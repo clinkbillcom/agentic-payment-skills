@@ -5,20 +5,18 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, refu
 ## Requirements
 
 - Node.js >= 20
-- `clink-cli` installed and configured — see the [clink-cli setup guide](https://github.com/clinkbillcom/agentic-payment-skills)
+- `clink-cli` installed and configured — see the [Clink Payment Skills setup guide](https://github.com/clinkbillcom/agent-payment-skills)
 - `clink-cli` config file at `~/.clink-cli/config.json` with a valid `customerId` and `customerApiKey`
 
-## Install the Skill
+## Install Clink Payment Skills
 
-```bash
-# Personal (all projects)
-git clone https://github.com/clinkbillcom/agentic-payment-skills ~/.claude/skills/clink-payment-skill
+Ask your agent to install the current Clink Payment Skills package:
 
-# Project-level (current project only)
-git clone https://github.com/clinkbillcom/agentic-payment-skills .claude/skills/clink-payment-skill
+```text
+Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
 ```
 
-The skill is available to your Claude agent immediately after cloning.
+After installation, the agent will guide you through the remaining setup.
 
 ## What It Does
 

@@ -5,20 +5,18 @@
 ## 环境要求
 
 - Node.js >= 20
-- 已安装并配置 `clink-cli` — 参考 [clink-cli 配置文档](https://github.com/clinkbillcom/agentic-payment-skills)
+- 已安装并配置 `clink-cli` — 参考 [Clink Payment Skills 配置文档](https://github.com/clinkbillcom/agent-payment-skills)
 - `~/.clink-cli/config.json` 中包含有效的 `customerId` 和 `customerApiKey`
 
-## 安装技能
+## 安装 Clink Payment Skills
 
-```bash
-# 个人级别（对所有项目生效）
-git clone https://github.com/clinkbillcom/agentic-payment-skills ~/.claude/skills/clink-payment-skill
+直接让 Agent 安装当前的 Clink Payment Skills：
 
-# 项目级别（仅对当前项目生效）
-git clone https://github.com/clinkbillcom/agentic-payment-skills .claude/skills/clink-payment-skill
+```text
+Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
 ```
 
-克隆完成后技能立即对 Claude agent 生效。
+安装完成后，Agent 会继续引导你完成后续配置。
 
 ## 功能说明
 
