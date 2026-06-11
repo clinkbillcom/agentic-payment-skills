@@ -1,6 +1,6 @@
 # clink-payment-skill
 
-适用于 Claude Code 的 Clink 支付技能，通过 `clink-cli` 实现钱包、卡片、支付、退款和风控规则操作。
+适用于 Claude Code 的 Clink 支付技能，通过 `clink-cli` 实现钱包、卡片、支付、VIC 授权、退款和风控规则操作。
 
 ## 环境要求
 
@@ -25,5 +25,6 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包状态检查
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
+- VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
 - 退款提交与状态轮询
 - 风控规则查看与配置

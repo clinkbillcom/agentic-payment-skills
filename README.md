@@ -1,6 +1,6 @@
 # clink-payment-skill
 
-A Claude Code skill for Clink payment operations — wallet, card, payment, refund, and risk rules via `clink-cli`.
+A Claude Code skill for Clink payment operations — wallet, card, payment, VIC agentic authorization, refund, and risk rules via `clink-cli`.
 
 ## Requirements
 
@@ -25,5 +25,6 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Wallet readiness checks
 - Card binding and management
 - Payment execution (direct and session mode)
+- VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
 - Refund submission and polling
 - Risk rule configuration

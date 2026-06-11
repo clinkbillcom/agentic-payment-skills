@@ -36,6 +36,7 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 - Merchant or product skills own business intent: when to charge, how much to charge, and how to confirm success on the merchant side.
 - This skill owns the Clink CLI execution path: wallet readiness, payment-method readiness, charge execution, refund submission, refund polling, and risk-rule links.
 - If the request is generic product language such as "enable auto top-up" without a direct Clink wallet or payment operation, route to the merchant or integration skill first.
+- High-priority VIC route: if the user says to use Visa for a purchase, booking, order, reservation, hotel booking, ticket purchase, or equivalent, this skill must first perform VIC authorization preparation. Do not immediately answer that the merchant plugin is missing, ask for a payment link/session ID, or run normal `pay` before the Visa readiness and instruction list-first flow.
 
 ## Hard Rules
 
@@ -47,6 +48,7 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 - Treat `pay` exit code `6` or client-side timeout as an unknown payment state. Do not blindly retry unless the caller provides an idempotent retry guarantee or the payment state is confirmed elsewhere.
 - For exit code `7`, send the 3DS redirect URL to the user and wait for completion instead of continuing automatically.
 - Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.
+- VIC (agentic authorization): when the user asks to use Visa for a purchase, booking, order, or reservation, first refresh cards and check `visaRegistrationSucceeded`. If it is not `true`, send the Visa Passkey registration URL. If it is `true`, list ACTIVE instructions filtered by the selected `paymentInstrumentId`, semantically reuse a matching instruction, or create a draft with `instruction prepare`. Never call a backend sign API; send the Passkey page URL and let the page automatically sign after the user opens it. Never invent `mandates`, `title`, amount limits, merchant scope, or hidden Passkey payloads. Never send `clientReferenceId`, `channelTokenId`, or `consumerId` — the server derives them. Currency/amount are per-mandate, not at instruction level.
 - If the user asks to preview a command or verify inputs without execution, use `--dry-run` when supported.
 
 ## Quick Reference
@@ -62,6 +64,10 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 | Poll refund | `clink-cli refund get ... --format json` |
 | View risk rules | `clink-cli risk-rule get --format json` |
 | Get risk-rule config URL | `clink-cli risk-rule link --format json` |
+| Create VIC instruction draft | `clink-cli payment-handler instruction prepare ... --format json` |
+| Print instruction Passkey URL | `clink-cli payment-handler instruction sign-url ... --format json` |
+| List reusable VIC instructions | `clink-cli payment-handler instruction list --status ACTIVE --payment-instrument-id <id> --format json` |
+| Future charge with VIC authorization | `clink-cli pay ... --purchase-instruction-id <id> --format json` |
 
 ## Prerequisites
 
@@ -292,6 +298,73 @@ clink-cli risk-rule link --format json
 
 Key fields: `url`.
 
+### payment-handler instruction (VIC agentic authorization)
+
+VIC lets the user pre-authorize an agent to operate within mandate limits (amount cap, currency, merchant/category scope, expiry) on a Visa card that has completed registration. This phase prepares authorization; it does not prove payment completion.
+
+Only use for a Visa card whose card data has:
+
+```text
+visaRegistrationSucceeded === true
+```
+
+If the selected Visa card has not completed registration, send the registration page URL:
+
+```text
+https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
+```
+
+Use `--agent-env sandbox` when the user or caller is operating against sandbox; otherwise production is the default agent page environment.
+
+**list** — first check for reusable ACTIVE instructions on the selected card:
+
+```bash
+clink-cli payment-handler instruction list \
+  --status ACTIVE \
+  --payment-instrument-id <visa_pi> \
+  --format json
+```
+
+Reuse only when `paymentInstrumentId`, amount cap, currency, service window, and merchant/category/title/description semantics cover the user's requested scope. MCC is optional; missing MCC alone must not block reuse.
+
+**prepare** — when no reusable instruction exists, create a draft and print the Passkey URL:
+
+```bash
+clink-cli payment-handler instruction prepare \
+  --payment-instrument-id <visa_pi> --title "<title>" \
+  --effective-until-time "2026-06-25 00:00:00" \
+  --mandates '[{"title":"Hotel","description":"Hotel","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \
+  --agent-env production \
+  --format json
+```
+
+Returns `data.instructionId` and `data.passkeyUrl`. Send `data.passkeyUrl` to the user. The user opens that page and the page automatically signs. `--description`, `--extra` are optional. Currency and `amountLimit` live on each mandate, not at instruction level — do NOT pass `--currency`/`--total-limit-amount`/`--country-code`. `--effective-until-time` is a UTC `yyyy-MM-dd HH:mm:ss` string. For hotel check-in, use the check-in day at `23:59:59` UTC. Do NOT pass `clientReferenceId` / `channelTokenId` / `consumerId`.
+
+Default to one-time authorization. Set recurring only when the user clearly says it is periodic, recurring, subscription-like, monthly, weekly, or equivalent.
+
+**sign-url** — print the Passkey URL for an existing draft:
+
+```bash
+clink-cli payment-handler instruction sign-url \
+  --payment-instrument-id <visa_pi> \
+  --purchase-instruction-id <instructionId> \
+  --agent-env production \
+  --format json
+```
+
+This command does not call a backend sign API. Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`.
+
+**update / cancel** — first phase only prints the agent page base URL:
+
+```bash
+clink-cli payment-handler instruction update --agent-env sandbox --format json
+clink-cli payment-handler instruction cancel --agent-env production --format json
+```
+
+Do not call backend update/cancel APIs in this phase.
+
+**Future payment boundary**: `clink-cli pay --purchase-instruction-id <instructionId>` is the target command shape, but backend payment support for this parameter is not ready yet. Until that contract is confirmed, store the ACTIVE `instructionId` in task context and do not claim payment has completed.
+
 ### config get
 
 Read current configuration.
@@ -420,6 +493,49 @@ Run this once before any payment operation.
    → failed: refund failed, inform user
    → review_rejected: refund rejected, inform user
 ```
+
+### VIC Agentic Authorization
+
+```
+1. Refresh and select a Visa card:
+   clink-cli card binding-link --format json  (refresh)
+   → choose the user-specified Visa card, otherwise default card, otherwise first available card
+   → check cardScheme/cardBrand/network is Visa
+   → if Visa and visaRegistrationSucceeded is not true:
+     send https://<agent-domain>/passkey-auth/{paymentInstrumentId}?type=visa
+     wait until refreshed card data shows visaRegistrationSucceeded=true
+   → non-Visa? Use the normal Execute Payment workflow instead
+
+2. List reusable instructions before creating anything:
+   clink-cli payment-handler instruction list --status ACTIVE --payment-instrument-id <visa_pi> --format json
+   → if an ACTIVE instruction semantically matches the selected card, amount cap,
+     currency, merchant/category/title/description, and service window:
+     reuse its instructionId
+   → if no match and scope is incomplete:
+     ask only for the missing mandate fields
+   → if no match and scope is complete:
+     continue to prepare
+
+3. Prepare draft:
+   clink-cli payment-handler instruction prepare --payment-instrument-id <visa_pi> \
+     --title <t> --effective-until-time "<yyyy-MM-dd HH:mm:ss>" \
+     --mandates '<json: each mandate carries amountLimit + currencyCode>' \
+     --agent-env <sandbox|production> --format json
+   → save data.instructionId
+   → send data.passkeyUrl to the user
+
+4. Wait for page-driven authorization:
+   → user opens data.passkeyUrl
+   → the page automatically signs
+   → when the user asks for status or when polling is available, refresh state and confirm instruction/card readiness
+
+5. Payment boundary:
+   → store the ACTIVE instructionId in task context
+   → do not claim payment completed from authorization alone
+   → do not use --purchase-instruction-id for pay until backend payment support is confirmed
+```
+
+**VIC rules**: never create a draft without explicit user authorization and complete mandate scope; never invent mandates, merchant scope, or hidden Passkey payloads; list by selected `paymentInstrumentId` before creating; default to one-time authorization unless the user clearly expresses recurring semantics.
 
 ### Payment Method Management
 
