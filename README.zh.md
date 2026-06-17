@@ -28,3 +28,4 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
 - 退款提交与状态轮询
 - 风控规则查看与配置
+- 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink-cli events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试

@@ -1,7 +1,7 @@
 ---
 name: clink-payment-skill
-description: "Use when an agent needs to initialize a Clink wallet, check payment-method readiness, execute an explicitly authorized charge, create or track a refund, or retrieve payment-management and risk-rule links."
-version: "1.0.0"
+description: "Use when an agent needs to initialize a Clink wallet, check payment-method readiness, execute an explicitly authorized charge, create or track a refund, wait for an async completion event (binding, refund, VIC activation, 3DS), or retrieve payment-management and risk-rule links."
+version: "1.1.0"
 requires:
   node: ">=20"
   bins: ["clink-cli"]
@@ -48,7 +48,8 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 - Treat `pay` exit code `6` or client-side timeout as an unknown payment state. Do not blindly retry unless the caller provides an idempotent retry guarantee or the payment state is confirmed elsewhere.
 - For exit code `7`, send the 3DS redirect URL to the user and wait for completion instead of continuing automatically.
 - Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.
-- VIC (agentic authorization): when the user asks to use Visa for a purchase, booking, order, or reservation, first refresh cards and check `visaRegistrationSucceeded`. If it is not `true`, send the Visa Passkey registration URL. If it is `true`, list ACTIVE instructions filtered by the selected `paymentInstrumentId`, semantically reuse a matching instruction, or create a draft with `instruction prepare`. Never call a backend sign API; send the Passkey page URL and let the page automatically sign after the user opens it. Never invent `mandates`, `title`, amount limits, merchant scope, or hidden Passkey payloads. Never send `clientReferenceId`, `channelTokenId`, or `consumerId` — the server derives them. Currency/amount are per-mandate, not at instruction level.
+- Async completion is event-driven, not guesswork. Operations that finish asynchronously (card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, post-3DS order result) are confirmed by a webhook event from the Clink event hub, not by assumption. Never claim an async flow completed until the matching event has been observed — either through the link command's built-in watch or through `events poll`. See the Async Completion Model section.
+- VIC (agentic authorization): when the user asks to use Visa for a purchase, booking, order, or reservation, first refresh cards and check `visaRegistrationSucceeded`. If it is not `true`, send the Visa Passkey registration URL. If it is `true`, list ACTIVE instructions filtered by the selected `paymentInstrumentId`, semantically reuse a matching instruction, or create a draft with `instruction create`. Never call a backend sign API; send the Passkey page URL and let the page automatically sign after the user opens it. Never invent `mandates`, `title`, amount limits, merchant scope, or hidden Passkey payloads. Never send `clientReferenceId`, `channelTokenId`, or `consumerId` — the server derives them. Currency/amount are per-mandate, not at instruction level.
 - If the user asks to preview a command or verify inputs without execution, use `--dry-run` when supported.
 
 ## Quick Reference
@@ -62,11 +63,14 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 | Charge user | `clink-cli pay ... --format json` |
 | Submit refund | `clink-cli refund create ... --format json` |
 | Poll refund | `clink-cli refund get ... --format json` |
+| Wait for an async completion event | `clink-cli events poll --type <eventType> --format json` |
+| Refresh card cache without waiting | `clink-cli card binding-link --no-watch --format json` |
 | View risk rules | `clink-cli risk-rule get --format json` |
 | Get risk-rule config URL | `clink-cli risk-rule link --format json` |
-| Create VIC instruction draft | `clink-cli payment-handler instruction prepare ... --format json` |
-| Print instruction Passkey URL | `clink-cli payment-handler instruction sign-url ... --format json` |
-| List reusable VIC instructions | `clink-cli payment-handler instruction list --status ACTIVE --payment-instrument-id <id> --format json` |
+| Create VIC instruction draft | `clink-cli instruction create ... --format json` |
+| Print instruction Passkey URL | `clink-cli instruction sign-url ... --format json` |
+| List reusable VIC instructions | `clink-cli instruction list --status ACTIVE --payment-instrument-id <id> --format json` |
+| Get one VIC instruction by ID | `clink-cli instruction get --purchase-instruction-id <id> --format json` |
 | Future charge with VIC authorization | `clink-cli pay ... --purchase-instruction-id <id> --format json` |
 
 ## Prerequisites
@@ -84,7 +88,9 @@ After init, bind a payment method:
 
 ```bash
 clink-cli card binding-link --format json
-# → send bindingUrl to user, wait for confirmation, then run binding-link again to refresh
+# → send bindingUrl to user; the built-in watch waits for the payment_method.added
+#   event and refreshes the cache automatically (or poll: clink-cli events poll
+#   --type payment_method.added --format json)
 ```
 
 ## Output Format
@@ -104,6 +110,25 @@ Error envelope (stderr, only when `--format json` is explicit):
 ```
 
 When a command returns a list, treat the list as the payload inside `data`.
+
+## Async Completion Model
+
+Many Clink operations finish asynchronously: card binding/change, risk-rule update, the refund lifecycle, VIC registration, purchase-instruction activation, and the final order result after a 3DS redirect. Completion is signaled by a webhook event from the Clink event hub, not by assumption or by re-running the action.
+
+This skill has no background process. Instead, `clink-cli` exposes the event hub through two foreground mechanisms — use them in place of guessing or busy-looping:
+
+1. **Built-in link watch (default).** Whenever a command prints a URL for the user to act on in a browser — `card binding-link`, `card setup-link`, `card modify-link`, `risk-rule link`, `instruction create|sign-url|update|cancel`, and `pay` when it returns a 3DS redirect — the CLI keeps running and polls the event queue (every 5s, up to 15 min, stopping at the first batch). It processes the events (logs to **stderr**, refreshes the local payment-method cache, stores each event under `eventCache`), acknowledges them, and prints them as a **second JSON envelope** on **stdout**. So a single foreground call both shows the user the link and returns once the completion event arrives.
+
+2. **On-demand poll (`events poll`).** When you need to wait for a state change without printing a link — for example after a refund submission, or to resume a watch that timed out — call `clink-cli events poll`. It drains the queue within a bounded window and returns the processed events.
+
+Rules:
+
+- **Do not fabricate completion.** Never tell the user a binding, refund, VIC activation, or post-3DS payment succeeded until the matching event has actually been observed (via the link watch's second envelope or `events poll`).
+- **Do not busy-retry the action.** Re-running `card binding-link` or re-submitting a refund to "check" status is wrong — poll the event hub instead. Refund status may also be queried directly with `refund get`.
+- **Do not block scripted runs.** For non-interactive or cache-only refreshes (e.g. calling `card binding-link` only to refresh the cached card list), pass `--no-watch` so the command prints and exits immediately. The watch is also skipped automatically under `--dry-run`.
+- **Never silently drop events.** Event types the CLI does not recognize yet are still logged, cached, and acked, so newer business events are never lost — read them from the returned envelope by `type`/`resourceId`.
+
+Event types you will encounter include `payment_method.added`, `payment_method.updated`, `payment_method.default_change`, `risk_rule.updated`, `agent_order.succeeded`, `agent_order.failed`, `agent_refund.succeeded`, `agent_refund.approved`, `agent_refund.failed`, `agent_refund.rejected`, `vic_device.binding_succeeded`, `purchase_instruction.created`, `purchase_instruction.activated`, `purchase_instruction.updated`, and `purchase_instruction.cancelled`.
 
 ## Exit Codes
 
@@ -127,6 +152,7 @@ All commands accept these flags:
 | `--profile <name>` | default | Named credential profile |
 | `--timeout <ms>` | 30000 | Request timeout |
 | `--dry-run` | false | Print request without executing |
+| `--no-watch` | false | Skip the built-in event watch after a link is printed (use for scripted runs or cache-only refresh) |
 
 Config resolution: flags > env vars (`CLINK_BASE_URL`, `CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`) > `~/.clink-cli/config.json`.
 
@@ -140,7 +166,7 @@ Initialize a customer wallet. Run once per user.
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Optional: `--callback-url <url>`, `--webhook-sign-key <key>`, `--source <value>` (bootstrap source tag, defaults to `"agent"` — leave unset unless the caller requires a different value).
+Optional: `--source <value>` (bootstrap source tag, defaults to `"agent"` — leave unset unless the caller requires a different value).
 
 Side effects: saves `customerId`, `customerApiKey`, `email`, `name` to `~/.clink-cli/config.json`.
 
@@ -166,14 +192,14 @@ clink-cli card binding-link --format json
 
 Key fields: `bindingUrl`, `paymentMethodsVoList` (array, empty if no card bound).
 
-Side effects: overwrites the local payment method cache.
+Side effects: overwrites the local payment method cache. By default this command also **watches** for the binding-completion event after printing `bindingUrl` (see Async Completion Model) and emits a second JSON envelope when `payment_method.added` arrives. Pass `--no-watch` when you only want to refresh the cache.
 
 This command has two distinct uses — always be explicit about which one applies:
 
 | Use case | Action |
 |----------|--------|
-| Need up-to-date card list | Call `binding-link` first, then read `paymentMethodsVoList` from the response (or follow with `card list`) |
-| User needs to bind a first card | Call `binding-link`, send `bindingUrl` to user, wait for confirmation, then call `binding-link` again to refresh |
+| Need up-to-date card list (no waiting) | Call `binding-link --no-watch`, then read `paymentMethodsVoList` from the response (or follow with `card list`) |
+| User needs to bind a first card | Call `binding-link`, send `bindingUrl` to user, then let the built-in watch (or `events poll --type payment_method.added`) confirm completion and refresh the cache — do not busy-retry |
 
 **Never call `card list` alone when you need current card state** — it reads the local cache and may be stale. Always precede it with `binding-link` if freshness matters.
 
@@ -278,6 +304,30 @@ clink-cli refund get --refund-id <refund_id> --format json
 
 Terminal states: `success`, `failed`, `review_rejected`.
 
+### events poll
+
+Wait on demand for async completion events from the Clink event hub, then process and acknowledge them. This is the standalone counterpart to the link commands' built-in watch — use it when you need to wait for a state change without re-printing a link (e.g. after a refund submission, after a user finishes a Passkey page, or to resume a watch that timed out).
+
+```bash
+clink-cli events poll --type <eventType> --format json
+```
+
+Options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--type <eventType>` | (none) | Return early once an event of this type arrives. Without it, the poll returns on the first event of any type. |
+| `--max-wait <seconds>` | 60 | Bounded wait window before timing out. |
+| `--limit <n>` | 20 | Page size per poll. |
+| `--no-ack` | false | Peek without acknowledging (events stay in the queue). |
+
+Returns `{ ready, timedOut, events, ackedEventIds }`:
+
+- `ready: true` — the awaited event arrived (any event, or one matching `--type`). Read it from `events`.
+- `timedOut: true` — the window elapsed with no matching event. The result also includes `resumeCommand`; because acked events are removed server-side, resuming is just running the same command again — there is no cursor or offset to pass.
+
+Important: a single poll processes the **whole returned batch** (every event is cached under `eventCache`). `--type` only controls **when to stop waiting**, not which events are returned — so always filter the returned `events` by `type` and `resourceId` to find the specific change you triggered. Pass `--no-ack` only to peek; by default the poll consumes (acks) what it reads.
+
 ### risk-rule get
 
 Get current risk rule settings.
@@ -298,7 +348,7 @@ clink-cli risk-rule link --format json
 
 Key fields: `url`.
 
-### payment-handler instruction (VIC agentic authorization)
+### instruction (VIC agentic authorization)
 
 VIC lets the user pre-authorize an agent to operate within mandate limits (amount cap, currency, merchant/category scope, expiry) on a Visa card that has completed registration. This phase prepares authorization; it does not prove payment completion.
 
@@ -314,12 +364,12 @@ If the selected Visa card has not completed registration, send the registration 
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 ```
 
-Use `--agent-env sandbox` when the user or caller is operating against sandbox; otherwise production is the default agent page environment.
+Pass `--sandbox` when the user or caller is operating against sandbox; omit it for production (the default). `--sandbox` switches both the agent page domain (`agent.clinkbill.dev`) and the API base URL (`api.clinkbill.dev`). There is no `--agent-env` flag.
 
 **list** — first check for reusable ACTIVE instructions on the selected card:
 
 ```bash
-clink-cli payment-handler instruction list \
+clink-cli instruction list \
   --status ACTIVE \
   --payment-instrument-id <visa_pi> \
   --format json
@@ -327,38 +377,60 @@ clink-cli payment-handler instruction list \
 
 Reuse only when `paymentInstrumentId`, amount cap, currency, service window, and merchant/category/title/description semantics cover the user's requested scope. MCC is optional; missing MCC alone must not block reuse.
 
-**prepare** — when no reusable instruction exists, create a draft and print the Passkey URL:
+**get** — fetch a single instruction (e.g. to confirm its current status) by id:
 
 ```bash
-clink-cli payment-handler instruction prepare \
-  --payment-instrument-id <visa_pi> --title "<title>" \
-  --effective-until-time "2026-06-25 00:00:00" \
-  --mandates '[{"title":"Hotel","description":"Hotel","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \
-  --agent-env production \
+clink-cli instruction get \
+  --purchase-instruction-id <instructionId> \
   --format json
 ```
 
-Returns `data.instructionId` and `data.passkeyUrl`. Send `data.passkeyUrl` to the user. The user opens that page and the page automatically signs. `--description`, `--extra` are optional. Currency and `amountLimit` live on each mandate, not at instruction level — do NOT pass `--currency`/`--total-limit-amount`/`--country-code`. `--effective-until-time` is a UTC `yyyy-MM-dd HH:mm:ss` string. For hotel check-in, use the check-in day at `23:59:59` UTC. Do NOT pass `clientReferenceId` / `channelTokenId` / `consumerId`.
+**create** — when no reusable instruction exists, create a draft and print the Passkey URL:
 
-Default to one-time authorization. Set recurring only when the user clearly says it is periodic, recurring, subscription-like, monthly, weekly, or equivalent.
+```bash
+clink-cli instruction create \
+  --payment-instrument-id <visa_pi> --title "<title>" \
+  --effective-until-time "1782345600" \
+  --mandates '[{"title":"Hotel","description":"Hotel","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"1782345600"}]' \
+  --format json
+```
+
+Returns `data.instructionId` and `data.passkeyUrl`. Send `data.passkeyUrl` to the user. The user opens that page and the page automatically signs. `--description`, `--extra` are optional. Currency and `amountLimit` live on each mandate, not at instruction level — do NOT pass `--currency`/`--total-limit-amount`/`--country-code`. `--effective-until-time` is Unix epoch seconds (e.g. `1782345600`); the CLI rejects other formats. For hotel check-in, use the check-in day end-of-day as epoch seconds. Do NOT pass `clientReferenceId` / `channelTokenId` / `consumerId`. Add `--sandbox` for the sandbox agent page.
+
+**Fulfillment (`--shipping-address`)** — classify the purchase before preparing:
+- **Physical goods that ship**: pass `--shipping-address '<json>'` with a US address (`countryCode` must be `US`). The CLI forwards it to the backend as `shippingAddress`.
+- **Services, subscriptions, hotels, tickets, bookings, reservations, digital goods**: do NOT pass `--shipping-address`.
+- If it is unclear whether the purchase ships a physical item, ask the user before preparing — do not guess.
+
+There is no `--fulfillment-type` flag in `clink-cli`; the presence or absence of `--shipping-address` is how fulfillment is expressed on the CLI path. Address shape:
+
+```bash
+clink-cli instruction create \
+  --payment-instrument-id <visa_pi> --title "<title>" \
+  --effective-until-time "1782345600" \
+  --mandates '<json>' \
+  --shipping-address '{"addressId":"addr_001","name":"Jim","line1":"123 Market St","line2":"Apt 201","city":"San Francisco","state":"CA","zip":"94105","countryCode":"US","deliveryContactDetails":{}}' \
+  --format json
+```
+
+Default to one-time authorization. Set recurring (`--is-recurring`) only when the user clearly says it is periodic, recurring, subscription-like, monthly, weekly, or equivalent.
 
 **sign-url** — print the Passkey URL for an existing draft:
 
 ```bash
-clink-cli payment-handler instruction sign-url \
+clink-cli instruction sign-url \
   --payment-instrument-id <visa_pi> \
   --purchase-instruction-id <instructionId> \
-  --agent-env production \
   --format json
 ```
 
-This command does not call a backend sign API. Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`.
+This command does not call a backend sign API. Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`. Add `--sandbox` for the sandbox agent page.
 
-**update / cancel** — first phase only prints the agent page base URL:
+**update / cancel** — first phase only prints the agent page base URL (add `--sandbox` for sandbox):
 
 ```bash
-clink-cli payment-handler instruction update --agent-env sandbox --format json
-clink-cli payment-handler instruction cancel --agent-env production --format json
+clink-cli instruction update --format json
+clink-cli instruction cancel --format json
 ```
 
 Do not call backend update/cancel APIs in this phase.
@@ -417,9 +489,11 @@ Run this once before any payment operation.
 3. clink-cli card binding-link --format json
    → paymentMethodsVoList is empty:
      a. Send bindingUrl to user, ask them to bind a card on the web page
-     b. Wait for user confirmation
-     c. clink-cli card binding-link --format json  (refresh cache)
-     d. Verify paymentMethodsVoList is non-empty
+     b. The command's built-in watch is already polling — wait for its second JSON
+        envelope carrying a payment_method.added event (it also refreshes the cache),
+        or call: clink-cli events poll --type payment_method.added --format json
+     c. Confirm the event arrived, then read paymentMethodsVoList (now non-empty)
+     d. Do NOT busy-retry binding-link to "check" — let the event confirm completion
    → paymentMethodsVoList is non-empty:
      Skip to step 4
 
@@ -459,7 +533,10 @@ Run this once before any payment operation.
    exit 7 → 3DS required:
      → extract data.channelPaymentResponse.action.redirectUrl
      → send URL to user
-     → wait for user to complete 3DS verification
+     → the pay command's built-in watch is already polling for the post-3DS result;
+       wait for its second JSON envelope (agent_order.succeeded / agent_order.failed),
+       or call: clink-cli events poll --type agent_order.succeeded --format json
+     → do NOT declare success until that order event arrives
 
    exit 3 or exit 4 → wallet not initialized or auth error:
      → ask user to run: clink-cli wallet init --email <email> --name <name> --format json
@@ -483,15 +560,20 @@ Run this once before any payment operation.
 1. Collect orderId from user (starts with "order_")
 
 2. clink-cli refund create --order-id <order_id> --format json
-   → exit 0: extract refundOrderId from response
+   → exit 0: extract refundOrderId from response. Tell the user the refund is
+     submitted and pending — a successful submission is NOT a final result.
    → exit 5: order not found or already refunded, show error
 
-3. Poll status (recommended interval: 5-10 seconds, timeout: 2-5 minutes):
-   clink-cli refund get --refund-id <refund_id> --format json
-   → pending_review / refunding: poll again
-   → success: refund completed, inform user
-   → failed: refund failed, inform user
-   → review_rejected: refund rejected, inform user
+3. Wait for the final result (two equivalent options — do NOT fabricate completion):
+   a. Event-driven: clink-cli events poll --type agent_refund.succeeded --format json
+      (also watch for agent_refund.approved / agent_refund.failed / agent_refund.rejected;
+      filter the returned events by refundId/resourceId for this refund)
+   b. Direct status poll (interval 5-10s, timeout 2-5 min):
+      clink-cli refund get --refund-id <refund_id> --format json
+      → pending_review / refunding: poll again
+      → success: refund completed, inform user
+      → failed: refund failed, inform user
+      → review_rejected: refund rejected, inform user
 ```
 
 ### VIC Agentic Authorization
@@ -503,56 +585,71 @@ Run this once before any payment operation.
    → check cardScheme/cardBrand/network is Visa
    → if Visa and visaRegistrationSucceeded is not true:
      send https://<agent-domain>/passkey-auth/{paymentInstrumentId}?type=visa
-     wait until refreshed card data shows visaRegistrationSucceeded=true
+     wait for the registration event rather than busy-refreshing:
+       clink-cli events poll --type vic_device.binding_succeeded --format json
+       (payment_method.updated for the same paymentInstrumentId also signals readiness)
+     then refresh and confirm card data shows visaRegistrationSucceeded=true
    → non-Visa? Use the normal Execute Payment workflow instead
 
 2. List reusable instructions before creating anything:
-   clink-cli payment-handler instruction list --status ACTIVE --payment-instrument-id <visa_pi> --format json
+   clink-cli instruction list --status ACTIVE --payment-instrument-id <visa_pi> --format json
    → if an ACTIVE instruction semantically matches the selected card, amount cap,
      currency, merchant/category/title/description, and service window:
      reuse its instructionId
    → if no match and scope is incomplete:
      ask only for the missing mandate fields
    → if no match and scope is complete:
-     continue to prepare
+     classify fulfillment, then continue to prepare
 
-3. Prepare draft:
-   clink-cli payment-handler instruction prepare --payment-instrument-id <visa_pi> \
-     --title <t> --effective-until-time "<yyyy-MM-dd HH:mm:ss>" \
+3. Classify fulfillment:
+   → physical goods that ship? collect a US shipping address and pass --shipping-address
+   → services / hotels / tickets / bookings / subscriptions / digital goods? no --shipping-address
+   → unclear? ask the user before preparing — do not guess
+
+4. Prepare draft:
+   clink-cli instruction create --payment-instrument-id <visa_pi> \
+     --title <t> --effective-until-time "<unix-epoch-seconds>" \
      --mandates '<json: each mandate carries amountLimit + currencyCode>' \
-     --agent-env <sandbox|production> --format json
+     [--shipping-address '<US address json>']  (only for shipped physical goods) \
+     [--sandbox]  (only for sandbox) \
+     --format json
    → save data.instructionId
    → send data.passkeyUrl to the user
 
-4. Wait for page-driven authorization:
+5. Wait for page-driven authorization:
    → user opens data.passkeyUrl
    → the page automatically signs
-   → when the user asks for status or when polling is available, refresh state and confirm instruction/card readiness
+   → the create command's built-in watch is already polling; wait for its second JSON
+     envelope carrying purchase_instruction.activated for this instructionId, or call:
+     clink-cli events poll --type purchase_instruction.activated --format json
+   → the instruction must be ACTIVE before any payment; do not assume activation
 
-5. Payment boundary:
+6. Payment boundary:
    → store the ACTIVE instructionId in task context
    → do not claim payment completed from authorization alone
    → do not use --purchase-instruction-id for pay until backend payment support is confirmed
 ```
 
-**VIC rules**: never create a draft without explicit user authorization and complete mandate scope; never invent mandates, merchant scope, or hidden Passkey payloads; list by selected `paymentInstrumentId` before creating; default to one-time authorization unless the user clearly expresses recurring semantics.
+**VIC rules**: never create a draft without explicit user authorization and complete mandate scope; never invent mandates, merchant scope, or hidden Passkey payloads; classify fulfillment (pass `--shipping-address` only for shipped physical goods, with `countryCode=US`); list by selected `paymentInstrumentId` before creating; default to one-time authorization unless the user clearly expresses recurring semantics.
 
 ### Payment Method Management
 
 ```
 View current methods:
-  clink-cli card binding-link --format json  (refresh cache)
-  clink-cli card list --format json          (read cache)
+  clink-cli card binding-link --no-watch --format json  (refresh cache, no waiting)
+  clink-cli card list --format json                      (read cache)
 
 Add a new method:
   clink-cli card setup-link --format json
   → send URL to user
-  → after user completes, run card binding-link to refresh
+  → its built-in watch waits for payment_method.added (also refreshes the cache),
+    or call: clink-cli events poll --type payment_method.added --format json
 
 Manage existing methods:
   clink-cli card modify-link --format json
   → send URL to user
-  → after user completes, run card binding-link to refresh
+  → its built-in watch waits for payment_method.updated / payment_method.default_change,
+    or call: clink-cli events poll --type payment_method.updated --format json
 ```
 
 ### Risk Rules
@@ -564,6 +661,8 @@ View current rules:
 Configure rules:
   clink-cli risk-rule link --format json
   → send URL to user
+  → its built-in watch waits for risk_rule.updated,
+    or call: clink-cli events poll --type risk_rule.updated --format json
 ```
 
 ---
@@ -606,4 +705,7 @@ Merchant Skill                        This Skill (clink-cli)
 - Retrying exit code `6` payments without first resolving the payment state.
 - Inventing missing payment parameters instead of stopping for clarification.
 - Forgetting to refresh card state with `card binding-link` before assuming the cache is current.
-- Treating refunds as synchronous instead of polling `refund get`.
+- Treating refunds as synchronous instead of waiting for the `agent_refund.*` event (or polling `refund get`).
+- Declaring an async flow complete (binding, refund, VIC activation, post-3DS order) before the matching event is observed.
+- Busy-retrying a link command to "check" status instead of letting its built-in watch or `events poll` deliver the event.
+- Passing `--no-watch` when you actually need to wait for the user's browser action — or omitting it when you only wanted a cache refresh.

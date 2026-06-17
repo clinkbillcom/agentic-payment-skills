@@ -28,3 +28,4 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
 - Refund submission and polling
 - Risk rule configuration
+- Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink-cli events poll`, instead of guessing or busy-retrying
