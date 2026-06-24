@@ -4,15 +4,14 @@ description: "Use when an agent needs to initialize a Clink wallet, check paymen
 version: "1.1.0"
 requires:
   node: ">=20"
-  bins: ["clink-cli"]
-  install: "npm install -g @clink-ai/clink-cli"
+  bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
 ---
 
 # Clink Payment Skill
 
 Use this skill for direct Clink payment operations through `clink-cli`.
 
-This skill executes wallet, card, payment, refund, risk-rule, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
+This skill executes wallet, card, payment, refund, risk, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
 
 ## When to Use
 
@@ -65,8 +64,8 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 | Poll refund | `clink-cli refund get ... --format json` |
 | Wait for an async completion event | `clink-cli events poll --type <eventType> --format json` |
 | Refresh card cache without waiting | `clink-cli card binding-link --no-watch --format json` |
-| View risk rules | `clink-cli risk-rule get --format json` |
-| Get risk-rule config URL | `clink-cli risk-rule link --format json` |
+| View risk rules | `clink-cli risk get --format json` |
+| Get risk-rule config URL | `clink-cli risk link --format json` |
 | Create VIC instruction draft | `clink-cli instruction create ... --format json` |
 | Print instruction Passkey URL | `clink-cli instruction sign-url ... --format json` |
 | List reusable VIC instructions | `clink-cli instruction list --status ACTIVE --payment-instrument-id <id> --format json` |
@@ -76,9 +75,20 @@ This skill executes wallet, card, payment, refund, risk-rule, and local config c
 ## Prerequisites
 
 - Node.js >= 20
-- `clink-cli` installed: `npm install -g @clink-ai/clink-cli`
+- `clink-cli` ships with this skill as a vendored single-file bundle at `vendor/clink-cli/clink-cli.bundle.mjs` — no global `npm install` is required.
 - Network access to Clink API (default: `https://api.clinkbill.com`)
-- Wallet initialized (run once after installing `clink-cli`):
+
+### Invocation
+
+Every `clink-cli <args>` command below is the vendored bundle. At the start of each shell session, define `clink-cli` to point at it (replace `<skill_dir>` with this skill's absolute directory):
+
+```bash
+clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" "$@"; }
+```
+
+All commands in this document then work verbatim. (To re-vendor after changing the `clink-cli` source, see `vendor/clink-cli/package.json`.)
+
+- Wallet initialized (run once after setup):
 
 ```bash
 clink-cli wallet init --email <email> --name <name> --format json
@@ -117,7 +127,7 @@ Many Clink operations finish asynchronously: card binding/change, risk-rule upda
 
 This skill has no background process. Instead, `clink-cli` exposes the event hub through two foreground mechanisms — use them in place of guessing or busy-looping:
 
-1. **Built-in link watch (default).** Whenever a command prints a URL for the user to act on in a browser — `card binding-link`, `card setup-link`, `card modify-link`, `risk-rule link`, `instruction create|sign-url|update|cancel`, and `pay` when it returns a 3DS redirect — the CLI keeps running and polls the event queue (every 5s, up to 15 min, stopping at the first batch). It processes the events (logs to **stderr**, refreshes the local payment-method cache, stores each event under `eventCache`), acknowledges them, and prints them as a **second JSON envelope** on **stdout**. So a single foreground call both shows the user the link and returns once the completion event arrives.
+1. **Built-in link watch (default).** Whenever a command prints a URL for the user to act on in a browser — `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create|sign-url|update|cancel`, and `pay` when it returns a 3DS redirect — the CLI keeps running and polls the event queue (every 5s, up to 15 min, stopping at the first batch). It processes the events (logs to **stderr**, refreshes the local payment-method cache, stores each event under `eventCache`), acknowledges them, and prints them as a **second JSON envelope** on **stdout**. So a single foreground call both shows the user the link and returns once the completion event arrives.
 
 2. **On-demand poll (`events poll`).** When you need to wait for a state change without printing a link — for example after a refund submission, or to resume a watch that timed out — call `clink-cli events poll`. It drains the queue within a bounded window and returns the processed events.
 
@@ -328,22 +338,22 @@ Returns `{ ready, timedOut, events, ackedEventIds }`:
 
 Important: a single poll processes the **whole returned batch** (every event is cached under `eventCache`). `--type` only controls **when to stop waiting**, not which events are returned — so always filter the returned `events` by `type` and `resourceId` to find the specific change you triggered. Pass `--no-ack` only to peek; by default the poll consumes (acks) what it reads.
 
-### risk-rule get
+### risk get
 
 Get current risk rule settings.
 
 ```bash
-clink-cli risk-rule get --format json
+clink-cli risk get --format json
 ```
 
 Key fields: `singleRechargeLimit`, `dailyTotalLimit`, `dailyMaxCount`, `rechargeInterval`, `manualApprovalThreshold`.
 
-### risk-rule link
+### risk link
 
 URL to configure risk rules.
 
 ```bash
-clink-cli risk-rule link --format json
+clink-cli risk link --format json
 ```
 
 Key fields: `url`.
@@ -497,7 +507,7 @@ Run this once before any payment operation.
    → paymentMethodsVoList is non-empty:
      Skip to step 4
 
-4. (Optional) clink-cli risk-rule link --format json
+4. (Optional) clink-cli risk link --format json
    → Send URL to user for risk rule configuration
 
 5. Setup complete
@@ -525,8 +535,8 @@ Run this once before any payment operation.
        → send URL to user to switch card
        → ask user if they want to retry (do NOT auto-retry)
      status 4 → risk rule blocked
-       → clink-cli risk-rule get --format json (show current limits)
-       → clink-cli risk-rule link --format json (send config URL)
+       → clink-cli risk get --format json (show current limits)
+       → clink-cli risk link --format json (send config URL)
        → ask user if they want to retry after adjusting rules
      status 6 → other failure, show error to user
 
@@ -656,10 +666,10 @@ Manage existing methods:
 
 ```
 View current rules:
-  clink-cli risk-rule get --format json
+  clink-cli risk get --format json
 
 Configure rules:
-  clink-cli risk-rule link --format json
+  clink-cli risk link --format json
   → send URL to user
   → its built-in watch waits for risk_rule.updated,
     or call: clink-cli events poll --type risk_rule.updated --format json
