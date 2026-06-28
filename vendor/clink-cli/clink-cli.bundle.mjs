@@ -3549,6 +3549,8 @@ var OPTION_DEFINITIONS = [
   { name: "merchant-id", flags: "--merchant-id <id>" },
   { name: "amount", flags: "--amount <amount>" },
   { name: "currency", flags: "--currency <currency>" },
+  { name: "instruction-id", flags: "--instruction-id <id>" },
+  { name: "mandate-id", flags: "--mandate-id <id>" },
   { name: "session-id", flags: "--session-id <id>" },
   { name: "payment-method-type", flags: "--payment-method-type <type>" },
   { name: "order-id", flags: "--order-id <id>" },
@@ -4744,6 +4746,8 @@ Arguments:
   --merchant-category-code <code> Merchant category code for create
   --order-channel-id <id>         Clink order channel ID for create
   --currency <currency>           Checkout currency for create, for example USD
+  --instruction-id <id>           Purchase instruction ID for create
+  --mandate-id <id>               Purchase instruction mandate ID for create
   --line-items <json>             UCP line_items JSON array for create/update
   --buyer <json>                  UCP buyer JSON object for create/update
   --shipping-address <json>       Shipping address JSON object for create/update
@@ -4758,11 +4762,13 @@ Notes:
   expose an "external" mode or subcommand.
   Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
   X-Customer-ID is not sent.
+  create sends instruction_id and mandate_id. complete does not send those fields.
 
 Examples:
   clink-cli ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc --merchant-name "Shop" \\
     --merchant-category-code 5311 --order-channel-id ucp_oc_xxx --currency USD \\
+    --instruction-id ins_xxx --mandate-id mndt_xxx \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1000},"quantity":1}]' \\
     --buyer '{"email":"buyer@example.com"}' --format json
   clink-cli ucp-checkout get --checkout-id chk_xxx --format json
@@ -5601,6 +5607,8 @@ async function ucpCheckoutCreate(context) {
     merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
     order_channel_id: requireStringFlag(flags, "missing --order-channel-id", "order-channel-id"),
     currency: requireStringFlag(flags, "missing --currency", "currency"),
+    instruction_id: requireStringFlag(flags, "missing --instruction-id", "instruction-id"),
+    mandate_id: requireStringFlag(flags, "missing --mandate-id", "mandate-id"),
     buyer: optionalJsonFlag(flags, "buyer"),
     line_items: requireJsonArrayFlag(flags, "line-items"),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
@@ -5651,6 +5659,9 @@ async function ucpCheckoutUpdate(context) {
 }
 async function ucpCheckoutComplete(context) {
   const flags = context.args.flags;
+  if (getStringFlag(flags, "instruction-id") || getStringFlag(flags, "mandate-id")) {
+    throw validationError("--instruction-id and --mandate-id are only supported on ucp-checkout create");
+  }
   const checkoutId = requireCheckoutId(flags);
   const credentialToken = requireStringFlag(flags, "missing --credential-token", "credential-token");
   const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
