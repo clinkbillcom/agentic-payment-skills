@@ -3462,6 +3462,9 @@ var require_commander = __commonJS({
   }
 });
 
+// dist/cli.js
+import { randomUUID } from "node:crypto";
+
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
@@ -3533,6 +3536,16 @@ var OPTION_DEFINITIONS = [
   { name: "name", flags: "--name <name>" },
   { name: "source", flags: "--source <value>" },
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
+  { name: "idempotency-key", flags: "--idempotency-key <key>" },
+  { name: "checkout-id", flags: "--checkout-id <id>" },
+  { name: "merchant-url", flags: "--merchant-url <url>" },
+  { name: "merchant-name", flags: "--merchant-name <name>" },
+  { name: "merchant-category-code", flags: "--merchant-category-code <code>" },
+  { name: "order-channel-id", flags: "--order-channel-id <id>" },
+  { name: "line-items", flags: "--line-items <json>" },
+  { name: "buyer", flags: "--buyer <json>" },
+  { name: "metadata", flags: "--metadata <json>" },
+  { name: "credential-token", flags: "--credential-token <token>" },
   { name: "merchant-id", flags: "--merchant-id <id>" },
   { name: "amount", flags: "--amount <amount>" },
   { name: "currency", flags: "--currency <currency>" },
@@ -3552,7 +3565,8 @@ var OPTION_DEFINITIONS = [
   { name: "extra", flags: "--extra <json>" },
   { name: "max-wait", flags: "--max-wait <seconds>" },
   { name: "limit", flags: "--limit <n>" },
-  { name: "type", flags: "--type <eventType>" }
+  { name: "type", flags: "--type <eventType>" },
+  { name: "url", flags: "--url <url>" }
 ];
 function parseArgs(argv) {
   const preFlags = {};
@@ -3755,10 +3769,7 @@ function cloneStoredConfig(config) {
       name,
       {
         ...profile,
-        ...profile.paymentMethods ? { paymentMethods: profile.paymentMethods.map((item) => ({ ...item })) } : {},
-        ...profile.eventCache ? {
-          eventCache: Object.fromEntries(Object.entries(profile.eventCache).map(([key, state]) => [key, { ...state }]))
-        } : {}
+        ...profile.paymentMethods ? { paymentMethods: profile.paymentMethods.map((item) => ({ ...item })) } : {}
       }
     ]))
   };
@@ -3807,11 +3818,10 @@ function parseStoredProfile(raw) {
   assignProfileString(profile, "email", record.email);
   assignProfileString(profile, "name", record.name);
   assignPaymentMethods(profile, record.paymentMethods);
-  assignEventCache(profile, record.eventCache);
   return profile;
 }
 function hasProfileData(profile) {
-  return Boolean(profile.customerId || profile.customerApiKey || profile.email || profile.name || profile.paymentMethods && profile.paymentMethods.length > 0 || profile.eventCache && Object.keys(profile.eventCache).length > 0);
+  return Boolean(profile.customerId || profile.customerApiKey || profile.email || profile.name || profile.paymentMethods && profile.paymentMethods.length > 0);
 }
 function compactProfile(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
@@ -3839,18 +3849,6 @@ function assignPaymentMethods(target, value) {
   }).map((item) => ({ ...item }));
   if (paymentMethods.length > 0) {
     target.paymentMethods = paymentMethods;
-  }
-}
-function assignEventCache(target, value) {
-  if (typeof value !== "object" || value === null) {
-    return;
-  }
-  const entries = Object.entries(value).filter((entry) => {
-    const state = entry[1];
-    return typeof state === "object" && state !== null && typeof state.eventId === "string" && typeof state.eventType === "string";
-  });
-  if (entries.length > 0) {
-    target.eventCache = Object.fromEntries(entries.map(([key, state]) => [key, { ...state }]));
   }
 }
 
@@ -3944,7 +3942,7 @@ function buildCustomerHeaders(config) {
     "X-Timestamp": Date.now().toString()
   };
 }
-function buildInstructionHeaders(config) {
+function buildCustomerApiKeyHeaders(config) {
   if (!config.customerApiKey) {
     throw configError(`missing customerApiKey for profile "${config.profile}"; run \`clink-cli wallet init --profile ${config.profile}\` or pass --customer-api-key`);
   }
@@ -3952,6 +3950,9 @@ function buildInstructionHeaders(config) {
     "X-Customer-API-Key": config.customerApiKey,
     "X-Timestamp": Date.now().toString()
   };
+}
+function buildInstructionHeaders(config) {
+  return buildCustomerApiKeyHeaders(config);
 }
 function buildBareDomainUrl(bindingUrl) {
   return new URL(bindingUrl).origin;
@@ -4226,19 +4227,6 @@ function applyEventToConfig(config, profileName, event) {
   if (event.eventType.startsWith("payment_method.")) {
     applyPaymentMethodEvent(profile.paymentMethods ?? (profile.paymentMethods = []), event);
   }
-  const cacheKey = event.resourceId ?? event.eventId;
-  if (cacheKey) {
-    profile.eventCache ??= {};
-    profile.eventCache[cacheKey] = {
-      eventId: event.eventId,
-      eventType: event.eventType,
-      ...event.resourceId ? { resourceId: event.resourceId } : {},
-      ...event.businessStatus ? { businessStatus: event.businessStatus } : {},
-      ...event.eventTime ? { eventTime: event.eventTime } : {},
-      receivedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      data: event.data
-    };
-  }
 }
 function applyPaymentMethodEvent(paymentMethods, event) {
   const paymentInstrumentId = asString(event.data.paymentInstrumentId);
@@ -4377,8 +4365,10 @@ Commands:
   risk              Inspect or open risk rule settings
   pay               Charge a payment instrument
   refund            Create refund and query refund status
+  ucp-checkout      Manage UCP checkout sessions for shadow merchants
   instruction       Manage purchase instruction mandates (agentic authorization)
   events            Poll the webhook-event queue for state-change events
+  tool              Utility tools for UCP and checkout workflows
   config            Read and update local config
 
 Global Options:
@@ -4389,7 +4379,8 @@ Global Options:
   --profile <name>              Use a named local profile, defaults to "default"
   --base-url <url>              Override API base URL
   --sandbox                     Target the sandbox environment (sandbox API base + agent domain);
-                                explicit --base-url / CLINK_BASE_URL still overrides the API host
+                                explicit --base-url / CLINK_BASE_URL still overrides the API host.
+                                Use --profile sandbox to keep sandbox CSK separate.
   --customer-id <id>            Override customer ID
   --customer-api-key <key>      Override customer API key
   --timeout <ms>                Request timeout in milliseconds
@@ -4408,18 +4399,50 @@ Event Watching:
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
+  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
   clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
   clink-cli wallet status --format pretty
   clink-cli card setup-link --open
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
+  clink-cli ucp-checkout get --checkout-id chk_xxx
+  clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
   clink-cli refund create --order-id order_xxx
 
 More Help:
   clink-cli wallet --help
   clink-cli card --help
+  clink-cli ucp-checkout --help
   clink-cli refund --help
   clink-cli instruction --help
+  clink-cli tool --help
   clink-cli config --help
+`;
+var TOOL_HELP = `clink-cli tool
+
+Usage:
+  clink-cli tool item-id --url <url> [options]
+
+Tools:
+  item-id   Extract a UCP item_id from a product URL
+
+Examples:
+  clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
+`;
+var TOOL_ITEM_ID_HELP = `clink-cli tool item-id
+
+Usage:
+  clink-cli tool item-id --url <url> [options]
+
+Arguments:
+  --url <url>   Product URL to inspect
+
+Behavior:
+  Shopify is detected when the hostname ends with .myshopify.com, or when any CNAME in the chain
+  has canonical name shops.myshopify.com. For Shopify URLs, item_id is the variant query parameter.
+  Other sites return item_id "unknown".
+
+Examples:
+  clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
 `;
 var WALLET_HELP = `clink-cli wallet
 
@@ -4433,6 +4456,7 @@ Subcommands:
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
+  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
   clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
   clink-cli wallet status --format pretty
 `;
@@ -4449,11 +4473,16 @@ Options:
   --profile <name>             Local profile name, defaults to "default"
   --source <value>             Bootstrap source value, defaults to "agent"
 
+Sandbox:
+  --sandbox switches the API/agent environment only; it does not choose a different CSK.
+  Initialize sandbox credentials into a dedicated profile, for example --profile sandbox.
+
 Defaults:
   --source                     agent
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
+  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
   clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
 `;
 var WALLET_STATUS_HELP = `clink-cli wallet status
@@ -4696,6 +4725,51 @@ Examples:
   clink-cli refund get --refund-id rfd_xxx
   clink-cli refund get --profile buyer-2 --refund-id rfd_xxx --format pretty
 `;
+var UCP_CHECKOUT_HELP = `clink-cli ucp-checkout
+
+Usage:
+  clink-cli ucp-checkout <create|get|update|cancel|complete> [options]
+
+Actions:
+  create    Create a UCP checkout session for an external/shadow merchant
+  get       Fetch one checkout session by --checkout-id
+  update    Replace editable checkout fields by --checkout-id
+  cancel    Cancel one checkout session by --checkout-id
+  complete  Complete checkout with a credential token
+
+Arguments:
+  --checkout-id <id>              Checkout ID for get/update/cancel/complete
+  --merchant-url <url>            External merchant checkout URL for create
+  --merchant-name <name>          Merchant display name for create
+  --merchant-category-code <code> Merchant category code for create
+  --order-channel-id <id>         Clink order channel ID for create
+  --currency <currency>           Checkout currency for create, for example USD
+  --line-items <json>             UCP line_items JSON array for create/update
+  --buyer <json>                  UCP buyer JSON object for create/update
+  --shipping-address <json>       Shipping address JSON object for create/update
+  --metadata <json>               Metadata JSON object for create/update
+  --credential-token <token>      Credential token for complete
+  --payment-instrument-id <id>    Optional payment method ID for complete
+  --idempotency-key <key>         Optional key for create/update/complete; generated when omitted
+
+Notes:
+  Calls /agent/ucp/external/checkout-sessions internally because CLI-discovered merchants use the
+  shadow-merchant external checkout path by default. The command surface intentionally does not
+  expose an "external" mode or subcommand.
+  Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
+  X-Customer-ID is not sent.
+
+Examples:
+  clink-cli ucp-checkout create \\
+    --merchant-url https://shop.example/checkout/abc --merchant-name "Shop" \\
+    --merchant-category-code 5311 --order-channel-id ucp_oc_xxx --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1000},"quantity":1}]' \\
+    --buyer '{"email":"buyer@example.com"}' --format json
+  clink-cli ucp-checkout get --checkout-id chk_xxx --format json
+  clink-cli ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
+  clink-cli ucp-checkout complete --checkout-id chk_xxx --credential-token ctok_xxx --format json
+  clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
+`;
 var CONFIG_HELP = `clink-cli config
 
 Usage:
@@ -4799,15 +4873,15 @@ Notes:
   Only valid for Visa cards whose card data has visaRegistrationSucceeded = true.
   Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
   Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
-  --effective-until-time / mandate effectiveUntilTime are Unix epoch seconds (e.g. "1782345600").
+  --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
   Authenticates by customer API key only (no X-Customer-ID header).
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
 Examples:
   clink-cli instruction create \\
     --payment-instrument-id pi_xxx --title "Business trip" \\
-    --effective-until-time "1782345600" \\
-    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"1782345600"}]' \\
+    --effective-until-time "2026-06-25 00:00:00" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
     --sandbox --format json
   clink-cli instruction sign-url \\
     --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --format json
@@ -4850,11 +4924,12 @@ Output (data):
   removed server-side, so no offset is needed).
 
 Notes:
-  A single poll returns the whole batch it reads in "events" (every event is cached
-  under eventCache). --type controls both when to stop waiting and which events are
-  acked: only events matching --type are acknowledged, so unrelated events stay on the
-  queue for a later poll. Without --type, the whole batch is acked. --no-ack peeks
-  without acknowledging anything.
+  A single poll returns the whole batch it reads in "events". payment_method.* events
+  refresh the cached payment methods in local wallet state; other events are returned
+  in this command's output but are not persisted in config.json. --type controls both
+  when to stop waiting and which events are acked: only events matching --type are
+  acknowledged, so unrelated events stay on the queue for a later poll. Without --type,
+  the whole batch is acked. --no-ack peeks without acknowledging anything.
 
 Examples:
   clink-cli events poll --format json
@@ -4911,6 +4986,13 @@ function getHelpText(command, subcommand) {
         default:
           return EVENTS_HELP;
       }
+    case "tool":
+      switch (subcommand) {
+        case "item-id":
+          return TOOL_ITEM_ID_HELP;
+        default:
+          return TOOL_HELP;
+      }
     case "refund":
       switch (subcommand) {
         case "create":
@@ -4920,6 +5002,8 @@ function getHelpText(command, subcommand) {
         default:
           return REFUND_HELP;
       }
+    case "ucp-checkout":
+      return UCP_CHECKOUT_HELP;
     case "config":
       switch (subcommand) {
         case "set":
@@ -4978,9 +5062,73 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
+// dist/tool.js
+import { resolveCname as nodeResolveCname } from "node:dns/promises";
+async function resolveUcpItemIdFromUrl(rawUrl, options = {}) {
+  const url = parseUrl(rawUrl);
+  const hostname = normalizeHostname(url.hostname);
+  if (isMyShopifyHost(hostname)) {
+    return shopifyResult(url, "myshopify_domain");
+  }
+  const resolveCname = options.resolveCname ?? nodeResolveCname;
+  if (await hasShopifyCname(hostname, resolveCname)) {
+    return shopifyResult(url, "cname");
+  }
+  return {
+    item_id: "unknown",
+    site_type: "unknown",
+    strategy: "unknown"
+  };
+}
+function parseUrl(rawUrl) {
+  try {
+    return new URL(rawUrl);
+  } catch {
+    throw validationError("invalid --url");
+  }
+}
+function shopifyResult(url, strategy) {
+  return {
+    item_id: url.searchParams.get("variant")?.trim() || "unknown",
+    site_type: "shopify",
+    strategy
+  };
+}
+function isMyShopifyHost(hostname) {
+  return hostname.endsWith(".myshopify.com");
+}
+async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ new Set()) {
+  const normalized = normalizeHostname(hostname);
+  if (seen.has(normalized) || seen.size >= 8) {
+    return false;
+  }
+  seen.add(normalized);
+  let cnames;
+  try {
+    cnames = await resolveCname(normalized);
+  } catch {
+    return false;
+  }
+  for (const cname of cnames.map(normalizeHostname)) {
+    if (cname === "shops.myshopify.com") {
+      return true;
+    }
+  }
+  for (const cname of cnames) {
+    if (await hasShopifyCname(cname, resolveCname, seen)) {
+      return true;
+    }
+  }
+  return false;
+}
+function normalizeHostname(value) {
+  return value.trim().toLowerCase().replace(/\.$/, "");
+}
+
 // dist/cli.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
+var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 async function runCli(argv) {
   const args = parseArgs(argv);
   const [command, subcommand] = args.positionals;
@@ -5012,15 +5160,37 @@ async function runCli(argv) {
       return handlePayCommand(context);
     case "refund":
       return handleRefundCommand(subcommand, context);
+    case "ucp-checkout":
+      return handleUcpCheckoutCommand(subcommand, context);
     case "instruction":
       return handleInstructionCommand(subcommand, context);
     case "events":
       return handleEventsCommand(subcommand, context);
+    case "tool":
+      return handleToolCommand(subcommand, context);
     case "config":
       return handleConfigCommand(subcommand, context);
     default:
       throw validationError(`unsupported command: ${command}`);
   }
+}
+async function handleToolCommand(subcommand, context) {
+  if (!subcommand) {
+    printHelp("tool");
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "item-id":
+      return toolItemId(context);
+    default:
+      throw validationError(`unsupported tool command: ${subcommand}`);
+  }
+}
+async function toolItemId(context) {
+  const url = requireStringFlag(context.args.flags, "missing --url", "url");
+  const result = await resolveUcpItemIdFromUrl(url);
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
 }
 function resolveGlobalOptions(args, storedConfig) {
   const formatFlag = getStringFlag(args.flags, "format");
@@ -5403,6 +5573,131 @@ async function refundGet(context) {
   });
   return finishApiCommand(result, context);
 }
+async function handleUcpCheckoutCommand(subcommand, context) {
+  if (!subcommand) {
+    printHelp("ucp-checkout");
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "create":
+      return ucpCheckoutCreate(context);
+    case "get":
+      return ucpCheckoutGet(context);
+    case "update":
+      return ucpCheckoutUpdate(context);
+    case "cancel":
+      return ucpCheckoutCancel(context);
+    case "complete":
+      return ucpCheckoutComplete(context);
+    default:
+      throw validationError(`unsupported ucp-checkout command: ${subcommand}`);
+  }
+}
+async function ucpCheckoutCreate(context) {
+  const flags = context.args.flags;
+  const body = compact({
+    merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
+    merchant_name: requireStringFlag(flags, "missing --merchant-name", "merchant-name"),
+    merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
+    order_channel_id: requireStringFlag(flags, "missing --order-channel-id", "order-channel-id"),
+    currency: requireStringFlag(flags, "missing --currency", "currency"),
+    buyer: optionalJsonFlag(flags, "buyer"),
+    line_items: requireJsonArrayFlag(flags, "line-items"),
+    shipping_address: optionalJsonFlag(flags, "shipping-address"),
+    metadata: optionalJsonFlag(flags, "metadata")
+  });
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "POST",
+    path: UCP_EXTERNAL_CHECKOUT_PATH,
+    headers: buildUcpCheckoutHeaders(context),
+    body,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(result, context);
+}
+async function ucpCheckoutGet(context) {
+  const checkoutId = requireCheckoutId(context.args.flags);
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "GET",
+    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}`,
+    headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(result, context);
+}
+async function ucpCheckoutUpdate(context) {
+  const flags = context.args.flags;
+  const checkoutId = requireCheckoutId(flags);
+  const body = compact({
+    line_items: requireJsonArrayFlag(flags, "line-items"),
+    buyer: optionalJsonFlag(flags, "buyer"),
+    shipping_address: optionalJsonFlag(flags, "shipping-address"),
+    metadata: optionalJsonFlag(flags, "metadata")
+  });
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "PUT",
+    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}`,
+    headers: buildUcpCheckoutHeaders(context),
+    body,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(result, context);
+}
+async function ucpCheckoutComplete(context) {
+  const flags = context.args.flags;
+  const checkoutId = requireCheckoutId(flags);
+  const credentialToken = requireStringFlag(flags, "missing --credential-token", "credential-token");
+  const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
+  const instrument = compact({
+    type: "token",
+    payment_method_id: paymentInstrumentId,
+    credential: {
+      type: "token",
+      token: credentialToken
+    }
+  });
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "POST",
+    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}/complete`,
+    headers: buildUcpCheckoutHeaders(context),
+    body: {
+      payment: {
+        instruments: [instrument]
+      }
+    },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(result, context);
+}
+async function ucpCheckoutCancel(context) {
+  const checkoutId = requireCheckoutId(context.args.flags);
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "POST",
+    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}/cancel`,
+    headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(result, context);
+}
+function requireCheckoutId(flags) {
+  return requireStringFlag(flags, "missing --checkout-id", "checkout-id");
+}
+function buildUcpCheckoutHeaders(context) {
+  return {
+    ...buildCustomerApiKeyHeaders(context.runtimeConfig),
+    "Idempotency-Key": getStringFlag(context.args.flags, "idempotency-key") ?? randomUUID()
+  };
+}
 async function handleInstructionCommand(subcommand, context) {
   if (!subcommand) {
     printHelp("instruction");
@@ -5430,7 +5725,7 @@ function instructionBody(context) {
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
-    effectiveUntilTime: epochSecondsFlag(flags, "effective-until-time"),
+    effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
     extra: optionalJsonFlag(flags, "extra"),
     mandates: requireJsonArrayFlag(flags, "mandates")
   });
@@ -5443,13 +5738,13 @@ function instructionBody(context) {
   }
   return body;
 }
-function epochSecondsFlag(flags, name) {
+function utcDateTimeFlag(flags, name) {
   const value = getStringFlag(flags, name);
   if (value === void 0) {
     return void 0;
   }
-  if (!/^\d+$/.test(value)) {
-    throw validationError(`--${name} must be Unix epoch seconds (e.g. 1782345600), got "${value}"`);
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+    throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
   }
   return value;
 }
@@ -5772,7 +6067,7 @@ function detectHelpHint(argv) {
   if (!command) {
     return "Run `clink-cli --help`.";
   }
-  if (["wallet", "card", "risk", "pay", "refund", "instruction", "events", "config"].includes(command)) {
+  if (["wallet", "card", "risk", "pay", "refund", "ucp-checkout", "instruction", "events", "tool", "config"].includes(command)) {
     return `Run \`clink-cli ${command} --help\`.`;
   }
   return "Run `clink-cli --help`.";

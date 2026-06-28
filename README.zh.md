@@ -5,7 +5,7 @@
 ## 环境要求
 
 - Node.js >= 20
-- 已安装并配置 `clink-cli` — 参考 [Clink Payment Skills 配置文档](https://github.com/clinkbillcom/agent-payment-skills)
+- Skill 内置 vendored `clink-cli` bundle：`vendor/clink-cli/clink-cli.bundle.mjs`；全局安装 `clink-cli` 只作为本地调试可选项
 - `~/.clink-cli/config.json` 中包含有效的 `customerId` 和 `customerApiKey`
 
 ## 安装 Clink Payment Skills
@@ -29,3 +29,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 退款提交与状态轮询
 - 风控规则查看与配置
 - 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink-cli events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
+
+## Skill 结构
+
+`SKILL.md` 只保留路由和安全规则；命令级细节放在 `references/` 下，沿用飞书/Lark skills 的“执行前读取对应操作 reference”模式。

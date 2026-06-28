@@ -5,7 +5,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, VIC 
 ## Requirements
 
 - Node.js >= 20
-- `clink-cli` installed and configured — see the [Clink Payment Skills setup guide](https://github.com/clinkbillcom/agent-payment-skills)
+- The skill ships a vendored `clink-cli` bundle at `vendor/clink-cli/clink-cli.bundle.mjs`; a global `clink-cli` install is optional for local debugging
 - `clink-cli` config file at `~/.clink-cli/config.json` with a valid `customerId` and `customerApiKey`
 
 ## Install Clink Payment Skills
@@ -29,3 +29,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Refund submission and polling
 - Risk rule configuration
 - Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink-cli events poll`, instead of guessing or busy-retrying
+
+## Skill Structure
+
+`SKILL.md` contains routing and safety rules. Command-level details live under `references/`, following the same "read the operation reference before running the CLI" pattern used by the Lark skills.
