@@ -4737,14 +4737,14 @@ Actions:
   get       Fetch one checkout session by --checkout-id
   update    Replace editable checkout fields by --checkout-id
   cancel    Cancel one checkout session by --checkout-id
-  complete  Complete checkout with a credential token
+  complete  Complete checkout with a payment instrument
 
 Arguments:
   --checkout-id <id>              Checkout ID for get/update/cancel/complete
   --merchant-url <url>            External merchant checkout URL for create
-  --merchant-name <name>          Merchant display name for create
+  --merchant-name <name>          Optional merchant display name override for create
   --merchant-category-code <code> Merchant category code for create
-  --order-channel-id <id>         Clink order channel ID for create
+  --order-channel-id <id>         Optional advanced override; backend derives it from merchant-url
   --currency <currency>           Checkout currency for create, for example USD
   --instruction-id <id>           Purchase instruction ID for create
   --mandate-id <id>               Purchase instruction mandate ID for create
@@ -4752,8 +4752,7 @@ Arguments:
   --buyer <json>                  UCP buyer JSON object for create/update
   --shipping-address <json>       Shipping address JSON object for create/update
   --metadata <json>               Metadata JSON object for create/update
-  --credential-token <token>      Credential token for complete
-  --payment-instrument-id <id>    Optional payment method ID for complete
+  --payment-instrument-id <id>    Required payment instrument ID for complete
   --idempotency-key <key>         Optional key for create/update/complete; generated when omitted
 
 Notes:
@@ -4762,18 +4761,19 @@ Notes:
   expose an "external" mode or subcommand.
   Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
   X-Customer-ID is not sent.
-  create sends instruction_id and mandate_id. complete does not send those fields.
+  create sends merchant_url, instruction_id and mandate_id; backend resolves order_channel_id from
+  merchant_url. external complete sends payment_instrument_id only.
 
 Examples:
   clink-cli ucp-checkout create \\
-    --merchant-url https://shop.example/checkout/abc --merchant-name "Shop" \\
-    --merchant-category-code 5311 --order-channel-id ucp_oc_xxx --currency USD \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
     --instruction-id ins_xxx --mandate-id mndt_xxx \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1000},"quantity":1}]' \\
     --buyer '{"email":"buyer@example.com"}' --format json
   clink-cli ucp-checkout get --checkout-id chk_xxx --format json
   clink-cli ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
-  clink-cli ucp-checkout complete --checkout-id chk_xxx --credential-token ctok_xxx --format json
+  clink-cli ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
   clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
 var CONFIG_HELP = `clink-cli config
@@ -5603,9 +5603,9 @@ async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
   const body = compact({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
-    merchant_name: requireStringFlag(flags, "missing --merchant-name", "merchant-name"),
+    merchant_name: getStringFlag(flags, "merchant-name"),
     merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
-    order_channel_id: requireStringFlag(flags, "missing --order-channel-id", "order-channel-id"),
+    order_channel_id: getStringFlag(flags, "order-channel-id"),
     currency: requireStringFlag(flags, "missing --currency", "currency"),
     instruction_id: requireStringFlag(flags, "missing --instruction-id", "instruction-id"),
     mandate_id: requireStringFlag(flags, "missing --mandate-id", "mandate-id"),
@@ -5626,7 +5626,9 @@ async function ucpCheckoutCreate(context) {
   return finishApiCommand(result, context);
 }
 async function ucpCheckoutGet(context) {
-  const checkoutId = requireCheckoutId(context.args.flags);
+  const flags = context.args.flags;
+  rejectUcpCheckoutCreateOnlyFlags(flags);
+  const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "GET",
@@ -5639,6 +5641,7 @@ async function ucpCheckoutGet(context) {
 }
 async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
+  rejectUcpCheckoutCreateOnlyFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const body = compact({
     line_items: requireJsonArrayFlag(flags, "line-items"),
@@ -5659,29 +5662,19 @@ async function ucpCheckoutUpdate(context) {
 }
 async function ucpCheckoutComplete(context) {
   const flags = context.args.flags;
-  if (getStringFlag(flags, "instruction-id") || getStringFlag(flags, "mandate-id")) {
-    throw validationError("--instruction-id and --mandate-id are only supported on ucp-checkout create");
+  rejectUcpCheckoutCreateOnlyFlags(flags);
+  if ("credential-token" in flags) {
+    throw validationError("--credential-token is not supported on external ucp-checkout complete; pass --payment-instrument-id");
   }
   const checkoutId = requireCheckoutId(flags);
-  const credentialToken = requireStringFlag(flags, "missing --credential-token", "credential-token");
-  const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
-  const instrument = compact({
-    type: "token",
-    payment_method_id: paymentInstrumentId,
-    credential: {
-      type: "token",
-      token: credentialToken
-    }
-  });
+  const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}/complete`,
     headers: buildUcpCheckoutHeaders(context),
     body: {
-      payment: {
-        instruments: [instrument]
-      }
+      payment_instrument_id: paymentInstrumentId
     },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
@@ -5689,7 +5682,9 @@ async function ucpCheckoutComplete(context) {
   return finishApiCommand(result, context);
 }
 async function ucpCheckoutCancel(context) {
-  const checkoutId = requireCheckoutId(context.args.flags);
+  const flags = context.args.flags;
+  rejectUcpCheckoutCreateOnlyFlags(flags);
+  const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
@@ -5702,6 +5697,11 @@ async function ucpCheckoutCancel(context) {
 }
 function requireCheckoutId(flags) {
   return requireStringFlag(flags, "missing --checkout-id", "checkout-id");
+}
+function rejectUcpCheckoutCreateOnlyFlags(flags) {
+  if ("instruction-id" in flags || "mandate-id" in flags) {
+    throw validationError("--instruction-id and --mandate-id are only supported on ucp-checkout create");
+  }
 }
 function buildUcpCheckoutHeaders(context) {
   return {

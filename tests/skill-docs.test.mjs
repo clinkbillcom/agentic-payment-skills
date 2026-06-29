@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const execFileAsync = promisify(execFile);
 
 async function readRepoFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
@@ -36,6 +39,7 @@ test('main skill uses lark-style metadata and delegates command details to refer
     'references/clink-async-events.md',
     'references/clink-instruction.md',
     'references/clink-payment-refund.md',
+    'references/clink-ucp-checkout.md',
   ]) {
     assert.match(skill, new RegExp(reference.replaceAll('/', '\\/')));
     const fileStat = await stat(path.join(rootDir, reference));
@@ -46,6 +50,56 @@ test('main skill uses lark-style metadata and delegates command details to refer
     skill.split('\n').length <= 260,
     'SKILL.md should stay concise and leave command details in references/',
   );
+});
+
+test('ucp checkout reference documents the product-order control flow', async () => {
+  const ucp = await readRepoFile('references/clink-ucp-checkout.md');
+
+  assert.match(ucp, /clink-cli instruction list --status ACTIVE/);
+  assert.match(ucp, /filter out reserve/i);
+  assert.match(ucp, /filter out inactive/i);
+  assert.match(ucp, /amount hard match/i);
+  assert.match(ucp, /merchant semantic/i);
+  assert.match(ucp, /no matching instruction/i);
+  assert.match(ucp, /create an instruction first/i);
+  assert.match(ucp, /clink-cli tool item-id --url/);
+  assert.match(ucp, /clink-cli ucp-checkout create/);
+  assert.match(ucp, /--instruction-id/);
+  assert.match(ucp, /--mandate-id/);
+  assert.match(ucp, /clink-cli ucp-checkout complete/);
+  assert.match(ucp, /--payment-instrument-id/);
+  assert.match(ucp, /Idempotency-Key/i);
+  assert.match(ucp, /state machine/i);
+});
+
+test('skill routes product purchases through ucp checkout reference', async () => {
+  const skill = await readRepoFile('SKILL.md');
+
+  assert.match(skill, /references\/clink-ucp-checkout\.md/);
+  assert.match(skill, /UCP checkout/i);
+  assert.match(skill, /product order/i);
+  assert.match(skill, /instruction\/mandate/i);
+  assert.match(skill, /tool item-id/i);
+});
+
+test('ucp checkout docs and vendored help use payment instrument, not credential token', async () => {
+  for (const filePath of await listMarkdownFiles()) {
+    const relativePath = path.relative(rootDir, filePath);
+    const text = await readFile(filePath, 'utf8');
+    assert.doesNotMatch(text, /--credential-token/, `${relativePath} still documents credential-token`);
+  }
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    path.join(rootDir, 'vendor/clink-cli/clink-cli.bundle.mjs'),
+    'ucp-checkout',
+    '--help',
+  ]);
+
+  assert.match(stdout, /complete\s+Complete checkout with a payment instrument/);
+  assert.match(stdout, /--payment-instrument-id <id>\s+Required payment instrument ID for complete/);
+  assert.match(stdout, /external complete sends payment_instrument_id only/);
+  assert.doesNotMatch(stdout, /--credential-token/);
+  assert.doesNotMatch(stdout, /Complete checkout with a credential token/);
 });
 
 test('skill markdown does not describe stale event cache or epoch instruction contracts', async () => {

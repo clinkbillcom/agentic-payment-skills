@@ -26,6 +26,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Card binding and management
 - Payment execution (direct and session mode)
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
+- External UCP checkout for product orders — list ACTIVE instructions, match instruction/mandate to the exact product amount and merchant semantics, extract the product `item_id`, create checkout, then complete it with a payment instrument
 - Refund submission and polling
 - Risk rule configuration
 - Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink-cli events poll`, instead of guessing or busy-retrying
@@ -33,3 +34,5 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 ## Skill Structure
 
 `SKILL.md` contains routing and safety rules. Command-level details live under `references/`, following the same "read the operation reference before running the CLI" pattern used by the Lark skills.
+
+For product checkout, read `references/clink-ucp-checkout.md` before running `clink-cli instruction list`, `clink-cli tool item-id`, or `clink-cli ucp-checkout create/complete`.
