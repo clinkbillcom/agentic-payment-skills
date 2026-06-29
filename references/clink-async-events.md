@@ -51,6 +51,20 @@ The result shape is:
 
 Always filter returned events by `type` and `resourceId` to find the specific change you triggered. The `--type` flag controls readiness, not business correctness.
 
+## Resource Correlation
+
+An event type alone is not proof that the current workflow completed. After any built-in watch or `events poll`, match the returned event to the resource that this workflow is waiting on:
+
+| Flow | Required correlation |
+| --- | --- |
+| Card binding/update/default change | same customer/profile and, when known, same `paymentInstrumentId` |
+| 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
+| Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
+| Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
+| VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
+
+If the right event type appears for a different resource, keep the current workflow pending or use a status/get command to verify. Do not mark the workflow complete from a type-only match.
+
 ## Required Event Checks
 
 | Flow | Event evidence |

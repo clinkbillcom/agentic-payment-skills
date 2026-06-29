@@ -38,7 +38,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - check wallet, profile, sandbox, or payment-method readiness
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear
-- order a discovered product through UCP checkout after an ACTIVE instruction/mandate exactly matches the product order
+- order a discovered product through the UCP checkout control flow: resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
 - create a full refund or poll refund status
 - wait for async completion events from the Clink event hub
 - inspect or update local Clink CLI configuration
@@ -56,7 +56,37 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - Merchant or product skills own business intent: when to charge, how much to charge, and how to confirm merchant-side success.
 - This skill owns the Clink CLI execution path: wallet readiness, payment-method readiness, charge execution, refund submission, refund polling, event waiting, and risk-rule links.
 - If the request is generic product language such as "enable auto top-up" without a direct Clink wallet or payment operation, route to the merchant or integration skill first.
-- High-priority VIC route: if the user says to use Visa for a purchase, booking, order, reservation, hotel booking, ticket purchase, or equivalent, perform the VIC readiness and instruction list-first flow before any normal `pay`.
+- High-priority VIC route: if the user says to use Visa, or the selected/default payment method is known to be Visa, for a purchase, booking, order, reservation, hotel booking, ticket purchase, or equivalent, perform the VIC readiness and instruction list-first flow before any normal `pay`.
+
+## Control Loop
+
+Every workflow follows:
+
+`Observe → Classify → Act → Verify → Return`
+
+1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting.
+3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
+4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
+5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
+
+Maintain a **profile/environment lock**: once a workflow starts with `--profile <name>` and/or `--sandbox`, every follow-up command in that workflow must use the same profile and environment unless the caller explicitly starts a new workflow.
+
+## Routing And Action Matrix
+
+| Observation | Action |
+| --- | --- |
+| Need current payment-method readiness | `card binding-link --no-watch`, then inspect `paymentMethodsVoList`; do not trust `card list` alone |
+| User must bind/manage card or risk rules | Run the link command without `--no-watch`, or wait with `events poll`, then verify the matching event |
+| User says Visa, or selected/default payment method is known to be Visa, for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |
+| Discovered external product order | List ACTIVE instructions for the resolved paymentInstrumentId first; if no matching instruction+mandate exists, start the instruction creation workflow and stop UCP checkout until activation; if a valid match exists, run UCP checkout create then complete as one handoff: create checkout, parse checkoutId, then complete checkout with that paymentInstrumentId; do not use plain `pay` |
+| Direct/session payment is explicitly authorized | Run `clink-cli pay` with exact inputs from the user or upstream merchant flow |
+| `pay status=1` | Return payment success data for merchant confirmation; do not claim merchant fulfillment |
+| `pay status=3/4/6` | Stop or offer recovery; do not report merchant success |
+| `pay exit=6` | Treat state as unknown; verify before retry |
+| `pay exit=7` | Send 3DS redirect URL and wait for the matching order event |
+| `refund create ok` | Treat as submitted only; wait for refund event or `refund get` terminal state |
+| UCP `complete_in_progress` | Use bounded `ucp-checkout get` recovery or return a resumable pending state |
 
 ## Hard Rules
 
@@ -71,7 +101,10 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.
 - Async completion is event-driven. Never claim binding, refund, VIC registration, instruction activation, risk-rule update, or post-3DS order completion until the matching event has been observed through the built-in link watch or `events poll`.
 - VIC authorization prepares permission; it is not payment completion. Reuse ACTIVE instructions only when the selected card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request.
-- UCP checkout product orders must list ACTIVE instructions first, filter out reserve or inactive instruction/mandate entries, apply amount hard match and merchant semantic match, extract `item_id`, create the external checkout, then complete it with `--payment-instrument-id`.
+- UCP checkout product orders must list ACTIVE instructions first, filter out reserve or inactive instruction/mandate entries, apply amount hard match and merchant semantic match, extract `item_id`, resolve the current/default paymentInstrumentId, create the external checkout, parse checkoutId from the create response, then complete it with `--payment-instrument-id`.
+- If no matching instruction+mandate is found for a UCP product order, do not run `ucp-checkout create` or `ucp-checkout complete`; start the instruction creation workflow and wait for matching ACTIVE instruction evidence.
+- No-match UCP branch is terminal for the current checkout attempt: after starting the instruction creation workflow, return a waiting/pending state and do not continue to item-id extraction, checkout create, or checkout complete until activation is observed and the flow restarts from instruction list.
+- UCP checkout completion is not merchant fulfillment; delivery, entitlement, merchant receipt, or downstream business completion belongs to the merchant/product runtime.
 - If the user asks to preview a command or verify inputs without execution, use `--dry-run` when supported.
 
 ## Quick Reference

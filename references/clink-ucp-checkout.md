@@ -16,6 +16,8 @@ Product discovery and price truth belong to the merchant/product tool. This skil
 
 Do not use plain `clink-cli pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, instruction binding, and external automation context.
 
+UCP checkout completion is not merchant fulfillment. A `completed` checkout proves only the checkout/order-side action returned terminal success; fulfillment, delivery, entitlement, or merchant receipt confirmation still belongs to the merchant/product runtime.
+
 ## Required Inputs
 
 Before the first checkout command, have all of these in the current request:
@@ -41,8 +43,10 @@ DISCOVER_PRODUCT
   -> REFRESH_PAYMENT_INSTRUMENT
   -> LIST_AUTHORIZATIONS
   -> SELECT_INSTRUCTION_MANDATE
-  -> EXTRACT_ITEM_ID
-  -> CREATE_CHECKOUT
+  -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
+  -> IF_MATCH_EXTRACT_ITEM_ID
+  -> IF_MATCH_CREATE_CHECKOUT
+  -> CAPTURE_CHECKOUT_ID
   -> VERIFY_READY_FOR_COMPLETE
   -> COMPLETE_CHECKOUT
   -> VERIFY_CHECKOUT_RESULT
@@ -77,7 +81,7 @@ Use the selected profile and environment. For sandbox, always include `--sandbox
 clink-cli card binding-link --no-watch --format json
 ```
 
-Select the caller-authorized payment method. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
+Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Carry this exact `paymentInstrumentId` through the rest of the checkout workflow, including `ucp-checkout complete`. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
 
 ## Step 2: List Candidate Instructions
 
@@ -98,13 +102,9 @@ The `--status ACTIVE` query is required, but still filter the returned payload d
 - filter out entries for a different `paymentInstrumentId`
 - filter out entries with missing `instructionId`, `mandateId`, `currencyCode`, or amount limit
 
-If there is no matching instruction and mandate after filtering, stop and tell the user:
+If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink-cli instruction create` and, when needed, `clink-cli instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run `ucp-checkout create` or `ucp-checkout complete` until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-```text
-No matching instruction and mandate was found for this product order. Please create an instruction first for the exact merchant, amount, currency, and product scope, then retry checkout.
-```
-
-Do not create an instruction inside this checkout flow unless the user explicitly switches to the VIC instruction creation flow.
+When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. After the `purchase_instruction.activated` event is observed and correlated to the created instruction, restart this checkout flow from Step 1 so the instruction list is refreshed before matching.
 
 ## Step 3: Select One Instruction And Mandate
 
@@ -157,7 +157,7 @@ Use `--shipping-address '<json>'` only for physical goods that ship. Services, s
 
 `stable_create_key` should be stable for the same product order attempt, for example a hash of merchant URL, item ID, quantity, total, instruction ID, mandate ID, and user/task correlation. Do not reuse it for a different cart.
 
-After create, parse `data.id` / `data.checkout_id` / `data.checkoutId` as `checkoutId`. A normal create response should be `ready_for_complete` (or equivalent ready state). If it is not ready, run:
+This is a continuous create then complete handoff. After create, parse `data.id` / `data.checkout_id` / `data.checkoutId` as `checkoutId`; do not ask the user to provide it. A normal create response should be `ready_for_complete` (or equivalent ready state). If it is not ready, run:
 
 ```bash
 clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
@@ -167,7 +167,7 @@ Stop on `requires_escalation`, `canceled`, or errors.
 
 ## Step 6: Complete External Checkout
 
-External complete uses the payment instrument. Do not pass instruction, mandate, or credential-token fields.
+External complete uses the current/default paymentInstrumentId resolved in Step 1. Complete uses that `checkoutId` and the resolved payment instrument. Do not pass instruction, mandate, or credential-token fields.
 
 ```bash
 clink-cli ucp-checkout complete \
@@ -201,7 +201,7 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 
 ## Failure And Recovery Rules
 
-- No matching instruction and mandate: tell the user to create an instruction first; do not create checkout.
+- No matching instruction and mandate: start the instruction creation workflow, then stop checkout until instruction activation event proves a matching instruction+mandate is ACTIVE.
 - Partial authorization match: do not select it.
 - More than one equally specific match: ask the user to choose.
 - `ucp-checkout create` idempotency conflict: use the original response if the cart is identical; otherwise create a new checkout with a new key.
@@ -213,6 +213,17 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 ```bash
 clink-cli card binding-link --no-watch --format json
 clink-cli instruction list --status ACTIVE --payment-instrument-id <payment_instrument_id> --format json
+
+# Branch gate:
+# If no active instruction+mandate matches:
+#   1. start the VIC instruction creation flow with the same mandate scope
+#      using clink-cli instruction create / instruction sign-url
+#   2. wait for purchase_instruction.activated for that instruction
+#   3. STOP this checkout attempt here
+#   4. restart from card refresh + instruction list after activation
+# Do NOT run tool item-id, ucp-checkout create, or ucp-checkout complete on this branch.
+
+# Only the IF_MATCH branch continues:
 clink-cli tool item-id --url <product_url> --format json
 clink-cli ucp-checkout create \
   --merchant-url <product_url> \
