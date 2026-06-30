@@ -28,11 +28,12 @@ Before the first checkout command, have all of these in the current request:
 - currency
 - unit price in ISO 4217 minor units, quantity, and total amount
 - product title or description
+- fulfillment classification: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`
 - payment instrument ID
 - buyer data when required by the merchant
-- shipping address for physical goods that ship
+- standard US shipping address for physical goods that ship
 
-Never invent missing values. Ask the caller or user when product identity, amount, currency, merchant context, or payment instrument is missing.
+Never invent missing values. Ask the caller or user when product identity, amount, currency, merchant context, fulfillment type, shipping address, or payment instrument is missing.
 
 ## Control Model
 
@@ -40,6 +41,7 @@ Treat checkout as a closed-loop state machine:
 
 ```text
 DISCOVER_PRODUCT
+  -> CLASSIFY_FULFILLMENT
   -> REFRESH_PAYMENT_INSTRUMENT
   -> LIST_AUTHORIZATIONS
   -> SELECT_INSTRUCTION_MANDATE
@@ -72,6 +74,32 @@ The agent may use merchant tools, browser tools, search, or page extraction to i
 ```
 
 Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. `line_items[].item.price` is minor units; instruction mandates usually express `amountLimit` as major units. Convert before comparison and do not treat a different product total as "close enough".
+
+## Step 0.5: Classify Fulfillment And Shipping
+
+Before payment refresh or instruction list, classify the frozen product/order:
+
+- `PHYSICAL_GOODS_REQUIRES_SHIPPING`: shipped physical goods. Collect a standard US shipping address before instruction list, instruction creation, item ID extraction, or checkout create.
+- `NO_SHIPPING_REQUIRED`: services, subscriptions, hotels, tickets, bookings, reservations, and digital goods.
+- `UNKNOWN`: stop and ask the caller or user whether the order ships a physical item. Do not run instruction list or checkout while fulfillment is unknown.
+
+For physical goods, the shipping address must be a US address. Required fields are `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `countryCode` must be `US`.
+
+```json
+{
+  "fulfillmentType": "PHYSICAL_GOODS_REQUIRES_SHIPPING",
+  "shippingAddress": {
+    "name": "Buyer",
+    "line1": "123 Market St",
+    "line2": "Apt 201",
+    "city": "San Francisco",
+    "state": "CA",
+    "zip": "94105",
+    "countryCode": "US",
+    "deliveryContactDetails": {}
+  }
+}
+```
 
 ## Step 1: Refresh Payment Instrument
 

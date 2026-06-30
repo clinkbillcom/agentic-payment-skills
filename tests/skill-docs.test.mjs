@@ -168,6 +168,25 @@ test('ucp checkout docs align no-match branch with instruction creation workflow
   assert.match(skill, /return a waiting\/pending state/i);
 });
 
+test('ucp checkout docs require fulfillment classification before checkout branch', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const ucp = await readRepoFile('references/clink-ucp-checkout.md');
+
+  assert.match(skill, /fulfillmentType/i);
+  assert.match(skill, /PHYSICAL_GOODS_REQUIRES_SHIPPING/);
+  assert.match(skill, /NO_SHIPPING_REQUIRED/);
+  assert.match(skill, /UNKNOWN/);
+  assert.match(skill, /US shipping address/i);
+
+  assert.match(ucp, /CLASSIFY_FULFILLMENT/i);
+  assert.match(ucp, /PHYSICAL_GOODS_REQUIRES_SHIPPING/);
+  assert.match(ucp, /NO_SHIPPING_REQUIRED/);
+  assert.match(ucp, /UNKNOWN/);
+  assert.match(ucp, /countryCode.*US/i);
+  assert.match(ucp, /UNKNOWN[\s\S]+stop[\s\S]+instruction list/i);
+  assert.match(ucp, /physical goods[\s\S]+US shipping address[\s\S]+before[\s\S]+instruction list/i);
+});
+
 test('ucp checkout docs and vendored help use payment instrument, not credential token', async () => {
   for (const filePath of await listMarkdownFiles()) {
     const relativePath = path.relative(rootDir, filePath);
