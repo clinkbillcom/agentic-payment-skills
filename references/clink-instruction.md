@@ -35,7 +35,7 @@ List active reusable instructions:
 
 ```bash
 clink-cli instruction list \
-  --status ACTIVE \
+  --valid-only \
   --payment-instrument-id <visa_pi> \
   --format json
 ```

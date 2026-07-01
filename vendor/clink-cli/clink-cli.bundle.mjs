@@ -13,11 +13,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -3557,10 +3553,12 @@ var OPTION_DEFINITIONS = [
   { name: "refund-id", flags: "--refund-id <id>" },
   { name: "purchase-instruction-id", flags: "--purchase-instruction-id <id>" },
   { name: "status", flags: "--status <status>" },
+  { name: "valid-only", flags: "--valid-only" },
   { name: "title", flags: "--title <title>" },
   { name: "description", flags: "--description <text>" },
   { name: "effective-until-time", flags: "--effective-until-time <datetime>" },
   { name: "mandates", flags: "--mandates <json>" },
+  { name: "products", flags: "--products <json>" },
   { name: "is-recurring", flags: "--is-recurring" },
   { name: "shipping-address", flags: "--shipping-address <json>" },
   { name: "sandbox", flags: "--sandbox" },
@@ -4030,7 +4028,25 @@ function extractMessage(body) {
     return void 0;
   }
   const candidate = body.message ?? body.msg ?? body.error;
-  return typeof candidate === "string" ? candidate : void 0;
+  if (typeof candidate === "string") {
+    return candidate;
+  }
+  const messages = body.messages;
+  if (Array.isArray(messages)) {
+    for (const item of messages) {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (typeof item !== "object" || item === null) {
+        continue;
+      }
+      const messageContent = item.content ?? item.message ?? item.msg;
+      if (typeof messageContent === "string") {
+        return messageContent;
+      }
+    }
+  }
+  return void 0;
 }
 function pickDefaultPaymentInstrument(items) {
   if (!Array.isArray(items) || items.length === 0) {
@@ -4135,18 +4151,45 @@ async function watchEvents(options) {
   const sleep = options.sleep ?? realSleep;
   const now = options.now ?? Date.now;
   const log = options.log ?? stderrLog;
+  const startedAtMs = now();
   log(`Open this link in your browser to complete the ${options.label}:`);
   log(`  ${options.url}`);
   log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
-  const deadline = now() + maxDurationMs;
+  const deadline = startedAtMs + maxDurationMs;
   for (; ; ) {
-    const records = await pollWebhookEvents({
-      runtimeConfig: options.runtimeConfig,
-      timeoutMs: options.timeoutMs,
-      ...options.pageSize !== void 0 ? { pageSize: options.pageSize } : {}
-    });
+    let records;
+    try {
+      records = await pollWebhookEvents({
+        runtimeConfig: options.runtimeConfig,
+        timeoutMs: options.timeoutMs,
+        ...options.pageSize !== void 0 ? { pageSize: options.pageSize } : {}
+      });
+    } catch (error) {
+      if (!isRecoverableWatchPollError(error)) {
+        throw error;
+      }
+      if (now() + pollIntervalMs >= deadline) {
+        break;
+      }
+      await sleep(pollIntervalMs);
+      continue;
+    }
     if (records.length > 0) {
-      const events = await processEvents(records, options.runtimeConfig.profile);
+      const staleRecords = records.filter((record) => isStaleForWatch(record, startedAtMs));
+      const currentRecords = records.filter((record) => !isStaleForWatch(record, startedAtMs));
+      const staleEventIds = staleRecords.map((record) => record.eventId).filter((id) => id.length > 0);
+      if (staleEventIds.length > 0) {
+        await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, staleEventIds);
+        log(`Ignored ${staleEventIds.length} stale event(s) from before the watch started.`);
+      }
+      if (currentRecords.length === 0) {
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep(pollIntervalMs);
+        continue;
+      }
+      const events = await processEvents(currentRecords, options.runtimeConfig.profile);
       log(`Received ${events.length} event(s):`);
       for (const event of events) {
         log(`  ${event.summary}`);
@@ -4163,6 +4206,38 @@ async function watchEvents(options) {
   }
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
   return { watched: true, url: options.url, timedOut: true, events: [], ackedEventIds: [] };
+}
+function isStaleForWatch(record, startedAtMs) {
+  const eventTimeMs = parseEventTimeMs(record.eventTime);
+  return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
+}
+function parseEventTimeMs(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return normalizeEpochMs(value);
+  }
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return void 0;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return normalizeEpochMs(Number(trimmed));
+  }
+  const utcDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(trimmed);
+  if (utcDateTime) {
+    const [, year, month, day, hour, minute, second, millisecond = "0"] = utcDateTime;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond.padEnd(3, "0")));
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function normalizeEpochMs(value) {
+  return value < 1e12 ? value * 1e3 : value;
+}
+function isRecoverableWatchPollError(error) {
+  return error instanceof CliError && (error.type === "network_error" || error.type === "api_error" && error.code === 429);
 }
 async function collectWebhookEvents(options) {
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
@@ -4667,7 +4742,11 @@ Arguments:
   --currency <currency>        Charge currency for direct charge mode, for example USD
   --session-id <id>            Checkout session ID for session mode
   --payment-instrument-id <id> Payment instrument to charge; defaults to the cached default card
-  --purchase-instruction-id <id> VIC purchase instruction (local instructionId); required for VIC-routed cards
+  --instruction-id <id>          VIC purchase instruction ID sent as instruction_id
+  --purchase-instruction-id <id> Backward-compatible alias for --instruction-id
+  --mandate-id <id>              VIC mandate ID sent as mandate_id
+  --shipping-address <json>      UCP Postal Address JSON object sent as shippingaddress
+  --products <json>              Product list JSON array for aiAgentInstructionBo.products
 
 Options:
   --profile <name>             Local profile whose customer credentials will be used
@@ -4676,12 +4755,18 @@ Options:
 Notes:
   If --payment-instrument-id is omitted, pay uses the default cached payment method from local config.
   Refresh cached payment methods with clink-cli card binding-link when needed.
-  --purchase-instruction-id is the target shape for VIC-routed payments; backend support for charging with this parameter is still pending.
+  For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
+  For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
+  street_address, extended_address, address_locality, address_region, address_country,
+  postal_code, first_name, last_name, and phone_number.
+  For product-level VIC credential context, pass --products as a JSON array with productId,
+  productName, productUrl, quantity, unitPrice, currencyCode, and optional extra.
+  Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
 
 Examples:
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli pay --session-id sess_xxx --payment-instrument-id pi_xxx
-  clink-cli pay --session-id sess_xxx --purchase-instruction-id ins_xxx
+  clink-cli pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --profile buyer-2
 `;
 var REFUND_HELP = `clink-cli refund
@@ -4763,13 +4848,15 @@ Notes:
   X-Customer-ID is not sent.
   create sends merchant_url, instruction_id and mandate_id; backend resolves order_channel_id from
   merchant_url. external complete sends payment_instrument_id only.
+  create treats line_items price/amount fields as decimal major-unit values and converts them by
+  --currency before calling the external checkout API; update sends line_items JSON unchanged.
 
 Examples:
   clink-cli ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
     --instruction-id ins_xxx --mandate-id mndt_xxx \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1000},"quantity":1}]' \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --buyer '{"email":"buyer@example.com"}' --format json
   clink-cli ucp-checkout get --checkout-id chk_xxx --format json
   clink-cli ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
@@ -4781,7 +4868,14 @@ var CONFIG_HELP = `clink-cli config
 Usage:
   clink-cli config set <key> <value>
   clink-cli config get [--profile <name>]
+  clink-cli config profiles [--profile <name>]
   clink-cli config unset <key> [--profile <name>]
+
+Subcommands:
+  set        Update local config
+  get        Show the selected profile's local config
+  profiles   List local profiles and show environment guidance
+  unset      Remove or reset a local config key
 
 Supported Keys:
   base-url
@@ -4793,6 +4887,7 @@ Supported Keys:
 
 Notes:
   Profile-scoped keys default to profile "default" when --profile is omitted.
+  Environment is selected by --sandbox or --base-url; profile only selects local credentials.
 `;
 var CONFIG_SET_HELP = `clink-cli config set
 
@@ -4831,6 +4926,32 @@ Examples:
   clink-cli config get
   clink-cli config get --profile buyer-2 --format pretty
 `;
+var CONFIG_PROFILES_HELP = `clink-cli config profiles
+
+List local profiles without making a network request.
+
+Usage:
+  clink-cli config profiles [--profile <name>] [options]
+
+Options:
+  --profile <name>             Mark the currently selected local profile, defaults to "default"
+  --sandbox                    Resolve currentEnvironment as sandbox for this invocation
+  --base-url <url>             Resolve currentEnvironment from the explicit API base URL
+
+Output (data):
+  currentProfile               Local profile selected by --profile
+  currentEnvironment           Effective API environment selected by --sandbox / --base-url / config
+  profiles[]                   Local credential summaries; customerApiKey is never printed
+
+Notes:
+  Environment is selected by --sandbox or --base-url; profile only selects local credentials.
+  Profiles are not inherently sandbox or production in the current config schema. Use a naming
+  convention such as --profile sandbox together with --sandbox to keep credentials separated.
+
+Examples:
+  clink-cli config profiles --format pretty
+  clink-cli config profiles --profile sandbox --sandbox --format json
+`;
 var CONFIG_UNSET_HELP = `clink-cli config unset
 
 Usage:
@@ -4862,7 +4983,7 @@ Usage:
 Actions:
   create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
   sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
-  list      List instructions, optionally filtered by --status and --payment-instrument-id
+  list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
   get       Get one instruction by --purchase-instruction-id
   update    Print the agent page URL for user-managed changes; no backend update call in this phase
   cancel    Print the agent page URL for user-managed cancellation; no backend cancel call in this phase
@@ -4880,6 +5001,7 @@ Notes:
   Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
   Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
   --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
+  --valid-only lists ACTIVE instructions and, for one-time instructions, keeps only mandates with reserveStatus=0.
   Authenticates by customer API key only (no X-Customer-ID header).
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
@@ -4891,7 +5013,7 @@ Examples:
     --sandbox --format json
   clink-cli instruction sign-url \\
     --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --format json
-  clink-cli instruction list --status ACTIVE --payment-instrument-id pi_xxx --format json
+  clink-cli instruction list --valid-only --payment-instrument-id pi_xxx --format json
   clink-cli instruction get --purchase-instruction-id ins_xxx --format json
   clink-cli instruction cancel --sandbox --format json
 `;
@@ -5016,6 +5138,8 @@ function getHelpText(command, subcommand) {
           return CONFIG_SET_HELP;
         case "get":
           return CONFIG_GET_HELP;
+        case "profiles":
+          return CONFIG_PROFILES_HELP;
         case "unset":
           return CONFIG_UNSET_HELP;
         default:
@@ -5135,6 +5259,7 @@ function normalizeHostname(value) {
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
+var OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE = "5999";
 async function runCli(argv) {
   const args = parseArgs(argv);
   const [command, subcommand] = args.positionals;
@@ -5486,32 +5611,57 @@ async function riskRuleGet(context) {
   return finishApiCommand(result, context);
 }
 async function handlePayCommand(context) {
-  const sessionId = getStringFlag(context.args.flags, "session-id");
-  const merchantId = getStringFlag(context.args.flags, "merchant-id");
-  const paymentMethodType = getStringFlag(context.args.flags, "payment-method-type") ?? "CARD";
+  const flags = context.args.flags;
+  const sessionId = getStringFlag(flags, "session-id");
+  const merchantId = getStringFlag(flags, "merchant-id");
+  const paymentMethodType = getStringFlag(flags, "payment-method-type") ?? "CARD";
   if (!sessionId && !merchantId) {
     throw validationError("pay requires either --merchant-id or --session-id");
   }
   if (sessionId && merchantId) {
     throw validationError("pay accepts either --merchant-id or --session-id, not both");
   }
-  let paymentInstrumentId = getStringFlag(context.args.flags, "payment-instrument-id");
+  let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
   if (!paymentInstrumentId) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
   }
-  const purchaseInstructionId = getStringFlag(context.args.flags, "purchase-instruction-id");
+  const legacyPurchaseInstructionId = getStringFlag(flags, "purchase-instruction-id");
+  const explicitInstructionId = getStringFlag(flags, "instruction-id");
+  const instructionId = explicitInstructionId ?? legacyPurchaseInstructionId;
+  if (legacyPurchaseInstructionId !== void 0 && explicitInstructionId !== void 0 && legacyPurchaseInstructionId !== explicitInstructionId) {
+    throw validationError("--instruction-id and --purchase-instruction-id must match when both are provided");
+  }
+  const mandateId = getStringFlag(flags, "mandate-id");
+  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
+  const products = optionalJsonArrayFlag(flags, "products");
+  const aiAgentInstructionBo = compact({
+    instructionId,
+    mandateId,
+    shippingAddressJson: shippingAddress === void 0 ? void 0 : JSON.stringify(shippingAddress),
+    merchantInfo: { merchantCategoryCode: OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE },
+    products
+  });
+  const vicChargeFields = {
+    instruction_id: instructionId,
+    mandate_id: mandateId,
+    shippingaddress: shippingAddress,
+    aiAgentInstructionBo: Object.keys(aiAgentInstructionBo).length > 0 ? aiAgentInstructionBo : void 0,
+    // Backward-compatible alias for older callers/backend revisions; new charge integrations should
+    // use instruction_id.
+    purchaseInstructionId: legacyPurchaseInstructionId
+  };
   const body = sessionId ? compact({
     paymentInstrumentId,
     paymentMethodType,
     sessionId,
-    purchaseInstructionId
+    ...vicChargeFields
   }) : compact({
     paymentInstrumentId,
     paymentMethodType,
     merchantId,
-    customAmount: parseAmount(requireStringFlag(context.args.flags, "missing --amount", "amount")),
-    paymentCurrency: requireStringFlag(context.args.flags, "missing --currency", "currency"),
-    purchaseInstructionId
+    customAmount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
+    paymentCurrency: requireStringFlag(flags, "missing --currency", "currency"),
+    ...vicChargeFields
   });
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
@@ -5601,16 +5751,17 @@ async function handleUcpCheckoutCommand(subcommand, context) {
 }
 async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
+  const currency = requireStringFlag(flags, "missing --currency", "currency");
   const body = compact({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
     merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
     order_channel_id: getStringFlag(flags, "order-channel-id"),
-    currency: requireStringFlag(flags, "missing --currency", "currency"),
+    currency,
     instruction_id: requireStringFlag(flags, "missing --instruction-id", "instruction-id"),
     mandate_id: requireStringFlag(flags, "missing --mandate-id", "mandate-id"),
     buyer: optionalJsonFlag(flags, "buyer"),
-    line_items: requireJsonArrayFlag(flags, "line-items"),
+    line_items: normalizeExternalCheckoutCreateLineItems(requireJsonArrayFlag(flags, "line-items"), currency),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
@@ -5697,6 +5848,87 @@ async function ucpCheckoutCancel(context) {
 }
 function requireCheckoutId(flags) {
   return requireStringFlag(flags, "missing --checkout-id", "checkout-id");
+}
+var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
+var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
+function normalizeExternalCheckoutCreateLineItems(lineItems, currency) {
+  return lineItems.map((lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`));
+}
+function normalizeExternalCheckoutMoneyFields(value, currency, path2) {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeExternalCheckoutMoneyFields(item, currency, `${path2}[${index}]`));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
+    const fieldPath = `${path2}.${key}`;
+    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
+      return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
+    }
+    return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
+  }));
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+function isDecimalInput(value) {
+  return typeof value === "number" || typeof value === "string";
+}
+function majorAmountToMinorUnits(value, currency, fieldPath) {
+  const normalizedCurrency = currency.trim().toUpperCase();
+  const fractionDigits = getCurrencyFractionDigits(normalizedCurrency);
+  const rawValue = typeof value === "number" ? numberAmountToString(value, fieldPath) : value.trim();
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(rawValue);
+  if (!match) {
+    throw validationError(`${fieldPath} must be a decimal amount`);
+  }
+  const sign = match[1] ?? "";
+  const integerPart = match[2];
+  const rawFractionPart = match[3];
+  if (integerPart === void 0) {
+    throw validationError(`${fieldPath} must be a decimal amount`);
+  }
+  if (sign === "-") {
+    throw validationError(`${fieldPath} must be a non-negative amount`);
+  }
+  const fractionPart = rawFractionPart ?? "";
+  const extraFraction = fractionPart.slice(fractionDigits);
+  if (/[1-9]/.test(extraFraction)) {
+    throw validationError(`${fieldPath} supports at most ${fractionDigits} decimal places for ${normalizedCurrency}`);
+  }
+  const scale = 10n ** BigInt(fractionDigits);
+  const minorUnits = BigInt(integerPart) * scale + BigInt(fractionPart.slice(0, fractionDigits).padEnd(fractionDigits, "0") || "0");
+  if (minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw validationError(`${fieldPath} is too large`);
+  }
+  return Number(minorUnits);
+}
+function numberAmountToString(value, fieldPath) {
+  if (!Number.isFinite(value)) {
+    throw validationError(`${fieldPath} must be a finite decimal amount`);
+  }
+  const rawValue = String(value);
+  if (/e/i.test(rawValue)) {
+    throw validationError(`${fieldPath} must be a plain decimal amount`);
+  }
+  return rawValue;
+}
+function getCurrencyFractionDigits(currency) {
+  const cached = CURRENCY_FRACTION_DIGIT_CACHE.get(currency);
+  if (cached !== void 0) {
+    return cached;
+  }
+  try {
+    const fractionDigits = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+    CURRENCY_FRACTION_DIGIT_CACHE.set(currency, fractionDigits);
+    return fractionDigits;
+  } catch {
+    throw validationError(`unsupported currency: ${currency}`);
+  }
 }
 function rejectUcpCheckoutCreateOnlyFlags(flags) {
   if ("instruction-id" in flags || "mandate-id" in flags) {
@@ -5822,7 +6054,12 @@ async function instructionSignUrl(context) {
   return EXIT_CODES.OK;
 }
 async function instructionList(context) {
-  const status = getStringFlag(context.args.flags, "status")?.toUpperCase();
+  const validOnly = getBooleanFlag(context.args.flags, "valid-only");
+  const rawStatus = getStringFlag(context.args.flags, "status");
+  if (validOnly && rawStatus && rawStatus.toUpperCase() !== "ACTIVE") {
+    throw validationError(`--valid-only cannot be combined with --status ${rawStatus.toUpperCase()}`);
+  }
+  const status = validOnly ? "ACTIVE" : rawStatus?.toUpperCase();
   if (status && !INSTRUCTION_STATUSES.has(status)) {
     throw validationError(`invalid instruction status: ${status}`);
   }
@@ -5836,7 +6073,62 @@ async function instructionList(context) {
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
-  return finishApiCommand(result, context);
+  if (!validOnly || isDryRun(result)) {
+    return finishApiCommand(result, context);
+  }
+  assertApiSuccess(result.status, result.body);
+  printSuccess(filterValidInstructionsPayload(unwrapApiData(result.body)), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function filterValidInstructionsPayload(data) {
+  if (Array.isArray(data)) {
+    return filterValidInstructionArray(data);
+  }
+  if (!isRecord(data)) {
+    return data;
+  }
+  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
+    const value = data[key];
+    if (Array.isArray(value)) {
+      return { ...data, [key]: filterValidInstructionArray(value) };
+    }
+  }
+  return data;
+}
+function filterValidInstructionArray(instructions) {
+  return instructions.flatMap((instruction) => {
+    if (!isRecord(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+      return [];
+    }
+    if (!isOneTimeInstruction(instruction)) {
+      return [instruction];
+    }
+    const mandateKey = findMandateArrayKey(instruction);
+    if (!mandateKey) {
+      return [instruction];
+    }
+    const mandates = instruction[mandateKey];
+    const usableMandates = mandates.filter(isUsableOneTimeMandate);
+    if (usableMandates.length === 0) {
+      return [];
+    }
+    return [{ ...instruction, [mandateKey]: usableMandates }];
+  });
+}
+function findMandateArrayKey(instruction) {
+  return ["mandates", "mandateList", "mandateVoList"].find((key) => Array.isArray(instruction[key]));
+}
+function isOneTimeInstruction(instruction) {
+  return isZeroLike(instruction.isRecurring);
+}
+function isUsableOneTimeMandate(mandate) {
+  return isRecord(mandate) && isZeroLike(mandate.reserveStatus);
+}
+function isZeroLike(value) {
+  return value === 0 || value === "0" || value === false;
+}
+function normalizedString(value) {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 async function instructionAgentPageUrl(context) {
   const url = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
@@ -5855,6 +6147,8 @@ async function handleConfigCommand(subcommand, context) {
       return configSet(context);
     case "get":
       return configGet(context);
+    case "profiles":
+      return configProfiles(context);
     case "unset":
       return configUnset(context);
     default:
@@ -5875,6 +6169,10 @@ async function configSet(context) {
 }
 async function configGet(context) {
   printSuccess(buildConfigView(context.storedConfig, context.runtimeConfig.profile), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function configProfiles(context) {
+  printSuccess(buildProfilesView(context.storedConfig, context.runtimeConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function configUnset(context) {
@@ -5969,6 +6267,39 @@ function buildConfigView(config, profileName) {
     configPath: "~/.clink-cli/config.json"
   };
 }
+function buildProfilesView(config, runtimeConfig) {
+  return {
+    currentProfile: runtimeConfig.profile,
+    currentEnvironment: inferEnvironment(runtimeConfig.baseUrl),
+    profiles: Object.entries(config.profiles).map(([name, profile]) => ({
+      name,
+      customerId: profile.customerId ?? null,
+      email: profile.email ?? null,
+      hasCustomerApiKey: Boolean(profile.customerApiKey),
+      paymentMethodCount: profile.paymentMethods?.length ?? 0,
+      suggestedEnvironment: suggestProfileEnvironment(name)
+    })),
+    note: "Environment is selected by --sandbox or --base-url; profile only selects local credentials. Use --profile sandbox --sandbox for sandbox credentials.",
+    configPath: "~/.clink-cli/config.json"
+  };
+}
+function inferEnvironment(baseUrl) {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    if (host === "api.clinkbill.dev" || host.includes("sandbox") || host.startsWith("test-api.")) {
+      return "sandbox";
+    }
+    if (host === "api.clinkbill.com") {
+      return "production";
+    }
+    return "custom";
+  } catch {
+    return "custom";
+  }
+}
+function suggestProfileEnvironment(profileName) {
+  return /sandbox|test/i.test(profileName) ? "sandbox" : "production";
+}
 function isEmptyProfile(profile) {
   return Object.keys(profile).length === 0;
 }
@@ -6016,6 +6347,31 @@ function optionalJsonFlag(flags, name) {
     return void 0;
   }
   return parseJsonFlag(value, `--${name}`);
+}
+function optionalJsonObjectFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  const parsed = parseJsonFlag(value, `--${name}`);
+  if (!isJsonObject(parsed)) {
+    throw validationError(`--${name} must be a JSON object`);
+  }
+  return parsed;
+}
+function optionalJsonArrayFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  const parsed = parseJsonFlag(value, `--${name}`);
+  if (!Array.isArray(parsed)) {
+    throw validationError(`--${name} must be a JSON array`);
+  }
+  return parsed;
+}
+function isJsonObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function compact(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));

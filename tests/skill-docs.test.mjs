@@ -55,7 +55,7 @@ test('main skill uses lark-style metadata and delegates command details to refer
 test('ucp checkout reference documents the product-order control flow', async () => {
   const ucp = await readRepoFile('references/clink-ucp-checkout.md');
 
-  assert.match(ucp, /clink-cli instruction list --status ACTIVE/);
+  assert.match(ucp, /clink-cli instruction list --valid-only/);
   assert.match(ucp, /filter out reserve/i);
   assert.match(ucp, /filter out inactive/i);
   assert.match(ucp, /amount hard match/i);
@@ -177,14 +177,113 @@ test('ucp checkout docs require fulfillment classification before checkout branc
   assert.match(skill, /NO_SHIPPING_REQUIRED/);
   assert.match(skill, /UNKNOWN/);
   assert.match(skill, /US shipping address/i);
+  assert.match(skill, /CWallet instruction address shape/i);
+  assert.match(skill, /UCP Postal Address shape/i);
 
   assert.match(ucp, /CLASSIFY_FULFILLMENT/i);
   assert.match(ucp, /PHYSICAL_GOODS_REQUIRES_SHIPPING/);
   assert.match(ucp, /NO_SHIPPING_REQUIRED/);
   assert.match(ucp, /UNKNOWN/);
   assert.match(ucp, /countryCode.*US/i);
+  assert.match(ucp, /address_country.*US/i);
+  assert.match(ucp, /instructionShippingAddress/);
+  assert.match(ucp, /ucpShippingAddress/);
+  assert.match(ucp, /street_address/);
+  assert.match(ucp, /postal_code/);
   assert.match(ucp, /UNKNOWN[\s\S]+stop[\s\S]+instruction list/i);
   assert.match(ucp, /physical goods[\s\S]+US shipping address[\s\S]+before[\s\S]+instruction list/i);
+});
+
+test('payment docs describe current VIC pay context fields', async () => {
+  const payment = await readRepoFile('references/clink-payment-refund.md');
+
+  assert.match(payment, /--instruction-id <id>/);
+  assert.match(payment, /--mandate-id <id>/);
+  assert.match(payment, /`--purchase-instruction-id <id>` remains only a backward-compatible alias/);
+  assert.match(payment, /--shipping-address '<json>'/);
+  assert.match(payment, /UCP Postal Address shape/);
+  assert.match(payment, /--products '<json-array>'/);
+  assert.match(payment, /unitPrice.*major-unit decimal/);
+  assert.match(payment, /merchantCategoryCode.*5999/i);
+
+  const skill = await readRepoFile('SKILL.md');
+  assert.match(skill, /merchant category code `?5999`?/i);
+});
+
+
+
+test('vendored clink-cli pay hardcodes old-pay merchant category code 5999', async () => {
+  const bundle = await readRepoFile('vendor/clink-cli/clink-cli.bundle.mjs');
+
+  assert.match(bundle, /5999/);
+  assert.match(bundle, /merchantCategoryCode/);
+  assert.match(bundle, /merchantInfo/);
+});
+
+test('vendored clink-cli includes latest UCP error message extraction', async () => {
+  const bundle = await readRepoFile('vendor/clink-cli/clink-cli.bundle.mjs');
+
+  assert.match(bundle, /messages = body\.messages/);
+  assert.match(bundle, /messageContent = item\.content/);
+  assert.match(bundle, /return messageContent/);
+});
+
+test('payment docs require list-first instruction and mandate resolution before VIC pay', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const payment = await readRepoFile('references/clink-payment-refund.md');
+
+  assert.match(payment, /instruction_id.*mandate_id.*mandatory|mandatory.*instruction_id.*mandate_id/i);
+  assert.match(payment, /clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json/);
+  assert.match(payment, /description semantic match/i);
+  assert.match(payment, /amount hard match/i);
+  assert.match(payment, /matching instruction\+mandate/i);
+  assert.match(payment, /start the instruction creation workflow/i);
+  assert.match(payment, /do not run `clink-cli pay`/i);
+  assert.match(payment, /--instruction-id <instruction_id>/);
+  assert.match(payment, /--mandate-id <mandate_id>/);
+
+  assert.match(skill, /Direct\/session Visa payment/i);
+  assert.match(skill, /list\/match ACTIVE instruction\+mandate/i);
+  assert.match(skill, /instruction creation workflow/i);
+  assert.match(skill, /No-match VIC pay branch is terminal/i);
+});
+
+test('payment docs keep instruction activation resume inside payment intent FSM', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const payment = await readRepoFile('references/clink-payment-refund.md');
+
+  assert.match(payment, /pending payment intent/i);
+  assert.match(payment, /Payment Intent ID/i);
+  assert.match(payment, /resume_pending_payment_intent/i);
+  assert.match(payment, /purchase_instruction\.activated/i);
+  assert.match(payment, /draftInstructionId|draft instruction/i);
+  assert.match(payment, /same card[\s\S]+must not[\s\S]+resume/i);
+  assert.match(payment, /re-run `clink-cli instruction list --valid-only/i);
+  assert.match(payment, /do not let the merchant skill manually call `clink-cli pay`/i);
+
+  assert.match(skill, /pending payment intent/i);
+  assert.match(skill, /resume_pending_payment_intent/i);
+  assert.match(skill, /same FSM/i);
+  assert.match(skill, /draft instruction/i);
+  assert.match(skill, /merchant.*must not.*instruction_id.*mandate_id/is);
+});
+
+test('payment docs require fulfillment-based shipping gate before old pay', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const payment = await readRepoFile('references/clink-payment-refund.md');
+
+  assert.match(payment, /NO_SHIPPING_REQUIRED[\s\S]+fixed default US shipping address/i);
+  assert.match(payment, /548 Market St/);
+  assert.match(payment, /PMB 00000/);
+  assert.match(payment, /address_country.*US/i);
+  assert.match(payment, /PHYSICAL_GOODS_REQUIRES_SHIPPING[\s\S]+standard US shipping address/i);
+  assert.match(payment, /UNKNOWN[\s\S]+do not run `clink-cli pay`/i);
+  assert.match(payment, /ISO 3166-1 alpha-2/i);
+  assert.match(payment, /USPS state abbreviation/i);
+
+  assert.match(skill, /NO_SHIPPING_REQUIRED[\s\S]+fixed default US address/i);
+  assert.match(skill, /PHYSICAL_GOODS_REQUIRES_SHIPPING[\s\S]+real US shipping address/i);
+  assert.match(skill, /UNKNOWN[\s\S]+ask/i);
 });
 
 test('ucp checkout docs and vendored help use payment instrument, not credential token', async () => {

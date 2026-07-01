@@ -83,12 +83,15 @@ Before payment refresh or instruction list, classify the frozen product/order:
 - `NO_SHIPPING_REQUIRED`: services, subscriptions, hotels, tickets, bookings, reservations, and digital goods.
 - `UNKNOWN`: stop and ask the caller or user whether the order ships a physical item. Do not run instruction list or checkout while fulfillment is unknown.
 
-For physical goods, the shipping address must be a US address. Required fields are `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `countryCode` must be `US`.
+For physical goods, collect one US shipping address but serialize it differently for each downstream command:
+
+- CWallet instruction creation (`clink-cli instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `countryCode` must be `US`.
+- External UCP checkout creation (`clink-cli ucp-checkout create --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be `US`. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
 
 ```json
 {
   "fulfillmentType": "PHYSICAL_GOODS_REQUIRES_SHIPPING",
-  "shippingAddress": {
+  "instructionShippingAddress": {
     "name": "Buyer",
     "line1": "123 Market St",
     "line2": "Apt 201",
@@ -97,6 +100,17 @@ For physical goods, the shipping address must be a US address. Required fields a
     "zip": "94105",
     "countryCode": "US",
     "deliveryContactDetails": {}
+  },
+  "ucpShippingAddress": {
+    "street_address": "123 Market St",
+    "extended_address": "Apt 201",
+    "address_locality": "San Francisco",
+    "address_region": "CA",
+    "address_country": "US",
+    "postal_code": "94105",
+    "first_name": "Buyer",
+    "last_name": "Example",
+    "phone_number": "+14155550100"
   }
 }
 ```
@@ -117,12 +131,12 @@ List before creating or checking out:
 
 ```bash
 clink-cli instruction list \
-  --status ACTIVE \
+  --valid-only \
   --payment-instrument-id <payment_instrument_id> \
   --format json
 ```
 
-The `--status ACTIVE` query is required, but still filter the returned payload defensively:
+The `--valid-only` query is required so the CLI requests ACTIVE instructions and filters unusable one-time mandates; still filter the returned payload defensively:
 
 - filter out inactive instructions whose `status` is absent from the active set or is not `ACTIVE` / `active`
 - filter out inactive mandates whose mandate-level status is not active when the backend exposes such a field
@@ -132,7 +146,7 @@ The `--status ACTIVE` query is required, but still filter the returned payload d
 
 If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink-cli instruction create` and, when needed, `clink-cli instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run `ucp-checkout create` or `ucp-checkout complete` until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. After the `purchase_instruction.activated` event is observed and correlated to the created instruction, restart this checkout flow from Step 1 so the instruction list is refreshed before matching.
+When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the CWallet instruction address shape to `instruction create`; do not pass the UCP Postal Address shape to instruction creation. After the `purchase_instruction.activated` event is observed and correlated to the created instruction, restart this checkout flow from Step 1 so the instruction list is refreshed before matching.
 
 ## Step 3: Select One Instruction And Mandate
 
@@ -181,7 +195,7 @@ clink-cli ucp-checkout create \
   --format json
 ```
 
-Use `--shipping-address '<json>'` only for physical goods that ship. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a shipping address unless the merchant explicitly requires one.
+Use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a shipping address unless the merchant explicitly requires one.
 
 `stable_create_key` should be stable for the same product order attempt, for example a hash of merchant URL, item ID, quantity, total, instruction ID, mandate ID, and user/task correlation. Do not reuse it for a different cart.
 
@@ -240,7 +254,7 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 
 ```bash
 clink-cli card binding-link --no-watch --format json
-clink-cli instruction list --status ACTIVE --payment-instrument-id <payment_instrument_id> --format json
+clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json
 
 # Branch gate:
 # If no active instruction+mandate matches:
@@ -260,6 +274,7 @@ clink-cli ucp-checkout create \
   --instruction-id <instruction_id> \
   --mandate-id <mandate_id> \
   --line-items '<line_items_json>' \
+  --shipping-address '<ucp_postal_address_json_if_required>' \
   --idempotency-key <stable_create_key> \
   --format json
 clink-cli ucp-checkout complete \

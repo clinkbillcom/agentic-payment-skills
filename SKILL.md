@@ -37,7 +37,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - initialize a user's Clink wallet
 - check wallet, profile, sandbox, or payment-method readiness
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
-- execute a payment after amount and authorization are already clear
+- execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, Direct/session Visa payment must list/match ACTIVE instruction+mandate before pay
 - order a discovered product through the UCP checkout control flow: classify `fulfillmentType`, require a US shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
 - create a full refund or poll refund status
 - wait for async completion events from the Clink event hub
@@ -80,7 +80,11 @@ Maintain a **profile/environment lock**: once a workflow starts with `--profile 
 | User must bind/manage card or risk rules | Run the link command without `--no-watch`, or wait with `events poll`, then verify the matching event |
 | User says Visa, or selected/default payment method is known to be Visa, for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |
 | Discovered external product order | First classify fulfillment as `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`. If `UNKNOWN`, ask before checkout. If physical goods ship, collect a US shipping address before instruction list. Then list ACTIVE instructions for the resolved paymentInstrumentId; if no matching instruction+mandate exists, start the instruction creation workflow and stop UCP checkout until activation; if a valid match exists, run UCP checkout create then complete as one handoff: create checkout, parse checkoutId, then complete checkout with that paymentInstrumentId; do not use plain `pay` |
-| Direct/session payment is explicitly authorized | Run `clink-cli pay` with exact inputs from the user or upstream merchant flow |
+| Old direct/session pay fulfillment is `NO_SHIPPING_REQUIRED` | Do not ask for an address; pass the fixed default US address placeholder to `clink-cli pay` |
+| Old direct/session pay fulfillment is `PHYSICAL_GOODS_REQUIRES_SHIPPING` | Ask for a real US shipping address and validate it before `instruction list` or `clink-cli pay` |
+| Old direct/session pay fulfillment is `UNKNOWN` | Ask whether the product ships as physical goods; do not run `clink-cli pay` |
+| Direct/session Visa payment is explicitly authorized | Resolve current/default paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, and run `clink-cli pay` only with resolved `instruction_id` + `mandate_id` |
+| Direct/session non-Visa payment is explicitly authorized | Run `clink-cli pay` with exact inputs from the user or upstream merchant flow |
 | `pay status=1` | Return payment success data for merchant confirmation; do not claim merchant fulfillment |
 | `pay status=3/4/6` | Stop or offer recovery; do not report merchant success |
 | `pay exit=6` | Treat state as unknown; verify before retry |
@@ -91,6 +95,10 @@ Maintain a **profile/environment lock**: once a workflow starts with `--profile 
 ## Hard Rules
 
 - Never run `clink-cli pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
+- Before old `clink-cli pay`, classify fulfillment. For `NO_SHIPPING_REQUIRED`, use the fixed default US address (`548 Market St`, `PMB 00000`, San Francisco, CA 94104, `address_country=US`) as the payment-context placeholder. For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, collect a real US shipping address. For `UNKNOWN`, ask first.
+- Old agent pay must use the fixed merchant category code `5999` in `aiAgentInstructionBo.merchantInfo.merchantCategoryCode`; do not ask the user or merchant skill for this MCC.
+- For Direct/session Visa payment, `instruction_id` and `mandate_id` are mandatory. Before pay, run `clink-cli instruction list --valid-only --payment-instrument-id <current/default paymentInstrumentId> --format json`, apply amount hard match plus title/description/merchant semantic match, and inject the matched IDs. If there is no matching instruction+mandate, start the instruction creation workflow and stop; the No-match VIC pay branch is terminal for the current pay attempt.
+- When no-match VIC pay starts instruction creation, preserve a pending payment intent with its draft instruction, then wait for `purchase_instruction.activated`. Resume through `resume_pending_payment_intent` only for the matching pending intent so the same FSM re-runs list/match/pay. A different instruction activation on the same card must not resume this intent. The merchant skill must not manually provide `instruction_id` or `mandate_id` or call pay outside this payment intent.
 - Never run `ucp-checkout create` or `ucp-checkout complete` for a product order until the target product, amount, currency, merchant context, fulfillment type, payment instrument, instruction ID, and mandate ID are all known and explicitly authorized for the same current request.
 - Never invent payment parameters. Missing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, or target payment method means stop and ask the caller or user for the missing data.
 - Never expose `customerApiKey` or other secrets in user-visible output.
@@ -101,7 +109,7 @@ Maintain a **profile/environment lock**: once a workflow starts with `--profile 
 - Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.
 - Async completion is event-driven. Never claim binding, refund, VIC registration, instruction activation, risk-rule update, or post-3DS order completion until the matching event has been observed through the built-in link watch or `events poll`.
 - VIC authorization prepares permission; it is not payment completion. Reuse ACTIVE instructions only when the selected card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request.
-- UCP checkout product orders must classify fulfillment before checkout: use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only for shipped physical goods, `NO_SHIPPING_REQUIRED` for services/subscriptions/hotels/tickets/bookings/reservations/digital goods, and `UNKNOWN` only long enough to ask. Physical shipped goods require a US shipping address (`countryCode=US`) before instruction list, instruction creation, `tool item-id`, or checkout create.
+- UCP checkout product orders must classify fulfillment before checkout: use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only for shipped physical goods, `NO_SHIPPING_REQUIRED` for services/subscriptions/hotels/tickets/bookings/reservations/digital goods, and `UNKNOWN` only long enough to ask. Physical shipped goods require a US shipping address before instruction list, instruction creation, `tool item-id`, or checkout create. Use the CWallet instruction address shape (`countryCode=US`, `line1`, `zip`) for `instruction create`, and the UCP Postal Address shape (`address_country=US`, `street_address`, `postal_code`) for `ucp-checkout create` and VIC `pay` shipping context.
 - UCP checkout product orders must list ACTIVE instructions first, filter out reserve or inactive instruction/mandate entries, apply amount hard match and merchant semantic match, extract `item_id`, resolve the current/default paymentInstrumentId, create the external checkout, parse checkoutId from the create response, then complete it with `--payment-instrument-id`.
 - If no matching instruction+mandate is found for a UCP product order, do not run `ucp-checkout create` or `ucp-checkout complete`; start the instruction creation workflow and wait for matching ACTIVE instruction evidence.
 - No-match UCP branch is terminal for the current checkout attempt: after starting the instruction creation workflow, return a waiting/pending state and do not continue to item-id extraction, checkout create, or checkout complete until activation is observed and the flow restarts from instruction list.
@@ -124,7 +132,7 @@ Maintain a **profile/environment lock**: once a workflow starts with `--profile 
 | Wait for event | `clink-cli events poll --type <eventType> --format json` |
 | View risk rules | `clink-cli risk get --format json` |
 | Get risk-rule config URL | `clink-cli risk link --format json` |
-| List reusable VIC instructions | `clink-cli instruction list --status ACTIVE --payment-instrument-id <id> --format json` |
+| List reusable VIC instructions | `clink-cli instruction list --valid-only --payment-instrument-id <id> --format json` |
 | Create VIC instruction draft | `clink-cli instruction create ... --format json` |
 | Print instruction Passkey URL | `clink-cli instruction sign-url ... --format json` |
 | Get one VIC instruction | `clink-cli instruction get --purchase-instruction-id <id> --format json` |
