@@ -225,7 +225,10 @@ test('vendored clink-cli includes latest UCP error message extraction', async ()
 
   assert.match(bundle, /messages = body\.messages/);
   assert.match(bundle, /messageContent = item\.content/);
-  assert.match(bundle, /return messageContent/);
+  assert.match(bundle, /sanitizeApiMessage\(messageContent\)/);
+  assert.match(bundle, /sanitizeApiMessage/);
+  assert.match(bundle, /downstream service timeout/);
+  assert.match(bundle, /hasInternalServiceDiagnostics/);
 });
 
 test('payment docs require list-first instruction and mandate resolution before VIC pay', async () => {

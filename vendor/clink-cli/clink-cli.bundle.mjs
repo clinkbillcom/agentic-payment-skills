@@ -4029,24 +4029,62 @@ function extractMessage(body) {
   }
   const candidate = body.message ?? body.msg ?? body.error;
   if (typeof candidate === "string") {
-    return candidate;
+    return sanitizeApiMessage(candidate);
   }
   const messages = body.messages;
   if (Array.isArray(messages)) {
     for (const item of messages) {
       if (typeof item === "string") {
-        return item;
+        return sanitizeApiMessage(item);
       }
       if (typeof item !== "object" || item === null) {
         continue;
       }
       const messageContent = item.content ?? item.message ?? item.msg;
       if (typeof messageContent === "string") {
-        return messageContent;
+        return sanitizeApiMessage(messageContent);
       }
     }
   }
   return void 0;
+}
+function sanitizeApiMessage(message) {
+  const trimmed = message.trim();
+  if (!hasInternalServiceDiagnostics(trimmed)) {
+    return trimmed;
+  }
+  const publicPrefix = extractPublicErrorPrefix(trimmed);
+  const publicReason = /timeout|timed out/i.test(trimmed) ? "downstream service timeout" : "downstream service invocation failed";
+  return publicPrefix ? `${publicPrefix}: ${publicReason}` : publicReason;
+}
+function hasInternalServiceDiagnostics(message) {
+  return [
+    /org\.apache\.dubbo/i,
+    /DefaultServiceInstance/i,
+    /GenericService/i,
+    /from the registry/i,
+    /\bproviders?\s+\[[^\]]+\]/i,
+    /\bconsumer\s+\d{1,3}(?:\.\d{1,3}){3}/i,
+    /\bprovider\.application\b/i,
+    /\bservice\{name=/i,
+    /Failed to invoke the method/i
+  ].some((pattern) => pattern.test(message));
+}
+function extractPublicErrorPrefix(message) {
+  const markerIndexes = [
+    "Failed to invoke the method",
+    "org.apache.dubbo",
+    "DefaultServiceInstance",
+    "GenericService",
+    "from the registry",
+    "Tried 1 times of the providers"
+  ].map((marker) => message.indexOf(marker)).filter((index) => index > 0);
+  const firstMarkerIndex = markerIndexes.length > 0 ? Math.min(...markerIndexes) : -1;
+  if (firstMarkerIndex <= 0) {
+    return void 0;
+  }
+  const prefix = message.slice(0, firstMarkerIndex).replace(/[\s:：,，.。]+$/u, "").trim();
+  return prefix.length > 0 ? prefix : void 0;
 }
 function pickDefaultPaymentInstrument(items) {
   if (!Array.isArray(items) || items.length === 0) {
