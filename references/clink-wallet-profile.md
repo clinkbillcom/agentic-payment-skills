@@ -4,24 +4,13 @@ Read this before wallet setup, config/profile work, card readiness checks, payme
 
 ## Wallet Setup
 
-Production profile:
+Define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`); that prefix is the only place sandbox vs production is chosen. Wallet init then only needs the account fields:
 
 ```bash
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Sandbox profile:
-
-```bash
-clink-cli wallet init \
-  --sandbox \
-  --profile sandbox \
-  --email <email> \
-  --name <name> \
-  --format json
-```
-
-Use a separate `sandbox` profile for sandbox credentials. A sandbox run should use sandbox customer credentials; do not reuse a production customer API key with `--sandbox`.
+Match the profile credentials to the prefix's environment: sandbox customer credentials for a sandbox prefix, production credentials for a production prefix. Never reuse a production customer API key with a sandbox prefix.
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the selected local profile. It is a one-time setup step and must not be run automatically during a payment attempt.
 
@@ -41,26 +30,26 @@ Read current config:
 clink-cli config get --format json
 ```
 
-Set non-secret values:
+Set non-secret values (the prefix already selects the profile, so no per-command `--profile` is needed):
 
 ```bash
-clink-cli config set base-url <url> --profile <name> --format json
-clink-cli config set customer-id <id> --profile <name> --format json
-clink-cli config set email <email> --profile <name> --format json
-clink-cli config set name <name> --profile <name> --format json
+clink-cli config set base-url <url> --format json
+clink-cli config set customer-id <id> --format json
+clink-cli config set email <email> --format json
+clink-cli config set name <name> --format json
 clink-cli config set default-open-links false --format json
 ```
 
 Set the customer API key only through stdin:
 
 ```bash
-printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --profile <name> --format json
+printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json
 ```
 
 Unset values:
 
 ```bash
-clink-cli config unset <key> --profile <name> --format json
+clink-cli config unset <key> --format json
 ```
 
 ## Config State Model

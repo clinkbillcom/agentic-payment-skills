@@ -5,7 +5,7 @@ Read this before executing `clink-cli pay`, handling 3DS, or creating/checking r
 ## Preconditions
 
 - Wallet is initialized in the intended profile.
-- Sandbox operations use `--sandbox --profile sandbox` and sandbox credentials.
+- Sandbox vs production is set by the `clink-cli` prefix; use credentials matching that environment.
 - At least one current payment method is available. Refresh with `card binding-link --no-watch` before relying on cached methods.
 - Payment parameters come from the user or an upstream merchant workflow.
 - The payment is explicitly authorized for this request.
@@ -38,7 +38,7 @@ Common options:
 - `--shipping-address '<json>'` for old pay context; use the UCP Postal Address shape (`street_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `extended_address`, `first_name`, `last_name`, `phone_number`)
 - `--products '<json-array>'` for product-level VIC credential context; each item uses `productId`, `productName`, optional `productUrl`, `quantity`, `unitPrice` as a major-unit decimal, `currencyCode`, and optional `extra`
 - Old agent pay must send `aiAgentInstructionBo.merchantInfo.merchantCategoryCode` fixed to `5999`; do not ask the user or merchant skill for this value.
-- `--sandbox --profile sandbox` for sandbox
+- Sandbox targeting comes from the `clink-cli` prefix, not per-command flags.
 
 ## Fulfillment Shipping Gate Before Old Pay
 

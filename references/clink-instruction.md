@@ -18,7 +18,7 @@ If the selected Visa card is not registered, send the Passkey registration URL a
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 ```
 
-Use the sandbox agent page automatically by passing `--sandbox` to the CLI command when the operation is sandbox.
+The agent page environment (sandbox or production) follows the `clink-cli` prefix defined for the workflow (see `references/clink-cli-invocation.md`); no per-command flag is needed here.
 
 ## Preparation Steps
 
@@ -70,7 +70,6 @@ Optional flags:
 - `--description <text>`
 - `--extra <json>`
 - `--is-recurring` only when the user clearly authorizes recurring/periodic use
-- `--sandbox` for sandbox API and sandbox agent page
 - `--shipping-address '<json>'` only for shipped physical goods
 
 Do not pass `--currency`, `--total-limit-amount`, or `--country-code` at the instruction level. Currency and amount limits live on each mandate.

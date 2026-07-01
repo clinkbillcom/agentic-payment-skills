@@ -70,7 +70,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain a **profile/environment lock**: once a workflow starts with `--profile <name>` and/or `--sandbox`, every follow-up command in that workflow must use the same profile and environment unless the caller explicitly starts a new workflow.
+Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), which is the only place sandbox vs production is chosen, and reuse it for every command in the workflow. Individual commands stay environment-neutral. Do not switch profile or environment mid-workflow unless the caller explicitly starts a new workflow.
 
 ## Routing And Action Matrix
 
@@ -120,8 +120,7 @@ Maintain a **profile/environment lock**: once a workflow starts with `--profile 
 
 | Need | Command |
 | --- | --- |
-| Initialize wallet | `clink-cli wallet init --email <email> --name <name> --format json` |
-| Initialize sandbox wallet in its own profile | `clink-cli wallet init --sandbox --profile sandbox --email <email> --name <name> --format json` |
+| Initialize wallet | `clink-cli wallet init --email <email> --name <name> --format json` (use credentials matching the prefix's environment) |
 | Check wallet readiness | `clink-cli wallet status --format json` |
 | Refresh payment methods without waiting | `clink-cli card binding-link --no-watch --format json` |
 | Bind first card and wait | `clink-cli card binding-link --format json` |

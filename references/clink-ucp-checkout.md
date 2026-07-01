@@ -117,7 +117,7 @@ For physical goods, collect one US shipping address but serialize it differently
 
 ## Step 1: Refresh Payment Instrument
 
-Use the selected profile and environment. For sandbox, always include `--sandbox --profile sandbox` or the caller's sandbox profile.
+Use the `clink-cli` prefix defined for this workflow (see `references/clink-cli-invocation.md`); the prefix already fixes the environment and profile, so do not add environment flags here.
 
 ```bash
 clink-cli card binding-link --no-watch --format json

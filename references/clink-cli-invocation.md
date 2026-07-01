@@ -4,15 +4,27 @@ Read this before running any `clink-cli` command from this skill.
 
 ## Command Resolution
 
-The command examples use `clink-cli` as the stable command name. In a packaged skill session, define it from the vendored bundle before running examples:
+Every example in this skill uses `clink-cli` as the stable command name. Define it once from the vendored bundle at the start of the workflow, and reuse that single prefix for every command. Do not repeat the bundle path, `--sandbox`, or `--profile` on individual examples; the prefix already carries them.
+
+**This prefix definition is the only place that selects sandbox vs production.** Every other example and reference is environment-neutral, so switching environments means editing this one line and nothing else.
+
+For sandbox, bake in `--sandbox` and the sandbox profile:
+
+```bash
+clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" --sandbox --profile sandbox "$@"; }
+```
+
+For production, drop the sandbox flags:
 
 ```bash
 clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" "$@"; }
 ```
 
-Replace `<skill_dir>` with the absolute path of this skill. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it is built from the expected local source.
+Replace `<skill_dir>` with the absolute path of this skill. Match the profile credentials to the environment: sandbox customer credentials in the sandbox profile, production credentials for production. Never reuse a production customer API key with `--sandbox`.
 
-To inspect help without installing a global binary:
+Pick one prefix at the start of a workflow and keep it for every follow-up command; this is the profile/environment lock. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it is built from the expected local source.
+
+To inspect help without installing a global binary, call the bundle directly:
 
 ```bash
 node vendor/clink-cli/clink-cli.bundle.mjs --help
@@ -55,8 +67,8 @@ Inspect the process exit code first, then parse the stream that contains the env
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--profile <name>` | `default` | Named local credential profile. |
-| `--sandbox` | false | Uses sandbox API and sandbox agent pages. Pair it with a sandbox profile. |
+| `--profile <name>` | `default` | Named local credential profile. Set once in the `clink-cli` prefix, not per command. |
+| `--sandbox` | false | Uses sandbox API and sandbox agent pages. Selected only in the `clink-cli` prefix definition (see Command Resolution), never per command. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |
