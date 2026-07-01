@@ -122,7 +122,7 @@ Exit 7:
 
 Exit 3 or 4:
 
-- Wallet/config/auth problem. Ask the user to run wallet setup or fix credentials; do not run `wallet init` automatically during payment.
+- Wallet/config/auth problem. Stop the payment attempt, start the wallet initialization or configuration workflow yourself, and collect only the missing user input or credential source. Do not run `wallet init` as a hidden recovery inside the payment attempt.
 
 Exit 6:
 

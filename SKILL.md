@@ -17,6 +17,12 @@ Use this skill for direct Clink payment operations through `clink-cli`.
 
 This skill executes wallet, card, payment, refund, risk, VIC instruction, external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
 
+## Execution Ownership
+
+Agent owns command execution. When this skill is triggered and required inputs/authorization are available, run the matching tool or `clink-cli` command yourself through the available runtime. Command examples are internal execution recipes, not user instructions. Ask the user only for missing data, explicit payment/refund authorization, shipping details, or required browser-page actions.
+
+If the runtime cannot execute local commands, report that limitation and stop. Provide a manual command only when the user explicitly asks for a command preview or manual fallback.
+
 ## Before Running Commands
 
 CRITICAL - before executing a matching operation, read the listed reference file. Do not rely on memory or infer hidden fields.
@@ -103,7 +109,7 @@ Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see
 - Never invent payment parameters. Missing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, or target payment method means stop and ask the caller or user for the missing data.
 - Never expose `customerApiKey` or other secrets in user-visible output.
 - Never call `config set customer-api-key <value>` with a literal key. Pipe from the environment variable instead: `printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json`.
-- Never run `wallet init` automatically during a payment or other operation. If exit code 3 or 4 is returned, ask the user to run wallet setup themselves.
+- Never run `wallet init` as a hidden recovery inside payment, checkout, or refund execution. If exit code 3 or 4 is returned, stop the current operation and start the wallet initialization or configuration workflow yourself after collecting only the missing user input.
 - Treat `pay` exit code 6 or client-side timeout as an unknown payment state. Do not retry until the payment state is verified safe through merchant-side status, operator checks, or a caller-provided idempotency guarantee.
 - For exit code 7, send the 3DS redirect URL to the user and wait for the matching order event before declaring success.
 - Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.

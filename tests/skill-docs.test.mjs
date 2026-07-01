@@ -107,6 +107,19 @@ test('main skill documents closed-loop control and routing decisions', async () 
   assert.match(skill, /profile\/environment lock/i);
 });
 
+test('payment skill docs require agent-owned command execution', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const invocation = await readRepoFile('references/clink-cli-invocation.md');
+  const payment = await readRepoFile('references/clink-payment-refund.md');
+
+  assert.match(skill, /Agent owns command execution/i);
+  assert.match(invocation, /Command examples are execution recipes for the agent/i);
+  assert.match(payment, /start the wallet initialization or configuration workflow/i);
+  assert.doesNotMatch(skill, /ask the user to run wallet setup themselves/i);
+  assert.doesNotMatch(payment, /Ask the user to run wallet setup/i);
+  assert.doesNotMatch(invocation, /tell the user to run/i);
+});
+
 test('async events reference requires resource correlation, not type-only matches', async () => {
   const events = await readRepoFile('references/clink-async-events.md');
 

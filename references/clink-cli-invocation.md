@@ -2,6 +2,8 @@
 
 Read this before running any `clink-cli` command from this skill.
 
+Command examples are execution recipes for the agent. Run them through the available runtime when the workflow has the required inputs and authorization; do not present them as routine user-run instructions. Only provide a command instead of executing it when the user explicitly asks for a preview/manual fallback or the runtime cannot execute local commands.
+
 ## Command Resolution
 
 Every example in this skill uses `clink-cli` as the stable command name. Define it once from the vendored bundle at the start of the workflow, and reuse that single prefix for every command. Do not repeat the bundle path, `--sandbox`, or `--profile` on individual examples; the prefix already carries them.
