@@ -97,6 +97,24 @@ test('main skill documents closed-loop control and routing decisions', async () 
 
   assert.match(skill, /## Control Loop/i);
   assert.match(skill, /Observe\s*→\s*Classify\s*→\s*Act\s*→\s*Verify\s*→\s*Return/i);
+  assert.match(skill, /\[PAYMENT_FSM\] state=<STATE> action=<ACTION> reason=<REASON>/);
+  assert.match(skill, /event_fsm/i);
+  assert.match(skill, /lib\/payment-workflow-fsm\.mjs/);
+  assert.match(skill, /lib\/event-workflow-fsm\.mjs/);
+  assert.match(skill, /lib\/workflow-marker\.mjs/);
+  assert.match(skill, /correlateEventWorkflow/);
+  assert.match(skill, /formatWorkflowMarker/);
+  for (const action of [
+    'WAIT_EVENT',
+    'SEND_3DS_AND_WAIT_EVENT',
+    'RETURN_SUCCESS_FOR_MERCHANT_CONFIRMATION',
+    'STOP_PAYMENT_FAILURE',
+    'VERIFY_BEFORE_RETRY',
+    'START_WALLET_SETUP',
+    'SURFACE_ERROR',
+  ]) {
+    assert.match(skill, new RegExp(action));
+  }
   assert.match(skill, /## Routing And Action Matrix/i);
   assert.match(skill, /selected\/default payment method is known to be Visa/i);
   assert.match(skill, /status=1/i);

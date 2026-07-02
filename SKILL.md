@@ -71,12 +71,24 @@ Every workflow follows:
 `Observe → Classify → Act → Verify → Return`
 
 1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** map the observation to a route, status, exit code, or event type before acting.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` and `correlateEventWorkflow` to produce the `event_fsm` classification only after resource correlation.
 3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
 Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), which is the only place sandbox vs production is chosen, and reuse it for every command in the workflow. Individual commands stay environment-neutral. Do not switch profile or environment mid-workflow unless the caller explicitly starts a new workflow.
+
+FSM action contract:
+
+| Action | Required behavior |
+| --- | --- |
+| `WAIT_EVENT` | Return a pending state and wait for the correlated event or status check; do not claim completion. |
+| `SEND_3DS_AND_WAIT_EVENT` | Send the redirect URL once, then wait for the matching `agent_order.succeeded` or `agent_order.failed`. |
+| `RETURN_SUCCESS_FOR_MERCHANT_CONFIRMATION` | Return payment success evidence to the merchant layer; do not claim merchant fulfillment. |
+| `STOP_PAYMENT_FAILURE` | Stop the payment path or offer an explicit recovery; do not retry automatically. |
+| `VERIFY_BEFORE_RETRY` | Treat payment state as unknown and verify through a safe status/idempotency path before retry. |
+| `START_WALLET_SETUP` | Start wallet/config recovery before any new payment attempt. |
+| `SURFACE_ERROR` | Surface the CLI/API error and stop without inventing recovery. |
 
 ## Routing And Action Matrix
 
