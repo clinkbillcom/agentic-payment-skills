@@ -26,6 +26,14 @@ The first JSON envelope contains the URL or immediate command result. If the wat
 
 Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch.
 
+## Start Monitoring At Emit Time
+
+Start the event listener the moment a browser-action URL is emitted, concurrently with sending that URL to the user. Do not wait for the user to report "done" before you begin listening; the completion event can arrive before, during, or after the user's message. Start a non-blocking watch through the available runtime and keep working while it listens, then correlate the event when it arrives.
+
+This applies to every browser-action URL, including hand-built URLs that are not CLI command output. In particular, the **Visa Passkey registration URL** (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) is not one of the built-in-watch commands above, so it has **no built-in watch**. Cover it with a concurrently-started `events poll` beginning when you send the URL.
+
+Prefer a non-blocking/background watch over a single blocking foreground call. A blocking built-in watch can run longer than a runtime's foreground command limit and be killed before the event arrives. If a watch process exits non-zero from a runtime timeout (for example a killed foreground command), the event may still be pending: resume with a fresh `events poll` and confirm through authoritative status. Never treat a killed watch as a failed operation.
+
 ## On-Demand Poll
 
 Use `events poll` when you need to wait for a state change without printing a new link, or when a previous watch timed out:
@@ -50,6 +58,10 @@ The result shape is:
 ```
 
 Always filter returned events by `type` and `resourceId` to find the specific change you triggered. The `--type` flag controls readiness, not business correctness.
+
+When a flow has more than one valid readiness event, do not gate on a single restrictive `--type`. Poll without `--type` (or poll each valid type in turn) so you cannot miss the alternate event, and re-check authoritative status with a `get`/status command (`card binding-link --no-watch`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`.
+
+While a concurrent watch is still running for the same flow, poll with `--no-ack` so a readiness event is not consumed before it can be correlated. Acknowledge only once you own the event and have correlated it to the resource.
 
 ## Resource Correlation
 
@@ -80,7 +92,9 @@ If the right event type appears for a different resource, keep the current workf
 ## Rules
 
 - Do not fabricate completion.
+- Start listening at URL-emit time; do not wait for the user to report completion before you begin.
 - Do not busy-retry the initiating link command to check status.
 - Do not acknowledge events with `--no-ack` unless you intentionally only want to peek.
 - On timeout, return the timeout state and resume command; do not claim success.
+- A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.
 - For refund status, direct `refund get` polling is also acceptable.
