@@ -6,7 +6,7 @@
 
 - Node.js >= 20
 - Skill 内置 vendored `clink-cli` bundle：`vendor/clink-cli/clink-cli.bundle.mjs`；全局安装 `clink-cli` 只作为本地调试可选项
-- `~/.clink-cli/config.json` 中包含有效的 `customerId` 和 `customerApiKey`
+- 一个 Clink 钱包——通过运行 `clink-cli wallet init --email <email> --name <name>` 完成初始化：该命令用邮箱引导创建账户，并将服务端返回的 `customerId` 和 `customerApiKey` 写入 `~/.clink-cli/config.json`。无需事先准备 customer API key，init 会自动获取。
 
 ## 安装 Clink Payment Skills
 

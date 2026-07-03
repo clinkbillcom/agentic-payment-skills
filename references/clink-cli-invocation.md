@@ -8,23 +8,26 @@ Command examples are execution recipes for the agent. Run them through the avail
 
 Every example in this skill uses `clink-cli` as the stable command name. Define it once from the vendored bundle at the start of the workflow, and reuse that single prefix for every command. Do not repeat the bundle path, `--sandbox`, or `--profile` on individual examples; the prefix already carries them.
 
-**This prefix definition is the only place that selects sandbox vs production.** Every other example and reference is environment-neutral, so switching environments means editing this one line and nothing else.
+**This prefix definition is the only place that selects sandbox vs production.** Every other example and reference is environment-neutral, so switching environments means changing this one keyword and nothing else.
 
-For sandbox, bake in `--sandbox` and the sandbox profile:
-
-```bash
-clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" --sandbox --profile sandbox "$@"; }
-```
-
-For production, drop the sandbox flags:
+Define the prefix once. The environment is fixed by the single `CLINK_ENV` keyword below — it is the only thing to change to switch environments:
 
 ```bash
-clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" "$@"; }
+clink-cli() {
+  local CLINK_ENV=sandbox   # the ONLY switch: sandbox | production
+  if [ "$CLINK_ENV" = sandbox ]; then
+    node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" --sandbox --profile sandbox "$@"
+  else
+    node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" --profile production "$@"
+  fi
+}
 ```
 
-Replace `<skill_dir>` with the absolute path of this skill. Match the profile credentials to the environment: sandbox customer credentials in the sandbox profile, production credentials for production. Never reuse a production customer API key with `--sandbox`.
+The skill currently runs in **sandbox**. To move to production later, change the one keyword `CLINK_ENV=sandbox` to `CLINK_ENV=production` and nothing else. Replace `<skill_dir>` with the absolute path of this skill. Match the profile credentials to the environment: sandbox customer credentials in the `sandbox` profile, production credentials in the `production` profile. Never reuse a production customer API key with `--sandbox`.
 
-Pick one prefix at the start of a workflow and keep it for every follow-up command; this is the profile/environment lock. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it is built from the expected local source.
+The environment is a fixed configuration value, not a runtime choice. Do **not** ask the user which environment to run against. Read `CLINK_ENV` from this prefix and proceed silently — sandbox today, production after the keyword is changed.
+
+Keep this one prefix for every follow-up command in the workflow; this is the profile/environment lock. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it is built from the expected local source.
 
 To inspect help without installing a global binary, call the bundle directly:
 
@@ -69,8 +72,8 @@ Inspect the process exit code first, then parse the stream that contains the env
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--profile <name>` | `default` | Named local credential profile. Set once in the `clink-cli` prefix, not per command. |
-| `--sandbox` | false | Uses sandbox API and sandbox agent pages. Selected only in the `clink-cli` prefix definition (see Command Resolution), never per command. |
+| `--profile <name>` | `default` | Named local credential profile. Driven by the `CLINK_ENV` keyword in the `clink-cli` prefix (see Command Resolution), not chosen per command. |
+| `--sandbox` | false | Uses sandbox API and sandbox agent pages. Driven by the `CLINK_ENV` keyword in the `clink-cli` prefix (see Command Resolution), never per command. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |

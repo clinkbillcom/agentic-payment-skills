@@ -10,7 +10,11 @@ Define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`); t
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Match the profile credentials to the prefix's environment: sandbox customer credentials for a sandbox prefix, production credentials for a production prefix. Never reuse a production customer API key with a sandbox prefix.
+**Email is the only credential you must collect.** `wallet init` is a bootstrap call: it posts `email` and `name` to the wallet bootstrap endpoint with no customer authentication, and the server **returns** the `customerId` and `customerApiKey`, which the CLI then persists into the selected local profile. The customer API key is an **output** of init, not an input.
+
+Do not ask the user for a customer API key and do not require `CLINK_CUSTOMER_API_KEY` before running init — there is no `--customer-api-key` flag on `wallet init`, and none is needed. If the wallet is not yet set up, the first and only account input to collect is the user's email (and a display name); run `wallet init` and let it provision the key.
+
+Match the profile to the prefix's environment: run init under the sandbox profile for a sandbox prefix and the production profile for a production prefix, so each environment's server issues its own key into its own profile. Never copy a production customer API key into a sandbox profile.
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the selected local profile. It is a one-time setup step and must not be run automatically during a payment attempt.
 
@@ -40,7 +44,7 @@ clink-cli config set name <name> --format json
 clink-cli config set default-open-links false --format json
 ```
 
-Set the customer API key only through stdin:
+Set the customer API key only through stdin. This is a manual override for restoring or rotating a key you already hold (for example re-seeding a profile from a stored secret); normal setup does not need it, because `wallet init` provisions the key from the email. Never treat this as a precondition for init:
 
 ```bash
 printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json

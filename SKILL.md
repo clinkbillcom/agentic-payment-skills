@@ -76,7 +76,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), which is the only place sandbox vs production is chosen, and reuse it for every command in the workflow. Individual commands stay environment-neutral. Do not switch profile or environment mid-workflow unless the caller explicitly starts a new workflow.
+Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), whose single `CLINK_ENV` keyword is the only place sandbox vs production is chosen, and reuse that prefix for every command in the workflow. Individual commands stay environment-neutral. Do not switch profile or environment mid-workflow unless the caller explicitly starts a new workflow.
 
 FSM action contract:
 
@@ -112,6 +112,7 @@ FSM action contract:
 
 ## Hard Rules
 
+- Environment is fixed by the `CLINK_ENV` keyword in the `clink-cli` prefix (see `references/clink-cli-invocation.md`). Never ask the user which environment to use; default silently to the configured environment (currently sandbox).
 - Never run `clink-cli pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
 - Before old `clink-cli pay`, classify fulfillment. For `NO_SHIPPING_REQUIRED`, use the fixed default US address (`548 Market St`, `PMB 00000`, San Francisco, CA 94104, `address_country=US`) as the payment-context placeholder. For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, collect a real US shipping address. For `UNKNOWN`, ask first.
 - Old agent pay must use the fixed merchant category code `5999` in `aiAgentInstructionBo.merchantInfo.merchantCategoryCode`; do not ask the user or merchant skill for this MCC.
@@ -119,8 +120,9 @@ FSM action contract:
 - When no-match VIC pay starts instruction creation, preserve a pending payment intent with its draft instruction, then wait for `purchase_instruction.activated`. Resume through `resume_pending_payment_intent` only for the matching pending intent so the same FSM re-runs list/match/pay. A different instruction activation on the same card must not resume this intent. The merchant skill must not manually provide `instruction_id` or `mandate_id` or call pay outside this payment intent.
 - Never run `ucp-checkout create` or `ucp-checkout complete` for a product order until the target product, amount, currency, merchant context, fulfillment type, payment instrument, instruction ID, and mandate ID are all known and explicitly authorized for the same current request.
 - Never invent payment parameters. Missing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, or target payment method means stop and ask the caller or user for the missing data.
+- `wallet init` provisions the wallet from `--email` and `--name` alone; the server returns the `customerApiKey` and the CLI stores it. The key is an output of init, not an input. Never ask the user for a customer API key or require `CLINK_CUSTOMER_API_KEY` before setup. When the wallet is not initialized, collect the user's email (and display name) and run `wallet init` — do not block on a key.
 - Never expose `customerApiKey` or other secrets in user-visible output.
-- Never call `config set customer-api-key <value>` with a literal key. Pipe from the environment variable instead: `printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json`.
+- `config set customer-api-key` is a manual override for restoring or rotating an existing key, not part of normal setup. Never call it with a literal key; pipe from the environment variable instead: `printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json`.
 - Never run `wallet init` as a hidden recovery inside payment, checkout, or refund execution. If exit code 3 or 4 is returned, stop the current operation and start the wallet initialization or configuration workflow yourself after collecting only the missing user input.
 - Treat `pay` exit code 6 or client-side timeout as an unknown payment state. Do not retry until the payment state is verified safe through merchant-side status, operator checks, or a caller-provided idempotency guarantee.
 - For exit code 7, send the 3DS redirect URL to the user and wait for the matching order event before declaring success.

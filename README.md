@@ -6,7 +6,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, VIC 
 
 - Node.js >= 20
 - The skill ships a vendored `clink-cli` bundle at `vendor/clink-cli/clink-cli.bundle.mjs`; a global `clink-cli` install is optional for local debugging
-- `clink-cli` config file at `~/.clink-cli/config.json` with a valid `customerId` and `customerApiKey`
+- A Clink wallet — provisioned by running `clink-cli wallet init --email <email> --name <name>`, which bootstraps the account from the email and stores the returned `customerId` and `customerApiKey` in `~/.clink-cli/config.json`. You do not need a customer API key beforehand; init obtains it.
 
 ## Install Clink Payment Skills
 
