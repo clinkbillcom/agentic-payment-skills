@@ -6,7 +6,7 @@ Read this before waiting for card binding/change, risk-rule update, refund lifec
 
 Clink async operations complete through webhook events from the Clink event hub. Completion is not proven by re-running the initiating command or by guessing from time elapsed.
 
-The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot for the selected profile; other events are returned to the caller and acknowledged by the event path.
+The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot; `risk_rule.updated` upserts local risk-rule state. Other events are returned to the caller and acknowledged by the event path.
 
 ## Built-In Link Watch
 
@@ -57,7 +57,7 @@ An event type alone is not proof that the current workflow completed. After any 
 
 | Flow | Required correlation |
 | --- | --- |
-| Card binding/update/default change | same customer/profile and, when known, same `paymentInstrumentId` |
+| Card binding/update/default change | same customer and, when known, same `paymentInstrumentId` |
 | 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |

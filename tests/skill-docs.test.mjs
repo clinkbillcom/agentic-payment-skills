@@ -35,7 +35,7 @@ test('main skill uses lark-style metadata and delegates command details to refer
 
   for (const reference of [
     'references/clink-cli-invocation.md',
-    'references/clink-wallet-profile.md',
+    'references/clink-wallet-config.md',
     'references/clink-async-events.md',
     'references/clink-instruction.md',
     'references/clink-payment-refund.md',
@@ -122,7 +122,7 @@ test('main skill documents closed-loop control and routing decisions', async () 
   assert.match(skill, /exit=7/i);
   assert.match(skill, /refund create ok/i);
   assert.match(skill, /complete_in_progress/i);
-  assert.match(skill, /profile\/environment lock/i);
+  assert.match(skill, /environment lock/i);
 });
 
 test('payment skill docs require agent-owned command execution', async () => {

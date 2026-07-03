@@ -4,7 +4,7 @@ Read this before executing `clink-cli pay`, handling 3DS, or creating/checking r
 
 ## Preconditions
 
-- Wallet is initialized in the intended profile.
+- Wallet is initialized for the intended environment.
 - Sandbox vs production is set by the `clink-cli` prefix; use credentials matching that environment.
 - At least one current payment method is available. Refresh with `card binding-link --no-watch` before relying on cached methods.
 - Payment parameters come from the user or an upstream merchant workflow.

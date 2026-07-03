@@ -30,18 +30,18 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Operation | Must read |
 | --- | --- |
 | Any command invocation, JSON parsing, exit-code handling, local bundle usage | `references/clink-cli-invocation.md` |
-| Wallet init/status, config/profile, sandbox profile, card readiness, card management, risk links | `references/clink-wallet-profile.md` |
+| Wallet init/status, single-user config, sandbox, card readiness, card management, risk links | `references/clink-wallet-config.md` |
 | Waiting for binding, risk, refund, VIC, instruction, or 3DS completion events | `references/clink-async-events.md` |
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel | `references/clink-instruction.md` |
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
 | UCP checkout product order flow, instruction/mandate matching, item-id extraction, external checkout create/complete | `references/clink-ucp-checkout.md` |
 
-Read multiple references when a workflow crosses boundaries. Example: a product order through UCP checkout needs `clink-cli-invocation.md`, `clink-wallet-profile.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`.
+Read multiple references when a workflow crosses boundaries. Example: a product order through UCP checkout needs `clink-cli-invocation.md`, `clink-wallet-config.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`.
 
 ## When to Use
 
 - initialize a user's Clink wallet
-- check wallet, profile, sandbox, or payment-method readiness
+- check wallet, sandbox, or payment-method readiness
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, Direct/session Visa payment must list/match ACTIVE instruction+mandate before pay
 - order a discovered product through the UCP checkout control flow: classify `fulfillmentType`, require a US shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
@@ -76,7 +76,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain a **profile/environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), which is the only place sandbox vs production is chosen, and reuse it for every command in the workflow. Individual commands stay environment-neutral. Do not switch profile or environment mid-workflow unless the caller explicitly starts a new workflow.
+Maintain an **environment lock**: define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`), which is the only place sandbox vs production is chosen, and reuse it for every command in the workflow. Individual commands stay environment-neutral. Do not switch environment mid-workflow unless the caller explicitly starts a new workflow.
 
 FSM action contract:
 

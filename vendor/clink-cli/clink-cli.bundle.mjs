@@ -3523,7 +3523,6 @@ var OPTION_DEFINITIONS = [
   { name: "format", flags: "--format <format>" },
   { name: "dry-run", flags: "--dry-run" },
   { name: "open", flags: "--open" },
-  { name: "profile", flags: "--profile <name>" },
   { name: "base-url", flags: "--base-url <url>" },
   { name: "customer-id", flags: "--customer-id <id>" },
   { name: "customer-api-key", flags: "--customer-api-key <key>" },
@@ -3646,25 +3645,22 @@ import path from "node:path";
 // dist/domains.js
 var API_BASE_URLS = {
   production: "https://api.clinkbill.com",
-  // sandbox: "https://test-api.clinkbill.com"
-  sandbox: "https://api.clinkbill.dev"
+  sandbox: "https://uat-api.clinkbill.com"
+  // sandbox: "https://api.clinkbill.dev"
 };
 var AGENT_BASE_URLS = {
+  sandbox: "https://uat-agent.clinkbill.com",
   production: "https://agent.clinkbill.com"
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
-var DEFAULT_PROFILE = "default";
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 function defaultConfig() {
   return {
     baseUrl: DEFAULT_BASE_URL,
-    defaultOpenLinks: false,
-    profiles: {
-      [DEFAULT_PROFILE]: {}
-    }
+    defaultOpenLinks: false
   };
 }
 async function readStoredConfig() {
@@ -3684,23 +3680,20 @@ async function writeStoredConfig(config) {
 `, "utf8");
 }
 function resolveRuntimeConfig(storedConfig, flags) {
-  const profileName = getStringFlag(flags, "profile") ?? DEFAULT_PROFILE;
-  const storedProfile = storedConfig.profiles[profileName] ?? {};
-  const envConfig = compactProfile({
+  const envConfig = compactDefined({
     customerId: process.env.CLINK_CUSTOMER_ID,
     customerApiKey: process.env.CLINK_CUSTOMER_API_KEY
   });
-  const flagConfig = compactProfile({
+  const flagConfig = compactDefined({
     customerId: getStringFlag(flags, "customer-id"),
     customerApiKey: getStringFlag(flags, "customer-api-key")
   });
   const resolved = {
-    ...storedProfile,
+    ...storedConfig,
     ...envConfig,
     ...flagConfig
   };
   const runtimeConfig = {
-    profile: profileName,
     // Base URL precedence: explicit --base-url / CLINK_BASE_URL win; otherwise --sandbox selects the
     // sandbox API host (so one flag switches both the API base and the agent domain); otherwise the
     // stored/default (production) base URL.
@@ -3751,27 +3744,16 @@ function resolveOpenFlag(storedConfig, flags) {
   }
   return storedConfig.defaultOpenLinks;
 }
-function isProfileConfigKey(key) {
+function isCustomerConfigKey(key) {
   return key === "customerId" || key === "customerApiKey" || key === "email" || key === "name";
-}
-function getStoredProfile(config, profileName) {
-  return config.profiles[profileName] ?? {};
-}
-function ensureStoredProfile(config, profileName) {
-  config.profiles[profileName] ??= {};
-  return config.profiles[profileName];
 }
 function cloneStoredConfig(config) {
   return {
+    ...config,
     baseUrl: config.baseUrl,
     defaultOpenLinks: config.defaultOpenLinks,
-    profiles: Object.fromEntries(Object.entries(config.profiles).map(([name, profile]) => [
-      name,
-      {
-        ...profile,
-        ...profile.paymentMethods ? { paymentMethods: profile.paymentMethods.map((item) => ({ ...item })) } : {}
-      }
-    ]))
+    ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
+    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {}
   };
 }
 function normalizeStoredConfig(raw) {
@@ -3786,44 +3768,36 @@ function normalizeStoredConfig(raw) {
   if (typeof record.defaultOpenLinks === "boolean") {
     config.defaultOpenLinks = record.defaultOpenLinks;
   }
-  const parsedProfiles = parseProfiles(record.profiles);
-  if (Object.keys(parsedProfiles).length > 0) {
-    config.profiles = parsedProfiles;
-  }
-  const legacyProfile = parseStoredProfile(record);
-  if (hasProfileData(legacyProfile)) {
-    config.profiles[DEFAULT_PROFILE] = {
-      ...legacyProfile,
-      ...config.profiles[DEFAULT_PROFILE]
-    };
-  }
-  config.profiles[DEFAULT_PROFILE] ??= {};
+  assignStoredCustomerState(config, parseStoredCustomerState(record));
   return config;
 }
-function parseProfiles(raw) {
+function parseStoredCustomerState(raw) {
+  const customer = {};
   if (typeof raw !== "object" || raw === null) {
-    return {};
-  }
-  const parsed = Object.fromEntries(Object.entries(raw).map(([profileName, value]) => [profileName, parseStoredProfile(value)]));
-  return parsed;
-}
-function parseStoredProfile(raw) {
-  const profile = {};
-  if (typeof raw !== "object" || raw === null) {
-    return profile;
+    return customer;
   }
   const record = raw;
-  assignProfileString(profile, "customerId", record.customerId);
-  assignProfileString(profile, "customerApiKey", record.customerApiKey ?? record.customerAPIKey);
-  assignProfileString(profile, "email", record.email);
-  assignProfileString(profile, "name", record.name);
-  assignPaymentMethods(profile, record.paymentMethods);
-  return profile;
+  assignCustomerString(customer, "customerId", record.customerId);
+  assignCustomerString(customer, "customerApiKey", record.customerApiKey ?? record.customerAPIKey);
+  assignCustomerString(customer, "email", record.email);
+  assignCustomerString(customer, "name", record.name);
+  assignPaymentMethods(customer, record.paymentMethods);
+  assignRiskRules(customer, record.riskRules);
+  return customer;
 }
-function hasProfileData(profile) {
-  return Boolean(profile.customerId || profile.customerApiKey || profile.email || profile.name || profile.paymentMethods && profile.paymentMethods.length > 0);
+function assignStoredCustomerState(target, value) {
+  assignIfDefined(target, "customerId", value.customerId);
+  assignIfDefined(target, "customerApiKey", value.customerApiKey);
+  assignIfDefined(target, "email", value.email);
+  assignIfDefined(target, "name", value.name);
+  if (value.paymentMethods) {
+    target.paymentMethods = value.paymentMethods.map((item) => ({ ...item }));
+  }
+  if (value.riskRules) {
+    target.riskRules = value.riskRules.map((item) => ({ ...item }));
+  }
 }
-function compactProfile(value) {
+function compactDefined(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
 }
 function assignIfDefined(target, key, value) {
@@ -3831,7 +3805,7 @@ function assignIfDefined(target, key, value) {
     target[key] = value;
   }
 }
-function assignProfileString(target, key, value) {
+function assignCustomerString(target, key, value) {
   if (typeof value === "string" && value.length > 0) {
     target[key] = value;
   }
@@ -3849,6 +3823,21 @@ function assignPaymentMethods(target, value) {
   }).map((item) => ({ ...item }));
   if (paymentMethods.length > 0) {
     target.paymentMethods = paymentMethods;
+  }
+}
+function assignRiskRules(target, value) {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  const riskRules = value.filter((item) => {
+    if (typeof item !== "object" || item === null) {
+      return false;
+    }
+    const customerId = item.customerId;
+    return typeof customerId === "string" && customerId.length > 0;
+  }).map((item) => ({ ...item }));
+  if (riskRules.length > 0) {
+    target.riskRules = riskRules;
   }
 }
 
@@ -3931,10 +3920,10 @@ function parseBody(rawText) {
 import { spawn } from "node:child_process";
 function buildCustomerHeaders(config) {
   if (!config.customerId) {
-    throw configError(`missing customerId for profile "${config.profile}"; run \`clink-cli wallet init --profile ${config.profile}\` or pass --customer-id`);
+    throw configError("missing customerId; run `clink-cli wallet init` or pass --customer-id");
   }
   if (!config.customerApiKey) {
-    throw configError(`missing customerApiKey for profile "${config.profile}"; run \`clink-cli wallet init --profile ${config.profile}\` or pass --customer-api-key`);
+    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
   }
   return {
     "X-Customer-ID": config.customerId,
@@ -3944,7 +3933,7 @@ function buildCustomerHeaders(config) {
 }
 function buildCustomerApiKeyHeaders(config) {
   if (!config.customerApiKey) {
-    throw configError(`missing customerApiKey for profile "${config.profile}"; run \`clink-cli wallet init --profile ${config.profile}\` or pass --customer-api-key`);
+    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
   }
   return {
     "X-Customer-API-Key": config.customerApiKey,
@@ -3960,6 +3949,12 @@ function buildBareDomainUrl(bindingUrl) {
 function resolveAgentBaseUrl(apiBaseUrl) {
   try {
     const url = new URL(apiBaseUrl);
+    if (url.origin === API_BASE_URLS.sandbox) {
+      return AGENT_BASE_URLS.sandbox;
+    }
+    if (url.origin === API_BASE_URLS.production) {
+      return AGENT_BASE_URLS.production;
+    }
     const segments = url.hostname.split(".");
     const first = segments[0] ?? "";
     if (/(^|-)api$/i.test(first)) {
@@ -4128,6 +4123,8 @@ var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   // both spellings so card-change summaries survive a future rename to `payment_method.updated`.
   "payment_method.update",
   "payment_method.updated",
+  "payment_method.delete",
+  "payment_method.deleted",
   "payment_method.default_change",
   "risk_rule.updated",
   // UCP/VIC purchase-instruction + device events. These have NO producer in the backend codebase
@@ -4227,7 +4224,7 @@ async function watchEvents(options) {
         await sleep(pollIntervalMs);
         continue;
       }
-      const events = await processEvents(currentRecords, options.runtimeConfig.profile);
+      const events = await processEvents(currentRecords);
       log(`Received ${events.length} event(s):`);
       for (const event of events) {
         log(`  ${event.summary}`);
@@ -4294,7 +4291,7 @@ async function collectWebhookEvents(options) {
       ...options.pageSize !== void 0 ? { pageSize: options.pageSize } : {}
     });
     if (records.length > 0) {
-      const events = await processEvents(records, options.runtimeConfig.profile);
+      const events = await processEvents(records);
       collected.push(...events);
       if (ack) {
         const ackable = options.type ? events.filter((event) => event.eventType === options.type) : events;
@@ -4313,12 +4310,12 @@ async function collectWebhookEvents(options) {
   }
   return { ready: false, timedOut: true, events: collected, ackedEventIds };
 }
-async function processEvents(records, profileName) {
+async function processEvents(records) {
   const stored = await readStoredConfig();
   const nextConfig = cloneStoredConfig(stored);
   const events = records.map((record) => {
     const event = toProcessedEvent(record);
-    applyEventToConfig(nextConfig, profileName, event);
+    applyEventToConfig(nextConfig, event);
     return event;
   });
   await writeStoredConfig(nextConfig);
@@ -4329,6 +4326,7 @@ function toProcessedEvent(record) {
   return {
     eventId: record.eventId,
     eventType: record.eventType,
+    ...record.customerId ? { customerId: record.customerId } : {},
     ...record.resourceId ? { resourceId: record.resourceId } : {},
     ...record.businessStatus ? { businessStatus: record.businessStatus } : {},
     ...record.eventTime ? { eventTime: record.eventTime } : {},
@@ -4337,18 +4335,30 @@ function toProcessedEvent(record) {
     data
   };
 }
-function applyEventToConfig(config, profileName, event) {
-  const profile = ensureStoredProfile(config, profileName);
+function applyEventToConfig(config, event) {
   if (event.eventType.startsWith("payment_method.")) {
-    applyPaymentMethodEvent(profile.paymentMethods ?? (profile.paymentMethods = []), event);
+    applyPaymentMethodEvent(config.paymentMethods ?? (config.paymentMethods = []), event);
+  }
+  if (event.eventType === "risk_rule.updated") {
+    applyRiskRuleEvent(config.riskRules ?? (config.riskRules = []), event);
   }
 }
 function applyPaymentMethodEvent(paymentMethods, event) {
-  const paymentInstrumentId = asString(event.data.paymentInstrumentId);
+  const paymentInstrumentId = asString(event.data.paymentInstrumentId) ?? event.resourceId;
   if (event.eventType === "payment_method.default_change") {
     const defaultId = asString(event.data.defaultPaymentMethodId) ?? paymentInstrumentId;
     for (const method of paymentMethods) {
       method.isDefault = method.paymentInstrumentId === defaultId;
+    }
+    return;
+  }
+  if (event.eventType === "payment_method.delete" || event.eventType === "payment_method.deleted") {
+    if (!paymentInstrumentId) {
+      return;
+    }
+    const index = paymentMethods.findIndex((method) => method.paymentInstrumentId === paymentInstrumentId);
+    if (index >= 0) {
+      paymentMethods.splice(index, 1);
     }
     return;
   }
@@ -4360,6 +4370,22 @@ function applyPaymentMethodEvent(paymentMethods, event) {
     Object.assign(existing, event.data, { paymentInstrumentId });
   } else {
     paymentMethods.push({ ...event.data, paymentInstrumentId });
+  }
+}
+function applyRiskRuleEvent(riskRules, event) {
+  const customerId = asString(event.data.customerId) ?? event.resourceId ?? event.customerId;
+  if (!customerId) {
+    return;
+  }
+  const nextRiskRule = {
+    ...event.data,
+    customerId
+  };
+  const existing = riskRules.find((riskRule) => riskRule.customerId === customerId);
+  if (existing) {
+    Object.assign(existing, nextRiskRule);
+  } else {
+    riskRules.push(nextRiskRule);
   }
 }
 function summarizeEvent(record, data) {
@@ -4383,6 +4409,9 @@ function summarizeEvent(record, data) {
     case "payment_method.update":
     case "payment_method.updated":
       return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} updated${cardSuffix(data)}`;
+    case "payment_method.delete":
+    case "payment_method.deleted":
+      return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} deleted${cardSuffix(data)}`;
     case "payment_method.default_change":
       return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record.resourceId))}`;
     case "risk_rule.updated":
@@ -4491,11 +4520,9 @@ Global Options:
   --dry-run                     Print request without executing
   --open                        Open generated link in browser
   --no-watch                    Do not poll for webhook events after printing a link
-  --profile <name>              Use a named local profile, defaults to "default"
   --base-url <url>              Override API base URL
   --sandbox                     Target the sandbox environment (sandbox API base + agent domain);
                                 explicit --base-url / CLINK_BASE_URL still overrides the API host.
-                                Use --profile sandbox to keep sandbox CSK separate.
   --customer-id <id>            Override customer ID
   --customer-api-key <key>      Override customer API key
   --timeout <ms>                Request timeout in milliseconds
@@ -4514,8 +4541,7 @@ Event Watching:
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
-  clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
+  clink-cli wallet init --sandbox --email user@example.com --name Alice
   clink-cli wallet status --format pretty
   clink-cli card setup-link --open
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
@@ -4562,7 +4588,7 @@ Examples:
 var WALLET_HELP = `clink-cli wallet
 
 Usage:
-  clink-cli wallet init --email <email> --name <name> [--profile <name>] [options]
+  clink-cli wallet init --email <email> --name <name> [options]
   clink-cli wallet status [options]
 
 Subcommands:
@@ -4571,49 +4597,43 @@ Subcommands:
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
-  clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
+  clink-cli wallet init --sandbox --email user@example.com --name Alice
   clink-cli wallet status --format pretty
 `;
 var WALLET_INIT_HELP = `clink-cli wallet init
 
 Usage:
-  clink-cli wallet init --email <email> --name <name> [--profile <name>] [options]
+  clink-cli wallet init --email <email> --name <name> [options]
 
 Arguments:
   --email <email>              Customer email used to create or activate the wallet
-  --name <name>                Customer display name saved to the local profile
+  --name <name>                Customer display name saved to local config
 
 Options:
-  --profile <name>             Local profile name, defaults to "default"
   --source <value>             Bootstrap source value, defaults to "agent"
 
 Sandbox:
-  --sandbox switches the API/agent environment only; it does not choose a different CSK.
-  Initialize sandbox credentials into a dedicated profile, for example --profile sandbox.
+  --sandbox switches the API/agent environment. Re-running wallet init overwrites the
+  single local customer credentials.
 
 Defaults:
   --source                     agent
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --profile sandbox --email user@example.com --name Alice
-  clink-cli wallet init --profile buyer-2 --email user2@example.com --name Bob
+  clink-cli wallet init --sandbox --email user@example.com --name Alice
 `;
 var WALLET_STATUS_HELP = `clink-cli wallet status
 
 Usage:
   clink-cli wallet status [options]
 
-Options:
-  --profile <name>             Local profile name to inspect, defaults to "default"
-
 Notes:
   Reads local config only and does not make a network request.
 
 Examples:
   clink-cli wallet status
-  clink-cli wallet status --profile buyer-2 --format pretty
+  clink-cli wallet status --format pretty
 `;
 var CARD_HELP = `clink-cli card
 
@@ -4637,7 +4657,6 @@ Usage:
   clink-cli card binding-link [options]
 
 Options:
-  --profile <name>             Local profile whose customer credentials will be used
   --no-watch                   Skip polling for webhook events after printing the link
 
 Notes:
@@ -4648,7 +4667,7 @@ Notes:
 
 Examples:
   clink-cli card binding-link
-  clink-cli card binding-link --no-watch --profile buyer-2 --format pretty
+  clink-cli card binding-link --no-watch --format pretty
 `;
 var CARD_SETUP_LINK_HELP = `clink-cli card setup-link
 
@@ -4656,7 +4675,6 @@ Usage:
   clink-cli card setup-link [--open] [options]
 
 Options:
-  --profile <name>             Local profile whose customer credentials will be used
   --open                       Open the generated setup link in the browser
   --no-watch                   Skip polling for webhook events after printing the link
 
@@ -4667,7 +4685,7 @@ Notes:
 
 Examples:
   clink-cli card setup-link
-  clink-cli card setup-link --open --profile buyer-2
+  clink-cli card setup-link --open
 `;
 var CARD_MODIFY_LINK_HELP = `clink-cli card modify-link
 
@@ -4675,7 +4693,6 @@ Usage:
   clink-cli card modify-link [--open] [options]
 
 Options:
-  --profile <name>             Local profile whose customer credentials will be used
   --open                       Open the generated manage-card link in the browser
   --no-watch                   Skip polling for webhook events after printing the link
 
@@ -4686,22 +4703,19 @@ Notes:
 
 Examples:
   clink-cli card modify-link
-  clink-cli card modify-link --open --profile buyer-2
+  clink-cli card modify-link --open
 `;
 var CARD_LIST_HELP = `clink-cli card list
 
 Usage:
   clink-cli card list [options]
 
-Options:
-  --profile <name>             Local profile whose cached payment methods will be listed
-
 Notes:
   Reads payment methods from local config only and does not make a network request.
 
 Examples:
   clink-cli card list
-  clink-cli card list --profile buyer-2 --format pretty
+  clink-cli card list --format pretty
 `;
 var CARD_GET_HELP = `clink-cli card get
 
@@ -4711,15 +4725,12 @@ Usage:
 Arguments:
   --payment-instrument-id <id> Payment instrument ID to read from local cached payment methods
 
-Options:
-  --profile <name>             Local profile whose cached payment methods will be searched
-
 Notes:
   Reads payment method detail from local config only and does not make a network request.
 
 Examples:
   clink-cli card get --payment-instrument-id pi_xxx
-  clink-cli card get --profile buyer-2 --payment-instrument-id pi_xxx --format pretty
+  clink-cli card get --payment-instrument-id pi_xxx --format pretty
 `;
 var RISK_RULE_HELP = `clink-cli risk
 
@@ -4736,15 +4747,12 @@ var RISK_RULE_GET_HELP = `clink-cli risk get
 Usage:
   clink-cli risk get [options]
 
-Options:
-  --profile <name>             Local profile whose customer credentials will be used
-
 Notes:
   Calls GET /agent/risk/rule/settings.
 
 Examples:
   clink-cli risk get
-  clink-cli risk get --profile buyer-2 --format pretty
+  clink-cli risk get --format pretty
 `;
 var RISK_RULE_LINK_HELP = `clink-cli risk link
 
@@ -4752,21 +4760,20 @@ Usage:
   clink-cli risk link [--open] [options]
 
 Options:
-  --profile <name>             Local profile whose customer credentials will be used
   --open                       Open the generated risk-rule page in the browser
-  --sandbox                    Use the sandbox agent domain (agent.clinkbill.dev)
+  --sandbox                    Use the sandbox agent domain (uat-agent.clinkbill.com)
   --no-watch                   Skip polling for webhook events after printing the link
 
 Notes:
   Prints the agent risk-rule setup page at /risk-rules-setup. The agent domain mirrors the
   resolved API environment: production https://agent.clinkbill.com, --sandbox
-  https://agent.clinkbill.dev, a UAT base (CLINK_BASE_URL/--base-url) https://uat-agent.clinkbill.com.
+  https://uat-agent.clinkbill.com, a UAT base (CLINK_BASE_URL/--base-url) https://uat-agent.clinkbill.com.
   No network request.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
   clink-cli risk link
-  clink-cli risk link --sandbox --open --profile buyer-2
+  clink-cli risk link --sandbox --open
 `;
 var PAY_HELP = `clink-cli pay
 
@@ -4787,7 +4794,6 @@ Arguments:
   --products <json>              Product list JSON array for aiAgentInstructionBo.products
 
 Options:
-  --profile <name>             Local profile whose customer credentials will be used
   --payment-method-type <type> Payment method type, defaults to CARD
 
 Notes:
@@ -4805,7 +4811,6 @@ Examples:
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli pay --session-id sess_xxx --payment-instrument-id pi_xxx
   clink-cli pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
-  clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --profile buyer-2
 `;
 var REFUND_HELP = `clink-cli refund
 
@@ -4825,15 +4830,12 @@ Usage:
 Arguments:
   --order-id <id>              Order ID to refund
 
-Options:
-  --profile <name>             Local profile whose customer credentials will be used
-
 Notes:
   Applies a full refund for the given order.
 
 Examples:
   clink-cli refund create --order-id order_xxx
-  clink-cli refund create --profile buyer-2 --order-id order_xxx --format pretty
+  clink-cli refund create --order-id order_xxx --format pretty
 `;
 var REFUND_GET_HELP = `clink-cli refund get
 
@@ -4843,12 +4845,9 @@ Usage:
 Arguments:
   --refund-id <id>             Refund order ID to query
 
-Options:
-  --profile <name>             Local profile whose customer credentials will be used
-
 Examples:
   clink-cli refund get --refund-id rfd_xxx
-  clink-cli refund get --profile buyer-2 --refund-id rfd_xxx --format pretty
+  clink-cli refund get --refund-id rfd_xxx --format pretty
 `;
 var UCP_CHECKOUT_HELP = `clink-cli ucp-checkout
 
@@ -4905,14 +4904,12 @@ var CONFIG_HELP = `clink-cli config
 
 Usage:
   clink-cli config set <key> <value>
-  clink-cli config get [--profile <name>]
-  clink-cli config profiles [--profile <name>]
-  clink-cli config unset <key> [--profile <name>]
+  clink-cli config get
+  clink-cli config unset <key>
 
 Subcommands:
   set        Update local config
-  get        Show the selected profile's local config
-  profiles   List local profiles and show environment guidance
+  get        Show local config
   unset      Remove or reset a local config key
 
 Supported Keys:
@@ -4924,20 +4921,17 @@ Supported Keys:
   name
 
 Notes:
-  Profile-scoped keys default to profile "default" when --profile is omitted.
-  Environment is selected by --sandbox or --base-url; profile only selects local credentials.
+  wallet init stores a single local customer. Running wallet init again overwrites customer
+  credentials and clears cached payment methods/risk rules for the previous customer.
 `;
 var CONFIG_SET_HELP = `clink-cli config set
 
 Usage:
-  clink-cli config set <key> <value> [--profile <name>]
+  clink-cli config set <key> <value>
 
 Arguments:
   <key>                        Config key to update
   <value>                      Value to save
-
-Options:
-  --profile <name>             Profile used for profile-scoped keys such as customer-id and email
 
 Supported Keys:
   base-url
@@ -4949,57 +4943,25 @@ Supported Keys:
 
 Examples:
   clink-cli config set base-url https://api.clinkbill.com
-  clink-cli config set customer-id cus_xxx --profile buyer-2
+  clink-cli config set customer-id cus_xxx
   clink-cli config set default-open-links true
 `;
 var CONFIG_GET_HELP = `clink-cli config get
 
 Usage:
-  clink-cli config get [--profile <name>] [options]
-
-Options:
-  --profile <name>             Profile used when showing profile-scoped values, defaults to "default"
+  clink-cli config get [options]
 
 Examples:
   clink-cli config get
-  clink-cli config get --profile buyer-2 --format pretty
-`;
-var CONFIG_PROFILES_HELP = `clink-cli config profiles
-
-List local profiles without making a network request.
-
-Usage:
-  clink-cli config profiles [--profile <name>] [options]
-
-Options:
-  --profile <name>             Mark the currently selected local profile, defaults to "default"
-  --sandbox                    Resolve currentEnvironment as sandbox for this invocation
-  --base-url <url>             Resolve currentEnvironment from the explicit API base URL
-
-Output (data):
-  currentProfile               Local profile selected by --profile
-  currentEnvironment           Effective API environment selected by --sandbox / --base-url / config
-  profiles[]                   Local credential summaries; customerApiKey is never printed
-
-Notes:
-  Environment is selected by --sandbox or --base-url; profile only selects local credentials.
-  Profiles are not inherently sandbox or production in the current config schema. Use a naming
-  convention such as --profile sandbox together with --sandbox to keep credentials separated.
-
-Examples:
-  clink-cli config profiles --format pretty
-  clink-cli config profiles --profile sandbox --sandbox --format json
+  clink-cli config get --format pretty
 `;
 var CONFIG_UNSET_HELP = `clink-cli config unset
 
 Usage:
-  clink-cli config unset <key> [--profile <name>] [options]
+  clink-cli config unset <key> [options]
 
 Arguments:
   <key>                        Config key to remove or reset
-
-Options:
-  --profile <name>             Profile used for profile-scoped keys, defaults to "default"
 
 Supported Keys:
   base-url
@@ -5010,7 +4972,7 @@ Supported Keys:
   name
 
 Examples:
-  clink-cli config unset customer-api-key --profile buyer-2
+  clink-cli config unset customer-api-key
   clink-cli config unset base-url
 `;
 var INSTRUCTION_HELP = `clink-cli instruction
@@ -5034,9 +4996,10 @@ Notes:
   backend sign/update/cancel APIs itself \u2014 those require a Passkey authResult produced in the
   browser, so sign-url/update/cancel only print the agent page URL for the user to complete there.
   Agent page URL environment mirrors the resolved API base: production https://agent.clinkbill.com,
-  --sandbox https://agent.clinkbill.dev, UAT https://uat-agent.clinkbill.com.
+  --sandbox https://uat-agent.clinkbill.com, UAT https://uat-agent.clinkbill.com.
   Only valid for Visa cards whose card data has visaRegistrationSucceeded = true.
   Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
   Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
   --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
   --valid-only lists ACTIVE instructions and, for one-time instructions, keeps only mandates with reserveStatus=0.
@@ -5082,8 +5045,6 @@ Options:
   --limit <n>                  Max events per poll (pageSize, default 20)
   --type <eventType>           Return early once an event of this type arrives (exact match)
   --no-ack                     Peek without acknowledging the events
-  --profile <name>             Local profile whose customer credentials will be used
-
 Output (data):
   { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...] }
   On timeout, "resumeCommand" is included \u2014 rerun it to continue (acked events are
@@ -5091,11 +5052,11 @@ Output (data):
 
 Notes:
   A single poll returns the whole batch it reads in "events". payment_method.* events
-  refresh the cached payment methods in local wallet state; other events are returned
-  in this command's output but are not persisted in config.json. --type controls both
-  when to stop waiting and which events are acked: only events matching --type are
-  acknowledged, so unrelated events stay on the queue for a later poll. Without --type,
-  the whole batch is acked. --no-ack peeks without acknowledging anything.
+  refresh the cached payment methods in local wallet state; risk_rule.updated events
+  upsert local risk rule state. --type controls both when to stop waiting and which
+  events are acked: only events matching --type are acknowledged, so unrelated events
+  stay on the queue for a later poll. Without --type, the whole batch is acked.
+  --no-ack peeks without acknowledging anything.
 
 Examples:
   clink-cli events poll --format json
@@ -5176,8 +5137,6 @@ function getHelpText(command, subcommand) {
           return CONFIG_SET_HELP;
         case "get":
           return CONFIG_GET_HELP;
-        case "profiles":
-          return CONFIG_PROFILES_HELP;
         case "unset":
           return CONFIG_UNSET_HELP;
         default:
@@ -5296,6 +5255,8 @@ function normalizeHostname(value) {
 // dist/cli.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
+var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
+var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE = "5999";
 async function runCli(argv) {
@@ -5492,38 +5453,39 @@ async function walletInit(context) {
   const data = unwrapApiData(result.body);
   const nextConfig = cloneStoredConfig(context.storedConfig);
   nextConfig.baseUrl = context.runtimeConfig.baseUrl;
-  const profile = ensureStoredProfile(nextConfig, context.runtimeConfig.profile);
-  profile.email = email;
-  profile.name = name;
+  nextConfig.email = email;
+  nextConfig.name = name;
+  delete nextConfig.paymentMethods;
+  delete nextConfig.riskRules;
   const customerId = asOptionalString(data.customerId);
   const customerApiKey = asOptionalString(data.customerAPIKey ?? data.customerApiKey);
   if (customerId) {
-    profile.customerId = customerId;
+    nextConfig.customerId = customerId;
+  } else {
+    delete nextConfig.customerId;
   }
   if (customerApiKey) {
-    profile.customerApiKey = customerApiKey;
+    nextConfig.customerApiKey = customerApiKey;
+  } else {
+    delete nextConfig.customerApiKey;
   }
   await writeStoredConfig(nextConfig);
   printSuccess({
-    customerId: profile.customerId ?? null,
+    customerId: nextConfig.customerId ?? null,
     email,
     name,
-    hasCustomerApiKey: Boolean(profile.customerApiKey),
-    profile: context.runtimeConfig.profile,
+    hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
     configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function walletStatus(context) {
-  const profile = getStoredProfile(context.storedConfig, context.runtimeConfig.profile);
   printSuccess({
     baseUrl: context.storedConfig.baseUrl,
-    profile: context.runtimeConfig.profile,
-    customerId: profile.customerId ?? null,
-    email: profile.email ?? null,
-    name: profile.name ?? null,
-    hasCustomerApiKey: Boolean(profile.customerApiKey),
-    availableProfiles: Object.keys(context.storedConfig.profiles),
+    customerId: context.storedConfig.customerId ?? null,
+    email: context.storedConfig.email ?? null,
+    name: context.storedConfig.name ?? null,
+    hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
     defaultOpenLinks: context.storedConfig.defaultOpenLinks,
     configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
@@ -6002,15 +5964,17 @@ async function handleInstructionCommand(subcommand, context) {
 }
 function instructionBody(context) {
   const flags = context.args.flags;
+  const isRecurring = getBooleanFlag(flags, "is-recurring");
+  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
   const body = compact({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
     effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
     extra: optionalJsonFlag(flags, "extra"),
-    mandates: requireJsonArrayFlag(flags, "mandates")
+    mandates
   });
-  if (getBooleanFlag(flags, "is-recurring")) {
+  if (isRecurring) {
     body.isRecurring = true;
   }
   const shippingAddress = optionalJsonFlag(flags, "shipping-address");
@@ -6018,6 +5982,28 @@ function instructionBody(context) {
     body.shippingAddress = shippingAddress;
   }
   return body;
+}
+function normalizeInstructionMandates(mandates, isRecurring) {
+  if (!isRecurring) {
+    return mandates;
+  }
+  return mandates.map((mandate, index) => {
+    if (!isJsonObject(mandate)) {
+      throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
+    }
+    const frequency = mandate.recurringFrequency;
+    if (typeof frequency !== "string" || frequency.trim().length === 0) {
+      throw validationError(`--mandates[${index}].recurringFrequency is required when --is-recurring is set`);
+    }
+    const normalizedFrequency = frequency.trim().toUpperCase();
+    if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
+      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
+    }
+    return {
+      ...mandate,
+      recurringFrequency: normalizedFrequency
+    };
+  });
 }
 function utcDateTimeFlag(flags, name) {
   const value = getStringFlag(flags, name);
@@ -6056,6 +6042,7 @@ async function instructionCreate(context) {
   const data = unwrapApiData(result.body);
   const instructionId = asRequiredString(data.instructionId, "missing instructionId in instruction create response");
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
+  const mandateIds = extractMandateIds(data);
   const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
   printSuccess({
@@ -6063,6 +6050,7 @@ async function instructionCreate(context) {
     action: "created",
     instructionId,
     paymentInstrumentId,
+    ...mandateIds.length > 0 ? { mandateIds } : {},
     requiresPasskey: true,
     passkeyUrl
   }, context.globalOptions.format);
@@ -6185,8 +6173,6 @@ async function handleConfigCommand(subcommand, context) {
       return configSet(context);
     case "get":
       return configGet(context);
-    case "profiles":
-      return configProfiles(context);
     case "unset":
       return configUnset(context);
     default:
@@ -6200,17 +6186,13 @@ async function configSet(context) {
   }
   const key = normalizeConfigKey(rawKey);
   const nextConfig = cloneStoredConfig(context.storedConfig);
-  setConfigValue(nextConfig, key, parseConfigValue(key, rawValue), context.runtimeConfig.profile);
+  setConfigValue(nextConfig, key, parseConfigValue(key, rawValue));
   await writeStoredConfig(nextConfig);
-  printSuccess(buildConfigView(nextConfig, context.runtimeConfig.profile), context.globalOptions.format);
+  printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function configGet(context) {
-  printSuccess(buildConfigView(context.storedConfig, context.runtimeConfig.profile), context.globalOptions.format);
-  return EXIT_CODES.OK;
-}
-async function configProfiles(context) {
-  printSuccess(buildProfilesView(context.storedConfig, context.runtimeConfig), context.globalOptions.format);
+  printSuccess(buildConfigView(context.storedConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function configUnset(context) {
@@ -6223,30 +6205,29 @@ async function configUnset(context) {
   if (key === "baseUrl" || key === "defaultOpenLinks") {
     setConfigValue(nextConfig, key, defaultValueForRequiredKey(key));
   } else {
-    unsetConfigValue(nextConfig, key, context.runtimeConfig.profile);
+    unsetConfigValue(nextConfig, key);
   }
   await writeStoredConfig(nextConfig);
-  printSuccess(buildConfigView(nextConfig, context.runtimeConfig.profile), context.globalOptions.format);
+  printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function defaultValueForRequiredKey(key) {
   return key === "baseUrl" ? "https://api.clinkbill.com" : false;
 }
-function setConfigValue(target, key, value, profileName = DEFAULT_PROFILE) {
-  if (isProfileConfigKey(key)) {
-    const profile = ensureStoredProfile(target, profileName);
+function setConfigValue(target, key, value) {
+  if (isCustomerConfigKey(key)) {
     switch (key) {
       case "customerId":
-        profile.customerId = value;
+        target.customerId = value;
         return;
       case "customerApiKey":
-        profile.customerApiKey = value;
+        target.customerApiKey = value;
         return;
       case "email":
-        profile.email = value;
+        target.email = value;
         return;
       case "name":
-        profile.name = value;
+        target.name = value;
         return;
       default:
         return;
@@ -6263,95 +6244,47 @@ function setConfigValue(target, key, value, profileName = DEFAULT_PROFILE) {
       return;
   }
 }
-function unsetConfigValue(target, key, profileName) {
-  if (!isProfileConfigKey(key)) {
-    return;
-  }
-  const profile = target.profiles[profileName];
-  if (!profile) {
+function unsetConfigValue(target, key) {
+  if (!isCustomerConfigKey(key)) {
     return;
   }
   switch (key) {
     case "customerId":
-      delete profile.customerId;
+      delete target.customerId;
       break;
     case "customerApiKey":
-      delete profile.customerApiKey;
+      delete target.customerApiKey;
       break;
     case "email":
-      delete profile.email;
+      delete target.email;
       break;
     case "name":
-      delete profile.name;
+      delete target.name;
       break;
     default:
       break;
   }
-  if (profileName !== DEFAULT_PROFILE && isEmptyProfile(profile)) {
-    delete target.profiles[profileName];
-  }
 }
-function buildConfigView(config, profileName) {
-  const profile = getStoredProfile(config, profileName);
+function buildConfigView(config) {
   return {
     baseUrl: config.baseUrl,
-    profile: profileName,
-    availableProfiles: Object.keys(config.profiles),
-    customerId: profile.customerId ?? null,
-    email: profile.email ?? null,
-    name: profile.name ?? null,
-    hasCustomerApiKey: Boolean(profile.customerApiKey),
+    customerId: config.customerId ?? null,
+    email: config.email ?? null,
+    name: config.name ?? null,
+    hasCustomerApiKey: Boolean(config.customerApiKey),
     defaultOpenLinks: config.defaultOpenLinks,
     configPath: "~/.clink-cli/config.json"
   };
 }
-function buildProfilesView(config, runtimeConfig) {
-  return {
-    currentProfile: runtimeConfig.profile,
-    currentEnvironment: inferEnvironment(runtimeConfig.baseUrl),
-    profiles: Object.entries(config.profiles).map(([name, profile]) => ({
-      name,
-      customerId: profile.customerId ?? null,
-      email: profile.email ?? null,
-      hasCustomerApiKey: Boolean(profile.customerApiKey),
-      paymentMethodCount: profile.paymentMethods?.length ?? 0,
-      suggestedEnvironment: suggestProfileEnvironment(name)
-    })),
-    note: "Environment is selected by --sandbox or --base-url; profile only selects local credentials. Use --profile sandbox --sandbox for sandbox credentials.",
-    configPath: "~/.clink-cli/config.json"
-  };
-}
-function inferEnvironment(baseUrl) {
-  try {
-    const host = new URL(baseUrl).hostname.toLowerCase();
-    if (host === "api.clinkbill.dev" || host.includes("sandbox") || host.startsWith("test-api.")) {
-      return "sandbox";
-    }
-    if (host === "api.clinkbill.com") {
-      return "production";
-    }
-    return "custom";
-  } catch {
-    return "custom";
-  }
-}
-function suggestProfileEnvironment(profileName) {
-  return /sandbox|test/i.test(profileName) ? "sandbox" : "production";
-}
-function isEmptyProfile(profile) {
-  return Object.keys(profile).length === 0;
-}
 async function cachePaymentMethods(context, value) {
   const paymentMethods = Array.isArray(value) ? value.filter((item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0) : [];
   const nextConfig = cloneStoredConfig(context.storedConfig);
-  const profile = ensureStoredProfile(nextConfig, context.runtimeConfig.profile);
-  profile.paymentMethods = paymentMethods.map((item) => ({ ...item }));
+  nextConfig.paymentMethods = paymentMethods.map((item) => ({ ...item }));
   await writeStoredConfig(nextConfig);
-  context.storedConfig.profiles = nextConfig.profiles;
+  context.storedConfig.paymentMethods = nextConfig.paymentMethods;
 }
 function getStoredPaymentMethods(context) {
-  const profile = getStoredProfile(context.storedConfig, context.runtimeConfig.profile);
-  return Array.isArray(profile.paymentMethods) ? profile.paymentMethods : [];
+  return Array.isArray(context.storedConfig.paymentMethods) ? context.storedConfig.paymentMethods : [];
 }
 async function finishApiCommand(result, context) {
   if (isDryRun(result)) {
@@ -6422,6 +6355,22 @@ function asRequiredString(value, message) {
     return value;
   }
   throw validationError(message);
+}
+function extractMandateIds(instruction) {
+  const mandateKey = findMandateArrayKey(instruction);
+  if (!mandateKey) {
+    return [];
+  }
+  return instruction[mandateKey].map((mandate) => isRecord(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+}
+function extractMandateId(mandate) {
+  for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
+    const value = asOptionalString(mandate[key]);
+    if (value !== void 0) {
+      return value;
+    }
+  }
+  return void 0;
 }
 
 // dist/index.js

@@ -1,6 +1,6 @@
-# Wallet, Profile, Card, And Risk Commands
+# Wallet, Config, Card, And Risk Commands
 
-Read this before wallet setup, config/profile work, card readiness checks, payment-method management, or risk-rule links.
+Read this before wallet setup, local config work, card readiness checks, payment-method management, or risk-rule links.
 
 ## Wallet Setup
 
@@ -10,9 +10,9 @@ Define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`); t
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Match the profile credentials to the prefix's environment: sandbox customer credentials for a sandbox prefix, production credentials for a production prefix. Never reuse a production customer API key with a sandbox prefix.
+Match local credentials to the prefix's environment: sandbox customer credentials for a sandbox prefix, production credentials for a production prefix. Never reuse a production customer API key with a sandbox prefix.
 
-`wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the selected local profile. It is a one-time setup step and must not be run automatically during a payment attempt.
+`wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
 
 ## Wallet Status
 
@@ -30,7 +30,7 @@ Read current config:
 clink-cli config get --format json
 ```
 
-Set non-secret values (the prefix already selects the profile, so no per-command `--profile` is needed):
+Set non-secret values:
 
 ```bash
 clink-cli config set base-url <url> --format json
@@ -54,9 +54,9 @@ clink-cli config unset <key> --format json
 
 ## Config State Model
 
-The local config is a latest wallet state cache. It should contain selected profile credentials, the latest known payment-method snapshot, and user display data. It should not grow as an append-only log of events.
+The local config is a latest wallet state cache. It should contain the single local customer credentials, the latest known payment-method snapshot, risk-rule state, and user display data. It should not grow as an append-only log of events.
 
-When event processing sees payment-method changes, the CLI updates the cached payment-method snapshot for the profile. Non-wallet business events are returned to the caller and acknowledged by the event path; they are not configuration history.
+When event processing sees payment-method changes, the CLI updates the cached payment-method snapshot. `risk_rule.updated` upserts local risk-rule state. Non-wallet business events are returned to the caller and acknowledged by the event path; they are not configuration history.
 
 ## Card Readiness
 
