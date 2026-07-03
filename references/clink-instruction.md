@@ -12,10 +12,22 @@ Use this path only for a Visa card whose refreshed payment-method data has:
 visaRegistrationSucceeded === true
 ```
 
-If the selected Visa card is not registered, send the Passkey registration URL and wait for the readiness event:
+If the selected Visa card is not registered, send the Passkey registration URL:
 
 ```text
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
+```
+
+This URL is hand-built, not CLI command output, so it has **no built-in watch**. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so poll without gating on one type:
+
+```bash
+clink-cli events poll --no-ack --max-wait 60 --format json
+```
+
+Then confirm authoritatively by refreshing the card and checking `visaRegistrationSucceeded === true` before proceeding:
+
+```bash
+clink-cli card get --payment-instrument-id <visa_pi> --format json
 ```
 
 The agent page environment (sandbox or production) follows the `clink-cli` prefix defined for the workflow (see `references/clink-cli-invocation.md`); no per-command flag is needed here.
@@ -24,7 +36,7 @@ The agent page environment (sandbox or production) follows the `clink-cli` prefi
 
 1. Refresh cards with `clink-cli card binding-link --no-watch --format json`.
 2. Select the user-specified Visa card, otherwise the default card, otherwise the first usable Visa card.
-3. If registration is missing, send the registration URL and wait for `vic_device.binding_succeeded` or a same-card `payment_method.updated` event showing readiness.
+3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.updated` showing readiness, then confirm `visaRegistrationSucceeded === true` with `card get` before continuing.
 4. List reusable ACTIVE instructions before creating anything.
 5. Reuse an instruction only if card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request.
 6. If no reusable instruction exists, create a draft only after the mandate scope is complete and the user has authorized that scope.
