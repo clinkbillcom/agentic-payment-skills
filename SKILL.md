@@ -1,6 +1,6 @@
 ---
 name: clink-payment-skill
-description: "Use for direct Clink payment and wallet operations: Clink wallet initialization/status/config, risk-rule management, authorization management (Visa/VIC instruction, mandate, Passkey signing, async activation), card binding and payment-method management/readiness, executing an explicitly authorized recharge/top-up/payment for a known merchant_id, buying or ordering a product URL/product link with Clink pay (clink pay 买/购买/下单 商品链接), generic UCP checkout/order flows where merchant_id is unknown, generic UCP checkout/order flows where merchant_id is known, related async events, and Clink refund submission/status."
+description: "Use for direct Clink payment and wallet operations: Clink wallet initialization/status/config, risk-rule management, authorization management (Visa/VIC instruction, mandate, Passkey signing, async activation), card binding and payment-instrument/payment-method list refresh/readiness, executing an explicitly authorized recharge/top-up/payment for a known merchant_id, buying or ordering a product URL/product link with Clink pay (clink pay 买/购买/下单 商品链接), generic UCP checkout/order flows where merchant_id is unknown, generic UCP checkout/order flows where merchant_id is known, related async events, and Clink refund submission/status."
 version: "1.3.0"
 requires:
   node: ">=20"
@@ -42,6 +42,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 
 - initialize a user's Clink wallet
 - check wallet, sandbox, or payment-method readiness
+- refresh payment-instrument list / `paymentMethodsVoList` from Clink before selecting a card or relying on cached payment methods
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, Direct/session Visa payment must list/match ACTIVE instruction+mandate before pay
 - order a discovered product or product URL/product link through the UCP checkout control flow: classify `fulfillmentType`, require a US shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
@@ -96,7 +97,7 @@ FSM action contract:
 
 | Observation | Action |
 | --- | --- |
-| Need current payment-method readiness | `card binding-link --no-watch`, then inspect `paymentMethodsVoList`; do not trust `card list` alone |
+| Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
 | User must bind/manage card or risk rules | Emit the link and immediately start a concurrent, non-blocking watch (bound command watch, or `events poll` for a hand-built URL such as the Visa Passkey registration link), then verify the matching event; do not wait for the user to report completion before listening |
 | User says Visa, or selected/default payment method is known to be Visa, for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |
 | Discovered external product order | First classify fulfillment as `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`. If `UNKNOWN`, ask before checkout. If physical goods ship, collect a US shipping address before instruction list. Then list ACTIVE instructions for the resolved paymentInstrumentId; if no matching instruction+mandate exists, start the instruction creation workflow and stop UCP checkout until activation; if a valid match exists, run UCP checkout create then complete as one handoff: create checkout, parse checkoutId, complete checkout with that paymentInstrumentId, immediately poll `agent_order.succeeded`, then return the matched payment success event/message; do not use plain `pay` |
@@ -145,7 +146,7 @@ FSM action contract:
 | --- | --- |
 | Initialize wallet | `clink-cli wallet init --email <email> --name <name> --format json` (use credentials matching the prefix's environment) |
 | Check wallet readiness | `clink-cli wallet status --format json` |
-| Refresh payment methods without waiting | `clink-cli card binding-link --no-watch --format json` |
+| Refresh payment-instrument list without waiting | `clink-cli card binding-link --no-watch --format json` (returns `paymentMethodsVoList` and updates the local cache) |
 | Bind first card and wait | `clink-cli card binding-link --format json` |
 | List cached payment methods | `clink-cli card list --format json` |
 | Charge user | `clink-cli pay ... --format json` |

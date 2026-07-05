@@ -156,6 +156,15 @@ test('payment skill docs require agent-owned command execution', async () => {
   assert.doesNotMatch(invocation, /tell the user to run/i);
 });
 
+test('main skill exposes explicit payment-instrument list refresh capability', async () => {
+  const skill = await readRepoFile('SKILL.md');
+
+  assert.match(skill, /refresh payment-instrument list/i);
+  assert.match(skill, /paymentMethodsVoList/);
+  assert.match(skill, /clink-cli card binding-link --no-watch --format json/);
+  assert.match(skill, /Do not use `card list` alone/i);
+});
+
 test('cli invocation docs require a hardcoded sandbox wrapper command', async () => {
   const invocation = await readRepoFile('references/clink-cli-invocation.md');
 
