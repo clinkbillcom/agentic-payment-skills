@@ -3706,6 +3706,9 @@ function resolveRuntimeConfig(storedConfig, flags) {
   assignIfDefined(runtimeConfig, "name", resolved.name);
   return runtimeConfig;
 }
+function resolveWalletInitBaseUrl(flags) {
+  return getStringFlag(flags, "base-url") ?? process.env.CLINK_BASE_URL ?? (getBooleanFlag(flags, "sandbox") ? API_BASE_URLS.sandbox : API_BASE_URLS.production);
+}
 function normalizeConfigKey(rawKey) {
   const key = rawKey.trim();
   switch (key) {
@@ -4614,7 +4617,7 @@ Options:
 
 Sandbox:
   --sandbox switches the API/agent environment. Re-running wallet init overwrites the
-  single local customer credentials.
+  single local customer credentials. Without --sandbox, wallet init uses production.
 
 Defaults:
   --source                     agent
@@ -5433,8 +5436,9 @@ async function walletInit(context) {
   const email = requireStringFlag(context.args.flags, "missing --email", "email");
   const name = requireStringFlag(context.args.flags, "missing --name", "name");
   const source = getStringFlag(context.args.flags, "source") ?? "agent";
+  const baseUrl = resolveWalletInitBaseUrl(context.args.flags);
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    baseUrl,
     method: "POST",
     path: "/agent/cwallet/customer/bootstrap",
     body: compact({
@@ -5452,7 +5456,7 @@ async function walletInit(context) {
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
   const nextConfig = cloneStoredConfig(context.storedConfig);
-  nextConfig.baseUrl = context.runtimeConfig.baseUrl;
+  nextConfig.baseUrl = baseUrl;
   nextConfig.email = email;
   nextConfig.name = name;
   delete nextConfig.paymentMethods;
