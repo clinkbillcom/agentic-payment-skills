@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { access, constants, readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -154,6 +154,26 @@ test('payment skill docs require agent-owned command execution', async () => {
   assert.doesNotMatch(skill, /ask the user to run wallet setup themselves/i);
   assert.doesNotMatch(payment, /Ask the user to run wallet setup/i);
   assert.doesNotMatch(invocation, /tell the user to run/i);
+});
+
+test('cli invocation docs require a hardcoded sandbox wrapper command', async () => {
+  const invocation = await readRepoFile('references/clink-cli-invocation.md');
+
+  const packageJson = JSON.parse(await readRepoFile('package.json'));
+  const wrapper = await readRepoFile('bin/clink-cli');
+
+  assert.equal(packageJson.bin['clink-cli'], './bin/clink-cli');
+  await access(path.join(rootDir, 'bin/clink-cli'), constants.X_OK);
+  assert.match(wrapper, /^#!\/usr\/bin\/env sh/);
+  assert.match(wrapper, /vendor\/clink-cli\/clink-cli\.bundle\.mjs/);
+  assert.match(wrapper, /--sandbox "\$@"/);
+  assert.match(invocation, /package\.json `bin\.clink-cli`/i);
+  assert.match(invocation, /`bin\/clink-cli`/);
+  assert.match(invocation, /hardcodes `--sandbox`/i);
+  assert.match(invocation, /Do not create a production `clink-cli` bin/i);
+  assert.match(invocation, /Do not repeat .*--sandbox.* individual/i);
+  assert.doesNotMatch(invocation, /For production, drop the sandbox flags/i);
+  assert.doesNotMatch(invocation, /clink-cli\(\)/);
 });
 
 test('async events reference requires resource correlation, not type-only matches', async () => {

@@ -4,13 +4,13 @@ Read this before wallet setup, local config work, card readiness checks, payment
 
 ## Wallet Setup
 
-Define the `clink-cli` prefix once (see `references/clink-cli-invocation.md`); that prefix is the only place sandbox vs production is chosen. Wallet init then only needs the account fields:
+Define the hardcoded sandbox `clink-cli` wrapper once (see `references/clink-cli-invocation.md`). Wallet init then only needs the account fields:
 
 ```bash
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Match local credentials to the prefix's environment: sandbox customer credentials for a sandbox prefix, production credentials for a production prefix. Never reuse a production customer API key with a sandbox prefix.
+Use sandbox/UAT customer credentials only. Never reuse a production customer API key with the hardcoded sandbox wrapper.
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
 

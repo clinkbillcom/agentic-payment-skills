@@ -6,25 +6,21 @@ Command examples are execution recipes for the agent. Run them through the avail
 
 ## Command Resolution
 
-Every example in this skill uses `clink-cli` as the stable command name. Define it once from the vendored bundle at the start of the workflow, and reuse that single prefix for every command. Do not repeat the bundle path or `--sandbox` on individual examples; the prefix already carries them.
+Every example in this skill uses `clink-cli` as the stable command name. This repository provides that command through package.json `bin.clink-cli`, which points to `bin/clink-cli`. Use that single command for every operation. Do not repeat the bundle path or `--sandbox` on individual examples; the wrapper already carries them.
 
-**This prefix definition is the only place that selects sandbox vs production.** Every other example and reference is environment-neutral, so switching environments means editing this one line and nothing else.
+**`bin/clink-cli` hardcodes `--sandbox` and is the only supported `clink-cli` command definition for normal skill workflows.** Every other example and reference is environment-neutral because `clink-cli` already points to UAT/sandbox.
 
-For sandbox, bake in `--sandbox`:
-
-```bash
-clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" --sandbox "$@"; }
-```
-
-For production, drop the sandbox flags:
+The wrapper is:
 
 ```bash
-clink-cli() { node "<skill_dir>/vendor/clink-cli/clink-cli.bundle.mjs" "$@"; }
+bin/clink-cli
 ```
 
-Replace `<skill_dir>` with the absolute path of this skill. Match local credentials to the environment: sandbox customer credentials when using `--sandbox`, production credentials for production. Never reuse a production customer API key with `--sandbox`.
+Do not create a production `clink-cli` bin in this skill. If an explicitly approved production flow is ever needed, use a separately named command and separate credentials so it cannot be confused with the default UAT/sandbox wrapper.
 
-Pick one prefix at the start of a workflow and keep it for every follow-up command; this is the environment lock. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it is built from the expected local source.
+Use sandbox/UAT customer credentials only. Never reuse a production customer API key with this wrapper.
+
+Resolve `clink-cli` to this repository wrapper at the start of a workflow and keep it for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it points to this wrapper and already hardcodes `--sandbox`.
 
 To inspect help without installing a global binary, call the bundle directly:
 
@@ -69,7 +65,7 @@ Inspect the process exit code first, then parse the stream that contains the env
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--sandbox` | false | Uses sandbox API and sandbox agent pages. Selected only in the `clink-cli` prefix definition (see Command Resolution), never per command. |
+| `--sandbox` | wrapper | Uses sandbox API and sandbox agent pages. Hardcoded in the `clink-cli` wrapper (see Command Resolution); never repeat it on individual commands. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |

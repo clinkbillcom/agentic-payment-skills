@@ -30,7 +30,7 @@ Then confirm authoritatively by refreshing the card and checking `visaRegistrati
 clink-cli card get --payment-instrument-id <visa_pi> --format json
 ```
 
-The agent page environment (sandbox or production) follows the `clink-cli` prefix defined for the workflow (see `references/clink-cli-invocation.md`); no per-command flag is needed here.
+The agent page environment follows the hardcoded sandbox `clink-cli` wrapper defined for the workflow (see `references/clink-cli-invocation.md`); no per-command flag is needed here.
 
 ## Preparation Steps
 
