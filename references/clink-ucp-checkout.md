@@ -12,7 +12,7 @@ This flow is for external/shadow merchants discovered by an agent, such as a Sho
 
 ## Boundary
 
-Product discovery and price truth belong to the merchant/product tool. This skill only runs the payment-side control flow after the target product is clear.
+Product discovery and price truth belong to the merchant/product tool. Agent owns product exploration for product URL checkout: use browser tools, page extraction, or a page request to read product details before asking the user for fields that the page can expose. This skill only runs the payment-side control flow after the target product is clear.
 
 Do not use plain `clink-cli pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, instruction binding, and external automation context.
 
@@ -61,7 +61,7 @@ Every transition has a guard. If the guard fails, stop and report the exact miss
 
 ## Step 0: Find And Freeze The Product
 
-The agent may use merchant tools, browser tools, search, or page extraction to identify the target product. Freeze a single target:
+Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent, first open or request the product URL with browser tools, page extraction, merchant tools, or a direct page request. Extract title, price, currency, merchant context, availability, selected/default options, variant data, and fulfillment signals from the page or product JSON. Do not ask the user for product title, price, currency, availability, variant ID, or option values before browser exploration and page request attempts have failed or left multiple valid choices. Freeze one target:
 
 ```json
 {
@@ -84,7 +84,7 @@ Amount hard match means the checkout line-item total must equal the intended pro
 Resolve a stable item ID during product freeze with `classifyUcpItemIdResolution`. For Shopify sites:
 
 - Direct variant links: if the URL carries a variant query parameter (`variant=<id>`), use that value as the Shopify `variant_id` / UCP `item_id`; do not fetch product JSON just to rediscover it.
-- SPU product slug links: strip query/hash and fetch `<product_url>.js` (for example `/products/<slug>.js`). Parse the JSON `variants array`, then select the variant by explicit user selection such as exact variant ID or option values (`Color`, `Size`, etc.).
+- SPU product slug links: strip query/hash and fetch `<product_url>.js` (for example `/products/<slug>.js`). Parse the JSON response body `variants array`, then select the variant by explicit user selection such as exact variant ID or option values (`Color`, `Size`, etc.).
 - If there is only one variant, it can be selected. If several variants remain and the user has not chosen enough options, ask for the missing selection; do not guess.
 - Shopify custom domains are acceptable when product discovery identifies the platform through page evidence or CNAME; pass that as `siteType=shopify` to the FSM.
 

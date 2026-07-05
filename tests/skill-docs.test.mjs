@@ -225,11 +225,16 @@ test('ucp checkout docs require Shopify variant resolution before checkout item 
   const ucp = await readRepoFile('references/clink-ucp-checkout.md');
 
   assert.match(skill, /classifyUcpItemIdResolution/);
+  assert.match(skill, /browser|page request/i);
   assert.match(skill, /Shopify/i);
   assert.match(skill, /variant/i);
   assert.match(ucp, /Shopify/i);
+  assert.match(ucp, /Agent owns product exploration/i);
+  assert.match(ucp, /browser tools|page request/i);
+  assert.match(ucp, /do not ask[\s\S]+before[\s\S]+browser/i);
   assert.match(ucp, /variant query parameter/i);
   assert.match(ucp, /products\/<slug>\.js|<product_url>\.js/i);
+  assert.match(ucp, /response body/i);
   assert.match(ucp, /variants array/i);
   assert.match(ucp, /user.*selection|用户.*选择/i);
   assert.match(ucp, /do not guess|ask/i);

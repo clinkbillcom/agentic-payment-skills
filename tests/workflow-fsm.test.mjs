@@ -142,9 +142,22 @@ test('classifies UCP checkout prerequisites without inventing product or fulfill
     currency: 'USD',
   }), {
     state: UcpCheckoutWorkflowState.PRODUCT_INPUT_MISSING,
+    action: UcpCheckoutWorkflowAction.FREEZE_PRODUCT,
+    terminal: false,
+    reason: 'product_exploration_required',
+    missing: ['merchantUrl', 'title', 'amountMinor', 'quantity', 'fulfillmentType'],
+    productUrl: 'https://shop.example/products/ski-wax',
+  });
+
+  assert.deepEqual(classifyUcpCheckoutPrerequisites({
+    productUrl: 'https://shop.example/products/ski-wax',
+    currency: 'USD',
+    productExplorationAttempted: true,
+  }), {
+    state: UcpCheckoutWorkflowState.PRODUCT_INPUT_MISSING,
     action: UcpCheckoutWorkflowAction.ASK_FOR_PRODUCT_INPUT,
     terminal: false,
-    reason: 'missing_product_input',
+    reason: 'missing_product_input_after_exploration',
     missing: ['merchantUrl', 'title', 'amountMinor', 'quantity', 'fulfillmentType'],
   });
 
