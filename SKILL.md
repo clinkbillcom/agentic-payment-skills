@@ -71,7 +71,7 @@ Every workflow follows:
 `Observe → Classify → Act → Verify → Return`
 
 1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`) and include `[UCP_CHECKOUT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` and `correlateEventWorkflow` to produce the `event_fsm` classification only after resource correlation.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`, `classifyUcpPaymentSuccessEventObservation`) and include `[UCP_CHECKOUT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` and `correlateEventWorkflow` to produce the `event_fsm` classification only after resource correlation.
 3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
@@ -88,6 +88,8 @@ FSM action contract:
 | `STOP_PAYMENT_FAILURE` | Stop the payment path or offer an explicit recovery; do not retry automatically. |
 | `VERIFY_BEFORE_RETRY` | Treat payment state as unknown and verify through a safe status/idempotency path before retry. |
 | `START_WALLET_SETUP` | Start wallet/config recovery before any new payment attempt. |
+| `POLL_PAYMENT_SUCCESS_EVENT` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json` after UCP checkout complete returns `completed`; wait for the matching payment success event. |
+| `RETURN_PAYMENT_SUCCESS_EVENT` | Surface the matched `agent_order.succeeded` event/message to the caller; do not claim merchant fulfillment. |
 | `SURFACE_ERROR` | Surface the CLI/API error and stop without inventing recovery. |
 
 ## Routing And Action Matrix
@@ -97,7 +99,7 @@ FSM action contract:
 | Need current payment-method readiness | `card binding-link --no-watch`, then inspect `paymentMethodsVoList`; do not trust `card list` alone |
 | User must bind/manage card or risk rules | Emit the link and immediately start a concurrent, non-blocking watch (bound command watch, or `events poll` for a hand-built URL such as the Visa Passkey registration link), then verify the matching event; do not wait for the user to report completion before listening |
 | User says Visa, or selected/default payment method is known to be Visa, for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |
-| Discovered external product order | First classify fulfillment as `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`. If `UNKNOWN`, ask before checkout. If physical goods ship, collect a US shipping address before instruction list. Then list ACTIVE instructions for the resolved paymentInstrumentId; if no matching instruction+mandate exists, start the instruction creation workflow and stop UCP checkout until activation; if a valid match exists, run UCP checkout create then complete as one handoff: create checkout, parse checkoutId, then complete checkout with that paymentInstrumentId; do not use plain `pay` |
+| Discovered external product order | First classify fulfillment as `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`. If `UNKNOWN`, ask before checkout. If physical goods ship, collect a US shipping address before instruction list. Then list ACTIVE instructions for the resolved paymentInstrumentId; if no matching instruction+mandate exists, start the instruction creation workflow and stop UCP checkout until activation; if a valid match exists, run UCP checkout create then complete as one handoff: create checkout, parse checkoutId, complete checkout with that paymentInstrumentId, immediately poll `agent_order.succeeded`, then return the matched payment success event/message; do not use plain `pay` |
 | Old direct/session pay fulfillment is `NO_SHIPPING_REQUIRED` | Do not ask for an address; pass the fixed default US address placeholder to `clink-cli pay` |
 | Old direct/session pay fulfillment is `PHYSICAL_GOODS_REQUIRES_SHIPPING` | Ask for a real US shipping address and validate it before `instruction list` or `clink-cli pay` |
 | Old direct/session pay fulfillment is `UNKNOWN` | Ask whether the product ships as physical goods; do not run `clink-cli pay` |
@@ -129,6 +131,7 @@ FSM action contract:
 - VIC authorization prepares permission; it is not payment completion. Reuse ACTIVE instructions only when the selected card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request.
 - UCP checkout product orders must classify fulfillment before checkout: use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only for shipped physical goods, `NO_SHIPPING_REQUIRED` for services/subscriptions/hotels/tickets/bookings/reservations/digital goods, and `UNKNOWN` only long enough to ask. Physical shipped goods require a US shipping address before instruction list, instruction creation, `tool item-id`, or checkout create. Use the CWallet instruction address shape (`countryCode=US`, `line1`, `zip`) for `instruction create`, and the UCP Postal Address shape (`address_country=US`, `street_address`, `postal_code`) for `ucp-checkout create` and VIC `pay` shipping context.
 - UCP checkout product orders must list ACTIVE instructions first, filter out reserve or inactive instruction/mandate entries, apply amount hard match and merchant semantic match, extract `item_id`, resolve the current/default paymentInstrumentId, create the external checkout, parse checkoutId from the create response, then complete it with `--payment-instrument-id`.
+- After UCP checkout complete returns `completed`, immediately run `clink-cli events poll --type agent_order.succeeded --format json`, correlate the returned event to the current checkout/order/session when identifiers are available, and send the matched success event/message back to the caller.
 - If no matching instruction+mandate is found for a UCP product order, do not run `ucp-checkout create` or `ucp-checkout complete`; start the instruction creation workflow and wait for matching ACTIVE instruction evidence.
 - No-match UCP branch is terminal for the current checkout attempt: after starting the instruction creation workflow, return a waiting/pending state and do not continue to item-id extraction, checkout create, or checkout complete until activation is observed and the flow restarts from instruction list.
 - UCP checkout completion is not merchant fulfillment; delivery, entitlement, merchant receipt, or downstream business completion belongs to the merchant/product runtime.
@@ -156,6 +159,7 @@ FSM action contract:
 | Extract UCP product item ID | `clink-cli tool item-id --url <product_url> --format json` |
 | Create external UCP checkout | `clink-cli ucp-checkout create ... --instruction-id <id> --mandate-id <id> --format json` |
 | Complete external UCP checkout | `clink-cli ucp-checkout complete --checkout-id <id> --payment-instrument-id <id> --format json` |
+| Wait for UCP payment success | `clink-cli events poll --type agent_order.succeeded --format json` |
 
 ## Output Contract
 

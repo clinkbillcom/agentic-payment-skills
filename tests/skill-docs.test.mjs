@@ -79,6 +79,9 @@ test('ucp checkout reference documents the product-order control flow', async ()
 test('skill routes product purchases through ucp checkout reference', async () => {
   const skill = await readRepoFile('SKILL.md');
 
+  assert.match(skill, /clink pay/i);
+  assert.match(skill, /product URL|product link/i);
+  assert.match(skill, /商品链接|购买链接|下单/i);
   assert.match(skill, /references\/clink-ucp-checkout\.md/);
   assert.match(skill, /UCP checkout/i);
   assert.match(skill, /product order/i);
@@ -90,6 +93,21 @@ test('skill routes product purchases through ucp checkout reference', async () =
     skill,
     /order a discovered product through UCP checkout after an ACTIVE instruction\/mandate exactly matches/i,
   );
+});
+
+test('skill routes product-link checkout through the UCP checkout FSM', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const workflow = await readRepoFile('lib/ucp-checkout-workflow-fsm.mjs');
+
+  assert.match(skill, /lib\/ucp-checkout-workflow-fsm\.mjs/);
+  assert.match(skill, /\[UCP_CHECKOUT_FSM\] state=<STATE> action=<ACTION> reason=<REASON>/);
+  assert.match(skill, /classifyUcpProductIntent/);
+  assert.match(skill, /classifyUcpCheckoutPrerequisites/);
+  assert.match(skill, /classifyAuthorizationSelection/);
+  assert.match(skill, /classifyUcpCheckoutObservation/);
+  assert.match(skill, /classifyUcpPaymentSuccessEventObservation/);
+  assert.match(workflow, /normalizeUcpAmountToMinorUnitLong/);
+  assert.match(workflow, /clink-cli events poll --type agent_order\.succeeded --format json/);
 });
 
 test('main skill documents closed-loop control and routing decisions', async () => {
@@ -176,6 +194,30 @@ test('ucp checkout docs require continuous create then complete handoff', async 
   assert.match(ucp, /parse `data\.id` \/ `data\.checkout_id` \/ `data\.checkoutId` as `checkoutId`/);
   assert.match(ucp, /current\/default paymentInstrumentId/i);
   assert.match(ucp, /complete uses that `checkoutId` and the resolved payment instrument/i);
+});
+
+test('ucp checkout docs require payment success event poll after complete', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const ucp = await readRepoFile('references/clink-ucp-checkout.md');
+  const events = await readRepoFile('references/clink-async-events.md');
+
+  assert.match(skill, /agent_order\.succeeded/);
+  assert.match(skill, /POLL_PAYMENT_SUCCESS_EVENT/);
+  assert.match(ucp, /clink-cli events poll --type agent_order\.succeeded --format json/);
+  assert.match(ucp, /immediately|immediate/i);
+  assert.match(ucp, /return|surface|send/i);
+  assert.match(events, /UCP checkout payment success/i);
+  assert.match(events, /agent_order\.succeeded/);
+});
+
+test('ucp checkout docs require user-facing amount normalization to external long amount', async () => {
+  const ucp = await readRepoFile('references/clink-ucp-checkout.md');
+
+  assert.match(ucp, /minor-unit long/i);
+  assert.match(ucp, /normalizeUcpAmountToMinorUnitLong/);
+  assert.match(ucp, /user-facing|面向用户/i);
+  assert.match(ucp, /external UCP/i);
+  assert.doesNotMatch(ucp, /`line_items\[\]\.item\.price` is minor units/);
 });
 
 test('ucp checkout docs align no-match branch with instruction creation workflow', async () => {

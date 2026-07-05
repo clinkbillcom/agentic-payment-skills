@@ -71,6 +71,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | --- | --- |
 | Card binding/update/default change | same customer and, when known, same `paymentInstrumentId` |
 | 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
+| UCP checkout payment success | same `checkoutId`, `orderId`, or `sessionId` returned by checkout create/complete |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
 | VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
@@ -87,6 +88,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or `payment_method.updated` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
+| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 
 ## Rules

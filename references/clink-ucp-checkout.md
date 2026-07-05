@@ -52,7 +52,8 @@ DISCOVER_PRODUCT
   -> CAPTURE_CHECKOUT_ID
   -> VERIFY_READY_FOR_COMPLETE
   -> COMPLETE_CHECKOUT
-  -> VERIFY_CHECKOUT_RESULT
+  -> POLL_PAYMENT_SUCCESS_EVENT
+  -> RETURN_PAYMENT_SUCCESS_EVENT
 ```
 
 Every transition has a guard. If the guard fails, stop and report the exact missing or invalid condition instead of guessing. The feedback loop is the parsed JSON response from each CLI command plus a follow-up `ucp-checkout get` when the checkout state is not terminal.
@@ -223,9 +224,17 @@ clink-cli ucp-checkout complete \
 
 `stable_complete_key` is scoped to the checkout ID and payment instrument. Reusing it for the same complete attempt is safe; do not reuse it across different checkout IDs.
 
-## Step 7: Verify The Result
+## Step 7: Poll Payment Success Event
 
-Parse the complete response and then verify state if it is not clearly terminal:
+Parse the complete response. When complete returns `completed`, immediately start the payment success event poll:
+
+```bash
+clink-cli events poll --type agent_order.succeeded --format json
+```
+
+Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Correlate the returned `agent_order.succeeded` event to the current `checkoutId`, `orderId`, or `sessionId` when those identifiers are available. Once matched, return or surface the success event/message to the caller. Do not claim merchant fulfillment, delivery, or entitlement.
+
+If complete is not clearly terminal, verify state first:
 
 ```bash
 clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
@@ -235,7 +244,7 @@ Status handling:
 
 | Status | Action |
 | --- | --- |
-| `completed` | Report checkout completed and include checkout/order identifiers returned by the API. |
+| `completed` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json`, then return the matched payment success event/message. |
 | `complete_in_progress` | Tell the user automation is in progress; poll `ucp-checkout get` with bounded retries or leave a resumable pending state. |
 | `ready_for_complete` | Complete did not start or was rejected before processing; inspect error output and do not retry blindly. |
 | `requires_escalation` | Authorization did not cover the order; ask the user to create/update the instruction. |
@@ -250,6 +259,7 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 - More than one equally specific match: ask the user to choose.
 - `ucp-checkout create` idempotency conflict: use the original response if the cart is identical; otherwise create a new checkout with a new key.
 - `ucp-checkout complete` already has a payment in progress: recover with `ucp-checkout get`.
+- Payment success event poll timeout: return the pending state and `resumeCommand`; do not claim payment success until a matching `agent_order.succeeded` event is observed.
 - Backend `NO_AUTHORIZATION` or `UCP_AUTHORIZATION_BINDING_INVALID`: the instruction/mandate is not valid for this checkout. Stop and request a corrected instruction.
 
 ## Minimal End-To-End Skeleton
@@ -284,5 +294,6 @@ clink-cli ucp-checkout complete \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \
   --format json
+clink-cli events poll --type agent_order.succeeded --format json
 clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
 ```
