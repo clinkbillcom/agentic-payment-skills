@@ -1,6 +1,6 @@
 ---
 name: clink-payment-skill
-description: "Use when an agent needs to initialize a Clink wallet, check payment-method readiness, execute an explicitly authorized charge, run an external UCP product checkout, create or track a refund, wait for an async completion event (binding, refund, VIC activation, 3DS), or retrieve payment-management and risk-rule links."
+description: "Use for direct Clink payment and wallet operations: Clink wallet initialization/status/config, risk-rule management, authorization management (Visa/VIC instruction, mandate, Passkey signing, async activation), card binding and payment-method management/readiness, executing an explicitly authorized recharge/top-up/payment for a known merchant_id, buying or ordering a product URL/product link with Clink pay (clink pay 买/购买/下单 商品链接), generic UCP checkout/order flows where merchant_id is unknown, generic UCP checkout/order flows where merchant_id is known, related async events, and Clink refund submission/status."
 version: "1.3.0"
 requires:
   node: ">=20"
@@ -34,7 +34,7 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Waiting for binding, risk, refund, VIC, instruction, or 3DS completion events | `references/clink-async-events.md` |
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel | `references/clink-instruction.md` |
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
-| UCP checkout product order flow, instruction/mandate matching, item-id extraction, external checkout create/complete | `references/clink-ucp-checkout.md` |
+| UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, item-id extraction, external checkout create/complete | `references/clink-ucp-checkout.md` |
 
 Read multiple references when a workflow crosses boundaries. Example: a product order through UCP checkout needs `clink-cli-invocation.md`, `clink-wallet-config.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`.
 
@@ -44,7 +44,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - check wallet, sandbox, or payment-method readiness
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, Direct/session Visa payment must list/match ACTIVE instruction+mandate before pay
-- order a discovered product through the UCP checkout control flow: classify `fulfillmentType`, require a US shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
+- order a discovered product or product URL/product link through the UCP checkout control flow: classify `fulfillmentType`, require a US shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate first, start the instruction creation workflow when no match exists, then create and complete checkout only after a valid match exists
 - create a full refund or poll refund status
 - wait for async completion events from the Clink event hub
 - inspect or update local Clink CLI configuration
@@ -71,7 +71,7 @@ Every workflow follows:
 `Observe → Classify → Act → Verify → Return`
 
 1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` and `correlateEventWorkflow` to produce the `event_fsm` classification only after resource correlation.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`) and include `[UCP_CHECKOUT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` and `correlateEventWorkflow` to produce the `event_fsm` classification only after resource correlation.
 3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.

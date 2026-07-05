@@ -26,7 +26,7 @@ Before the first checkout command, have all of these in the current request:
 - merchant URL and merchant display context
 - merchant category code when known
 - currency
-- unit price in ISO 4217 minor units, quantity, and total amount
+- user-facing unit price, quantity, and total amount, plus normalized `amountMinor` / `unitPriceMinor` as minor-unit long values for matching and the external UCP request
 - product title or description
 - fulfillment classification: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`
 - payment instrument ID
@@ -37,10 +37,11 @@ Never invent missing values. Ask the caller or user when product identity, amoun
 
 ## Control Model
 
-Treat checkout as a closed-loop state machine:
+Treat checkout as a closed-loop state machine. Use `lib/ucp-checkout-workflow-fsm.mjs` to classify each step, emit `[UCP_CHECKOUT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`, and only then run the next command.
 
 ```text
 DISCOVER_PRODUCT
+  -> FREEZE_PRODUCT_AMOUNT_WITH normalizeUcpAmountToMinorUnitLong
   -> CLASSIFY_FULFILLMENT
   -> REFRESH_PAYMENT_INSTRUMENT
   -> LIST_AUTHORIZATIONS
@@ -66,14 +67,15 @@ The agent may use merchant tools, browser tools, search, or page extraction to i
   "merchant_name": "Shop Example",
   "merchant_category_code": "5311",
   "currency": "USD",
-  "unit_price_minor": 1000,
+  "unit_price_display": "10.00",
+  "unitPriceMinor": 1000,
   "quantity": 1,
-  "total_minor": 1000,
+  "amountMinor": 1000,
   "title": "T-shirt"
 }
 ```
 
-Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. `line_items[].item.price` is minor units; instruction mandates usually express `amountLimit` as major units. Convert before comparison and do not treat a different product total as "close enough".
+Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Convert the user-facing amount to a minor-unit long with `normalizeUcpAmountToMinorUnitLong` and carry that `amountMinor` through matching, idempotency, and checkout validation. The external UCP API receives a long minor-unit amount; when using `clink-cli ucp-checkout create`, its create path converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit values into that external UCP long before the API request. Do not treat a different product total as "close enough".
 
 ## Step 0.5: Classify Fulfillment And Shipping
 
@@ -189,7 +191,7 @@ clink-cli ucp-checkout create \
   --currency <currency> \
   --instruction-id <instruction_id> \
   --mandate-id <mandate_id> \
-  --line-items '[{"id":"li_<item_id>","item":{"id":"<item_id>","title":"<title>","price":1000},"quantity":1}]' \
+  --line-items '[{"id":"li_<item_id>","item":{"id":"<item_id>","title":"<title>","price":"10.00"},"quantity":1}]' \
   --buyer '{"email":"buyer@example.com"}' \
   --idempotency-key <stable_create_key> \
   --format json
