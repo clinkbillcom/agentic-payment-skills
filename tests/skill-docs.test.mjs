@@ -220,6 +220,23 @@ test('ucp checkout docs require user-facing amount normalization to external lon
   assert.doesNotMatch(ucp, /`line_items\[\]\.item\.price` is minor units/);
 });
 
+test('ucp checkout docs require Shopify variant resolution before checkout item id use', async () => {
+  const skill = await readRepoFile('SKILL.md');
+  const ucp = await readRepoFile('references/clink-ucp-checkout.md');
+
+  assert.match(skill, /classifyUcpItemIdResolution/);
+  assert.match(skill, /Shopify/i);
+  assert.match(skill, /variant/i);
+  assert.match(ucp, /Shopify/i);
+  assert.match(ucp, /variant query parameter/i);
+  assert.match(ucp, /products\/<slug>\.js|<product_url>\.js/i);
+  assert.match(ucp, /variants array/i);
+  assert.match(ucp, /user.*selection|用户.*选择/i);
+  assert.match(ucp, /do not guess|ask/i);
+  assert.match(ucp, /classifyUcpItemIdResolution/);
+  assert.match(ucp, /clink-cli tool item-id --url[\s\S]+fallback/i);
+});
+
 test('ucp checkout docs align no-match branch with instruction creation workflow', async () => {
   const skill = await readRepoFile('SKILL.md');
   const ucp = await readRepoFile('references/clink-ucp-checkout.md');

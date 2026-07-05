@@ -27,6 +27,7 @@ Before the first checkout command, have all of these in the current request:
 - merchant category code when known
 - currency
 - user-facing unit price, quantity, and total amount, plus normalized `amountMinor` / `unitPriceMinor` as minor-unit long values for matching and the external UCP request
+- stable item ID, SKU, or Shopify variant ID when the product site exposes one
 - product title or description
 - fulfillment classification: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`
 - payment instrument ID
@@ -42,12 +43,12 @@ Treat checkout as a closed-loop state machine. Use `lib/ucp-checkout-workflow-fs
 ```text
 DISCOVER_PRODUCT
   -> FREEZE_PRODUCT_AMOUNT_WITH normalizeUcpAmountToMinorUnitLong
+  -> RESOLVE_PRODUCT_ITEM_ID_WITH classifyUcpItemIdResolution
   -> CLASSIFY_FULFILLMENT
   -> REFRESH_PAYMENT_INSTRUMENT
   -> LIST_AUTHORIZATIONS
   -> SELECT_INSTRUCTION_MANDATE
   -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
-  -> IF_MATCH_EXTRACT_ITEM_ID
   -> IF_MATCH_CREATE_CHECKOUT
   -> CAPTURE_CHECKOUT_ID
   -> VERIFY_READY_FOR_COMPLETE
@@ -72,11 +73,22 @@ The agent may use merchant tools, browser tools, search, or page extraction to i
   "unitPriceMinor": 1000,
   "quantity": 1,
   "amountMinor": 1000,
+  "item_id": "123",
+  "variant_id": "123",
   "title": "T-shirt"
 }
 ```
 
 Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Convert the user-facing amount to a minor-unit long with `normalizeUcpAmountToMinorUnitLong` and carry that `amountMinor` through matching, idempotency, and checkout validation. The external UCP API receives a long minor-unit amount; when using `clink-cli ucp-checkout create`, its create path converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit values into that external UCP long before the API request. Do not treat a different product total as "close enough".
+
+Resolve a stable item ID during product freeze with `classifyUcpItemIdResolution`. For Shopify sites:
+
+- Direct variant links: if the URL carries a variant query parameter (`variant=<id>`), use that value as the Shopify `variant_id` / UCP `item_id`; do not fetch product JSON just to rediscover it.
+- SPU product slug links: strip query/hash and fetch `<product_url>.js` (for example `/products/<slug>.js`). Parse the JSON `variants array`, then select the variant by explicit user selection such as exact variant ID or option values (`Color`, `Size`, etc.).
+- If there is only one variant, it can be selected. If several variants remain and the user has not chosen enough options, ask for the missing selection; do not guess.
+- Shopify custom domains are acceptable when product discovery identifies the platform through page evidence or CNAME; pass that as `siteType=shopify` to the FSM.
+
+If Shopify resolution fails or the site is not Shopify, `clink-cli tool item-id --url <product_url> --format json` is the fallback. Continue only when the fallback returns a stable `data.item_id`; otherwise ask for a variant link, SKU, or product selection.
 
 ## Step 0.5: Classify Fulfillment And Shipping
 
@@ -171,9 +183,11 @@ Merchant semantic match must cover the requested merchant or product context. Co
 
 Reject a candidate when the merchant semantics point to another merchant, another product family, an expired service window, or a category that conflicts with the requested product. If multiple candidates remain, choose the most specific one: same domain and product text beats category-only text.
 
-## Step 4: Extract `item_id`
+## Step 4: Resolve `item_id`
 
-Use `tool item-id` after the product URL is frozen:
+Use the product-freeze result from `classifyUcpItemIdResolution` before checkout create. If it already returned `ITEM_ID_EXTRACTED`, carry that `itemId` into the line item. If it returned `shopify_product_json_required`, fetch `productJsonUrl`, parse the `variants array`, and re-run the classifier with the user's variant selection.
+
+For non-Shopify URLs or unresolved product URLs, use the CLI fallback after the product URL is frozen:
 
 ```bash
 clink-cli tool item-id --url <product_url> --format json

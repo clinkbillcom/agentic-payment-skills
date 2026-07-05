@@ -19,12 +19,16 @@ import {
   UcpCheckoutWorkflowAction,
   UcpCheckoutWorkflowState,
   classifyAuthorizationSelection,
+  classifyUcpItemIdResolution,
   classifyUcpCheckoutObservation,
   classifyUcpCheckoutPrerequisites,
   classifyUcpPaymentSuccessEventObservation,
   classifyUcpProductIntent,
+  extractShopifyVariantIdFromUrl,
   formatUcpCheckoutFsmMarker,
   normalizeUcpAmountToMinorUnitLong,
+  selectShopifyVariant,
+  shopifyProductJsonUrl,
 } from '../lib/ucp-checkout-workflow-fsm.mjs';
 import { formatWorkflowMarker } from '../lib/workflow-marker.mjs';
 
@@ -214,6 +218,120 @@ test('routes authorization selection to draft creation or checkout continuation'
     reason: 'authorization_matched',
     instructionId: 'ins_123',
     mandateId: 'mnd_123',
+  });
+});
+
+test('resolves Shopify direct variant URLs without fetching product JSON', () => {
+  assert.equal(
+    extractShopifyVariantIdFromUrl('https://shop.example/products/ski-wax?variant=45085516365894'),
+    '45085516365894',
+  );
+  assert.equal(
+    extractShopifyVariantIdFromUrl('https://shop.example/products/ski-wax'),
+    null,
+  );
+
+  assert.deepEqual(classifyUcpItemIdResolution({
+    productUrl: 'https://shop.example/products/ski-wax?variant=45085516365894',
+    siteType: 'shopify',
+  }), {
+    state: UcpCheckoutWorkflowState.ITEM_ID_EXTRACTED,
+    action: UcpCheckoutWorkflowAction.CREATE_CHECKOUT,
+    terminal: false,
+    reason: 'shopify_direct_variant_url',
+    itemId: '45085516365894',
+    variantId: '45085516365894',
+  });
+});
+
+test('builds Shopify product JSON URLs from SPU product slugs', () => {
+  assert.equal(
+    shopifyProductJsonUrl('https://shop.example/products/selling-plans-ski-wax?utm_source=test#details'),
+    'https://shop.example/products/selling-plans-ski-wax.js',
+  );
+  assert.equal(
+    shopifyProductJsonUrl('https://shop.example/products/selling-plans-ski-wax.js?variant=123'),
+    'https://shop.example/products/selling-plans-ski-wax.js',
+  );
+
+  assert.deepEqual(classifyUcpItemIdResolution({
+    productUrl: 'https://shop.example/products/selling-plans-ski-wax',
+    siteType: 'shopify',
+  }), {
+    state: UcpCheckoutWorkflowState.ITEM_ID_REQUIRED,
+    action: UcpCheckoutWorkflowAction.EXTRACT_ITEM_ID,
+    terminal: false,
+    reason: 'shopify_product_json_required',
+    productJsonUrl: 'https://shop.example/products/selling-plans-ski-wax.js',
+  });
+});
+
+test('selects Shopify variants by id or user-selected options and asks when ambiguous', () => {
+  const productJson = {
+    options: [
+      { name: 'Color', values: ['Blue', 'Red'] },
+      { name: 'Size', values: ['S', 'M'] },
+    ],
+    variants: [
+      { id: 111, title: 'Blue / S', option1: 'Blue', option2: 'S', available: true },
+      { id: 222, title: 'Blue / M', option1: 'Blue', option2: 'M', available: true },
+      { id: 333, title: 'Red / M', option1: 'Red', option2: 'M', available: true },
+    ],
+  };
+
+  assert.deepEqual(selectShopifyVariant(productJson, { variantId: '222' }), {
+    status: 'selected',
+    reason: 'shopify_variant_id_match',
+    variant: productJson.variants[1],
+    variantId: '222',
+  });
+
+  assert.deepEqual(selectShopifyVariant(productJson, { options: { Color: 'Red', Size: 'M' } }), {
+    status: 'selected',
+    reason: 'shopify_variant_option_match',
+    variant: productJson.variants[2],
+    variantId: '333',
+  });
+
+  assert.deepEqual(selectShopifyVariant(productJson, { optionValues: ['M'] }), {
+    status: 'selection_required',
+    reason: 'shopify_variant_selection_ambiguous',
+    variants: [
+      { id: '222', title: 'Blue / M', available: true, options: { Color: 'Blue', Size: 'M' } },
+      { id: '333', title: 'Red / M', available: true, options: { Color: 'Red', Size: 'M' } },
+    ],
+  });
+
+  assert.deepEqual(classifyUcpItemIdResolution({
+    productUrl: 'https://shop.example/products/ski-wax',
+    siteType: 'shopify',
+    productJson,
+  }), {
+    state: UcpCheckoutWorkflowState.PRODUCT_INPUT_MISSING,
+    action: UcpCheckoutWorkflowAction.ASK_FOR_PRODUCT_INPUT,
+    terminal: false,
+    reason: 'shopify_variant_selection_required',
+    productJsonUrl: 'https://shop.example/products/ski-wax.js',
+    variants: [
+      { id: '111', title: 'Blue / S', available: true, options: { Color: 'Blue', Size: 'S' } },
+      { id: '222', title: 'Blue / M', available: true, options: { Color: 'Blue', Size: 'M' } },
+      { id: '333', title: 'Red / M', available: true, options: { Color: 'Red', Size: 'M' } },
+    ],
+  });
+
+  assert.deepEqual(classifyUcpItemIdResolution({
+    productUrl: 'https://shop.example/products/ski-wax',
+    siteType: 'shopify',
+    productJson,
+    variantSelection: { options: { Color: 'Blue', Size: 'M' } },
+  }), {
+    state: UcpCheckoutWorkflowState.ITEM_ID_EXTRACTED,
+    action: UcpCheckoutWorkflowAction.CREATE_CHECKOUT,
+    terminal: false,
+    reason: 'shopify_variant_selected',
+    itemId: '222',
+    variantId: '222',
+    variant: productJson.variants[1],
   });
 });
 
