@@ -72,6 +72,7 @@ clink-cli instruction create \
   --title "Hotel booking" \
   --effective-until-time "2026-06-30 23:59:59" \
   --mandates '[{"title":"Hotel","description":"Hotel booking","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-30 23:59:59"}]' \
+  --shipping-address '{"name":"Clink User","line1":"One Apple Park Way","city":"Cupertino","state":"CA","zip":"95014","countryCode":"US","deliveryContactDetails":{}}' \
   --format json
 ```
 
@@ -82,7 +83,7 @@ Optional flags:
 - `--description <text>`
 - `--extra <json>`
 - `--is-recurring` only when the user clearly authorizes recurring/periodic use
-- `--shipping-address '<json>'` only for shipped physical goods
+- `--shipping-address '<json>'` for shipped physical goods, or the fixed Apple Park default address for `NO_SHIPPING_REQUIRED`
 
 Do not pass `--currency`, `--total-limit-amount`, or `--country-code` at the instruction level. Currency and amount limits live on each mandate.
 
@@ -93,10 +94,24 @@ Do not pass `clientReferenceId`, `channelTokenId`, or `consumerId`; the server d
 Classify the purchase before creating a draft:
 
 - Physical goods that ship: collect a US shipping address and pass `--shipping-address`.
-- Services, subscriptions, hotels, tickets, bookings, reservations, or digital goods: do not pass `--shipping-address`.
+- Services, subscriptions, hotels, tickets, bookings, reservations, or digital goods: classify as `NO_SHIPPING_REQUIRED`, do not ask the user for an address, and pass the fixed Apple Park default address to `instruction create`.
 - Unclear fulfillment: ask the user before preparing.
 
-Shipping address shape:
+For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address. It is a payment-context placeholder, not a delivery address:
+
+```json
+{
+  "name": "Clink User",
+  "line1": "One Apple Park Way",
+  "city": "Cupertino",
+  "state": "CA",
+  "zip": "95014",
+  "countryCode": "US",
+  "deliveryContactDetails": {}
+}
+```
+
+For shipped physical goods, collect a real US address in this shape:
 
 ```json
 {

@@ -48,15 +48,14 @@ Before old `clink-cli pay`, classify the actual product/order:
 
 ```json
 {
-  "street_address": "548 Market St",
-  "extended_address": "PMB 00000",
-  "address_locality": "San Francisco",
+  "street_address": "One Apple Park Way",
+  "address_locality": "Cupertino",
   "address_region": "CA",
   "address_country": "US",
-  "postal_code": "94104",
+  "postal_code": "95014",
   "first_name": "Clink",
   "last_name": "User",
-  "phone_number": "+14155550100"
+  "phone_number": "+14089961010"
 }
 ```
 
@@ -92,7 +91,7 @@ clink-cli pay \
   --format json
 ```
 
-If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. Persist or return the pending payment intent:
+If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
 
 ```text
 Payment Intent ID: payint_xxx
