@@ -4619,6 +4619,11 @@ Sandbox:
   --sandbox switches the API/agent environment. Re-running wallet init overwrites the
   single local customer credentials. Without --sandbox, wallet init uses production.
 
+Payment Methods:
+  After bootstrap succeeds, wallet init refreshes cached payment methods through the
+  card setup-link endpoint. A refresh failure is reported in output but does not fail
+  wallet initialization.
+
 Defaults:
   --source                     agent
 
@@ -5474,14 +5479,60 @@ async function walletInit(context) {
     delete nextConfig.customerApiKey;
   }
   await writeStoredConfig(nextConfig);
+  const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
   printSuccess({
     customerId: nextConfig.customerId ?? null,
     email,
     name,
     hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
+    paymentMethodsCached: paymentMethodsCache.cached,
+    paymentMethodCount: paymentMethodsCache.count,
+    ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
     configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function refreshPaymentMethodsAfterWalletInit(context, config) {
+  if (!config.customerId || !config.customerApiKey) {
+    return {
+      cached: false,
+      count: 0,
+      error: "missing customer credentials in bootstrap response"
+    };
+  }
+  const refreshContext = {
+    ...context,
+    storedConfig: config,
+    runtimeConfig: {
+      baseUrl: config.baseUrl,
+      defaultOpenLinks: config.defaultOpenLinks,
+      customerId: config.customerId,
+      customerApiKey: config.customerApiKey,
+      ...config.email ? { email: config.email } : {},
+      ...config.name ? { name: config.name } : {}
+    },
+    globalOptions: {
+      ...context.globalOptions,
+      dryRun: false,
+      open: false,
+      watch: false
+    }
+  };
+  try {
+    const result = await callBindingLink(refreshContext);
+    if (isDryRun(result)) {
+      return { cached: false, count: 0 };
+    }
+    const data = unwrapApiData(result.body);
+    const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
+    return { cached: true, count };
+  } catch (error) {
+    return {
+      cached: false,
+      count: 0,
+      error: stringifyRefreshError(error)
+    };
+  }
 }
 async function walletStatus(context) {
   printSuccess({
@@ -6286,9 +6337,16 @@ async function cachePaymentMethods(context, value) {
   nextConfig.paymentMethods = paymentMethods.map((item) => ({ ...item }));
   await writeStoredConfig(nextConfig);
   context.storedConfig.paymentMethods = nextConfig.paymentMethods;
+  return nextConfig.paymentMethods.length;
 }
 function getStoredPaymentMethods(context) {
   return Array.isArray(context.storedConfig.paymentMethods) ? context.storedConfig.paymentMethods : [];
+}
+function stringifyRefreshError(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
 }
 async function finishApiCommand(result, context) {
   if (isDryRun(result)) {
