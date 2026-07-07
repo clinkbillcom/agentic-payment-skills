@@ -4565,12 +4565,15 @@ var TOOL_HELP = `clink-cli tool
 
 Usage:
   clink-cli tool item-id --url <url> [options]
+  clink-cli tool parse-site --url <url> [options]
 
 Tools:
   item-id   Extract a UCP item_id from a product URL
+  parse-site Detect the site type from a URL
 
 Examples:
   clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
+  clink-cli tool parse-site --url https://store.example.com --format json
 `;
 var TOOL_ITEM_ID_HELP = `clink-cli tool item-id
 
@@ -4587,6 +4590,22 @@ Behavior:
 
 Examples:
   clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
+`;
+var TOOL_PARSE_SITE_HELP = `clink-cli tool parse-site
+
+Usage:
+  clink-cli tool parse-site --url <url> [options]
+
+Arguments:
+  --url <url>   Site URL to inspect
+
+Behavior:
+  Shopify is detected first when the hostname ends with .myshopify.com. Otherwise the CLI sends
+  GET https://<host> and detects Shopify when a powered-by response header contains Shopify. Other
+  sites return site_type "unknown".
+
+Examples:
+  clink-cli tool parse-site --url https://store.example.com --format pretty
 `;
 var WALLET_HELP = `clink-cli wallet
 
@@ -5125,6 +5144,8 @@ function getHelpText(command, subcommand) {
       switch (subcommand) {
         case "item-id":
           return TOOL_ITEM_ID_HELP;
+        case "parse-site":
+          return TOOL_PARSE_SITE_HELP;
         default:
           return TOOL_HELP;
       }
@@ -5199,6 +5220,22 @@ function renderHumanError(error, helpHint) {
 
 // dist/tool.js
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
+async function resolveSiteTypeFromUrl(rawUrl, options = {}) {
+  const url = parseUrl(rawUrl);
+  const hostname = normalizeHostname(url.hostname);
+  if (isMyShopifyHost(hostname)) {
+    return siteTypeResult("shopify", "myshopify_domain");
+  }
+  try {
+    const fetchSite = options.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options.timeoutMs));
+    const headers = await fetchSite(buildHttpsOriginUrl(url));
+    if (hasShopifyPoweredByHeader(headers)) {
+      return siteTypeResult("shopify", "powered_by_header");
+    }
+  } catch {
+  }
+  return siteTypeResult("unknown", "unknown");
+}
 async function resolveUcpItemIdFromUrl(rawUrl, options = {}) {
   const url = parseUrl(rawUrl);
   const hostname = normalizeHostname(url.hostname);
@@ -5229,8 +5266,38 @@ function shopifyResult(url, strategy) {
     strategy
   };
 }
+function siteTypeResult(siteType, strategy) {
+  return {
+    site_type: siteType,
+    strategy
+  };
+}
 function isMyShopifyHost(hostname) {
-  return hostname.endsWith(".myshopify.com");
+  return hostname === "myshopify.com" || hostname.endsWith(".myshopify.com");
+}
+function buildHttpsOriginUrl(url) {
+  return `https://${url.host}`;
+}
+async function fetchSiteHeaders(url, timeoutMs = 1e4) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal
+    });
+    return response.headers;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function hasShopifyPoweredByHeader(headers) {
+  for (const [key, value] of headers.entries()) {
+    if (key.toLowerCase() === "powered-by" && /shopify/i.test(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ new Set()) {
   const normalized = normalizeHostname(hostname);
@@ -5320,6 +5387,8 @@ async function handleToolCommand(subcommand, context) {
   switch (subcommand) {
     case "item-id":
       return toolItemId(context);
+    case "parse-site":
+      return toolParseSite(context);
     default:
       throw validationError(`unsupported tool command: ${subcommand}`);
   }
@@ -5327,6 +5396,12 @@ async function handleToolCommand(subcommand, context) {
 async function toolItemId(context) {
   const url = requireStringFlag(context.args.flags, "missing --url", "url");
   const result = await resolveUcpItemIdFromUrl(url);
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function toolParseSite(context) {
+  const url = requireStringFlag(context.args.flags, "missing --url", "url");
+  const result = await resolveSiteTypeFromUrl(url, { timeoutMs: context.globalOptions.timeoutMs });
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
