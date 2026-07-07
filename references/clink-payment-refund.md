@@ -10,7 +10,7 @@ Read this before executing `clink-cli pay`, handling 3DS, or creating/checking r
 - Payment parameters come from the user or an upstream merchant workflow.
 - The payment is explicitly authorized for this request.
 - Fulfillment is classified before old pay: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`.
-- For Visa/VIC-routed direct or session payment, `instruction_id` and `mandate_id` are mandatory before `clink-cli pay`.
+- Before direct or session payment, run the authorization resolver. `instruction_id` and `mandate_id` are mandatory only when the selected/default card is Visa + VIC ready and a matching ACTIVE instruction+mandate is found.
 
 ## Payment Modes
 
@@ -64,9 +64,24 @@ Before old `clink-cli pay`, classify the actual product/order:
 
 The fixed default address is not a delivery address and must not be used for shipped physical goods.
 
-## VIC Direct/Session Pay Authorization Resolver
+## Direct/Session Pay Authorization Resolver
 
-Before any Visa/VIC `clink-cli pay`, resolve the current/default `payment_instrument_id`, then run:
+Before any direct/session `clink-cli pay`, refresh payment methods and resolve the selected/default `payment_instrument_id`:
+
+```bash
+clink-cli card binding-link --no-watch --format json
+```
+
+Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs` `classifyPaymentAuthorizationResolver` and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs.
+
+Resolver branches:
+
+- `AUTHORIZATION_BYPASSED`: the selected/default card is non-Visa, or it is Visa but VIC is not enabled. In this branch, bypass instruction matching and run `clink-cli pay` without `--instruction-id` or `--mandate-id`.
+- `AUTHORIZATION_LIST_REQUIRED`: the selected/default card is Visa + VIC ready. List ACTIVE instructions before pay.
+- `AUTHORIZATION_MATCHED`: pass the matched `instruction_id` and `mandate_id` to `clink-cli pay`.
+- `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Start the instruction creation workflow and stop the current pay attempt until activation.
+
+For the Visa + VIC ready branch, run:
 
 ```bash
 clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json

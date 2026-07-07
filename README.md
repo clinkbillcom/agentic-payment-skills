@@ -26,7 +26,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Card binding and management
 - Payment execution (direct and session mode)
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
-- External UCP checkout for product orders — classify fulfillment first, require a US shipping address for shipped physical goods, use CWallet address shape for instruction creation and UCP Postal Address shape for checkout/payment context, list ACTIVE instructions, match instruction/mandate to the exact product amount and merchant semantics, extract the product `item_id`, create checkout, then complete it with a payment instrument
+- UCP checkout for product orders — parse product-page facts with `clink-cli tool parse-item`, select one available item, classify fulfillment, require a US shipping address for shipped physical goods, use CWallet address shape for instruction creation and UCP Postal Address shape for checkout/payment context, resolve Visa/VIC instructions only when required, route known standard UCP domains such as `www.bruceleeclub.com` separately from external checkout, create checkout, then complete it with a payment instrument
 - Refund submission and polling
 - Risk rule configuration
 - Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink-cli events poll`, instead of guessing or busy-retrying
@@ -35,4 +35,4 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 
 `SKILL.md` contains routing and safety rules. Command-level details live under `references/`, following the same "read the operation reference before running the CLI" pattern used by the Lark skills.
 
-For product checkout, read `references/clink-ucp-checkout.md` before running `clink-cli instruction list`, `clink-cli tool item-id`, or `clink-cli ucp-checkout create/complete`.
+For product checkout, read `references/clink-ucp-checkout.md` before running `clink-cli tool parse-item`, `clink-cli instruction list`, or `clink-cli ucp-checkout create/complete`.
