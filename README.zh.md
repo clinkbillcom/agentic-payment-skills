@@ -26,7 +26,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
 - VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
-- 外部 UCP 商品下单 —— 先判断实物/虚拟履约类型；需要邮寄的实物商品必须提供美国收货地址，instruction 创建使用 CWallet 地址结构，checkout/payment 上下文使用 UCP Postal Address 结构，再列出 ACTIVE instructions，按商品金额硬匹配与商家语义匹配筛选 instruction/mandate，获取商品 `item_id`，创建 checkout，再用支付工具完成 checkout
+- 外部 UCP 商品下单 —— 先判断实物/虚拟履约类型；需要邮寄的实物商品必须提供完整的标准收货地址，不限定美国地址，instruction 创建使用 CWallet 地址结构，checkout/payment 上下文使用 UCP Postal Address 结构，再列出 ACTIVE instructions，按商品金额硬匹配与商家语义匹配筛选 instruction/mandate，获取商品 `item_id`，创建 checkout，再用支付工具完成 checkout
 - 退款提交与状态轮询
 - 风控规则查看与配置
 - 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink-cli events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
