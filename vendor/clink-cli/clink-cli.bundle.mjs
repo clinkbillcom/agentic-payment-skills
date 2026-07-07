@@ -5811,6 +5811,7 @@ async function handleUcpCheckoutCommand(subcommand, context) {
 async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
   const currency = requireStringFlag(flags, "missing --currency", "currency");
+  const buyer = withWalletStatusEmail(optionalJsonFlag(flags, "buyer"), context);
   const body = compact({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
@@ -5819,7 +5820,7 @@ async function ucpCheckoutCreate(context) {
     currency,
     instruction_id: requireStringFlag(flags, "missing --instruction-id", "instruction-id"),
     mandate_id: requireStringFlag(flags, "missing --mandate-id", "mandate-id"),
-    buyer: optionalJsonFlag(flags, "buyer"),
+    buyer,
     line_items: normalizeExternalCheckoutCreateLineItems(requireJsonArrayFlag(flags, "line-items"), currency),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
@@ -5834,6 +5835,19 @@ async function ucpCheckoutCreate(context) {
     dryRun: context.globalOptions.dryRun
   });
   return finishApiCommand(result, context);
+}
+function withWalletStatusEmail(buyer, context) {
+  const email = context.runtimeConfig.email;
+  if (!email) {
+    return buyer;
+  }
+  if (buyer === void 0) {
+    return { email };
+  }
+  if (isJsonObject(buyer) && typeof buyer.email !== "string") {
+    return { ...buyer, email };
+  }
+  return buyer;
 }
 async function ucpCheckoutGet(context) {
   const flags = context.args.flags;
