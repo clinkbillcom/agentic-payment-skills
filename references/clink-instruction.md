@@ -93,7 +93,7 @@ Do not pass `clientReferenceId`, `channelTokenId`, or `consumerId`; the server d
 
 Classify the purchase before creating a draft:
 
-- Physical goods that ship: collect a US shipping address and pass `--shipping-address`.
+- Physical goods that ship: collect a standard complete shipping address and pass `--shipping-address`.
 - Services, subscriptions, hotels, tickets, bookings, reservations, or digital goods: classify as `NO_SHIPPING_REQUIRED`, do not ask the user for an address, and pass the fixed Apple Park default address to `instruction create`.
 - Unclear fulfillment: ask the user before preparing.
 
@@ -111,18 +111,17 @@ For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address. It is a p
 }
 ```
 
-For shipped physical goods, collect a real US address in this shape:
+For shipped physical goods, collect a real standard complete address in this shape. `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country:
 
 ```json
 {
   "addressId": "addr_001",
   "name": "Jim",
-  "line1": "123 Market St",
-  "line2": "Apt 201",
-  "city": "San Francisco",
-  "state": "CA",
-  "zip": "94105",
-  "countryCode": "US",
+  "line1": "10 Downing Street",
+  "city": "London",
+  "state": "England",
+  "zip": "SW1A 2AA",
+  "countryCode": "GB",
   "deliveryContactDetails": {}
 }
 ```

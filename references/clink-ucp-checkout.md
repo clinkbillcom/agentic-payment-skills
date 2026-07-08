@@ -32,7 +32,7 @@ Before the first checkout command, have all of these in the current request:
 - fulfillment classification: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`
 - payment instrument ID
 - buyer data when required by the merchant
-- standard US shipping address for physical goods that ship
+- standard complete shipping address for physical goods that ship
 
 Never invent missing values. Ask the caller or user when product identity, amount, currency, merchant context, fulfillment type, shipping address, or payment instrument is missing.
 
@@ -118,7 +118,7 @@ Amount hard match means the checkout line-item total must equal the intended pro
 
 Before payment refresh or instruction list, classify the frozen product/order:
 
-- `PHYSICAL_GOODS_REQUIRES_SHIPPING`: shipped physical goods. Collect a standard US shipping address before instruction creation or checkout create.
+- `PHYSICAL_GOODS_REQUIRES_SHIPPING`: shipped physical goods. Collect a standard complete shipping address before instruction list, instruction creation, or checkout create. Do not restrict the address to the US.
 - `NO_SHIPPING_REQUIRED`: services, subscriptions, hotels, tickets, bookings, reservations, and digital goods. Do not ask the user for an address; use the fixed Apple Park default address when `instruction create` needs a shipping-address payload.
 - `UNKNOWN`: stop and ask the caller or user whether the order ships a physical item. Do not run instruction list or checkout while fulfillment is unknown.
 
@@ -148,31 +148,29 @@ For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address for instru
 }
 ```
 
-For physical goods, collect one US shipping address but serialize it differently for each downstream command:
+For physical goods, collect one standard complete shipping address but serialize it differently for each downstream command:
 
-- CWallet instruction creation (`clink-cli instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `countryCode` must be `US`.
-- External UCP checkout creation (`clink-cli ucp-checkout create --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be `US`. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
+- CWallet instruction creation (`clink-cli instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country.
+- External UCP checkout creation (`clink-cli ucp-checkout create --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be ISO 3166-1 alpha-2 for the destination country. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
 
 ```json
 {
   "fulfillmentType": "PHYSICAL_GOODS_REQUIRES_SHIPPING",
   "instructionShippingAddress": {
     "name": "Buyer",
-    "line1": "123 Market St",
-    "line2": "Apt 201",
-    "city": "San Francisco",
-    "state": "CA",
-    "zip": "94105",
-    "countryCode": "US",
+    "line1": "10 Downing Street",
+    "city": "London",
+    "state": "England",
+    "zip": "SW1A 2AA",
+    "countryCode": "GB",
     "deliveryContactDetails": {}
   },
   "ucpShippingAddress": {
-    "street_address": "123 Market St",
-    "extended_address": "Apt 201",
-    "address_locality": "San Francisco",
-    "address_region": "CA",
-    "address_country": "US",
-    "postal_code": "94105",
+    "street_address": "10 Downing Street",
+    "address_locality": "London",
+    "address_region": "England",
+    "address_country": "GB",
+    "postal_code": "SW1A 2AA",
     "first_name": "Buyer",
     "last_name": "Example",
     "phone_number": "+14155550100"
@@ -273,7 +271,7 @@ clink-cli ucp-checkout create \
 
 For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For standard checkout, use the standard UCP checkout FSM for an allowlisted merchant domain or a merchant domain with a successful `/.well-known/ucp-clink` JSON profile, and the same selected item payload.
 
-For checkout create, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
+For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
 `stable_create_key` should be stable for the same product order attempt, for example a hash of selected item URL, item ID, quantity, total, instruction ID, mandate ID, and user/task correlation. Do not reuse it for a different cart.
 
