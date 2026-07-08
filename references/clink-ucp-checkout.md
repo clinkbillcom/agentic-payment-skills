@@ -2,7 +2,7 @@
 
 Read this before ordering a discovered product through `clink-cli ucp-checkout`.
 
-This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing: known standard UCP domains use the standard checkout path, and all other resolved domains use the external checkout path. The external path aligns with `clink-ucp` external checkout:
+This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing: known standard UCP domains use the standard checkout path. Other resolved domains must first probe `https://domain/.well-known/ucp-clink`; a successful parseable JSON response uses the standard checkout path, and absent/non-JSON probe evidence uses the external checkout path. The external path aligns with `clink-ucp` external checkout:
 
 - create path: `/agent/ucp/external/checkout-sessions`
 - create binds `instruction_id` and `mandate_id`
@@ -51,6 +51,7 @@ DISCOVER_PRODUCT
   -> IF_VISA_VIC_READY_SELECT_INSTRUCTION_MANDATE
   -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
   -> RESOLVE_CHECKOUT_ROUTE_WITH classifyUcpCheckoutRoute
+  -> IF_CHECK_STANDARD_UCP_PROFILE_RUN_CURL_AND_RECLASSIFY
   -> CREATE_STANDARD_OR_EXTERNAL_CHECKOUT
   -> CAPTURE_CHECKOUT_ID
   -> VERIFY_READY_FOR_COMPLETE
@@ -242,7 +243,14 @@ Resolve standard vs external checkout with `lib/ucp-checkout-route-fsm.mjs` `cla
 The resolver derives a canonical domain from `parse-item` output in this order: `merchantDomain`, `merchantOrigin`, selected item URL, item URL, product URL, or merchant URL.
 
 - If the domain is in the known standard UCP domain allowlist, route to standard UCP checkout. The current allowlist contains `www.bruceleeclub.com`.
-- If the domain is resolved but not allowlisted, route to external UCP checkout.
+- If the domain is resolved but not allowlisted, first run the `CHECK_STANDARD_UCP_PROFILE` action returned by the FSM:
+
+```bash
+curl -fsSL -XGET -H 'Accept: application/json' https://<domain>/.well-known/ucp-clink
+```
+
+- If that probe returns a successful parseable JSON response, reclassify with the JSON response and route to standard UCP checkout (`standard_ucp_profile_json`).
+- If the probe fails, returns a non-2xx response, or returns a non-JSON body, reclassify with checked/failed evidence and route to external UCP checkout (`standard_ucp_profile_absent`).
 - If no domain can be resolved, stop and ask for product/merchant input; do not guess.
 
 Do not treat `bruceleeclub.com` as equivalent to `www.bruceleeclub.com` unless it is explicitly added to the allowlist. Route resolution must not mutate the selected item, amount, or merchant facts.
@@ -263,7 +271,7 @@ clink-cli ucp-checkout create \
   --format json
 ```
 
-For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For standard checkout, use the standard UCP checkout FSM for the allowlisted merchant domain and the same selected item payload.
+For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For standard checkout, use the standard UCP checkout FSM for an allowlisted merchant domain or a merchant domain with a successful `/.well-known/ucp-clink` JSON profile, and the same selected item payload.
 
 For checkout create, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
@@ -349,7 +357,9 @@ clink-cli tool parse-item --url <item_url> --format json
 
 # Resolve checkout route:
 #   www.bruceleeclub.com -> standard UCP checkout
-#   every other resolved domain -> external UCP checkout
+#   every other resolved domain -> curl https://domain/.well-known/ucp-clink
+#   successful parseable JSON profile -> standard UCP checkout
+#   standard_ucp_profile_absent -> external UCP checkout
 
 clink-cli ucp-checkout create \
   --merchant-url <selected_item_url> \

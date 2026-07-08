@@ -32,27 +32,45 @@ test('derives Bruce Lee Club domain from selected item URL', () => {
   assert.equal(result.merchantDomain, 'www.bruceleeclub.com');
 });
 
-test('routes non-standard domains to external UCP checkout', () => {
+test('checks non-allowlisted domains for a standard UCP profile before external checkout', () => {
   const result = classifyUcpCheckoutRoute({
     merchantOrigin: 'https://crazy-store-e9vyrbxn.myshopify.com',
   });
 
-  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
-  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
-  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
-  assert.equal(result.reason, 'external_ucp_default');
+  assert.equal(result.state, UcpCheckoutRouteState.STANDARD_PROFILE_CHECK_REQUIRED);
+  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_PROFILE_CHECK);
+  assert.equal(result.action, UcpCheckoutRouteAction.CHECK_STANDARD_UCP_PROFILE);
+  assert.equal(result.reason, 'standard_ucp_profile_check_required');
   assert.equal(result.merchantDomain, 'crazy-store-e9vyrbxn.myshopify.com');
+  assert.equal(result.profileUrl, 'https://crazy-store-e9vyrbxn.myshopify.com/.well-known/ucp-clink');
+  assert.match(result.command, /curl .*https:\/\/crazy-store-e9vyrbxn\.myshopify\.com\/\.well-known\/ucp-clink/u);
 });
 
-test('does not treat apex Bruce Lee Club domain as standard without explicit allowlist entry', () => {
+test('routes non-allowlisted domains with a JSON standard UCP profile to standard checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    merchantDomain: 'shop.example.com',
+    standardUcpProfileResponse: '{"checkout":{"create":"/agent/ucp/checkout-sessions"}}',
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.STANDARD_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_STANDARD_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_profile_json');
+  assert.equal(result.merchantDomain, 'shop.example.com');
+  assert.equal(result.profileUrl, 'https://shop.example.com/.well-known/ucp-clink');
+});
+
+test('routes non-allowlisted domains to external checkout after the standard profile check fails', () => {
   const result = classifyUcpCheckoutRoute({
     merchantDomain: 'bruceleeclub.com',
+    standardUcpProfileChecked: true,
+    standardUcpProfileResponse: '<html>not json</html>',
   });
 
   assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
   assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
   assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
-  assert.equal(result.reason, 'external_ucp_default');
+  assert.equal(result.reason, 'standard_ucp_profile_absent');
 });
 
 test('asks for route input when merchant domain cannot be resolved', () => {

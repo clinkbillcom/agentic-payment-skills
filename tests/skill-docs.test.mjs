@@ -41,9 +41,10 @@ test('skill documents intent routing and checkout route FSMs', () => {
   assert.match(skill, /UCP_CHECKOUT_ROUTE_FSM/u);
 });
 
-test('UCP checkout route uses standard-domain allowlist before external default', () => {
+test('UCP checkout route probes standard UCP profile before external default', () => {
   assert.match(ucpCheckout, /known standard UCP domain allowlist/u);
   assert.match(ucpCheckout, /www\.bruceleeclub\.com/u);
-  assert.match(ucpCheckout, /not allowlisted, route to external UCP checkout/u);
-  assert.doesNotMatch(ucpCheckout, /\.well-known\/ucp/u);
+  assert.match(ucpCheckout, /\.well-known\/ucp-clink/u);
+  assert.match(ucpCheckout, /parseable JSON/u);
+  assert.match(ucpCheckout, /standard_ucp_profile_absent/u);
 });
