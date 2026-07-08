@@ -3538,6 +3538,8 @@ var OPTION_DEFINITIONS = [
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
   { name: "checkout-id", flags: "--checkout-id <id>" },
+  { name: "endpoint", flags: "--endpoint <url>" },
+  { name: "endpont", flags: "--endpont <url>" },
   { name: "merchant-url", flags: "--merchant-url <url>" },
   { name: "merchant-name", flags: "--merchant-name <name>" },
   { name: "merchant-category-code", flags: "--merchant-category-code <code>" },
@@ -4600,18 +4602,24 @@ Usage:
   clink-cli tool parse-site --url <url> [options]
   clink-cli tool parse-item --url <url> [options]
   clink-cli tool checkout-total --url <url> [options]
+  clink-cli tool get-ucp-profile --url <url> [options]
+  clink-cli tool get-rest-endpoint --url <url> [options]
 
 Tools:
   item-id        Extract a UCP item_id from a product URL
   parse-site     Detect the site type from a URL
   parse-item     Extract Shopify item facts with merchant, currency, and variant details
   checkout-total Extract the total amount from a Shopify checkout URL
+  get-ucp-profile Fetch a merchant UCP discovery profile
+  get-rest-endpoint Resolve the UCP REST endpoint and provider
 
 Examples:
   clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
   clink-cli tool parse-site --url https://store.example.com --format json
   clink-cli tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format json
   clink-cli tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
+  clink-cli tool get-ucp-profile --url https://merchant.example.com --format json
+  clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
 `;
 var TOOL_ITEM_ID_HELP = `clink-cli tool item-id
 
@@ -4694,6 +4702,45 @@ Behavior:
 
 Examples:
   clink-cli tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format pretty
+`;
+var TOOL_GET_UCP_PROFILE_HELP = `clink-cli tool get-ucp-profile
+
+Usage:
+  clink-cli tool get-ucp-profile --url <url> [options]
+
+Arguments:
+  --url <url>   Merchant URL or domain to inspect
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Reads the merchant origin from --url, then fetches https://<domain>/.well-known/ucp-clink first.
+  If absent, it fetches https://<domain>/.well-known/ucp. On success, the command prints the
+  discovery JSON directly. When both discovery paths are absent, it exits successfully with
+  error_code "NO_UCP_SITE".
+
+Examples:
+  clink-cli tool get-ucp-profile --url https://merchant.example.com --format pretty
+`;
+var TOOL_GET_REST_ENDPOINT_HELP = `clink-cli tool get-rest-endpoint
+
+Usage:
+  clink-cli tool get-rest-endpoint --url <url> [options]
+
+Arguments:
+  --url <url>   UCP site URL or domain to inspect
+
+Options:
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Parses the URL hostname and resolves the UCP provider from the primary domain. For clinkbill.com
+  and its subdomains, provider is "clinkbill" and endpoint is returned as an empty string. Unknown
+  domains return error_code "NO_UCP_REST_ENDPOINT".
+
+Examples:
+  clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
 `;
 var WALLET_HELP = `clink-cli wallet
 
@@ -5017,11 +5064,14 @@ Arguments:
   --metadata <json>               Metadata JSON object for create/update
   --payment-instrument-id <id>    Required payment instrument ID for complete
   --idempotency-key <key>         Optional key for create/update/complete; generated when omitted
+  --endpoint <url>                Optional checkout endpoint prefix; appends checkout-sessions paths
 
 Notes:
   Calls /agent/ucp/external/checkout-sessions internally because CLI-discovered merchants use the
   shadow-merchant external checkout path by default. The command surface intentionally does not
   expose an "external" mode or subcommand.
+  When --endpoint is provided, create appends /checkout-sessions, get/update append
+  /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
   Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
   X-Customer-ID is not sent.
   create sends merchant_url, customer_id, buyer.email, context.currency, instruction_id, and
@@ -5061,6 +5111,7 @@ Optional Arguments:
   --buyer <json>                  UCP buyer JSON object
   --shipping-address <json>       Shipping address JSON object
   --metadata <json>               Metadata JSON object
+  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
   --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
@@ -5092,6 +5143,9 @@ Usage:
 Required Arguments:
   --checkout-id <id>              Checkout ID to fetch
 
+Optional Arguments:
+  --endpoint <url>                Optional checkout endpoint prefix
+
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
@@ -5117,6 +5171,7 @@ Optional Arguments:
   --buyer <json>                  Replacement UCP buyer JSON object
   --shipping-address <json>       Replacement shipping address JSON object
   --metadata <json>               Replacement metadata JSON object
+  --endpoint <url>                Optional checkout endpoint prefix
   --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
@@ -5143,6 +5198,9 @@ Usage:
 Required Arguments:
   --checkout-id <id>              Checkout ID to cancel
 
+Optional Arguments:
+  --endpoint <url>                Optional checkout endpoint prefix
+
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
@@ -5165,6 +5223,7 @@ Required Arguments:
   --payment-instrument-id <id>    Payment instrument ID to charge
 
 Optional Arguments:
+  --endpoint <url>                Optional checkout endpoint prefix
   --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
@@ -5566,6 +5625,10 @@ function getHelpText(command, subcommand) {
           return TOOL_PARSE_ITEM_HELP;
         case "checkout-total":
           return TOOL_CHECKOUT_TOTAL_HELP;
+        case "get-ucp-profile":
+          return TOOL_GET_UCP_PROFILE_HELP;
+        case "get-rest-endpoint":
+          return TOOL_GET_REST_ENDPOINT_HELP;
         default:
           return TOOL_HELP;
       }
@@ -5714,6 +5777,30 @@ async function resolveParseItemFromUrl(rawUrl, options = {}) {
   const currency = readCurrency(productJson) ?? readCurrency(await fetchJson(buildShopifyCartJsonUrl(rawUrl))) ?? "unknown";
   return parseShopifyProductItems(rawUrl, productJson, currency);
 }
+async function resolveUcpProfileFromUrl(rawUrl, options = {}) {
+  const url = parseUrl(rawUrl);
+  const fetchJson = options.fetchJsonIfOk ?? ((profileUrl) => fetchJsonResourceIfOk(profileUrl, options.timeoutMs));
+  const origin = buildHttpsOriginUrl(url);
+  const profilePaths = ["/.well-known/ucp-clink", "/.well-known/ucp"];
+  for (const profilePath of profilePaths) {
+    const profile = await fetchJson(`${origin}${profilePath}`);
+    if (profile !== void 0) {
+      return profile;
+    }
+  }
+  throw validationError("NO_UCP_SITE");
+}
+async function resolveUcpRestEndpointFromUrl(rawUrl) {
+  const url = parseUrl(rawUrl);
+  const provider = resolveUcpProviderFromHostname(url.hostname);
+  if (!provider) {
+    throw validationError("NO_UCP_REST_ENDPOINT");
+  }
+  return {
+    endpoint: "",
+    provider
+  };
+}
 async function resolveUcpItemIdFromUrl(rawUrl, options = {}) {
   const url = parseUrl(rawUrl);
   const hostname = normalizeHostname(url.hostname);
@@ -5815,6 +5902,37 @@ async function fetchJsonResource(url, timeoutMs = 3e4) {
       throw networkError(`request timed out after ${timeoutMs}ms`);
     }
     throw networkError(error.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function fetchJsonResourceIfOk(url, timeoutMs = 3e4) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "en-US",
+        "User-Agent": CHECKOUT_USER_AGENT
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return void 0;
+    }
+    const rawText = await response.text();
+    if (!rawText.trim()) {
+      return void 0;
+    }
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return void 0;
+    }
+  } catch {
+    return void 0;
   } finally {
     clearTimeout(timeout);
   }
@@ -6365,6 +6483,13 @@ function readPath(value, path2) {
 function isRecord(value) {
   return typeof value === "object" && value !== null;
 }
+function resolveUcpProviderFromHostname(hostname) {
+  const normalized = normalizeHostname(hostname);
+  if (normalized === "clinkbill.com" || normalized.endsWith(".clinkbill.com")) {
+    return "clinkbill";
+  }
+  return void 0;
+}
 function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
@@ -6435,6 +6560,10 @@ async function handleToolCommand(subcommand, context) {
       return toolParseItem(context);
     case "checkout-total":
       return toolCheckoutTotal(context);
+    case "get-ucp-profile":
+      return toolGetUcpProfile(context);
+    case "get-rest-endpoint":
+      return toolGetRestEndpoint(context);
     default:
       throw validationError(`unsupported tool command: ${subcommand}`);
   }
@@ -6479,11 +6608,45 @@ async function toolCheckoutTotal(context) {
   }
   return EXIT_CODES.OK;
 }
+async function toolGetUcpProfile(context) {
+  const url = requireStringFlag(context.args.flags, "missing --url", "url");
+  try {
+    const result = await resolveUcpProfileFromUrl(url, { timeoutMs: context.globalOptions.timeoutMs });
+    printJson(result, context.globalOptions.format);
+  } catch (error) {
+    if (isNoUcpSite(error)) {
+      printJson({ error_code: error.message }, context.globalOptions.format);
+      return EXIT_CODES.OK;
+    }
+    throw error;
+  }
+  return EXIT_CODES.OK;
+}
+async function toolGetRestEndpoint(context) {
+  const url = requireStringFlag(context.args.flags, "missing --url", "url");
+  try {
+    const result = await resolveUcpRestEndpointFromUrl(url);
+    printJson(result, context.globalOptions.format);
+  } catch (error) {
+    if (isNoUcpRestEndpoint(error)) {
+      printJson({ error_code: error.message }, context.globalOptions.format);
+      return EXIT_CODES.OK;
+    }
+    throw error;
+  }
+  return EXIT_CODES.OK;
+}
 function isCheckoutStateNotFound(error) {
   return error instanceof CliError && error.message === "checkout_state_not_found";
 }
 function isUnknownSiteType(error) {
   return error instanceof CliError && error.message === "unkonw site type";
+}
+function isNoUcpSite(error) {
+  return error instanceof CliError && error.message === "NO_UCP_SITE";
+}
+function isNoUcpRestEndpoint(error) {
+  return error instanceof CliError && error.message === "NO_UCP_REST_ENDPOINT";
 }
 function resolveGlobalOptions(args, storedConfig) {
   const formatFlag = getStringFlag(args.flags, "format");
@@ -6982,9 +7145,8 @@ async function ucpCheckoutCreate(context) {
     metadata: optionalJsonFlag(flags, "metadata")
   });
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    ...resolveUcpCheckoutRequestTarget(context, ""),
     method: "POST",
-    path: UCP_EXTERNAL_CHECKOUT_PATH,
     headers: buildUcpCheckoutHeaders(context),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
@@ -7003,9 +7165,8 @@ async function ucpCheckoutGet(context) {
   rejectUcpCheckoutCreateOnlyFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`),
     method: "GET",
-    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}`,
     headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
@@ -7023,9 +7184,8 @@ async function ucpCheckoutUpdate(context) {
     metadata: optionalJsonFlag(flags, "metadata")
   });
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`),
     method: "PUT",
-    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}`,
     headers: buildUcpCheckoutHeaders(context),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
@@ -7042,9 +7202,8 @@ async function ucpCheckoutComplete(context) {
   const checkoutId = requireCheckoutId(flags);
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`),
     method: "POST",
-    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}/complete`,
     headers: buildUcpCheckoutHeaders(context),
     body: {
       payment_instrument_id: paymentInstrumentId
@@ -7059,9 +7218,8 @@ async function ucpCheckoutCancel(context) {
   rejectUcpCheckoutCreateOnlyFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/cancel`),
     method: "POST",
-    path: `${UCP_EXTERNAL_CHECKOUT_PATH}/${encodeURIComponent(checkoutId)}/cancel`,
     headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
@@ -7070,6 +7228,33 @@ async function ucpCheckoutCancel(context) {
 }
 function requireCheckoutId(flags) {
   return requireStringFlag(flags, "missing --checkout-id", "checkout-id");
+}
+function resolveUcpCheckoutRequestTarget(context, checkoutSessionsSuffix) {
+  const endpoint = getStringFlag(context.args.flags, "endpoint") ?? getStringFlag(context.args.flags, "endpont");
+  if (!endpoint) {
+    return {
+      baseUrl: context.runtimeConfig.baseUrl,
+      path: `${UCP_EXTERNAL_CHECKOUT_PATH}${checkoutSessionsSuffix}`
+    };
+  }
+  const endpointUrl = parseAbsoluteHttpUrl(endpoint, "--endpoint");
+  const endpointPath = endpointUrl.pathname.replace(/\/+$/, "");
+  return {
+    baseUrl: endpointUrl.origin,
+    path: `${endpointPath}/checkout-sessions${checkoutSessionsSuffix}`
+  };
+}
+function parseAbsoluteHttpUrl(value, flagName) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw validationError(`${flagName} must be an absolute http(s) URL`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw validationError(`${flagName} must be an absolute http(s) URL`);
+  }
+  return parsed;
 }
 var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
 var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();

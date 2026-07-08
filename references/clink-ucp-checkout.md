@@ -2,7 +2,7 @@
 
 Read this before ordering a discovered product through `clink-cli ucp-checkout`.
 
-This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing: known standard UCP domains use the standard checkout path. Other resolved domains must first probe `https://domain/.well-known/ucp-clink`; a successful parseable JSON response uses the standard checkout path, and absent/non-JSON probe evidence uses the external checkout path. The external path aligns with `clink-ucp` external checkout:
+This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing: known standard UCP domains and successful `https://domain/.well-known/ucp-clink` JSON probes are standard UCP candidates. Candidates must run `clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json`; provider `clinkbill` uses the endpoint-aware standard checkout path, while provider values that are not `clinkbill` and endpoint-discovery failures use the external checkout path. The external path aligns with `clink-ucp` external checkout:
 
 - create path: `/agent/ucp/external/checkout-sessions`
 - create binds `instruction_id` and `mandate_id`
@@ -52,6 +52,7 @@ DISCOVER_PRODUCT
   -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
   -> RESOLVE_CHECKOUT_ROUTE_WITH classifyUcpCheckoutRoute
   -> IF_CHECK_STANDARD_UCP_PROFILE_RUN_CURL_AND_RECLASSIFY
+  -> IF_STANDARD_CANDIDATE_GET_REST_ENDPOINT_AND_RECLASSIFY
   -> CREATE_STANDARD_OR_EXTERNAL_CHECKOUT
   -> CAPTURE_CHECKOUT_ID
   -> VERIFY_READY_FOR_COMPLETE
@@ -240,16 +241,24 @@ Resolve standard vs external checkout with `lib/ucp-checkout-route-fsm.mjs` `cla
 
 The resolver derives a canonical domain from `parse-item` output in this order: `merchantDomain`, `merchantOrigin`, selected item URL, item URL, product URL, or merchant URL.
 
-- If the domain is in the known standard UCP domain allowlist, route to standard UCP checkout. The current allowlist contains `www.bruceleeclub.com`.
+- If the domain is in the known standard UCP domain allowlist, treat it as a standard UCP candidate. The current allowlist contains `www.bruceleeclub.com`.
 - If the domain is resolved but not allowlisted, first run the `CHECK_STANDARD_UCP_PROFILE` action returned by the FSM:
 
 ```bash
 curl -fsSL -XGET -H 'Accept: application/json' https://<domain>/.well-known/ucp-clink
 ```
 
-- If that probe returns a successful parseable JSON response, reclassify with the JSON response and route to standard UCP checkout (`standard_ucp_profile_json`).
+- If that probe returns a successful parseable JSON response, reclassify with the JSON response and treat it as a standard UCP candidate.
 - If the probe fails, returns a non-2xx response, or returns a non-JSON body, reclassify with checked/failed evidence and route to external UCP checkout (`standard_ucp_profile_absent`).
 - If no domain can be resolved, stop and ask for product/merchant input; do not guess.
+
+For every standard UCP candidate, run the `GET_REST_ENDPOINT` action returned by the FSM. The `<standard_ucp_url>` must come from the profile shopping service endpoint (`services.*.endpoint`) when present; otherwise use the selected item/product/merchant URL that led to the candidate:
+
+```bash
+clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json
+```
+
+Reclassify with the `provider` and `endpoint` from that output. If `provider` is `clinkbill`, route to standard UCP checkout and carry `rest_endpoint` through create/get/complete. If provider is not `clinkbill`, route to external UCP checkout. If endpoint discovery returns `NO_UCP_REST_ENDPOINT` or another failure payload, route to external UCP checkout.
 
 Do not treat `bruceleeclub.com` as equivalent to `www.bruceleeclub.com` unless it is explicitly added to the allowlist. Route resolution must not mutate the selected item, amount, or merchant facts.
 
@@ -259,6 +268,7 @@ Create the checkout with the selected item:
 
 ```bash
 clink-cli ucp-checkout create \
+  [--endpoint <rest_endpoint>] \
   --merchant-url <selected_item_url> \
   --merchant-category-code <mcc> \
   --currency <currency> \
@@ -269,7 +279,7 @@ clink-cli ucp-checkout create \
   --format json
 ```
 
-For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For standard checkout, use the standard UCP checkout FSM for an allowlisted merchant domain or a merchant domain with a successful `/.well-known/ucp-clink` JSON profile, and the same selected item payload.
+For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For standard checkout, use the same `ucp-checkout create` command and selected item payload, but pass `--endpoint <rest_endpoint>` when the clinkbill REST endpoint returned by `get-rest-endpoint` is non-empty. If the clinkbill endpoint is empty, omit `--endpoint` and keep the provider evidence in the FSM state. If provider is not `clinkbill`, use the external UCP checkout path without `--endpoint`.
 
 For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
@@ -285,10 +295,11 @@ Stop on `requires_escalation`, `canceled`, or errors.
 
 ## Step 6: Complete Checkout
 
-Complete uses the current/default paymentInstrumentId resolved in Step 1. Complete uses that `checkoutId` and the resolved payment instrument. Do not pass instruction, mandate, or credential-token fields to external complete; standard UCP complete follows the standard checkout route contract.
+Complete uses the current/default paymentInstrumentId resolved in Step 1. Complete uses that `checkoutId`, the resolved payment instrument, and the same optional `--endpoint <rest_endpoint>` selected by route resolution. Do not pass instruction, mandate, or credential-token fields to complete; create binds instruction and mandate.
 
 ```bash
 clink-cli ucp-checkout complete \
+  [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \
@@ -354,12 +365,15 @@ clink-cli tool parse-item --url <item_url> --format json
 #   4. restart from card refresh + instruction list after activation
 
 # Resolve checkout route:
-#   www.bruceleeclub.com -> standard UCP checkout
+#   www.bruceleeclub.com -> standard UCP candidate
 #   every other resolved domain -> curl https://domain/.well-known/ucp-clink
-#   successful parseable JSON profile -> standard UCP checkout
-#   standard_ucp_profile_absent -> external UCP checkout
+#   successful parseable JSON profile -> standard UCP candidate
+#   standard candidate -> clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json
+#   provider=clinkbill -> standard UCP checkout, carrying optional --endpoint <rest_endpoint>
+#   provider not clinkbill or standard_ucp_profile_absent -> external UCP checkout
 
 clink-cli ucp-checkout create \
+  [--endpoint <rest_endpoint>] \
   --merchant-url <selected_item_url> \
   --merchant-category-code <mcc> \
   --currency <currency> \
@@ -369,6 +383,7 @@ clink-cli ucp-checkout create \
   --idempotency-key <stable_create_key> \
   --format json
 clink-cli ucp-checkout complete \
+  [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \

@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+const readmeZh = await readFile(new URL('../README.zh.md', import.meta.url), 'utf8');
 const walletConfig = await readFile(new URL('../references/clink-wallet-config.md', import.meta.url), 'utf8');
 const paymentRefund = await readFile(new URL('../references/clink-payment-refund.md', import.meta.url), 'utf8');
 const ucpCheckout = await readFile(new URL('../references/clink-ucp-checkout.md', import.meta.url), 'utf8');
+
+test('skill frontmatter stays compact and trigger-focused', () => {
+  const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
+  const description = frontmatter.match(/^description:\s*"?(.+?)"?$/mu)?.[1] ?? '';
+
+  assert.ok(frontmatter.length <= 1024, `frontmatter length ${frontmatter.length} exceeds 1024`);
+  assert.match(description, /^Use when/u);
+});
 
 test('main skill routes direct and session pay through authorization resolver before pay', () => {
   assert.match(skill, /lib\/authorization-workflow-fsm\.mjs/u);
@@ -57,5 +67,19 @@ test('UCP checkout route probes standard UCP profile before external default', (
   assert.match(ucpCheckout, /www\.bruceleeclub\.com/u);
   assert.match(ucpCheckout, /\.well-known\/ucp-clink/u);
   assert.match(ucpCheckout, /parseable JSON/u);
+  assert.match(ucpCheckout, /clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json/u);
+  assert.match(ucpCheckout, /services\.\*\.endpoint/u);
+  assert.match(ucpCheckout, /provider.*clinkbill/u);
+  assert.match(ucpCheckout, /provider.*not.*clinkbill.*external/u);
+  assert.match(ucpCheckout, /--endpoint <rest_endpoint>/u);
   assert.match(ucpCheckout, /standard_ucp_profile_absent/u);
+});
+
+test('README summaries include the standard UCP provider gate', () => {
+  assert.match(readme, /get-rest-endpoint/u);
+  assert.match(readme, /provider.*clinkbill/u);
+  assert.match(readme, /external checkout/u);
+  assert.match(readmeZh, /get-rest-endpoint/u);
+  assert.match(readmeZh, /provider.*clinkbill/u);
+  assert.match(readmeZh, /external checkout/u);
 });

@@ -8,28 +8,127 @@ import {
   classifyUcpCheckoutRoute,
 } from '../lib/ucp-checkout-route-fsm.mjs';
 
-test('routes Bruce Lee Club domain to standard UCP checkout', () => {
+test('requires REST endpoint discovery for Bruce Lee Club standard candidate', () => {
   const result = classifyUcpCheckoutRoute({
     merchantDomain: 'www.bruceleeclub.com',
     selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
   });
 
-  assert.equal(result.state, UcpCheckoutRouteState.STANDARD_ROUTE_SELECTED);
-  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_CHECKOUT);
-  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_STANDARD_UCP_CHECKOUT);
-  assert.equal(result.reason, 'standard_ucp_domain_match');
+  assert.equal(result.state, UcpCheckoutRouteState.REST_ENDPOINT_REQUIRED);
+  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_REST_ENDPOINT_DISCOVERY);
+  assert.equal(result.action, UcpCheckoutRouteAction.GET_REST_ENDPOINT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_required');
   assert.equal(result.merchantDomain, 'www.bruceleeclub.com');
+  assert.match(result.command, /clink-cli tool get-rest-endpoint --url https:\/\/www\.bruceleeclub\.com\/products\/bruce-lee-toy-nunchakus-yellow --format json/u);
 });
 
-test('derives Bruce Lee Club domain from selected item URL', () => {
+test('quotes REST endpoint discovery URL when the selected item URL has query parameters', () => {
+  const result = classifyUcpCheckoutRoute({
+    merchantDomain: 'www.bruceleeclub.com',
+    selectedItemUrl: 'https://www.bruceleeclub.com/products/wax?variant=123&selling_plan=456',
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.REST_ENDPOINT_REQUIRED);
+  assert.equal(
+    result.command,
+    "clink-cli tool get-rest-endpoint --url 'https://www.bruceleeclub.com/products/wax?variant=123&selling_plan=456' --format json",
+  );
+});
+
+test('routes clinkbill REST endpoint discovery output to standard UCP checkout', () => {
   const result = classifyUcpCheckoutRoute({
     selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
+    restEndpointProvider: 'clinkbill',
+    restEndpoint: 'https://agent.clinkbill.com/ucp',
   });
 
   assert.equal(result.state, UcpCheckoutRouteState.STANDARD_ROUTE_SELECTED);
   assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_CHECKOUT);
   assert.equal(result.action, UcpCheckoutRouteAction.CREATE_STANDARD_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_clinkbill_provider');
   assert.equal(result.merchantDomain, 'www.bruceleeclub.com');
+  assert.equal(result.provider, 'clinkbill');
+  assert.equal(result.endpoint, 'https://agent.clinkbill.com/ucp');
+});
+
+test('routes non-clinkbill REST endpoint discovery output to external UCP checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    merchantDomain: 'shop.example.com',
+    standardUcpProfileResponse: '{"provider":"otherpay","endpoint":"https://pay.example.com/ucp"}',
+    restEndpointProvider: 'otherpay',
+    restEndpoint: 'https://pay.example.com/ucp',
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_provider_not_clinkbill_external');
+  assert.equal(result.merchantDomain, 'shop.example.com');
+  assert.equal(result.provider, 'otherpay');
+});
+
+test('routes REST endpoint discovery error envelope to external UCP checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
+    getRestEndpointOutput: JSON.stringify({
+      ok: false,
+      error: {
+        code: 'NO_UCP_REST_ENDPOINT',
+        message: 'No UCP REST endpoint was found',
+      },
+    }),
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_unavailable_external');
+  assert.equal(result.errorCode, 'NO_UCP_REST_ENDPOINT');
+});
+
+test('routes REST endpoint discovery error envelope without code to external UCP checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
+    getRestEndpointOutput: JSON.stringify({
+      ok: false,
+      error: {
+        type: 'ApiError',
+        message: 'No UCP REST endpoint was found',
+      },
+    }),
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_unavailable_external');
+  assert.equal(result.errorCode, 'ApiError');
+});
+
+test('routes invalid REST endpoint discovery output to external UCP checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
+    getRestEndpointOutput: '<html>not json</html>',
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_unavailable_external');
+  assert.equal(result.errorCode, 'invalid_get_rest_endpoint_output');
+});
+
+test('routes REST endpoint discovery failed envelope without error body to external UCP checkout', () => {
+  const result = classifyUcpCheckoutRoute({
+    selectedItemUrl: 'https://www.bruceleeclub.com/products/bruce-lee-toy-nunchakus-yellow',
+    getRestEndpointOutput: JSON.stringify({ ok: false }),
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.EXTERNAL_ROUTE_SELECTED);
+  assert.equal(result.route, UcpCheckoutRoute.EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_EXTERNAL_UCP_CHECKOUT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_unavailable_external');
+  assert.equal(result.errorCode, 'get_rest_endpoint_failed');
 });
 
 test('checks non-allowlisted domains for a standard UCP profile before external checkout', () => {
@@ -46,18 +145,40 @@ test('checks non-allowlisted domains for a standard UCP profile before external 
   assert.match(result.command, /curl .*https:\/\/crazy-store-e9vyrbxn\.myshopify\.com\/\.well-known\/ucp-clink/u);
 });
 
-test('routes non-allowlisted domains with a JSON standard UCP profile to standard checkout', () => {
+test('requires REST endpoint discovery when non-allowlisted domains have a JSON standard UCP profile', () => {
   const result = classifyUcpCheckoutRoute({
     merchantDomain: 'shop.example.com',
     standardUcpProfileResponse: '{"checkout":{"create":"/agent/ucp/checkout-sessions"}}',
   });
 
-  assert.equal(result.state, UcpCheckoutRouteState.STANDARD_ROUTE_SELECTED);
-  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_CHECKOUT);
-  assert.equal(result.action, UcpCheckoutRouteAction.CREATE_STANDARD_UCP_CHECKOUT);
-  assert.equal(result.reason, 'standard_ucp_profile_json');
+  assert.equal(result.state, UcpCheckoutRouteState.REST_ENDPOINT_REQUIRED);
+  assert.equal(result.route, UcpCheckoutRoute.STANDARD_UCP_REST_ENDPOINT_DISCOVERY);
+  assert.equal(result.action, UcpCheckoutRouteAction.GET_REST_ENDPOINT);
+  assert.equal(result.reason, 'standard_ucp_rest_endpoint_required');
   assert.equal(result.merchantDomain, 'shop.example.com');
   assert.equal(result.profileUrl, 'https://shop.example.com/.well-known/ucp-clink');
+  assert.match(result.command, /clink-cli tool get-rest-endpoint --url https:\/\/shop\.example\.com --format json/u);
+});
+
+test('uses the standard profile shopping endpoint for REST endpoint discovery when present', () => {
+  const result = classifyUcpCheckoutRoute({
+    merchantDomain: 'shop.example.com',
+    standardUcpProfileResponse: JSON.stringify({
+      services: {
+        'dev.ucp.shopping': [
+          {
+            transport: 'rest',
+            endpoint: 'https://agent.clinkbill.com/ucp/mcht_123',
+          },
+        ],
+      },
+    }),
+  });
+
+  assert.equal(result.state, UcpCheckoutRouteState.REST_ENDPOINT_REQUIRED);
+  assert.equal(result.action, UcpCheckoutRouteAction.GET_REST_ENDPOINT);
+  assert.equal(result.restEndpointUrl, 'https://agent.clinkbill.com/ucp/mcht_123');
+  assert.match(result.command, /clink-cli tool get-rest-endpoint --url https:\/\/agent\.clinkbill\.com\/ucp\/mcht_123 --format json/u);
 });
 
 test('routes non-allowlisted domains to external checkout after the standard profile check fails', () => {
