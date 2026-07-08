@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const skill = await readFile(new URL('../SKILL.md', import.meta.url), 'utf8');
+const walletConfig = await readFile(new URL('../references/clink-wallet-config.md', import.meta.url), 'utf8');
 const paymentRefund = await readFile(new URL('../references/clink-payment-refund.md', import.meta.url), 'utf8');
 const ucpCheckout = await readFile(new URL('../references/clink-ucp-checkout.md', import.meta.url), 'utf8');
 
@@ -21,6 +22,16 @@ test('payment reference documents Visa VIC resolver bypass branch', () => {
   assert.match(paymentRefund, /Visa but VIC is not enabled/u);
   assert.match(paymentRefund, /bypass instruction matching/u);
   assert.match(paymentRefund, /Visa \+ VIC ready/u);
+});
+
+test('wallet init documents email OTP recovery flow', () => {
+  assert.match(walletConfig, /BOOTSTRAP_OTP_REQUIRED/u);
+  assert.match(walletConfig, /71160015/u);
+  assert.match(walletConfig, /Verification code has been sent to this email/u);
+  assert.match(walletConfig, /clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json/u);
+  assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
+  assert.match(skill, /WALLET_FSM/u);
+  assert.match(skill, /--otp <email_otp>/u);
 });
 
 test('UCP checkout workflow uses parse-item as the product analysis command', () => {

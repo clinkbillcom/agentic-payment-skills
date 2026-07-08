@@ -14,6 +14,23 @@ Use sandbox/UAT customer credentials only. Never reuse a production customer API
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
 
+### Email OTP Recovery
+
+After `wallet init` returns, classify the observation with `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and report the `[WALLET_FSM]` marker in structured handoffs. If the classifier returns `ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT`, do not treat it as a terminal setup failure. It matches any of these fields:
+
+- `BOOTSTRAP_OTP_REQUIRED`
+- `71160015`
+- `cwallet.bootstrap.otp.required`
+- `Verification code has been sent to this email. Please retry with otp.`
+
+Tell the user that Clink sent a verification code to the same email address used for `wallet init`, ask them to check that email and send the OTP back, then retry once the user provides it:
+
+```bash
+clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json
+```
+
+Use the same `email`, `name`, and locked environment as the original attempt. Never invent or guess the OTP, never change the email to avoid the OTP challenge, and do not keep retrying `wallet init` without `--otp` after this error.
+
 ## Wallet Status
 
 ```bash
