@@ -8,6 +8,8 @@ const readmeZh = await readFile(new URL('../README.zh.md', import.meta.url), 'ut
 const walletConfig = await readFile(new URL('../references/clink-wallet-config.md', import.meta.url), 'utf8');
 const paymentRefund = await readFile(new URL('../references/clink-payment-refund.md', import.meta.url), 'utf8');
 const ucpCheckout = await readFile(new URL('../references/clink-ucp-checkout.md', import.meta.url), 'utf8');
+const asyncEvents = await readFile(new URL('../references/clink-async-events.md', import.meta.url), 'utf8');
+const instruction = await readFile(new URL('../references/clink-instruction.md', import.meta.url), 'utf8');
 
 test('skill frontmatter stays compact and trigger-focused', () => {
   const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
@@ -82,4 +84,19 @@ test('README summaries include the standard UCP provider gate', () => {
   assert.match(readmeZh, /get-rest-endpoint/u);
   assert.match(readmeZh, /provider.*clinkbill/u);
   assert.match(readmeZh, /external checkout/u);
+});
+
+test('instruction activation waits are FSM-driven and correlated before resume', () => {
+  assert.match(skill, /classifyAuthorizationDraftObservation/u);
+  assert.match(skill, /classifyAuthorizationActiveVerification/u);
+  assert.match(skill, /classifyEventWaitRequest/u);
+  assert.match(skill, /classifyEventPollObservation/u);
+  assert.match(skill, /clink-cli events poll --type purchase_instruction\.activated --no-ack --format json/u);
+  assert.match(skill, /instruction get --purchase-instruction-id/u);
+  assert.match(skill, /do not wait for the user to report completion/u);
+  assert.match(asyncEvents, /waitSpec/u);
+  assert.match(asyncEvents, /instructionId.*purchaseInstructionId/u);
+  assert.match(instruction, /ACTIVE/u);
+  assert.match(instruction, /classifyAuthorizationDraftObservation/u);
+  assert.match(ucpCheckout, /activation waitSpec/u);
 });

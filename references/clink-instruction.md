@@ -148,10 +148,16 @@ Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fi
 
 ## Activation
 
-After `create`, `sign-url`, `update`, or `cancel`, wait for the matching instruction event through the built-in watch or:
+After `create` or `sign-url`, do not wait for the user to report completion before listening. Run `classifyAuthorizationDraftObservation` on the CLI output, send the returned `passkeyUrl`, and immediately start the returned activation waitSpec through the Event FSM. `update` and `cancel` still use the built-in link watch, but they are not authorization-draft activation flows.
 
 ```bash
-clink-cli events poll --type purchase_instruction.activated --format json
+clink-cli events poll --type purchase_instruction.activated --no-ack --format json
 ```
 
-The instruction must be ACTIVE before it is considered reusable.
+The activation event must correlate by the same `instructionId` / `purchaseInstructionId`. After `classifyEventPollObservation` returns `EVENT_STATUS_VERIFY_REQUIRED`, run:
+
+```bash
+clink-cli instruction get --purchase-instruction-id <instructionId> --format json
+```
+
+Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed.

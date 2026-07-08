@@ -4239,10 +4239,22 @@ async function watchEvents(options) {
       for (const event of events) {
         log(`  ${event.summary}`);
       }
-      const ackedEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
+      const watchTargetEnabled = hasWatchTarget(options);
+      const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options)) : events;
+      if (watchTargetEnabled && matchedEvents.length === 0) {
+        const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
+        await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ignoredEventIds);
+        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep(pollIntervalMs);
+        continue;
+      }
+      const ackedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
       await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ackedEventIds);
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return { watched: true, url: options.url, timedOut: false, events, ackedEventIds };
+      return { watched: true, url: options.url, timedOut: false, events: matchedEvents, ackedEventIds };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
@@ -4255,6 +4267,53 @@ async function watchEvents(options) {
 function isStaleForWatch(record, startedAtMs) {
   const eventTimeMs = parseEventTimeMs(record.eventTime);
   return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
+}
+function hasWatchTarget(options) {
+  return Boolean(options.eventType || Object.values(options.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
+}
+function eventMatchesWatchTarget(event, options) {
+  if (options.eventType && event.eventType !== options.eventType) {
+    return false;
+  }
+  const expectedResource = options.expectedResource ?? {};
+  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
+  if (expectedEntries.length === 0) {
+    return true;
+  }
+  const instructionExpectedValues = [
+    expectedResource.instructionId,
+    expectedResource.instruction_id,
+    expectedResource.purchaseInstructionId,
+    expectedResource.purchase_instruction_id
+  ].map(normalizedValue).filter((value) => value !== void 0);
+  if (instructionExpectedValues.length > 0) {
+    const eventValues = compactValues([
+      event.resourceId,
+      event.data.instructionId,
+      event.data.instruction_id,
+      event.data.purchaseInstructionId,
+      event.data.purchase_instruction_id
+    ]);
+    return instructionExpectedValues.some((value) => eventValues.includes(value));
+  }
+  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
+}
+function eventFieldValues(event, key) {
+  const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+  return compactValues([
+    event.data[key],
+    event.data[snakeKey],
+    key.toLowerCase().endsWith("id") ? event.resourceId : void 0
+  ]);
+}
+function compactValues(values) {
+  return values.map(normalizedValue).filter((value) => value !== void 0);
+}
+function normalizedValue(value) {
+  if (value === void 0 || value === null || value === "") {
+    return void 0;
+  }
+  return String(value);
 }
 function parseEventTimeMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -6669,7 +6728,7 @@ function resolveWatchFlag(flags) {
   }
   return true;
 }
-async function maybeWatchEvents(context, url, label) {
+async function maybeWatchEvents(context, url, label, watchTarget = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     return;
   }
@@ -6677,7 +6736,8 @@ async function maybeWatchEvents(context, url, label) {
     runtimeConfig: context.runtimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     url,
-    label
+    label,
+    ...watchTarget
   });
   printSuccess(result, context.globalOptions.format);
 }
@@ -7461,7 +7521,10 @@ async function instructionCreate(context) {
     requiresPasskey: true,
     passkeyUrl
   }, context.globalOptions.format);
-  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization");
+  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
+    eventType: "purchase_instruction.activated",
+    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+  });
   return EXIT_CODES.OK;
 }
 async function instructionGet(context) {
@@ -7482,8 +7545,11 @@ async function instructionSignUrl(context) {
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, url);
-  printSuccess({ url }, context.globalOptions.format);
-  await maybeWatchEvents(context, url, "purchase instruction authorization");
+  printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
+  await maybeWatchEvents(context, url, "purchase instruction authorization", {
+    eventType: "purchase_instruction.activated",
+    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+  });
   return EXIT_CODES.OK;
 }
 async function instructionList(context) {

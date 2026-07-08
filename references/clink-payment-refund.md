@@ -106,7 +106,7 @@ clink-cli pay \
   --format json
 ```
 
-If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
+If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. Run `classifyAuthorizationDraftObservation` on the create/sign-url output, send the Passkey URL, and immediately launch the returned activation waitSpec (`clink-cli events poll --type purchase_instruction.activated --no-ack --format json`). For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
 
 ```text
 Payment Intent ID: payint_xxx
@@ -114,7 +114,7 @@ Instruction ID: ins_xxx
 Next command after activation: resume_pending_payment_intent {"paymentIntentId":"payint_xxx"}
 ```
 
-When `purchase_instruction.activated` is observed, resume only the pending payment intent whose stored draftInstructionId / draft instruction matches the activated instruction. A different activation on the same card must not resume this payment intent; paymentInstrumentId-only matching is only a legacy fallback for pending intents that did not store a draft instruction. The resume path must re-run `clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json`, re-match the ACTIVE instruction+mandate, and then call pay. Do not let the merchant skill manually call `clink-cli pay`, invent `instruction_id`/`mandate_id`, or branch into its own payment FSM after user authorization.
+When `purchase_instruction.activated` is observed, use `classifyEventPollObservation` to resume only the pending payment intent whose stored draftInstructionId / draft instruction matches the activated instruction. A different activation on the same card must not resume this payment intent; paymentInstrumentId-only matching is only a legacy fallback for pending intents that did not store a draft instruction. After a correlated activation, run `clink-cli instruction get --purchase-instruction-id <instruction_id> --format json` and `classifyAuthorizationActiveVerification`; the resume path must re-run `clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json`, re-match the ACTIVE instruction+mandate, and then call pay. Do not let the merchant skill manually call `clink-cli pay`, invent `instruction_id`/`mandate_id`, or branch into its own payment FSM after user authorization.
 
 Never invent amount, currency, merchant ID, session ID, order ID, payment method, mandate scope, `instruction_id`, or `mandate_id`.
 
