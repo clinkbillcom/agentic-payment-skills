@@ -26,7 +26,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
 - VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
-- UCP 商品下单 —— 先用 `clink-cli tool parse-item` 解析商品页面事实并选定一个可购买 item；再判断实物/虚拟履约类型；需要邮寄的实物商品必须提供完整的标准收货地址，不限定美国地址，instruction 创建使用 CWallet 地址结构，checkout/payment 上下文使用 UCP Postal Address 结构；仅在 Visa/VIC 需要时列出并按商品金额硬匹配与商家语义匹配 ACTIVE instruction/mandate；将 `www.bruceleeclub.com` 等标准 UCP 域名以及 `/.well-known/ucp-clink` JSON profile 视为 standard candidate，先运行 `clink-cli tool get-rest-endpoint`，只有 provider 是 `clinkbill` 才走 standard checkout，否则走 external checkout，创建 checkout 后再用支付工具完成 checkout
+- UCP 商品下单 —— 先用 `clink-cli tool parse-item` 解析并选择商品，判断履约方式；需要邮寄的实物商品必须提供完整的标准收货地址；在 Visa/VIC 需要时完成授权匹配；随后用商品 URL 调用 `clink-cli tool internal-ucp get-endpoint`。命中配置时直接走 internal checkout；只有返回 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `/.well-known/ucp-clink` 与 `get-rest-endpoint` 自主探测，其中 provider 为 `clinkbill` 时走 internal checkout，其他 provider 或探测失败时走 external checkout
 - 退款提交与状态轮询
 - 风控规则查看与配置
 - 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink-cli events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试

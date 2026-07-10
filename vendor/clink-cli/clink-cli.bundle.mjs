@@ -3541,6 +3541,7 @@ var OPTION_DEFINITIONS = [
   { name: "endpoint", flags: "--endpoint <url>" },
   { name: "endpont", flags: "--endpont <url>" },
   { name: "merchant-url", flags: "--merchant-url <url>" },
+  { name: "product-url", flags: "--product-url <url>" },
   { name: "merchant-name", flags: "--merchant-name <name>" },
   { name: "merchant-category-code", flags: "--merchant-category-code <code>" },
   { name: "order-channel-id", flags: "--order-channel-id <id>" },
@@ -4239,22 +4240,10 @@ async function watchEvents(options) {
       for (const event of events) {
         log(`  ${event.summary}`);
       }
-      const watchTargetEnabled = hasWatchTarget(options);
-      const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options)) : events;
-      if (watchTargetEnabled && matchedEvents.length === 0) {
-        const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ignoredEventIds);
-        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
-        if (now() + pollIntervalMs >= deadline) {
-          break;
-        }
-        await sleep(pollIntervalMs);
-        continue;
-      }
-      const ackedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
+      const ackedEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
       await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ackedEventIds);
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return { watched: true, url: options.url, timedOut: false, events: matchedEvents, ackedEventIds };
+      return { watched: true, url: options.url, timedOut: false, events, ackedEventIds };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
@@ -4267,53 +4256,6 @@ async function watchEvents(options) {
 function isStaleForWatch(record, startedAtMs) {
   const eventTimeMs = parseEventTimeMs(record.eventTime);
   return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
-}
-function hasWatchTarget(options) {
-  return Boolean(options.eventType || Object.values(options.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
-}
-function eventMatchesWatchTarget(event, options) {
-  if (options.eventType && event.eventType !== options.eventType) {
-    return false;
-  }
-  const expectedResource = options.expectedResource ?? {};
-  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
-  if (expectedEntries.length === 0) {
-    return true;
-  }
-  const instructionExpectedValues = [
-    expectedResource.instructionId,
-    expectedResource.instruction_id,
-    expectedResource.purchaseInstructionId,
-    expectedResource.purchase_instruction_id
-  ].map(normalizedValue).filter((value) => value !== void 0);
-  if (instructionExpectedValues.length > 0) {
-    const eventValues = compactValues([
-      event.resourceId,
-      event.data.instructionId,
-      event.data.instruction_id,
-      event.data.purchaseInstructionId,
-      event.data.purchase_instruction_id
-    ]);
-    return instructionExpectedValues.some((value) => eventValues.includes(value));
-  }
-  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
-}
-function eventFieldValues(event, key) {
-  const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
-  return compactValues([
-    event.data[key],
-    event.data[snakeKey],
-    key.toLowerCase().endsWith("id") ? event.resourceId : void 0
-  ]);
-}
-function compactValues(values) {
-  return values.map(normalizedValue).filter((value) => value !== void 0);
-}
-function normalizedValue(value) {
-  if (value === void 0 || value === null || value === "") {
-    return void 0;
-  }
-  return String(value);
 }
 function parseEventTimeMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -4570,6 +4512,8 @@ var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to
 ${HELP_OPTION}`;
 var TOOL_NETWORK_OPTIONS = `  --timeout <ms>                Request timeout in milliseconds
 ${OUTPUT_OPTIONS}`;
+var TOOL_ENDPOINT_OPTIONS = `  --sandbox                     Use sandbox UCP endpoint base URL
+${OUTPUT_OPTIONS}`;
 var API_BASE_OPTIONS = `  --base-url <url>              Override API base URL
   --sandbox                     Use sandbox API/agent environment unless --base-url or CLINK_BASE_URL overrides the API host`;
 var CUSTOMER_AUTH_OPTIONS = `  --customer-id <id>            Override customer ID
@@ -4663,6 +4607,7 @@ Usage:
   clink-cli tool checkout-total --url <url> [options]
   clink-cli tool get-ucp-profile --url <url> [options]
   clink-cli tool get-rest-endpoint --url <url> [options]
+  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
 
 Tools:
   item-id        Extract a UCP item_id from a product URL
@@ -4671,6 +4616,7 @@ Tools:
   checkout-total Extract the total amount from a Shopify checkout URL
   get-ucp-profile Fetch a merchant UCP discovery profile
   get-rest-endpoint Resolve the UCP REST endpoint and provider
+  internal-ucp   Resolve an internal Clink UCP endpoint from a product URL
 
 Examples:
   clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
@@ -4679,6 +4625,7 @@ Examples:
   clink-cli tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
   clink-cli tool get-ucp-profile --url https://merchant.example.com --format json
   clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
+  clink-cli tool internal-ucp get-endpoint --product-url https://modelmax-store-uat.myshopify.com/products/demo --sandbox --format json
 `;
 var TOOL_ITEM_ID_HELP = `clink-cli tool item-id
 
@@ -4800,6 +4747,45 @@ Behavior:
 
 Examples:
   clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
+`;
+var TOOL_INTERNAL_UCP_HELP = `clink-cli tool internal-ucp
+
+Usage:
+  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
+
+Subcommands:
+  get-endpoint   Resolve an internal Clink UCP endpoint from a product URL
+
+Options:
+${TOOL_ENDPOINT_OPTIONS}
+
+Behavior:
+  Uses the production internal merchant list by default and the sandbox list with --sandbox.
+  A product domain outside the selected list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
+
+Examples:
+  clink-cli tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink-cli tool internal-ucp get-endpoint --product-url https://modelmax-store-uat.myshopify.com/products/demo --sandbox --format pretty
+`;
+var TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP = `clink-cli tool internal-ucp get-endpoint
+
+Usage:
+  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
+
+Arguments:
+  --product-url <url>   Product URL whose exact hostname identifies the merchant
+
+Options:
+${TOOL_ENDPOINT_OPTIONS}
+
+Behavior:
+  Resolves a configured internal merchant by exact product hostname and generates its Clink UCP
+  REST endpoint. Production configuration is selected by default; --sandbox selects sandbox.
+  Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" without a network request.
+
+Examples:
+  clink-cli tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink-cli tool internal-ucp get-endpoint --product-url https://modelmax-store-uat.myshopify.com/products/demo --sandbox --format pretty
 `;
 var WALLET_HELP = `clink-cli wallet
 
@@ -5115,14 +5101,11 @@ Arguments:
   --merchant-category-code <code> Merchant category code for create
   --order-channel-id <id>         Optional advanced override; backend derives it from merchant-url
   --currency <currency>           Checkout currency for create, for example USD
-  --instruction-id <id>           Purchase instruction ID for create
-  --mandate-id <id>               Purchase instruction mandate ID for create
   --line-items <json>             UCP line_items JSON array for create/update
   --buyer <json>                  UCP buyer JSON object for create/update
   --shipping-address <json>       Shipping address JSON object for create/update
   --metadata <json>               Metadata JSON object for create/update
-  --payment-instrument-id <id>    Required payment instrument ID for complete
-  --idempotency-key <key>         Optional key for create/update/complete; generated when omitted
+  --payment-instrument-id <id>    Payment instrument ID for complete; defaults to the cached default card
   --endpoint <url>                Optional checkout endpoint prefix; appends checkout-sessions paths
 
 Notes:
@@ -5133,35 +5116,35 @@ Notes:
   /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
   Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
   X-Customer-ID is not sent.
-  create sends merchant_url, customer_id, buyer.email, context.currency, instruction_id, and
-  mandate_id. customer_id and buyer.email come from the local clink-cli config JSON.
+  create sends merchant_url, customer_id, buyer.email, and context.currency.
+  customer_id and buyer.email come from the local clink-cli config JSON.
+  Idempotency-Key is generated by clink-cli for create/update/complete; callers do not pass it.
   create treats line_items price/amount fields as decimal major-unit values and converts them by
   --currency before calling the external checkout API; --currency is sent as context.currency.
-  external complete sends payment_instrument_id only.
+  complete sends a standard UCP payment object with payment.instruments[0].id as local
+  config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
+  omitted, it uses the local cached default card.
 
 Examples:
   clink-cli ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
-    --instruction-id ins_xxx --mandate-id mndt_xxx \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
   clink-cli ucp-checkout get --checkout-id chk_xxx --format json
   clink-cli ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
-  clink-cli ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
+  clink-cli ucp-checkout complete --checkout-id chk_xxx --format json
   clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
 var UCP_CHECKOUT_CREATE_HELP = `clink-cli ucp-checkout create
 
 Usage:
-  clink-cli ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --instruction-id <id> --mandate-id <id> --line-items <json> [options]
+  clink-cli ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
 
 Required Arguments:
   --merchant-url <url>            External merchant checkout URL
   --merchant-category-code <code> Merchant category code, ISO 18245 MCC
   --currency <currency>           Checkout currency, for example USD
-  --instruction-id <id>           Purchase instruction ID
-  --mandate-id <id>               Purchase instruction mandate ID
   --line-items <json>             UCP line_items JSON array
 
 Optional Arguments:
@@ -5171,7 +5154,6 @@ Optional Arguments:
   --shipping-address <json>       Shipping address JSON object
   --metadata <json>               Metadata JSON object
   --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
-  --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -5183,6 +5165,7 @@ Notes:
   Authenticates by customer API key only: X-Customer-API-Key and X-Timestamp are sent.
   X-Customer-ID is not sent.
   customer_id and buyer.email are read from the local clink-cli config JSON.
+  Idempotency-Key is generated by clink-cli.
   line_items price/amount fields are decimal major-unit values and are converted by --currency;
   --currency is sent as context.currency.
 
@@ -5190,7 +5173,6 @@ Examples:
   clink-cli ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
-    --instruction-id ins_xxx --mandate-id mndt_xxx \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
 `;
@@ -5231,7 +5213,6 @@ Optional Arguments:
   --shipping-address <json>       Replacement shipping address JSON object
   --metadata <json>               Replacement metadata JSON object
   --endpoint <url>                Optional checkout endpoint prefix
-  --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -5241,6 +5222,7 @@ Endpoint:
 
 Notes:
   Authenticates by customer API key only. X-Customer-ID is not sent.
+  Idempotency-Key is generated by clink-cli.
   update sends line_items JSON unchanged.
 
 Examples:
@@ -5275,15 +5257,14 @@ Examples:
 var UCP_CHECKOUT_COMPLETE_HELP = `clink-cli ucp-checkout complete
 
 Usage:
-  clink-cli ucp-checkout complete --checkout-id <id> --payment-instrument-id <id> [options]
+  clink-cli ucp-checkout complete --checkout-id <id> [--payment-instrument-id <id>] [options]
 
 Required Arguments:
   --checkout-id <id>              Checkout ID to complete
-  --payment-instrument-id <id>    Payment instrument ID to charge
 
 Optional Arguments:
+  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
   --endpoint <url>                Optional checkout endpoint prefix
-  --idempotency-key <key>         Optional key; generated when omitted
 
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -5293,9 +5274,13 @@ Endpoint:
 
 Notes:
   Authenticates by customer API key only. X-Customer-ID is not sent.
-  Sends payment_instrument_id only in the request body.
+  Idempotency-Key is generated by clink-cli.
+  Sends a standard UCP payment object in the request body. The selected instrument id is local
+  config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
+  --payment-instrument-id is omitted or empty, the CLI uses the local cached default card.
 
 Examples:
+  clink-cli ucp-checkout complete --checkout-id chk_xxx --format json
   clink-cli ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
 `;
 var CONFIG_HELP = `clink-cli config
@@ -5609,11 +5594,11 @@ Examples:
   clink-cli events poll --type payment_method.updated --format json
   clink-cli events poll --no-ack --format json
 `;
-function printHelp(command, subcommand) {
-  const output = getHelpText(command, subcommand);
+function printHelp(command, subcommand, nestedCommand) {
+  const output = getHelpText(command, subcommand, nestedCommand);
   process.stdout.write(output);
 }
-function getHelpText(command, subcommand) {
+function getHelpText(command, subcommand, nestedCommand) {
   switch (command) {
     case "wallet":
       switch (subcommand) {
@@ -5688,6 +5673,8 @@ function getHelpText(command, subcommand) {
           return TOOL_GET_UCP_PROFILE_HELP;
         case "get-rest-endpoint":
           return TOOL_GET_REST_ENDPOINT_HELP;
+        case "internal-ucp":
+          return nestedCommand === "get-endpoint" ? TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP : TOOL_INTERNAL_UCP_HELP;
         default:
           return TOOL_HELP;
       }
@@ -5729,6 +5716,70 @@ function getHelpText(command, subcommand) {
     default:
       return ROOT_HELP;
   }
+}
+
+// dist/internal-ucp.production.json
+var internal_ucp_production_default = [];
+
+// dist/internal-ucp.sandbox.json
+var internal_ucp_sandbox_default = [
+  {
+    domain_name: "modelmax-store-uat.myshopify.com",
+    merchant_id: "mcht_fcq09yoqqink"
+  }
+];
+
+// dist/internal-ucp.js
+function validateInternalUcpMerchants(value, source) {
+  if (!Array.isArray(value)) {
+    throw validationError(`invalid internal UCP config: ${source}`);
+  }
+  const merchants = /* @__PURE__ */ new Map();
+  value.forEach((record, index) => {
+    if (!record || typeof record !== "object" || Array.isArray(record)) {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    const fields = record;
+    const domainName = canonicalDomain(fields.domain_name);
+    const merchantId = stringValue(fields.merchant_id);
+    if (!domainName || !merchantId) {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (merchants.has(domainName)) {
+      throw validationError(`duplicate internal UCP domain: ${domainName}`);
+    }
+    merchants.set(domainName, merchantId);
+  });
+  return merchants;
+}
+var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(internal_ucp_production_default, "internal-ucp.production.json");
+var SANDBOX_MERCHANTS = validateInternalUcpMerchants(internal_ucp_sandbox_default, "internal-ucp.sandbox.json");
+function resolveInternalUcpEndpoint(rawProductUrl, options = {}) {
+  let productUrl;
+  try {
+    productUrl = new URL(rawProductUrl);
+  } catch {
+    throw validationError("invalid --product-url");
+  }
+  const domainName = canonicalDomain(productUrl.hostname);
+  const merchants = options.merchants ?? (options.sandbox ? SANDBOX_MERCHANTS : PRODUCTION_MERCHANTS);
+  const merchantId = domainName ? merchants.get(domainName) : void 0;
+  if (!domainName || !merchantId) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  const baseUrl = options.sandbox ? API_BASE_URLS.sandbox : API_BASE_URLS.production;
+  return {
+    domainName,
+    merchantId,
+    provider: "clinkbill",
+    endpoint: `${baseUrl}/agent/ucp/${encodeURIComponent(merchantId)}`
+  };
+}
+function stringValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function canonicalDomain(value) {
+  return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
 // dist/output.js
@@ -6562,9 +6613,9 @@ var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE = "5999";
 async function runCli(argv) {
   const args = parseArgs(argv);
-  const [command, subcommand] = args.positionals;
+  const [command, subcommand, nestedCommand] = args.positionals;
   if (getBooleanFlag(args.flags, "help")) {
-    printHelp(command, subcommand);
+    printHelp(command, subcommand, nestedCommand);
     return EXIT_CODES.OK;
   }
   if (!command) {
@@ -6623,6 +6674,8 @@ async function handleToolCommand(subcommand, context) {
       return toolGetUcpProfile(context);
     case "get-rest-endpoint":
       return toolGetRestEndpoint(context);
+    case "internal-ucp":
+      return toolInternalUcp(context);
     default:
       throw validationError(`unsupported tool command: ${subcommand}`);
   }
@@ -6695,6 +6748,30 @@ async function toolGetRestEndpoint(context) {
   }
   return EXIT_CODES.OK;
 }
+async function toolInternalUcp(context) {
+  const nestedCommand = context.args.positionals[2];
+  if (!nestedCommand) {
+    printHelp("tool", "internal-ucp");
+    return EXIT_CODES.OK;
+  }
+  if (nestedCommand !== "get-endpoint") {
+    throw validationError(`unsupported internal-ucp tool command: ${nestedCommand}`);
+  }
+  const productUrl = requireStringFlag(context.args.flags, "missing --product-url", "product-url");
+  try {
+    const result = resolveInternalUcpEndpoint(productUrl, {
+      sandbox: getBooleanFlag(context.args.flags, "sandbox")
+    });
+    printJson(result, context.globalOptions.format);
+  } catch (error) {
+    if (error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST") {
+      printJson({ error_code: error.message }, context.globalOptions.format);
+      return EXIT_CODES.OK;
+    }
+    throw error;
+  }
+  return EXIT_CODES.OK;
+}
 function isCheckoutStateNotFound(error) {
   return error instanceof CliError && error.message === "checkout_state_not_found";
 }
@@ -6728,7 +6805,7 @@ function resolveWatchFlag(flags) {
   }
   return true;
 }
-async function maybeWatchEvents(context, url, label, watchTarget = {}) {
+async function maybeWatchEvents(context, url, label) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     return;
   }
@@ -6736,8 +6813,7 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}) {
     runtimeConfig: context.runtimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     url,
-    label,
-    ...watchTarget
+    label
   });
   printSuccess(result, context.globalOptions.format);
 }
@@ -7186,6 +7262,7 @@ async function handleUcpCheckoutCommand(subcommand, context) {
 }
 async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
+  rejectUcpCheckoutUnsupportedFlags(flags);
   const currency = requireStringFlag(flags, "missing --currency", "currency");
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
@@ -7197,8 +7274,6 @@ async function ucpCheckoutCreate(context) {
     order_channel_id: getStringFlag(flags, "order-channel-id"),
     customer_id: customerId,
     context: { currency },
-    instruction_id: requireStringFlag(flags, "missing --instruction-id", "instruction-id"),
-    mandate_id: requireStringFlag(flags, "missing --mandate-id", "mandate-id"),
     buyer,
     line_items: normalizeExternalCheckoutCreateLineItems(requireJsonArrayFlag(flags, "line-items"), currency),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
@@ -7222,7 +7297,7 @@ function withWalletStatusEmail(buyer, email) {
 }
 async function ucpCheckoutGet(context) {
   const flags = context.args.flags;
-  rejectUcpCheckoutCreateOnlyFlags(flags);
+  rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
     ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`),
@@ -7235,7 +7310,7 @@ async function ucpCheckoutGet(context) {
 }
 async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
-  rejectUcpCheckoutCreateOnlyFlags(flags);
+  rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const body = compact({
     line_items: requireJsonArrayFlag(flags, "line-items"),
@@ -7255,27 +7330,47 @@ async function ucpCheckoutUpdate(context) {
 }
 async function ucpCheckoutComplete(context) {
   const flags = context.args.flags;
-  rejectUcpCheckoutCreateOnlyFlags(flags);
+  rejectUcpCheckoutUnsupportedFlags(flags);
   if ("credential-token" in flags) {
     throw validationError("--credential-token is not supported on external ucp-checkout complete; pass --payment-instrument-id");
   }
   const checkoutId = requireCheckoutId(flags);
-  const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
+  let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
+  if (!paymentInstrumentId) {
+    paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
+  }
+  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const result = await requestJson({
     ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`),
     method: "POST",
     headers: buildUcpCheckoutHeaders(context),
-    body: {
-      payment_instrument_id: paymentInstrumentId
-    },
+    body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
   return finishApiCommand(result, context);
 }
+function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
+  return {
+    payment: {
+      instruments: [
+        {
+          id: `${customerId}#${paymentInstrumentId}`,
+          handler_id: "clink_pay",
+          type: "card",
+          selected: true,
+          credential: {
+            type: "PAYMENT_GATEWAY",
+            token: paymentInstrumentId
+          }
+        }
+      ]
+    }
+  };
+}
 async function ucpCheckoutCancel(context) {
   const flags = context.args.flags;
-  rejectUcpCheckoutCreateOnlyFlags(flags);
+  rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const result = await requestJson({
     ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/cancel`),
@@ -7397,15 +7492,18 @@ function getCurrencyFractionDigits(currency) {
     throw validationError(`unsupported currency: ${currency}`);
   }
 }
-function rejectUcpCheckoutCreateOnlyFlags(flags) {
+function rejectUcpCheckoutUnsupportedFlags(flags) {
   if ("instruction-id" in flags || "mandate-id" in flags) {
-    throw validationError("--instruction-id and --mandate-id are only supported on ucp-checkout create");
+    throw validationError("--instruction-id and --mandate-id are not supported on ucp-checkout");
+  }
+  if ("idempotency-key" in flags) {
+    throw validationError("--idempotency-key is generated by clink-cli and cannot be provided");
   }
 }
 function buildUcpCheckoutHeaders(context) {
   return {
     ...buildCustomerApiKeyHeaders(context.runtimeConfig),
-    "Idempotency-Key": getStringFlag(context.args.flags, "idempotency-key") ?? randomUUID()
+    "Idempotency-Key": randomUUID()
   };
 }
 async function handleInstructionCommand(subcommand, context) {
@@ -7521,10 +7619,7 @@ async function instructionCreate(context) {
     requiresPasskey: true,
     passkeyUrl
   }, context.globalOptions.format);
-  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
-    eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId }
-  });
+  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization");
   return EXIT_CODES.OK;
 }
 async function instructionGet(context) {
@@ -7545,11 +7640,8 @@ async function instructionSignUrl(context) {
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, url);
-  printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
-  await maybeWatchEvents(context, url, "purchase instruction authorization", {
-    eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId }
-  });
+  printSuccess({ url }, context.globalOptions.format);
+  await maybeWatchEvents(context, url, "purchase instruction authorization");
   return EXIT_CODES.OK;
 }
 async function instructionList(context) {

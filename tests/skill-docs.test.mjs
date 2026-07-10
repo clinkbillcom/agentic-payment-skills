@@ -64,9 +64,13 @@ test('skill documents intent routing and checkout route FSMs', () => {
   assert.match(skill, /UCP_CHECKOUT_ROUTE_FSM/u);
 });
 
-test('UCP checkout route probes standard UCP profile before external default', () => {
-  assert.match(ucpCheckout, /known standard UCP domain allowlist/u);
-  assert.match(ucpCheckout, /www\.bruceleeclub\.com/u);
+test('UCP checkout route delegates internal detection to clink-cli before profile fallback', () => {
+  assert.match(skill, /clink-cli tool internal-ucp get-endpoint/u);
+  assert.match(skill, /NOT_IN_INTERNAL_UCP_LIST/u);
+  assert.match(skill, /INTERNAL_UCP_CHECKOUT/u);
+  assert.match(ucpCheckout, /clink-cli tool internal-ucp get-endpoint/u);
+  assert.match(ucpCheckout, /NOT_IN_INTERNAL_UCP_LIST/u);
+  assert.match(ucpCheckout, /internal UCP checkout/iu);
   assert.match(ucpCheckout, /\.well-known\/ucp-clink/u);
   assert.match(ucpCheckout, /parseable JSON/u);
   assert.match(ucpCheckout, /clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json/u);
@@ -75,12 +79,22 @@ test('UCP checkout route probes standard UCP profile before external default', (
   assert.match(ucpCheckout, /provider.*not.*clinkbill.*external/u);
   assert.match(ucpCheckout, /--endpoint <rest_endpoint>/u);
   assert.match(ucpCheckout, /standard_ucp_profile_absent/u);
+  assert.doesNotMatch(skill, /STANDARD_UCP_DOMAINS/u);
+  assert.doesNotMatch(skill, /STANDARD_UCP_CHECKOUT/u);
+  assert.doesNotMatch(ucpCheckout, /known standard UCP domain allowlist/u);
+  assert.doesNotMatch(ucpCheckout, /www\.bruceleeclub\.com/u);
 });
 
-test('README summaries include the standard UCP provider gate', () => {
+test('README summaries include CLI-first internal routing and the profile provider gate', () => {
+  assert.match(readme, /internal-ucp get-endpoint/u);
+  assert.match(readme, /NOT_IN_INTERNAL_UCP_LIST/u);
+  assert.match(readme, /internal checkout/iu);
   assert.match(readme, /get-rest-endpoint/u);
   assert.match(readme, /provider.*clinkbill/u);
   assert.match(readme, /external checkout/u);
+  assert.match(readmeZh, /internal-ucp get-endpoint/u);
+  assert.match(readmeZh, /NOT_IN_INTERNAL_UCP_LIST/u);
+  assert.match(readmeZh, /internal checkout/iu);
   assert.match(readmeZh, /get-rest-endpoint/u);
   assert.match(readmeZh, /provider.*clinkbill/u);
   assert.match(readmeZh, /external checkout/u);
