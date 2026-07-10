@@ -5719,7 +5719,16 @@ function getHelpText(command, subcommand, nestedCommand) {
 }
 
 // dist/internal-ucp.production.json
-var internal_ucp_production_default = [];
+var internal_ucp_production_default = [
+  {
+    domain_name: "uebmaw-it.myshopify.com",
+    merchant_id: "mcht_frnagwqi4k43"
+  },
+  {
+    domain_name: "www.bruceleeclub.com",
+    merchant_id: "mcht_frnz6yfrz1sd"
+  }
+];
 
 // dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
