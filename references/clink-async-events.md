@@ -63,6 +63,26 @@ When a flow has more than one valid readiness event, do not gate on a single res
 
 While a concurrent watch is still running for the same flow, poll with `--no-ack` so a readiness event is not consumed before it can be correlated. Acknowledge only once you own the event and have correlated it to the resource.
 
+## FSM Wait Specs
+
+For code-driven workflows, build an explicit waitSpec before launching the poll. Use `lib/event-workflow-fsm.mjs` `classifyEventWaitRequest` to turn the waitSpec into the next command, and use `classifyEventPollObservation` on the poll result before resuming the business workflow.
+
+Instruction activation waitSpec:
+
+```json
+{
+  "eventType": "purchase_instruction.activated",
+  "expectedResource": {
+    "instructionId": "ins_xxx",
+    "purchaseInstructionId": "ins_xxx"
+  },
+  "pollCommand": "clink-cli events poll --type purchase_instruction.activated --no-ack --format json",
+  "verifyCommand": "clink-cli instruction get --purchase-instruction-id ins_xxx --format json"
+}
+```
+
+Start that poll immediately after the Passkey URL is emitted. If the poll returns the right event type for a different `instructionId` or `purchaseInstructionId`, keep waiting or return a resumable pending state; do not resume the payment or checkout.
+
 ## Resource Correlation
 
 An event type alone is not proof that the current workflow completed. After any built-in watch or `events poll`, match the returned event to the resource that this workflow is waiting on:
