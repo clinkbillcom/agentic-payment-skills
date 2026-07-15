@@ -140,6 +140,73 @@ test('honors an explicit false authorization flag over imperative text', () => {
   assert.deepEqual(result.missing, ['authorization']);
 });
 
+test('fail-closes when structured authorization conflicts with negated text', () => {
+  const result = classifyPaymentIntent({
+    text: '不要打赏 clinkpay/pollyreach 2 USD',
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['authorization']);
+});
+
+for (const text of [
+  '不要打赏 clinkpay/pollyreach 2 USD',
+  '别打赏 clinkpay/pollyreach 2 USD',
+  '打赏 clinkpay/pollyreach 2 USD 吗？',
+  '我昨天打赏 clinkpay/pollyreach 2 USD',
+  '如果打赏 clinkpay/pollyreach 2 USD 就继续',
+]) {
+  test(`does not authorize unsafe tip wording: ${text}`, () => {
+    const result = classifyPaymentIntent({ text });
+
+    assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+    assert.deepEqual(result.missing, ['authorization']);
+  });
+}
+
+test('rejects multiple distinct identity targets instead of choosing the first', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/a 或 clinkpay/b 2 USD' });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_target_ambiguous');
+  assert.deepEqual(result.missing, ['single_target']);
+});
+
+test('rejects multiple distinct amounts instead of choosing the first', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/a 2 USD 或 3 USD' });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_amount_ambiguous');
+  assert.deepEqual(result.missing, ['single_amount']);
+});
+
+test('list plus tip remains read-only and requires follow-up authorization', () => {
+  const result = classifyPaymentIntent({ text: '列出可打赏 skill，然后打赏序号 2 的 skill 2 USD' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_LIST);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_LIST_WORKFLOW);
+  assert.equal(result.followUpTipRequested, true);
+});
+
+test('rejects conflicting structured and textual tip fields', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip',
+    publisher: 'clinkpay',
+    skillName: 'a',
+    amount: 2,
+    currency: 'USD',
+    tipAuthorized: true,
+    text: '打赏 clinkpay/b 3 USD',
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_structured_text_conflict');
+  assert.deepEqual(result.missing, ['consistent_authorization']);
+});
+
 test('rejects ambiguous identity and Number tip targets', () => {
   const result = classifyPaymentIntent({
     intent: 'skill_tip',

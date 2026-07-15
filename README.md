@@ -25,7 +25,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Wallet readiness checks
 - Card binding and management
 - Payment execution (direct and session mode)
-- Public skill discovery with `clink-cli skills list --all`, rendered as Number, publisher, skill name, and skill ID
+- Tippable skill discovery with `clink-cli skills list --all --tippable`, rendered as Number, publisher, skill name, and skill ID
 - Explicitly authorized USD tips with `clink-cli skills tip` by publisher/name or a verified Number; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
 - UCP checkout for product orders — parse product-page facts with `clink-cli tool parse-item`, select one available item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization when required, then call `clink-cli tool internal-ucp get-endpoint` with the product URL. A configured endpoint uses internal checkout; only `NOT_IN_INTERNAL_UCP_LIST` falls back to `/.well-known/ucp-clink` plus `get-rest-endpoint`, where provider `clinkbill` uses internal checkout and other providers or discovery failures use external checkout
@@ -39,4 +39,4 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 
 For product checkout, read `references/clink-ucp-checkout.md` before running `clink-cli tool parse-item`, `clink-cli instruction list`, or `clink-cli ucp-checkout create/complete`.
 
-For public skill listing or tipping, read `references/clink-skill-tip.md` before running `clink-cli skills list --all` or `clink-cli skills tip`.
+For public skill listing or tipping, read `references/clink-skill-tip.md` before running `clink-cli skills list --all --tippable` or `clink-cli skills tip`; Number tips bind the displayed identity with `--expected-skill-id`.

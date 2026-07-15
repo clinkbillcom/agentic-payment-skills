@@ -39,12 +39,14 @@ test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);
   assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
   assert.match(runBundle(['skills', 'list', '--help']), /skills list --all/u);
+  assert.match(runBundle(['skills', 'list', '--help']), /--tippable/u);
   assert.match(runBundle(['skills', 'tip', '--help']), /--publisher <publisher>/u);
   assert.match(runBundle(['skills', 'tip', '--help']), /--number <number>/u);
+  assert.match(runBundle(['skills', 'tip', '--help']), /--expected-skill-id <skillId>/u);
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.1.4');
+  assert.equal(vendorPackage.version, '0.1.5');
 });
 
 test('vendored instruction sign-url exposes identifiers for correlated activation watches', () => {
@@ -86,6 +88,7 @@ test('vendored CLI Number tip dry-run is side-effect free and normalized', () =>
   const result = runBundleJson([
     'skills', 'tip',
     '--number', '2',
+    '--expected-skill-id', 'skl_expected',
     '--amount', '2',
     '--dry-run',
     '--format', 'json',
@@ -95,6 +98,7 @@ test('vendored CLI Number tip dry-run is side-effect free and normalized', () =>
   assert.deepEqual(result.data, {
     status: 'planned',
     number: 2,
+    expectedSkillId: 'skl_expected',
     amount: 2,
     currency: 'USD',
     dryRun: true,

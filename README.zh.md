@@ -25,7 +25,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包状态检查
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
-- 使用 `clink-cli skills list --all` 查询可打赏 Skill，并按序号、发布者、Skill 名称、skill_id 展示
+- 使用 `clink-cli skills list --all --tippable` 查询可打赏 Skill，并按序号、发布者、Skill 名称、skill_id 展示
 - 使用 `clink-cli skills tip` 按 publisher/name 或校验后的 Number 执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
 - UCP 商品下单 —— 先用 `clink-cli tool parse-item` 解析并选择商品，判断履约方式；需要邮寄的实物商品必须提供完整的标准收货地址；在 Visa/VIC 需要时完成授权匹配；随后用商品 URL 调用 `clink-cli tool internal-ucp get-endpoint`。命中配置时直接走 internal checkout；只有返回 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `/.well-known/ucp-clink` 与 `get-rest-endpoint` 自主探测，其中 provider 为 `clinkbill` 时走 internal checkout，其他 provider 或探测失败时走 external checkout
@@ -39,4 +39,4 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 
 商品下单前请先读取 `references/clink-ucp-checkout.md`，再执行 `clink-cli tool parse-item`、`clink-cli instruction list`、`clink-cli ucp-checkout create/complete`。
 
-查询可打赏 Skill 或执行打赏前，请先读取 `references/clink-skill-tip.md`，再执行 `clink-cli skills list --all` 或 `clink-cli skills tip`。
+查询可打赏 Skill 或执行打赏前，请先读取 `references/clink-skill-tip.md`，再执行 `clink-cli skills list --all --tippable` 或 `clink-cli skills tip`；Number 打赏使用 `--expected-skill-id` 绑定已展示的身份。

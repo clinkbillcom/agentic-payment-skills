@@ -4875,6 +4875,7 @@ var OPTION_DEFINITIONS = [
   { name: "format", flags: "--format <format>" },
   { name: "dry-run", flags: "--dry-run" },
   { name: "all", flags: "--all" },
+  { name: "tippable", flags: "--tippable" },
   { name: "force", flags: "--force" },
   { name: "open", flags: "--open" },
   { name: "base-url", flags: "--base-url <url>" },
@@ -4886,6 +4887,7 @@ var OPTION_DEFINITIONS = [
   { name: "name", flags: "--name <name>" },
   { name: "publisher", flags: "--publisher <publisher>" },
   { name: "number", flags: "--number <number>" },
+  { name: "expected-skill-id", flags: "--expected-skill-id <skillId>" },
   { name: "source", flags: "--source <value>" },
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
@@ -5004,16 +5006,18 @@ import path from "node:path";
 
 // dist/domains.js
 var API_BASE_URLS = {
-  production: "https://api.clinkbill.com",
-  sandbox: "https://uat-api.clinkbill.com"
-  // sandbox: "https://api.clinkbill.dev"
+  sandbox: "https://uat-api.clinkbill.com",
+  //sandbox: "https://api.clinkbill.dev",
+  production: "https://api.clinkbill.com"
 };
 var AGENT_BASE_URLS = {
   sandbox: "https://uat-agent.clinkbill.com",
+  //sandbox: "https://agent.clinkbill.dev",
   production: "https://agent.clinkbill.com"
 };
 var DASHBOARD_BASE_URLS = {
   sandbox: "https://uat-dashboard.clinkbill.com",
+  //sandbox: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
@@ -6029,7 +6033,7 @@ Examples:
   clink-cli card setup-link --open
   clink-cli skills list --all --format pretty
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --number 2 --amount 2
+  clink-cli skills tip --number 2 --expected-skill-id skl_xxx --amount 2
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli ucp-checkout get --checkout-id chk_xxx
   clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
@@ -6060,7 +6064,7 @@ Examples:
   clink-cli skills install clinkpay/PollyReach@v1.0.0
   clink-cli skills install clinkpay/PollyReach --force
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --number 2 --amount 2
+  clink-cli skills tip --number 2 --expected-skill-id skl_xxx --amount 2
 `;
 var SKILLS_LIST_HELP = `clink-cli skills list
 
@@ -6071,6 +6075,7 @@ Required Arguments:
   --all                        Request all public skills with pageSize=999
 
 Options:
+  --tippable                  Keep only rows with valid publisher, name, skillId, and merchantId
   --base-url <url>             Derive the dashboard environment from this API base URL
   --sandbox                    Use the UAT dashboard environment unless the API base is overridden
   --timeout <ms>               Request timeout in milliseconds
@@ -6080,11 +6085,13 @@ Endpoint:
   GET /prod-api/skill-marketplace/public/skills?pageSize=999&sort=NEW
 
 Behavior:
-  Reverses the returned items array, then injects a one-based Number into every item.
+  With --tippable, filters non-chargeable rows before numbering.
+  Reverses the selected items array, then injects a one-based Number into every item.
   The resulting JSON array is returned through the standard success envelope.
 
 Examples:
   clink-cli skills list --all --format pretty
+  clink-cli skills list --all --tippable --format pretty
 `;
 var SKILLS_INSTALL_HELP = `clink-cli skills install
 
@@ -6098,14 +6105,18 @@ Arguments:
 
 Options:
   --force                     Replace an existing installation and agent link/copy backups
-  --base-url <url>            Resolve the download ticket from this API environment
-  --sandbox                   Use the sandbox API environment unless overridden
+  --base-url <url>            Derive the dashboard environment from this API base URL
+  --sandbox                   Use the sandbox dashboard environment unless overridden
   --timeout <ms>              Request/download timeout in milliseconds
   --dry-run                   Plan the install without network calls or filesystem writes
 ${OUTPUT_OPTIONS}
 
 Install Location:
-  Skill releases are stored under ~/.agents/skills and exposed through the skill's current path.
+  A single-skill archive contains SKILL.md at its root or in one wrapper directory and is exposed
+  through ~/.agents/skills/<skillName>.
+  A multi-skill archive contains two or more first-level directories with their own SKILL.md files.
+  Those skills are exposed as sibling entries under ~/.agents/skills using the directory names.
+  Multi-skill releases and Agent updates are committed or rolled back together.
 
 Agent Integration:
   Existing local agent homes are detected automatically and updated where supported:
@@ -6113,7 +6124,7 @@ Agent Integration:
   OpenClaw/Hermes, and CodeWork/ChatGPT.
 
 Endpoint:
-  GET /public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
+  GET /prod-api/skill-marketplace/public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
 
 Examples:
   clink-cli skills install clinkpay/PollyReach@v1.0.0
@@ -6125,12 +6136,14 @@ var SKILLS_TIP_HELP = `clink-cli skills tip
 
 Usage:
   clink-cli skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
-  clink-cli skills tip --number <number> --amount <amount> [options]
+  clink-cli skills tip --number <number> --expected-skill-id <skillId> --amount <amount> [options]
 
 Target (choose one):
   --publisher <publisher>      Exact publisher; requires --name
   --name <skillName>           Exact skill name; requires --publisher
-  --number <number>            Positive Number from 'skills list --all'
+  --number <number>            Positive Number from 'skills list --all --tippable'
+  --expected-skill-id <skillId>
+                               Immutable skill ID displayed for the selected Number
 
 Required Argument:
   --amount <amount>            Any positive finite USD amount
@@ -6142,7 +6155,7 @@ ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   Tips use USD and the refreshed default payment method.
-  Number targets are resolved from a fresh list-all result and may change when the list changes.
+  Number targets resolve against a fresh tippable list and must still match --expected-skill-id.
   Registered Visa cards use VIC instruction/mandate authorization.
   Other cards are charged without instruction_id or mandate_id.
 `;
@@ -7742,9 +7755,9 @@ function classifyChargeData(data) {
   const channel = isRecord3(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   const action = isRecord3(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
-  const statusValue = Number(data.status);
+  const status = finiteNumber(channel.status);
   return {
-    status: Number.isFinite(statusValue) ? statusValue : void 0,
+    status,
     requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
     ...redirectUrl ? { redirectUrl } : {}
   };
@@ -7772,6 +7785,16 @@ async function executeCharge(input, runtime) {
 }
 function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function finiteNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return void 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
 }
 function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
@@ -8545,6 +8568,122 @@ import { chmod, lstat as lstat2, mkdir as mkdir3, readdir, rm as rm2 } from "nod
 import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+
+// dist/skills/spec.js
+var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
+var MAX_SEGMENT_LENGTH = 128;
+var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
+var TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
+var FORBIDDEN_TIP_FLAGS = [
+  "payment-instrument-id",
+  "instruction-id",
+  "purchase-instruction-id",
+  "mandate-id",
+  "merchant-id",
+  "session-id",
+  "payment-method-type",
+  "shipping-address",
+  "products",
+  "force"
+];
+function parseSkillPackageSpec(value) {
+  const slashIndex = value.indexOf("/");
+  if (slashIndex === -1 || slashIndex !== value.lastIndexOf("/")) {
+    throw invalidPackageSpec();
+  }
+  const publisher = value.slice(0, slashIndex);
+  const skillAndVersion = value.slice(slashIndex + 1);
+  const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
+  const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
+  const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && !isValidSegment(requestedVersion, VERSION_PATTERN)) {
+    throw invalidPackageSpec();
+  }
+  return { publisher, skillName, requestedVersion };
+}
+function parseSkillInstallArgs(operands, flags) {
+  if (operands.length === 0) {
+    throw validationError(`skills install requires a package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  if (operands.length !== 1) {
+    throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  return {
+    ...parseSkillPackageSpec(operands[0]),
+    force: getBooleanFlag(flags, "force")
+  };
+}
+function parseSkillTipArgs(operands, flags) {
+  if (operands.length !== 0) {
+    throw validationError("skills tip does not accept positional arguments; use --publisher with --name, or --number");
+  }
+  for (const name of FORBIDDEN_TIP_FLAGS) {
+    if (flags[name] !== void 0) {
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default payment method" : `--${name} is not supported by skills tip`);
+    }
+  }
+  const publisher = getStringFlag(flags, "publisher");
+  const skillName = getStringFlag(flags, "name");
+  const numberText = getStringFlag(flags, "number");
+  const expectedSkillId = getStringFlag(flags, "expected-skill-id");
+  const hasPublisher = flags.publisher !== void 0;
+  const hasSkillName = flags.name !== void 0;
+  const hasNumber = flags.number !== void 0;
+  const hasExpectedSkillId = flags["expected-skill-id"] !== void 0;
+  if (hasNumber && (hasPublisher || hasSkillName)) {
+    throw validationError("--number cannot be combined with --publisher or --name");
+  }
+  if (hasPublisher !== hasSkillName) {
+    throw validationError("skills tip requires both --publisher and --name");
+  }
+  if (!hasNumber && hasExpectedSkillId) {
+    throw validationError("--expected-skill-id requires --number");
+  }
+  let target;
+  if (hasNumber) {
+    if (numberText === void 0 || !/^[1-9]\d*$/.test(numberText) || !Number.isSafeInteger(Number(numberText))) {
+      throw validationError("--number must be a positive integer");
+    }
+    if (!hasExpectedSkillId) {
+      throw validationError("skills tip --number requires --expected-skill-id");
+    }
+    if (expectedSkillId === void 0 || expectedSkillId.length === 0 || expectedSkillId.length > 256 || expectedSkillId.trim() !== expectedSkillId || /[\u0000-\u001F\u007F]/.test(expectedSkillId)) {
+      throw validationError("--expected-skill-id must be a valid nonempty skill ID");
+    }
+    target = { kind: "number", number: Number(numberText), expectedSkillId };
+  } else if (hasPublisher && hasSkillName) {
+    if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+      throw invalidTipIdentity();
+    }
+    target = { kind: "identity", publisher, skillName };
+  } else {
+    throw validationError("skills tip requires either --publisher with --name, or --number");
+  }
+  const currency = getStringFlag(flags, "currency");
+  if (currency !== void 0 && currency.toUpperCase() !== "USD") {
+    throw validationError("skills tip only supports USD");
+  }
+  return {
+    target,
+    amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
+    currency: "USD"
+  };
+}
+function isValidSkillIdentitySegment(value) {
+  return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
+}
+function isValidSegment(value, pattern) {
+  return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
+}
+function invalidPackageSpec() {
+  return validationError(`invalid skill package; expected ${PACKAGE_SPEC_SYNTAX}`);
+}
+function invalidTipIdentity() {
+  return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
+}
+
+// dist/skills/archive.js
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -8636,9 +8775,9 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       throw new Error("archive size metadata mismatch");
     }
     closeZip(zipFile);
-    const skillRoot = await selectSkillRoot(rawRoot);
+    const layout = await selectSkillLayout(rawRoot);
     return {
-      skillRoot,
+      ...layout,
       entryCount,
       uncompressedBytes: byteCount.total
     };
@@ -8817,32 +8956,46 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
     await chmod(current, 493);
   }
 }
-async function selectSkillRoot(rawRoot) {
-  const topLevelNames = await readdir(rawRoot);
+async function selectSkillLayout(rawRoot) {
+  const topLevelNames = (await readdir(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
   if (topLevelNames.includes("SKILL.md")) {
     const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
     if (rootSkill.isFile()) {
-      return rawRoot;
+      return { layout: "single", skillRoot: rawRoot };
     }
   }
-  if (topLevelNames.length !== 1) {
-    throw new Error("archive must contain one skill root");
+  const skillRoots = [];
+  const nonSkillDirectories = [];
+  for (const name of topLevelNames) {
+    const candidateRoot = resolve2(rawRoot, name);
+    assertPathContained(rawRoot, candidateRoot);
+    const candidate = await lstat2(candidateRoot);
+    if (!candidate.isDirectory()) {
+      continue;
+    }
+    const candidateNames = await readdir(candidateRoot);
+    if (!candidateNames.includes("SKILL.md")) {
+      nonSkillDirectories.push(name);
+      continue;
+    }
+    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
+    if (!skillFile.isFile()) {
+      throw new Error("archive skill SKILL.md is not a regular file");
+    }
+    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
   }
-  const wrapperRoot = resolve2(rawRoot, topLevelNames[0]);
-  assertPathContained(rawRoot, wrapperRoot);
-  const wrapper = await lstat2(wrapperRoot);
-  if (!wrapper.isDirectory()) {
-    throw new Error("archive wrapper is not a directory");
+  if (skillRoots.length === 1 && nonSkillDirectories.length === 0) {
+    return { layout: "single", skillRoot: skillRoots[0].skillRoot };
   }
-  const wrapperNames = await readdir(wrapperRoot);
-  if (!wrapperNames.includes("SKILL.md")) {
-    throw new Error("archive wrapper lacks SKILL.md");
+  if (skillRoots.length < 2 || nonSkillDirectories.length > 0) {
+    throw new Error("archive must contain one skill root or multiple one-level skill roots");
   }
-  const wrappedSkill = await lstat2(resolve2(wrapperRoot, "SKILL.md"));
-  if (!wrappedSkill.isFile()) {
-    throw new Error("archive wrapper SKILL.md is not a regular file");
+  for (const skill of skillRoots) {
+    if (!isValidSkillIdentitySegment(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
+      throw new Error("archive contains an invalid multi-skill name");
+    }
   }
-  return wrapperRoot;
+  return { layout: "multi", skillRoots };
 }
 function closeZip(zipFile) {
   if (zipFile?.isOpen === true) {
@@ -9114,12 +9267,28 @@ async function cancelResponseBody(response) {
 
 // dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
+var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
 async function reportSkillPublicDownload(input, overrides = {}) {
+  await reportSkillMetric(input, "public-download", { source: PUBLIC_DOWNLOAD_METRIC_SOURCE }, overrides);
+}
+async function reportSkillTip(input, overrides = {}) {
+  await reportSkillMetric(input, "tip", compact2({
+    orderId: input.orderId,
+    versionNo: input.versionNo,
+    amount: input.amount,
+    currency: input.currency,
+    source: TIP_METRIC_SOURCE
+  }), overrides);
+}
+function compact2(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
+}
+async function reportSkillMetric(input, metric, body, overrides) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch
   };
-  const url = new URL(`${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/public-download`, ensureTrailingSlash2(input.dashboardBaseUrl));
+  const url = new URL(`${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/${metric}`, ensureTrailingSlash2(input.dashboardBaseUrl));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
   try {
@@ -9128,12 +9297,12 @@ async function reportSkillPublicDownload(input, overrides = {}) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ source: PUBLIC_DOWNLOAD_METRIC_SOURCE }),
+      body: JSON.stringify(body),
       signal: controller.signal
     });
     await response.body?.cancel();
     if (response.status < 200 || response.status >= 300) {
-      throw new Error("failed to report skill public download");
+      throw new Error(`failed to report skill ${metric}`);
     }
   } finally {
     clearTimeout(timeout);
@@ -9272,6 +9441,55 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
+// dist/skills/marketplace.js
+var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
+var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
+async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
+  const body = await request({
+    baseUrl: input.dashboardBaseUrl,
+    path: PUBLIC_SKILLS_MARKETPLACE_PATH,
+    query: { pageSize: 999, sort: "NEW" },
+    timeoutMs: input.timeoutMs,
+    maxResponseBodyBytes: LIST_ALL_MAX_RESPONSE_BODY_BYTES
+  });
+  const items = selectPublicSkillItems(body);
+  if (!items) {
+    throw apiError("invalid public skills response", 502);
+  }
+  const selectedItems = input.tippableOnly ? items.filter(isTippablePublicSkill) : items;
+  return [...selectedItems].reverse().map((item, index) => {
+    const copy = { ...item };
+    delete copy.Number;
+    return { Number: index + 1, ...copy };
+  });
+}
+function isTippablePublicSkill(item) {
+  return hasNonemptyString(item.publisher) && hasNonemptyString(item.name) && hasNonemptyString(item.skillId) && hasNonemptyString(item.merchantId);
+}
+function hasNonemptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function selectPublicSkillItems(body) {
+  const payload = selectPublicSkillPayload(body);
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord4)) {
+    return void 0;
+  }
+  return payload.items;
+}
+function selectPublicSkillPayload(body) {
+  if (isRecord4(body) && Array.isArray(body.items)) {
+    return body;
+  }
+  const unwrapped = unwrapApiData(body);
+  if (isRecord4(unwrapped) && Array.isArray(unwrapped.items)) {
+    return unwrapped;
+  }
+  return void 0;
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
@@ -9281,7 +9499,7 @@ var MAX_SKILL_ID_LENGTH = 128;
 async function getSkillDownloadTicket(input, overrides) {
   const body = await requestPublicSkillsJson({
     baseUrl: input.baseUrl,
-    path: "/public/skills/download-url",
+    path: `${PUBLIC_SKILLS_MARKETPLACE_PATH}/download-url`,
     query: {
       publisher: input.packageSpec.publisher,
       skillName: input.packageSpec.skillName,
@@ -9292,7 +9510,7 @@ async function getSkillDownloadTicket(input, overrides) {
     invalidResponseCode: 400,
     networkErrorMessage: NETWORK_ERROR_MESSAGE3
   }, overrides);
-  return parseDownloadTicket(body);
+  return parseDownloadTicket(unwrapApiData(body));
 }
 function parseDownloadTicket(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -10827,13 +11045,13 @@ async function installSkill(input, overrides = {}) {
   const packageSpec = toPackageSpec(input);
   const skillsRoot = join4(input.homeDir, ".agents", "skills");
   const installPath = join4(skillsRoot, input.skillName);
-  const detectedAgents = await dependencies.detectAgentRoots({
-    homeDir: input.homeDir,
-    env: input.env,
-    skillsRoot,
-    skillName: input.skillName
-  });
   if (input.dryRun) {
+    const detectedAgents = await dependencies.detectAgentRoots({
+      homeDir: input.homeDir,
+      env: input.env,
+      skillsRoot,
+      skillName: input.skillName
+    });
     return {
       publisher: input.publisher,
       skillName: input.skillName,
@@ -10848,20 +11066,9 @@ async function installSkill(input, overrides = {}) {
     };
   }
   const stagingUuid = dependencies.randomUUID();
-  const agentUuid = dependencies.randomUUID();
-  const publicationUuid = dependencies.randomUUID();
   const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
-  const agentPlans = await dependencies.prepareAgents({
-    detected: detectedAgents,
-    currentPath: preliminaryPaths.currentPath,
-    publisher: input.publisher,
-    skillName: input.skillName,
-    force: input.force,
-    backupsRoot: preliminaryPaths.backupsRoot,
-    uuid: agentUuid
-  });
   let installLock = null;
-  let published = null;
+  const publishedSkills = [];
   const appliedAgents = [];
   let committed = false;
   let finalCleanupStarted = false;
@@ -10870,7 +11077,7 @@ async function installSkill(input, overrides = {}) {
     await mkdir6(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
     dependencies.log("Resolving skill download URL");
     const ticket = await dependencies.getTicket({
-      baseUrl: input.baseUrl,
+      baseUrl: input.dashboardBaseUrl,
       packageSpec,
       timeoutMs: input.timeoutMs
     });
@@ -10880,49 +11087,50 @@ async function installSkill(input, overrides = {}) {
       destinationPath: join4(preliminaryPaths.stagingPath, "package.zip"),
       timeoutMs: input.timeoutMs,
       refreshTicket: () => dependencies.getTicket({
-        baseUrl: input.baseUrl,
+        baseUrl: input.dashboardBaseUrl,
         packageSpec,
         timeoutMs: input.timeoutMs
       })
     });
     dependencies.log("Extracting skill archive");
     const extracted = await dependencies.extractArchive(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
-    const finalPaths = resolveStorePaths(input.homeDir, packageSpec, downloaded.sha256, stagingUuid);
-    const marker = createInstallMarker(input, downloaded, dependencies.now());
+    const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
     dependencies.log("Publishing skill release");
-    published = await dependencies.publishRelease({
-      paths: finalPaths,
-      extractedRoot: extracted.skillRoot,
-      marker,
-      force: input.force,
-      uuid: publicationUuid
-    });
-    dependencies.log("Updating detected agents");
-    const agents = [];
-    for (const plan of agentPlans) {
-      const result2 = await plan.apply({
-        releasePath: published.releasePath,
-        marker
+    for (const unit of installUnits) {
+      unit.published = await dependencies.publishRelease({
+        paths: unit.paths,
+        extractedRoot: unit.skillRoot,
+        marker: unit.marker,
+        force: input.force,
+        uuid: unit.publicationUuid
       });
-      appliedAgents.push(plan);
-      agents.push(result2);
+      publishedSkills.push(unit.published);
+    }
+    dependencies.log("Updating detected agents");
+    for (const unit of installUnits) {
+      if (unit.published === null) {
+        throw new Error("skill publication is missing");
+      }
+      if (!unit.agentsPrepared) {
+        await prepareUnitAgents(unit, input, dependencies);
+      }
+      for (const plan of unit.agentPlans) {
+        const result2 = await plan.apply({
+          releasePath: unit.published.releasePath,
+          marker: unit.marker
+        });
+        appliedAgents.push(plan);
+        unit.agentResults.push(result2);
+      }
     }
     for (const plan of appliedAgents) {
       await plan.finalize();
     }
-    await published.finalize();
+    for (const published of publishedSkills) {
+      await published.finalize();
+    }
     committed = true;
-    const result = {
-      publisher: input.publisher,
-      skillName: input.skillName,
-      requestedVersion: input.requestedVersion,
-      action: published.action,
-      installPath: published.currentPath,
-      sizeBytes: downloaded.sizeBytes,
-      sha256: downloaded.sha256,
-      backupPath: published.backupPath,
-      agents
-    };
+    const result = createInstallResult(input, downloaded, extracted.layout, skillsRoot, installUnits);
     finalCleanupStarted = true;
     await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies);
     installLock = null;
@@ -10930,13 +11138,113 @@ async function installSkill(input, overrides = {}) {
     return result;
   } catch (error) {
     if (!committed) {
-      await rollbackInstall(appliedAgents, published, error);
+      await rollbackInstall(appliedAgents, publishedSkills, error);
     }
     if (!finalCleanupStarted) {
       await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies, error);
     }
     throw error;
   }
+}
+async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, installedAt, dependencies) {
+  const skillsRoot = join4(input.homeDir, ".agents", "skills");
+  const roots = extracted.layout === "single" ? [{ skillName: input.skillName, skillRoot: extracted.skillRoot }] : extracted.skillRoots;
+  const units = [];
+  for (const [index, root] of roots.entries()) {
+    const spec = {
+      publisher: input.publisher,
+      skillName: root.skillName,
+      requestedVersion: input.requestedVersion
+    };
+    const paths = resolveStorePaths(input.homeDir, spec, downloaded.sha256, stagingUuid);
+    const detected = await dependencies.detectAgentRoots({
+      homeDir: input.homeDir,
+      env: input.env,
+      skillsRoot,
+      skillName: root.skillName
+    });
+    const unit = {
+      skillName: root.skillName,
+      skillRoot: root.skillRoot,
+      paths,
+      marker: createInstallMarker(input, downloaded, installedAt, root.skillName),
+      detectedAgents: detected,
+      agentUuid: dependencies.randomUUID(),
+      agentPlans: [],
+      agentsPrepared: false,
+      agentResults: [],
+      publicationUuid: dependencies.randomUUID(),
+      published: null
+    };
+    if (index === 0) {
+      await prepareUnitAgents(unit, input, dependencies);
+    }
+    units.push(unit);
+  }
+  return units;
+}
+async function prepareUnitAgents(unit, input, dependencies) {
+  unit.agentPlans = await dependencies.prepareAgents({
+    detected: unit.detectedAgents,
+    currentPath: unit.paths.currentPath,
+    publisher: input.publisher,
+    skillName: unit.skillName,
+    force: input.force,
+    backupsRoot: unit.paths.backupsRoot,
+    uuid: unit.agentUuid
+  });
+  unit.agentsPrepared = true;
+}
+function createInstallResult(input, downloaded, layout, skillsRoot, units) {
+  if (layout === "single") {
+    const unit = units[0];
+    if (unit?.published === null || unit?.published === void 0) {
+      throw new Error("skill publication is missing");
+    }
+    return {
+      publisher: input.publisher,
+      skillName: input.skillName,
+      requestedVersion: input.requestedVersion,
+      action: unit.published.action,
+      installPath: unit.published.currentPath,
+      sizeBytes: downloaded.sizeBytes,
+      sha256: downloaded.sha256,
+      backupPath: unit.published.backupPath,
+      agents: unit.agentResults
+    };
+  }
+  const skills = units.map((unit) => {
+    if (unit.published === null) {
+      throw new Error("skill publication is missing");
+    }
+    return {
+      skillName: unit.skillName,
+      action: unit.published.action,
+      installPath: unit.published.currentPath,
+      backupPath: unit.published.backupPath,
+      agents: unit.agentResults
+    };
+  });
+  return {
+    publisher: input.publisher,
+    skillName: input.skillName,
+    requestedVersion: input.requestedVersion,
+    action: aggregateInstallAction(skills),
+    installPath: skillsRoot,
+    sizeBytes: downloaded.sizeBytes,
+    sha256: downloaded.sha256,
+    multiSkill: true,
+    skills
+  };
+}
+function aggregateInstallAction(skills) {
+  if (skills.every((skill) => skill.action === "unchanged")) {
+    return "unchanged";
+  }
+  if (skills.some((skill) => skill.action === "updated")) {
+    return "updated";
+  }
+  return "installed";
 }
 async function reportPublicDownloadIfAvailable(input, ticket, dependencies) {
   if (ticket.skillId === void 0) {
@@ -10967,18 +11275,18 @@ function toDryRunAgentResult(agent) {
     ...status === "unsupported" ? { reason: "local skill directory is not supported" } : {}
   };
 }
-function createInstallMarker(input, downloaded, installedAt) {
+function createInstallMarker(input, downloaded, installedAt, skillName = input.skillName) {
   return {
     schemaVersion: 1,
     publisher: input.publisher,
-    skillName: input.skillName,
+    skillName,
     requestedVersion: input.requestedVersion,
     sha256: downloaded.sha256,
     sizeBytes: downloaded.sizeBytes,
     installedAt: installedAt.toISOString()
   };
 }
-async function rollbackInstall(appliedAgents, published, primaryError) {
+async function rollbackInstall(appliedAgents, publishedSkills, primaryError) {
   let rollbackError;
   for (const plan of [...appliedAgents].reverse()) {
     try {
@@ -10987,7 +11295,7 @@ async function rollbackInstall(appliedAgents, published, primaryError) {
       rollbackError ??= error;
     }
   }
-  if (published !== null) {
+  for (const published of [...publishedSkills].reverse()) {
     try {
       await published.rollback();
     } catch (error) {
@@ -11017,144 +11325,23 @@ async function releaseAndCleanup(installLock, stagingPath, dependencies, primary
   }
 }
 
-// dist/skills/marketplace.js
-var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
-var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
-async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
-  const body = await request({
-    baseUrl: input.dashboardBaseUrl,
-    path: PUBLIC_SKILLS_MARKETPLACE_PATH,
-    query: { pageSize: 999, sort: "NEW" },
-    timeoutMs: input.timeoutMs,
-    maxResponseBodyBytes: LIST_ALL_MAX_RESPONSE_BODY_BYTES
-  });
-  if (!isRecord4(body) || !Array.isArray(body.items) || !body.items.every(isRecord4)) {
-    throw apiError("invalid public skills response", 502);
-  }
-  return [...body.items].reverse().map((item, index) => {
-    const copy = { ...item };
-    delete copy.Number;
-    return { Number: index + 1, ...copy };
-  });
-}
-function isRecord4(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/skills/spec.js
-var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
-var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
-var MAX_SEGMENT_LENGTH = 128;
-var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
-var TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
-var FORBIDDEN_TIP_FLAGS = [
-  "payment-instrument-id",
-  "instruction-id",
-  "purchase-instruction-id",
-  "mandate-id",
-  "merchant-id",
-  "session-id",
-  "payment-method-type",
-  "shipping-address",
-  "products",
-  "force"
-];
-function parseSkillPackageSpec(value) {
-  const slashIndex = value.indexOf("/");
-  if (slashIndex === -1 || slashIndex !== value.lastIndexOf("/")) {
-    throw invalidPackageSpec();
-  }
-  const publisher = value.slice(0, slashIndex);
-  const skillAndVersion = value.slice(slashIndex + 1);
-  const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
-  const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
-  const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
-  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && !isValidSegment(requestedVersion, VERSION_PATTERN)) {
-    throw invalidPackageSpec();
-  }
-  return { publisher, skillName, requestedVersion };
-}
-function parseSkillInstallArgs(operands, flags) {
-  if (operands.length === 0) {
-    throw validationError(`skills install requires a package: ${PACKAGE_SPEC_SYNTAX}`);
-  }
-  if (operands.length !== 1) {
-    throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
-  }
-  return {
-    ...parseSkillPackageSpec(operands[0]),
-    force: getBooleanFlag(flags, "force")
-  };
-}
-function parseSkillTipArgs(operands, flags) {
-  if (operands.length !== 0) {
-    throw validationError("skills tip does not accept positional arguments; use --publisher with --name, or --number");
-  }
-  for (const name of FORBIDDEN_TIP_FLAGS) {
-    if (flags[name] !== void 0) {
-      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default payment method" : `--${name} is not supported by skills tip`);
-    }
-  }
-  const publisher = getStringFlag(flags, "publisher");
-  const skillName = getStringFlag(flags, "name");
-  const numberText = getStringFlag(flags, "number");
-  const hasPublisher = flags.publisher !== void 0;
-  const hasSkillName = flags.name !== void 0;
-  const hasNumber = flags.number !== void 0;
-  if (hasNumber && (hasPublisher || hasSkillName)) {
-    throw validationError("--number cannot be combined with --publisher or --name");
-  }
-  if (hasPublisher !== hasSkillName) {
-    throw validationError("skills tip requires both --publisher and --name");
-  }
-  let target;
-  if (hasNumber) {
-    if (numberText === void 0 || !/^[1-9]\d*$/.test(numberText) || !Number.isSafeInteger(Number(numberText))) {
-      throw validationError("--number must be a positive integer");
-    }
-    target = { kind: "number", number: Number(numberText) };
-  } else if (hasPublisher && hasSkillName) {
-    if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
-      throw invalidTipIdentity();
-    }
-    target = { kind: "identity", publisher, skillName };
-  } else {
-    throw validationError("skills tip requires either --publisher with --name, or --number");
-  }
-  const currency = getStringFlag(flags, "currency");
-  if (currency !== void 0 && currency.toUpperCase() !== "USD") {
-    throw validationError("skills tip only supports USD");
-  }
-  return {
-    target,
-    amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
-    currency: "USD"
-  };
-}
-function isValidSkillIdentitySegment(value) {
-  return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
-}
-function isValidSegment(value, pattern) {
-  return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
-}
-function invalidPackageSpec() {
-  return validationError(`invalid skill package; expected ${PACKAGE_SPEC_SYNTAX}`);
-}
-function invalidTipIdentity() {
-  return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
-}
-
 // dist/skills/tip.js
+var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   if (input.target.kind === "number") {
     const number = input.target.number;
     const rows = await listAllPublicSkills({
       dashboardBaseUrl: input.dashboardBaseUrl,
-      timeoutMs: input.timeoutMs
+      timeoutMs: input.timeoutMs,
+      tippableOnly: true
     }, request);
     const selected = rows.find((row) => row.Number === number);
     if (!selected) {
-      throw apiError(`skill number not found: ${number}; run 'clink-cli skills list --all' to refresh numbers`, 404);
+      throw apiError(`skill number not found: ${number}; run 'clink-cli skills list --all --tippable' to refresh numbers`, 404);
+    }
+    const skillId = stringValue2(selected.skillId).trim();
+    if (skillId !== input.target.expectedSkillId) {
+      throw apiError(`skill number ${number} changed; refresh the tippable skill list and authorize again`, 409);
     }
     const publisher2 = stringValue2(selected.publisher).trim();
     const skillName2 = stringValue2(selected.name).trim();
@@ -11170,18 +11357,20 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
     query: {
       publisher,
       q: skillName,
-      pageSize: 1
+      pageSize: 1,
+      sort: "NEW"
     },
     timeoutMs: input.timeoutMs
   });
-  if (!isRecord5(body) || !Array.isArray(body.items)) {
+  const items = selectPublicSkillItems(body);
+  if (!items) {
     throw apiError("invalid public skills response", 502);
   }
-  const matches = body.items.filter((item) => isRecord5(item) && equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName));
+  const matches = items.filter((item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName));
   if (matches.length === 0) {
     throw apiError(`skill not found: ${publisher}/${skillName}`, 404);
   }
-  const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.merchantId).trim()}`));
+  const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`));
   if (uniqueRecipients.size !== 1) {
     throw apiError(`skill lookup is ambiguous: ${publisher}/${skillName}`, 409);
   }
@@ -11199,7 +11388,11 @@ async function executeSkillTip(args, runtime, dependencies) {
       ...plan,
       publisher: args.target.publisher,
       skillName: args.target.skillName
-    } : { ...plan, number: args.target.number };
+    } : {
+      ...plan,
+      number: args.target.number,
+      expectedSkillId: args.target.expectedSkillId
+    };
   }
   const recipient = await dependencies.resolveRecipient({
     dashboardBaseUrl: runtime.dashboardBaseUrl,
@@ -11218,6 +11411,7 @@ async function executeSkillTip(args, runtime, dependencies) {
       status: "authorization_pending",
       publisher: recipient.publisher,
       skillName: recipient.skillName,
+      skillId: recipient.skillId,
       amount: args.amount,
       currency: "USD",
       paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
@@ -11244,10 +11438,27 @@ async function executeSkillTip(args, runtime, dependencies) {
   if (execution.dryRun) {
     throw new Error("charge dry-run is unreachable after tip lookup");
   }
+  const status = execution.requires3ds ? "three_ds_required" : execution.status === 1 ? "paid" : execution.status !== void 0 && TERMINAL_PAYMENT_FAILURE_STATUSES.has(execution.status) ? "payment_failed" : "payment_unknown";
+  const orderId = paymentOrderId(execution.data);
+  if (status === "paid" && orderId !== void 0) {
+    try {
+      await dependencies.reportTip({
+        dashboardBaseUrl: runtime.dashboardBaseUrl,
+        skillId: recipient.skillId,
+        timeoutMs: runtime.timeoutMs,
+        orderId,
+        ...recipient.versionNo ? { versionNo: recipient.versionNo } : {},
+        amount: args.amount,
+        currency: "USD"
+      });
+    } catch {
+    }
+  }
   return {
-    status: execution.requires3ds ? "three_ds_required" : execution.status === 1 ? "paid" : "payment_failed",
+    status,
     publisher: recipient.publisher,
     skillName: recipient.skillName,
+    skillId: recipient.skillId,
     merchantId: recipient.merchantId,
     amount: args.amount,
     currency: "USD",
@@ -11268,13 +11479,23 @@ function recipientFromItem(item, errorIdentity) {
   if (!merchantId) {
     throw apiError(`tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`, 422);
   }
-  const skillId = stringValue2(item.skillId);
+  const skillId = stringValue2(item.skillId).trim();
+  if (!skillId) {
+    throw apiError("invalid public skills response", 502);
+  }
+  const versionNo = stringValue2(item.versionNo).trim();
   return {
     publisher,
     skillName,
-    ...skillId ? { skillId } : {},
+    skillId,
+    ...versionNo ? { versionNo } : {},
     merchantId
   };
+}
+function paymentOrderId(data) {
+  const paySuccessInfo = isRecord5(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const orderId = stringValue2(paySuccessInfo.orderId).trim();
+  return orderId || void 0;
 }
 function serializeShellArgument(value) {
   if (/^[A-Za-z0-9._+-]+$/.test(value)) {
@@ -11282,11 +11503,11 @@ function serializeShellArgument(value) {
   }
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
-function isRecord5(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 function stringValue2(value) {
   return typeof value === "string" ? value : "";
+}
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
@@ -12147,7 +12368,8 @@ async function skillsList(context) {
   }
   const rows = await listAllPublicSkills({
     dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
-    timeoutMs: context.globalOptions.timeoutMs
+    timeoutMs: context.globalOptions.timeoutMs,
+    tippableOnly: getBooleanFlag(context.args.flags, "tippable")
   });
   printSuccess(rows, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -12194,12 +12416,19 @@ ${url}
   }, {
     resolveRecipient: resolveSkillTipRecipient,
     resolveAuthorization: (intent) => resolveTipAuthorization(intent, authorizationApi),
-    executeCharge
+    executeCharge,
+    reportTip: reportSkillTip
   });
   printSuccess(result, context.globalOptions.format);
   if (result.status === "three_ds_required" && result.redirectUrl) {
     await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication");
     return EXIT_CODES.THREE_DS;
+  }
+  if (result.status === "payment_unknown") {
+    return EXIT_CODES.NETWORK;
+  }
+  if (result.status === "payment_failed") {
+    return EXIT_CODES.API;
   }
   return EXIT_CODES.OK;
 }
@@ -12449,7 +12678,7 @@ async function walletInit(context) {
     baseUrl,
     method: "POST",
     path: "/agent/cwallet/customer/bootstrap",
-    body: compact2({
+    body: compact3({
       email,
       name,
       otp,
@@ -12802,7 +13031,7 @@ async function ucpCheckoutCreate(context) {
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
   const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
-  const body = compact2({
+  const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
     merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
@@ -12847,7 +13076,7 @@ async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
-  const body = compact2({
+  const body = compact3({
     line_items: requireJsonArrayFlag(flags, "line-items"),
     buyer: optionalJsonFlag(flags, "buyer"),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
@@ -13066,7 +13295,7 @@ function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
   const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
-  const body = compact2({
+  const body = compact3({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
@@ -13450,7 +13679,7 @@ function optionalJsonArrayFlag(flags, name) {
 function isJsonObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function compact2(value) {
+function compact3(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
 }
 function asOptionalString(value) {

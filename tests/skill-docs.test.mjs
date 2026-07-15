@@ -80,9 +80,10 @@ test('skill documents public skill listing and explicitly authorized tip routing
   assert.match(skill, /references\/clink-skill-tip\.md/u);
   assert.match(skill, /lib\/skill-tip-workflow-fsm\.mjs/u);
   assert.match(skill, /SKILL_TIP_FSM/u);
-  assert.match(skill, /clink-cli skills list --all --format json/u);
+  assert.match(skill, /clink-cli skills list --all --tippable --format json/u);
   assert.match(skill, /clink-cli skills tip --publisher/u);
   assert.match(skill, /clink-cli skills tip --number/u);
+  assert.match(skill, /--expected-skill-id/u);
   assert.match(skill, /synchronous agent pay.*payment success/isu);
   assert.match(skill, /account-created.*account-reloaded/isu);
   assert.match(skill, /optional/iu);
@@ -91,6 +92,8 @@ test('skill documents public skill listing and explicitly authorized tip routing
 test('skill tip reference fixes Number drift and optional account event semantics', () => {
   assert.match(skillTip, /Number.*snapshot/isu);
   assert.match(skillTip, /refresh.*clink-cli skills list --all/isu);
+  assert.match(skillTip, /skills list --all --tippable/iu);
+  assert.match(skillTip, /--expected-skill-id <skill_id>/iu);
   assert.match(skillTip, /changed.*fresh authorization/isu);
   assert.match(skillTip, /status.*paid.*status.*1.*payment success/isu);
   assert.match(skillTip, /account-created.*account-reloaded/isu);
@@ -102,22 +105,27 @@ test('skill tip reference fixes Number drift and optional account event semantic
 
 test('skill tip reference documents authorization questions and fallback correlation context', () => {
   assert.match(skillTip, /counterfactual.*advice.*not authorization/isu);
+  assert.match(skillTip, /negated.*historical.*conditional.*not authorization/isu);
+  assert.match(skillTip, /multiple.*targets.*amounts.*stop/isu);
+  assert.match(skillTip, /payment_unknown/iu);
   assert.match(skillTip, /expectedResource.*customerId.*merchantId.*skillId/isu);
   assert.match(skillTip, /explicit.*conflicting orderId.*reject/isu);
   assert.match(asyncEvents, /nonzero CLI exit.*SURFACE_EVENT_ERROR/isu);
 });
 
-test('skill and package versions are bumped for tip routing', () => {
-  assert.match(skill, /version:\s*"1\.4\.0"/u);
-  assert.equal(packageJson.version, '1.4.0');
+test('skill and package versions are bumped for hardened tip routing', () => {
+  assert.match(skill, /version:\s*"1\.4\.1"/u);
+  assert.equal(packageJson.version, '1.4.1');
 });
 
 test('README summaries advertise both skill tip intents', () => {
-  assert.match(readme, /skills list --all/u);
+  assert.match(readme, /skills list --all --tippable/u);
   assert.match(readme, /skills tip/u);
+  assert.match(readme, /expected-skill-id/u);
   assert.match(readme, /account-created.*account-reloaded/isu);
-  assert.match(readmeZh, /skills list --all/u);
+  assert.match(readmeZh, /skills list --all --tippable/u);
   assert.match(readmeZh, /skills tip/u);
+  assert.match(readmeZh, /expected-skill-id/u);
   assert.match(readmeZh, /account-created.*account-reloaded/isu);
 });
 

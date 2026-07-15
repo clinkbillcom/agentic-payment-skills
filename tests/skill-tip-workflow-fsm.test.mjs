@@ -103,6 +103,7 @@ test('Number tip asks for a fresh list before execution', () => {
 
   assert.equal(result.state, SkillTipState.TIP_NUMBER_REFRESH_REQUIRED);
   assert.equal(result.action, SkillTipAction.REFRESH_SKILL_LIST);
+  assert.equal(result.command, 'clink-cli skills list --all --tippable --format json');
 });
 
 test('Number tip stops for reauthorization when the row changed', () => {
@@ -138,7 +139,10 @@ test('Number tip builds the Number command after snapshot verification', () => {
   });
 
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP);
-  assert.equal(result.command, 'clink-cli skills tip --number 2 --amount 2 --format json');
+  assert.equal(
+    result.command,
+    'clink-cli skills tip --number 2 --expected-skill-id skill_2 --amount 2 --format json',
+  );
   assert.deepEqual(result.resolvedTarget, row);
 });
 
@@ -171,6 +175,7 @@ test('synchronous paid agent pay starts optional account event monitoring', () =
         status: 'paid',
         publisher: 'clinkpay',
         skillName: 'PollyReach',
+        skillId: 'skill_1',
         merchantId: 'mcht_1',
         amount: 2,
         currency: 'USD',
@@ -182,8 +187,14 @@ test('synchronous paid agent pay starts optional account event monitoring', () =
   assert.equal(result.state, SkillTipState.TIP_PAYMENT_SUCCEEDED);
   assert.equal(result.action, SkillTipAction.START_OPTIONAL_ACCOUNT_EVENT_WATCH);
   assert.equal(result.paymentStatus, 'PAID');
+  assert.equal(result.paymentTerminal, true);
+  assert.equal(result.accountEventStatus, 'PENDING');
   assert.equal(result.terminal, false);
-  assert.deepEqual(result.expectedResource, { orderId: 'order_1', merchantId: 'mcht_1' });
+  assert.deepEqual(result.expectedResource, {
+    orderId: 'order_1',
+    merchantId: 'mcht_1',
+    skillId: 'skill_1',
+  });
   assert.deepEqual(result.pollCommands, [
     'clink-cli events poll --type account-created --max-wait 60 --format json',
     'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
@@ -253,6 +264,44 @@ test('payment failure stops without account polling', () => {
   assert.equal(result.action, SkillTipAction.RETURN_TIP_FAILURE);
   assert.equal(result.paymentStatus, 'FAILED');
   assert.equal(result.terminal, true);
+});
+
+test('payment failure payload remains terminal when CLI returns exit code 5', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 5,
+    stdout: JSON.stringify({ ok: true, data: { status: 'payment_failed', payment: { status: 3 } } }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_PAYMENT_FAILED);
+  assert.equal(result.action, SkillTipAction.RETURN_TIP_FAILURE);
+  assert.equal(result.paymentStatus, 'FAILED');
+});
+
+test('paid result that conflicts with the authorization binding is unknown', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 0,
+    expectedTip: {
+      skillId: 'skill_expected',
+      amount: '2',
+      currency: 'USD',
+    },
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        status: 'paid',
+        skillId: 'skill_other',
+        amount: 2,
+        currency: 'USD',
+        payment: { orderId: 'order_wrong_target', status: 1 },
+      },
+    }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_PAYMENT_UNKNOWN);
+  assert.equal(result.action, SkillTipAction.VERIFY_BEFORE_RETRY);
+  assert.equal(result.reason, 'skill_tip_authorization_binding_mismatch');
+  assert.equal(result.paymentStatus, 'UNKNOWN');
+  assert.equal(result.pollCommands, undefined);
 });
 
 test('3DS required waits for the existing order event flow', () => {
@@ -370,6 +419,7 @@ test('optional account event aggregation waits for the sibling poll', () => {
   assert.equal(result.state, SkillTipState.TIP_ACCOUNT_EVENT_WAITING);
   assert.equal(result.action, SkillTipAction.WAIT_OPTIONAL_ACCOUNT_EVENT);
   assert.equal(result.paymentStatus, 'PAID');
+  assert.equal(result.accountEventStatus, 'PENDING');
   assert.equal(result.terminal, false);
 });
 
@@ -381,6 +431,7 @@ test('one optional poll error waits for the sibling before returning a warning',
 
   assert.equal(result.state, SkillTipState.TIP_ACCOUNT_EVENT_WAITING);
   assert.equal(result.action, SkillTipAction.WAIT_OPTIONAL_ACCOUNT_EVENT);
+  assert.equal(result.accountEventStatus, 'PENDING');
   assert.equal(result.terminal, false);
 });
 

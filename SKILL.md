@@ -1,7 +1,7 @@
 ---
 name: clink-payment-skill
 description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), or explicitly tipping a skill by publisher/name or Number."
-version: "1.4.0"
+version: "1.4.1"
 requires:
   node: ">=20"
   bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -103,7 +103,7 @@ FSM action contract:
 | `GET_INTERNAL_UCP_ENDPOINT` | Execute the environment-locked internal endpoint command. On success create internal UCP checkout with the returned endpoint. On `NOT_IN_INTERNAL_UCP_LIST`, run the returned standard profile probe. Surface every other error without fallback. |
 | `POLL_PAYMENT_SUCCESS_EVENT` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json` after UCP checkout complete returns `completed`; wait for the matching payment success event. |
 | `RETURN_PAYMENT_SUCCESS_EVENT` | Surface the matched `agent_order.succeeded` event/message to the caller; do not claim merchant fulfillment. |
-| `RETURN_SKILL_TABLE` | Run `clink-cli skills list --all --format json`, preserve CLI Number values, and return the required four-column table. |
+| `RETURN_SKILL_TABLE` | Run `clink-cli skills list --all --tippable --format json`, preserve CLI Number values, and return the required four-column table. |
 | `REFRESH_SKILL_LIST` | Refresh the list immediately before a Number tip and compare Number, publisher, skill name, and skill ID with the displayed snapshot. |
 | `ASK_FOR_REAUTHORIZATION` | Stop before payment when a Number row is missing or changed; show the refreshed target and require fresh authorization. |
 | `RUN_SKILL_TIP` | Execute the exact authorized identity or Number tip command without adding currency or payment-instrument flags. |
@@ -119,9 +119,9 @@ FSM action contract:
 
 | Observation | Action |
 | --- | --- |
-| User asks which skills support tipping | Run `clink-cli skills list --all --format json`, classify with `classifySkillListObservation`, and return Number, publisher, skill name, and skill ID. |
+| User asks which skills support tipping | Run `clink-cli skills list --all --tippable --format json`, classify with `classifySkillListObservation`, and return Number, publisher, skill name, and skill ID. |
 | User explicitly authorizes an identity tip | Require exact publisher/name, a positive amount, and USD; run `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json`. |
-| User explicitly authorizes a Number tip | Require a displayed Number snapshot, refresh and compare the row, then run `clink-cli skills tip --number <number> --amount <amount> --format json` only when unchanged. |
+| User explicitly authorizes a Number tip | Require a displayed Number snapshot, refresh and compare the row, then run `clink-cli skills tip --number <number> --expected-skill-id <skill_id> --amount <amount> --format json` only when unchanged. |
 | Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the two optional account-event polls. |
 | Optional skill-tip account polls time out or fail | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
 | Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
@@ -142,8 +142,9 @@ FSM action contract:
 
 ## Hard Rules
 
-- Never run `clink-cli skills tip` unless the current request explicitly authorizes the exact skill target and positive USD amount. List, how-to, counterfactual, and advice questions are not payment authorization.
-- Number-based tips require the Number snapshot previously displayed in the current workflow. Refresh `skills list --all` immediately before payment; if Number, publisher, skill name, or skill ID changed, stop and require fresh authorization.
+- Never run `clink-cli skills tip` unless the current request affirmatively authorizes one exact skill target and one positive USD amount. Negated, cancelled, questioned, historical, conditional, counterfactual, advice, multi-target, and multi-amount requests are not payment authorization.
+- Number-based tips require the Number snapshot previously displayed in the current workflow. Refresh `skills list --all --tippable` immediately before payment; if Number, publisher, skill name, or skill ID changed, stop and require fresh authorization. Pass the unchanged `skillId` through `--expected-skill-id` so the CLI can reject a final lookup race before card or charge calls.
+- Treat a `payment_unknown` payload or exit code 6 as unknown even when the charge request returned an HTTP response. Never retry until an order/idempotency status path proves retry safety.
 - For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
 - `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.
 - Treat skill-tip exit code 6 or client timeout as an unknown payment state. Never retry the tip automatically.
@@ -178,9 +179,9 @@ FSM action contract:
 
 | Need | Command |
 | --- | --- |
-| List tippable public skills | `clink-cli skills list --all --format json` |
+| List tippable public skills | `clink-cli skills list --all --tippable --format json` |
 | Tip by publisher/name | `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json` |
-| Tip by displayed Number | `clink-cli skills tip --number <number> --amount <amount> --format json` |
+| Tip by displayed Number | `clink-cli skills tip --number <number> --expected-skill-id <skill_id> --amount <amount> --format json` |
 | Wait for optional new-account evidence | `clink-cli events poll --type account-created --max-wait 60 --format json` |
 | Wait for optional reload evidence | `clink-cli events poll --type account-reloaded --max-wait 60 --format json` |
 | Initialize wallet | `clink-cli wallet init --email <email> --name <name> [--otp <email_otp>] --format json` (use credentials matching the prefix's environment) |

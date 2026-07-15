@@ -20,7 +20,9 @@ Use lib/payment-intent-router-fsm.mjs before choosing a payment workflow.
 - SKILL_TIP_LIST is read-only. It answers requests such as “目前 clink payment skill 支持打赏哪些 skill”.
 - SKILL_TIP has a payment side effect. It requires an imperative tip request, one exact target, a positive amount, USD currency, and explicit authorization for the same request.
 - How-to, counterfactual, and advice questions are not authorization; ask for an imperative request before executing payment.
+- Negated, cancelled, questioned, historical, and conditional requests are not authorization. Multiple distinct targets or amounts stop for clarification instead of selecting the first match.
 - List/query language wins over execution language so “支持打赏哪些 skill” cannot trigger payment.
+- A request that asks to list and then tip remains read-only: show the list, then require a fresh exact authorization.
 
 Use lib/skill-tip-workflow-fsm.mjs for list parsing, Number verification, CLI result classification, and optional account-event aggregation. Emit [SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>.
 
@@ -29,7 +31,7 @@ Use lib/skill-tip-workflow-fsm.mjs for list parsing, Number verification, CLI re
 Execute through the environment-locked wrapper:
 
 ~~~bash
-clink-cli skills list --all --format json
+clink-cli skills list --all --tippable --format json
 ~~~
 
 Inspect the process exit code before parsing the standard JSON envelope. Require data to be an array. Every displayed row requires:
@@ -90,7 +92,7 @@ For a Number target:
 
 1. Require a Number list snapshot that was displayed to the user in the current workflow context.
 2. Find the requested Number in that snapshot.
-3. Immediately refresh with clink-cli skills list --all --format json.
+3. Immediately refresh with clink-cli skills list --all --tippable --format json.
 4. Compare Number, publisher, name, and skillId.
 5. If the row is missing or changed, stop before payment, show the refreshed target, and require fresh authorization.
 6. If unchanged, execute the Number command.
@@ -114,6 +116,7 @@ Number target:
 ~~~bash
 clink-cli skills tip \
   --number <number> \
+  --expected-skill-id <skill_id> \
   --amount <amount> \
   --format json
 ~~~
@@ -130,12 +133,15 @@ Use the CLI exit code first, then the first JSON result envelope. A later built-
 | --- | --- | --- |
 | status=paid and underlying agent pay status=1 | PAID | Start optional account-event monitoring |
 | authorization_pending | NOT_PAID | Send Passkey URL and wait/resume |
-| payment_failed | FAILED | Stop; do not poll account events |
+| exit 5 with payment_failed | FAILED | Stop; do not poll account events |
+| exit 6 or payment_unknown | UNKNOWN | Verify safely; do not retry |
 | exit 7 / three_ds_required | PENDING_3DS | Send redirect and use the existing correlated order-event flow |
 | exit 6 / client timeout | UNKNOWN | Verify safely; do not retry |
 | exit 2–5 | NOT_PAID or error | Surface the typed CLI error |
 
-For tips, status=paid with underlying agent pay status=1 is payment success synchronously. Do not require agent_order.succeeded, account-created, or account-reloaded before returning paymentStatus=PAID.
+For tips, status=paid with underlying agent pay status=1 is payment success synchronously. Verify returned skillId, amount, and currency against the authorization binding. Do not require agent_order.succeeded, account-created, or account-reloaded before returning paymentStatus=PAID.
+
+After paid status, the CLI uploads the tip metric using skillId and orderId as a best-effort side effect. Metric failure never changes PAID and never triggers another charge.
 
 Never retry exit code 6 or a client timeout automatically. The payment may already have executed.
 
@@ -145,7 +151,7 @@ After 3DS, start optional account-event monitoring only after the correlated ord
 
 Merchant account events enrich a successful tip but are not required. A merchant may emit neither event.
 
-After synchronous payment success, immediately start both bounded polls in parallel:
+After synchronous payment success, mark payment terminal PAID and immediately start both bounded polls in parallel. Return accountEventStatus=PENDING while optional monitoring continues:
 
 ~~~bash
 clink-cli events poll --type account-created --max-wait 60 --format json
@@ -192,7 +198,7 @@ Keep payment outcome separate from optional merchant evidence:
   "currency": "USD",
   "paymentStatus": "PAID",
   "orderId": "order_1",
-  "accountEventStatus": "NOT_OBSERVED"
+  "accountEventStatus": "PENDING"
 }
 ~~~
 
@@ -200,6 +206,7 @@ Valid account event statuses are:
 
 - CONFIRMED_CREATED
 - CONFIRMED_RELOADED
+- PENDING
 - NOT_OBSERVED
 - POLL_ERROR
 - NOT_STARTED
