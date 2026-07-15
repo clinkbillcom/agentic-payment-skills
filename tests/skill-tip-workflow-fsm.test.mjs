@@ -117,6 +117,18 @@ test('Number tip stops for reauthorization when the row changed', () => {
   assert.equal(result.terminal, false);
 });
 
+test('Number tip surfaces a malformed refresh instead of asking for reauthorization', () => {
+  const result = classifySkillTipPrerequisites({
+    tip: numberedTip,
+    listedRows: [{ number: 2, publisher: 'clinkpay', skillName: 'Old', skillId: 'old' }],
+    refreshedRows: [{ number: 2, publisher: 'clinkpay', skillName: 'Old' }],
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ERROR);
+  assert.equal(result.action, SkillTipAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'invalid_skill_number_refresh');
+});
+
 test('Number tip builds the Number command after snapshot verification', () => {
   const row = { number: 2, publisher: 'clinkpay', skillName: 'PollyReach', skillId: 'skill_2' };
   const result = classifySkillTipPrerequisites({
@@ -176,6 +188,27 @@ test('synchronous paid agent pay starts optional account event monitoring', () =
     'clink-cli events poll --type account-created --max-wait 60 --format json',
     'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
   ]);
+});
+
+test('paid tip carries caller stable identifiers for account-event fallback correlation', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 0,
+    expectedResource: { customerId: 'cust_1', skillId: 'skill_1' },
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        status: 'paid',
+        merchantId: 'mcht_1',
+        payment: { status: 1 },
+      },
+    }),
+  });
+
+  assert.deepEqual(result.expectedResource, {
+    customerId: 'cust_1',
+    merchantId: 'mcht_1',
+    skillId: 'skill_1',
+  });
 });
 
 test('tip observation reads the first result envelope before a built-in watch envelope', () => {
@@ -238,6 +271,20 @@ test('3DS required waits for the existing order event flow', () => {
   assert.equal(result.state, SkillTipState.TIP_3DS_REQUIRED);
   assert.equal(result.action, SkillTipAction.SEND_3DS_AND_WAIT_EVENT);
   assert.equal(result.paymentStatus, 'PENDING_3DS');
+});
+
+test('non-3DS CLI errors take precedence over a conflicting result status', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 5,
+    stdout: JSON.stringify({
+      ok: true,
+      data: { status: 'three_ds_required', redirectUrl: 'https://3ds.example/auth' },
+    }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ERROR);
+  assert.equal(result.action, SkillTipAction.SURFACE_ERROR);
+  assert.equal(result.exitCode, 5);
 });
 
 test('exit code 6 is unknown and never starts a retry or account poll', () => {

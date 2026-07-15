@@ -142,7 +142,7 @@ FSM action contract:
 
 ## Hard Rules
 
-- Never run `clink-cli skills tip` unless the current request explicitly authorizes the exact skill target and positive USD amount. List questions and how-to questions are not payment authorization.
+- Never run `clink-cli skills tip` unless the current request explicitly authorizes the exact skill target and positive USD amount. List, how-to, counterfactual, and advice questions are not payment authorization.
 - Number-based tips require the Number snapshot previously displayed in the current workflow. Refresh `skills list --all` immediately before payment; if Number, publisher, skill name, or skill ID changed, stop and require fresh authorization.
 - For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
 - `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.

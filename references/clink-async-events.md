@@ -42,6 +42,8 @@ Use `events poll` when you need to wait for a state change without printing a ne
 clink-cli events poll --type <eventType> --format json
 ```
 
+Pass the process exit code into `classifyEventPollObservation`. A nonzero CLI exit becomes `EVENT_INVALID` with `SURFACE_EVENT_ERROR`; optional skill-tip aggregation converts that monitoring failure to `POLL_ERROR` without changing `PAID`.
+
 Options:
 
 | Flag | Default | Description |

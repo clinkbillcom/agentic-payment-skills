@@ -90,6 +90,13 @@ test('skill tip reference fixes Number drift and optional account event semantic
   assert.match(skillTip, /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u);
 });
 
+test('skill tip reference documents authorization questions and fallback correlation context', () => {
+  assert.match(skillTip, /counterfactual.*advice.*not authorization/isu);
+  assert.match(skillTip, /expectedResource.*customerId.*merchantId.*skillId/isu);
+  assert.match(skillTip, /explicit.*conflicting orderId.*reject/isu);
+  assert.match(asyncEvents, /nonzero CLI exit.*SURFACE_EVENT_ERROR/isu);
+});
+
 test('skill and package versions are bumped for tip routing', () => {
   assert.match(skill, /version:\s*"1\.4\.0"/u);
   assert.equal(packageJson.version, '1.4.0');

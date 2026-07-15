@@ -113,6 +113,33 @@ test('does not execute a tip how-to question', () => {
   assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
 });
 
+test('asks for authorization instead of executing a counterfactual tip question', () => {
+  const result = classifyPaymentIntent({ text: 'What if I tip clinkpay/pollyreach 2 USD?' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['authorization']);
+});
+
+test('asks for authorization instead of executing a Chinese tip advice question', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach 2 USD 会怎样？' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['authorization']);
+});
+
+test('honors an explicit false authorization flag over imperative text', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏 clinkpay/pollyreach 2 USD',
+    tipAuthorized: false,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['authorization']);
+});
+
 test('rejects ambiguous identity and Number tip targets', () => {
   const result = classifyPaymentIntent({
     intent: 'skill_tip',

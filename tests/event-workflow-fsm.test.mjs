@@ -92,6 +92,44 @@ test('customer and merchant correlation does not require an optional skill id', 
   assert.equal(result.matched, true);
 });
 
+test('falls back to compound skill-tip identity when an event omits the expected order id', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'account-created',
+      data: { customerId: 'cust_1', merchantId: 'mcht_1' },
+    },
+    { orderId: 'order_1', customerId: 'cust_1', merchantId: 'mcht_1' },
+  );
+
+  assert.equal(result.matched, true);
+});
+
+test('uses compound fallback when account event resourceId is not the expected order id', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'account-created',
+      resourceId: 'cust_1',
+      data: { customerId: 'cust_1', merchantId: 'mcht_1' },
+    },
+    { orderId: 'order_1', customerId: 'cust_1', merchantId: 'mcht_1' },
+  );
+
+  assert.equal(result.matched, true);
+});
+
+test('does not use compound fallback when an explicit event order id conflicts', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'account-created',
+      data: { orderId: 'order_other', customerId: 'cust_1', merchantId: 'mcht_1' },
+    },
+    { orderId: 'order_1', customerId: 'cust_1', merchantId: 'mcht_1' },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.mismatchedKeys, ['orderId']);
+});
+
 test('requires a compound identity when a skill tip order id is unavailable', () => {
   const result = correlateEventWorkflow(
     { type: 'account-created', data: { merchantId: 'mcht_1' } },
@@ -220,6 +258,26 @@ test('event poll observation returns resumable timeout without claiming success'
     result.resumeCommand,
     'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
   );
+});
+
+test('event poll observation surfaces a nonzero CLI exit for optional aggregation', () => {
+  const result = classifyEventPollObservation(
+    {
+      exitCode: 5,
+      stderr: JSON.stringify({ ok: false, error: { message: 'poll failed' } }),
+    },
+    {
+      eventType: 'account-created',
+      expectedResource: { orderId: 'order_1' },
+      noAck: false,
+    },
+  );
+
+  assert.equal(result.state, EventWorkflowState.EVENT_INVALID);
+  assert.equal(result.action, EventWorkflowAction.SURFACE_EVENT_ERROR);
+  assert.equal(result.eventType, 'account-created');
+  assert.equal(result.exitCode, 5);
+  assert.equal(result.error.message, 'poll failed');
 });
 
 test('event poll observation keeps waiting when no matching event has been observed yet', () => {

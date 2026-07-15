@@ -19,7 +19,7 @@ Use lib/payment-intent-router-fsm.mjs before choosing a payment workflow.
 
 - SKILL_TIP_LIST is read-only. It answers requests such as “目前 clink payment skill 支持打赏哪些 skill”.
 - SKILL_TIP has a payment side effect. It requires an imperative tip request, one exact target, a positive amount, USD currency, and explicit authorization for the same request.
-- A question such as “怎么打赏” is not authorization.
+- How-to, counterfactual, and advice questions are not authorization; ask for an imperative request before executing payment.
 - List/query language wins over execution language so “支持打赏哪些 skill” cannot trigger payment.
 
 Use lib/skill-tip-workflow-fsm.mjs for list parsing, Number verification, CLI result classification, and optional account-event aggregation. Emit [SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>.
@@ -164,6 +164,10 @@ Treat them as ANY_OF. Correlate an event to the current tip using the strongest 
 
 1. matching orderId;
 2. otherwise a compound identity containing at least two stable values such as customerId + merchantId or customerId + skillId.
+
+Pass every stable value already known to `classifySkillTipObservation` through `expectedResource`, including `customerId`, `merchantId`, and `skillId`; the classifier adds authoritative values from the tip result and returns the context for both event polls.
+
+When an event omits `orderId`, or its generic `resourceId` is not the expected order, use a matching compound identity. If the event contains an explicit conflicting orderId, reject it even when the compound fields match.
 
 Never accept an event-type-only match. When one correlated event arrives, return it and stop the sibling listener.
 

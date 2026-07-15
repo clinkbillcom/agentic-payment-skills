@@ -32,7 +32,7 @@ The new routes run before UCP checkout and direct-pay selection. The list route 
 
 `SKILL_TIP_LIST` recognizes structured `intent=skill_tip_list` and natural-language requests that combine a skill concept, tip concept, and list/query concept. Representative requests include “目前 clink payment skill 支持打赏哪些 skill”, “列出可以打赏的技能”, and “list tippable skills”.
 
-`SKILL_TIP` recognizes structured `intent=skill_tip` or imperative `打赏` / `赞赏` / `tip` language. Questions such as “怎么打赏” do not authorize a payment. A complete imperative request in the current user turn is explicit payment authorization for that exact target and amount.
+`SKILL_TIP` recognizes structured `intent=skill_tip` or `打赏` / `赞赏` / `tip` language, then separates authorized imperatives from non-authorizing questions. How-to, counterfactual, and advice questions do not authorize a payment. A complete imperative request in the current user turn is explicit payment authorization for that exact target and amount.
 
 The normalized tip input is:
 
@@ -64,7 +64,7 @@ Inspect the exit code before parsing the standard JSON envelope. Require `data` 
 
 Escape Markdown table delimiters and line breaks in values. An empty array returns a clear empty-list response rather than an error.
 
-The agent retains the displayed `Number -> publisher/name/skillId` mapping in the current workflow context. Number-based tipping requires such a snapshot. Immediately before a Number tip, refresh `skills list --all` and compare the selected row with the snapshot. If the Number disappeared or its identity changed, stop and ask for fresh authorization. When the row is unchanged, preserve the requested CLI mode and execute `skills tip --number`.
+The agent retains the displayed `Number -> publisher/name/skillId` mapping in the current workflow context. Number-based tipping requires such a snapshot. Immediately before a Number tip, refresh `skills list --all` and compare the selected row with the snapshot. If the Number disappeared or its identity changed, stop and ask for fresh authorization. A malformed refresh is an operational error, not a target change. When the row is unchanged, preserve the requested CLI mode and execute `skills tip --number`.
 
 ## Skill Tip Workflow FSM
 
@@ -113,7 +113,7 @@ Tips always use USD and the refreshed default payment method. Do not pass `--no-
 
 `skills tip` delegates to agent pay. A synchronous tip result with `status=paid` and the underlying agent-pay `status=1` is terminal payment success. Do not wait for `agent_order.succeeded` or any merchant account event before classifying the payment as paid.
 
-`payment_failed` is a terminal payment failure. Exit code `6` or a client timeout is an unknown payment state and must never be automatically retried. Exit code `7` / `three_ds_required` follows the existing 3DS event flow; optional account-event monitoring begins only after the 3DS payment is confirmed successful.
+`payment_failed` is a terminal payment failure. Exit code `6` or a client timeout is an unknown payment state and must never be automatically retried. Exit codes take precedence over result-body status: only exit code `7` (or `three_ds_required` on an otherwise successful result) follows the existing 3DS event flow. Optional account-event monitoring begins only after the 3DS payment is confirmed successful.
 
 ## Optional Merchant Account Events
 
@@ -126,7 +126,7 @@ clink-cli events poll --type account-reloaded --max-wait 60 --format json
 
 The event types are mutually exclusive for one tip and use `ANY_OF` semantics. A newly created merchant account emits `account-created`; a pre-existing account may emit `account-reloaded`. Merchants are not required to support either event.
 
-Extend `lib/event-workflow-fsm.mjs` with a `SKILL_TIP_ACCOUNT` domain and terminal classifications for both event types. Correlate with the strongest available identifiers, preferring the tip payment `orderId`, then combinations of `customerId`, `merchantId`, and `skillId`. Never treat a type-only match as evidence for the current tip.
+Extend `lib/event-workflow-fsm.mjs` with a `SKILL_TIP_ACCOUNT` domain and terminal classifications for both event types. Carry all known `customerId`, `merchantId`, and `skillId` values into the tip classifier's `expectedResource`. Correlate with the strongest available identifiers, preferring the tip payment `orderId`, then combinations of two stable identifiers when the event omits an order ID. An explicit conflicting event `orderId` must be rejected even when compound fields match. Never treat a type-only match as evidence for the current tip.
 
 When one correlated event arrives, return the corresponding account result and stop the sibling wait. When neither event is observed during the bounded window, or polling fails, keep `paymentStatus=PAID`. Report only that no account event was observed or that optional monitoring failed; do not claim the merchant is unsupported and do not downgrade the payment.
 
