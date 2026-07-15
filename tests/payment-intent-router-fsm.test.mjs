@@ -8,6 +8,109 @@ import {
   classifyPaymentIntent,
 } from '../lib/payment-intent-router-fsm.mjs';
 
+test('routes a tippable skill list question before tip execution', () => {
+  const result = classifyPaymentIntent({
+    text: '目前clink payment skill 支持打赏哪些skill',
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_LIST_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_LIST);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_LIST_WORKFLOW);
+  assert.equal(result.reason, 'skill_tip_list_intent');
+});
+
+test('routes a structured tippable skill list intent', () => {
+  const result = classifyPaymentIntent({ intent: 'skill_tip_list' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_LIST);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_LIST_WORKFLOW);
+});
+
+test('routes an explicitly authorized identity tip', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach 2usd' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  assert.deepEqual(result.tip, {
+    target: { kind: 'identity', publisher: 'clinkpay', skillName: 'pollyreach' },
+    amount: '2',
+    currency: 'USD',
+    explicitlyAuthorized: true,
+  });
+});
+
+test('routes a marked Number tip without confusing the amount', () => {
+  const result = classifyPaymentIntent({ text: '打赏序号2的skill 2 USD' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.deepEqual(result.tip.target, { kind: 'number', number: 2 });
+  assert.equal(result.tip.amount, '2');
+});
+
+test('routes a structured authorized Number tip', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip',
+    skillNumber: 3,
+    amount: '1.50',
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.deepEqual(result.tip, {
+    target: { kind: 'number', number: 3 },
+    amount: '1.50',
+    currency: 'USD',
+    explicitlyAuthorized: true,
+  });
+});
+
+test('asks for a missing tip amount without executing', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['amount']);
+});
+
+test('asks for a missing tip target without treating the amount as Number', () => {
+  const result = classifyPaymentIntent({ text: '打赏 2 USD' });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.deepEqual(result.missing, ['target']);
+});
+
+test('rejects non-USD tips before execution', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach 2 EUR' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_currency_unsupported');
+  assert.deepEqual(result.missing, ['currency_USD']);
+});
+
+test('does not execute a tip how-to question', () => {
+  const result = classifyPaymentIntent({ text: '怎么打赏 clinkpay/pollyreach 2 USD' });
+
+  assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+});
+
+test('rejects ambiguous identity and Number tip targets', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    skillNumber: 2,
+    amount: 2,
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_target_ambiguous');
+  assert.deepEqual(result.missing, ['single_target']);
+});
+
 test('routes known merchant payment without product intent to direct pay', () => {
   const result = classifyPaymentIntent({
     text: '给这个商户充值 10 美元',
