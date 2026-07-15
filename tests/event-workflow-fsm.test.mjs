@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 
 import {
   EventWorkflowAction,
+  EventWorkflowDomain,
   EventWorkflowState,
+  classifyEventWorkflow,
   classifyEventPollObservation,
   classifyEventWaitRequest,
+  correlateEventWorkflow,
   pollCommandForWaitSpec,
 } from '../lib/event-workflow-fsm.mjs';
 
@@ -16,6 +19,98 @@ const instructionWaitSpec = {
   },
   verifyCommand: 'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
 };
+
+test('classifies account-created as optional skill tip account confirmation', () => {
+  const result = classifyEventWorkflow({ type: 'account-created' });
+
+  assert.equal(result.domain, EventWorkflowDomain.SKILL_TIP_ACCOUNT);
+  assert.equal(result.state, EventWorkflowState.SKILL_TIP_ACCOUNT_CREATED);
+  assert.equal(result.action, EventWorkflowAction.RETURN_SKILL_TIP_ACCOUNT_EVENT);
+  assert.equal(result.terminal, true);
+});
+
+test('classifies account-reloaded as optional skill tip account confirmation', () => {
+  const result = classifyEventWorkflow({ eventType: 'account-reloaded' });
+
+  assert.equal(result.domain, EventWorkflowDomain.SKILL_TIP_ACCOUNT);
+  assert.equal(result.state, EventWorkflowState.SKILL_TIP_ACCOUNT_RELOADED);
+  assert.equal(result.terminal, true);
+});
+
+test('correlates a skill tip account event by order id', () => {
+  const result = correlateEventWorkflow(
+    { type: 'account-reloaded', data: { orderId: 'order_1' } },
+    { orderId: 'order_1', merchantId: 'mcht_1' },
+  );
+
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.missingKeys, []);
+  assert.deepEqual(result.mismatchedKeys, []);
+});
+
+test('rejects a skill tip account event for a different order', () => {
+  const result = correlateEventWorkflow(
+    { type: 'account-created', data: { orderId: 'order_other' } },
+    { orderId: 'order_1' },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.mismatchedKeys, ['orderId']);
+});
+
+test('does not accept a type-only skill tip account event', () => {
+  const result = correlateEventWorkflow(
+    { type: 'account-created' },
+    { orderId: 'order_1' },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.missingKeys, ['orderId']);
+});
+
+test('correlates a skill tip account event by customer and merchant when order is unavailable', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'account-reloaded',
+      data: { customerId: 'cust_1', merchantId: 'mcht_1', skillId: 'skill_1' },
+    },
+    { customerId: 'cust_1', merchantId: 'mcht_1', skillId: 'skill_1' },
+  );
+
+  assert.equal(result.matched, true);
+});
+
+test('requires a compound identity when a skill tip order id is unavailable', () => {
+  const result = correlateEventWorkflow(
+    { type: 'account-created', data: { merchantId: 'mcht_1' } },
+    { merchantId: 'mcht_1' },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.missingKeys, ['expectedResource']);
+});
+
+test('a correlated optional account event returns terminal evidence without a status command', () => {
+  const result = classifyEventPollObservation(
+    {
+      ready: true,
+      timedOut: false,
+      events: [{ type: 'account-created', data: { orderId: 'order_1' } }],
+    },
+    {
+      eventType: 'account-created',
+      expectedResource: { orderId: 'order_1' },
+      noAck: false,
+      maxWaitSeconds: 60,
+    },
+  );
+
+  assert.equal(result.state, EventWorkflowState.SKILL_TIP_ACCOUNT_CREATED);
+  assert.equal(result.action, EventWorkflowAction.RETURN_SKILL_TIP_ACCOUNT_EVENT);
+  assert.equal(result.matched, true);
+  assert.equal(result.terminal, true);
+  assert.equal(result.verifyCommand, undefined);
+});
 
 test('event wait request starts a typed no-ack poll with resource correlation metadata', () => {
   const result = classifyEventWaitRequest(instructionWaitSpec);
