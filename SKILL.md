@@ -1,7 +1,7 @@
 ---
 name: clink-payment-skill
-description: "Use when handling Clink wallet init/status/config, risk rules, authorization or mandate management, card binding or payment-instrument readiness, known merchant_id recharge/top-up/payment, Clink pay product-link purchase (买/购买/下单 商品链接), generic UCP checkout with known or unknown merchant_id, async payment/refund/VIC/3DS events, or refund create/status."
-version: "1.3.0"
+description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), or explicitly tipping a skill by publisher/name or Number."
+version: "1.4.0"
 requires:
   node: ">=20"
   bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -11,7 +11,7 @@ requires:
 
 Use this skill for direct Clink payment operations through `clink-cli`.
 
-This skill executes wallet, card, payment, refund, risk, VIC instruction, internal/external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
+This skill executes wallet, card, payment, refund, risk, VIC instruction, public-skill listing/tipping, internal/external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
 
 ## Execution Ownership
 
@@ -31,6 +31,7 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel | `references/clink-instruction.md` |
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
 | UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, checkout route resolution, checkout create/complete | `references/clink-ucp-checkout.md` |
+| Public skill listing, skill tip input/authorization, Number snapshot safety, tip result handling, optional merchant account events | `references/clink-skill-tip.md` |
 
 Read multiple references when a workflow crosses boundaries. Example: a product order through UCP checkout needs `clink-cli-invocation.md`, `clink-wallet-config.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`.
 
@@ -44,6 +45,8 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - order a discovered product or product URL/product link through the UCP checkout control flow: resolve or explore to a product detail URL, use `clink-cli tool parse-item --url <item_url>` for product-page facts, select one available item, classify `fulfillmentType`, require a standard complete shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate only when Visa + VIC is ready, start the instruction workflow when no match exists, resolve internal vs external checkout route through `clink-cli tool internal-ucp get-endpoint`, then create and complete checkout only after all guards pass
 - create a full refund or poll refund status
 - wait for async completion events from the Clink event hub
+- list public skills that support tipping and present Number, publisher, skill name, and skill ID
+- tip one skill in USD by exact publisher/name or by a verified Number from the previously displayed list
 - inspect or update local Clink CLI configuration
 
 ## Do Not Use
@@ -68,7 +71,7 @@ Every workflow follows:
 `Observe → Classify → Act → Verify → Return`
 
 1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For wallet init output, use `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and include `[WALLET_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. For payment intent routing, use `lib/payment-intent-router-fsm.mjs` (`classifyPaymentIntent`) and include `[PAYMENT_INTENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Product signals route to UCP checkout only with explicit buy/order/checkout language or an upstream purchaseIntent; otherwise ask for the missing purchase intent. For direct/session pre-pay authorization routing, use `lib/authorization-workflow-fsm.mjs` (`classifyPaymentAuthorizationResolver`) and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. After `instruction create` or `instruction sign-url`, use `classifyAuthorizationDraftObservation` to build the activation waitSpec; after a correlated activation event, use `classifyAuthorizationActiveVerification` on `instruction get --purchase-instruction-id <id> --format json` before resuming. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpParseItemObservation`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`, `classifyUcpPaymentSuccessEventObservation`) and `lib/ucp-checkout-route-fsm.mjs` (`classifyUcpCheckoutRoute`); include `[UCP_CHECKOUT_FSM]` and `[UCP_CHECKOUT_ROUTE_FSM]` markers. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` (`classifyEventWaitRequest`, `classifyEventPollObservation`, and `correlateEventWorkflow`) to start the typed poll and produce the `event_fsm` classification only after resource correlation.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For wallet init output, use `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and include `[WALLET_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. For payment intent routing, use `lib/payment-intent-router-fsm.mjs` (`classifyPaymentIntent`) and include `[PAYMENT_INTENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Skill-tip list questions route to `SKILL_TIP_LIST`; an explicitly authorized tip with one exact target and USD amount routes to `SKILL_TIP`. Use `lib/skill-tip-workflow-fsm.mjs` and include `[SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Product signals route to UCP checkout only with explicit buy/order/checkout language or an upstream purchaseIntent; otherwise ask for the missing purchase intent. For direct/session pre-pay authorization routing, use `lib/authorization-workflow-fsm.mjs` (`classifyPaymentAuthorizationResolver`) and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. After `instruction create` or `instruction sign-url`, use `classifyAuthorizationDraftObservation` to build the activation waitSpec; after a correlated activation event, use `classifyAuthorizationActiveVerification` on `instruction get --purchase-instruction-id <id> --format json` before resuming. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpParseItemObservation`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`, `classifyUcpPaymentSuccessEventObservation`) and `lib/ucp-checkout-route-fsm.mjs` (`classifyUcpCheckoutRoute`); include `[UCP_CHECKOUT_FSM]` and `[UCP_CHECKOUT_ROUTE_FSM]` markers. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` (`classifyEventWaitRequest`, `classifyEventPollObservation`, and `correlateEventWorkflow`) to start the typed poll and produce the `event_fsm` classification only after resource correlation.
 3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
@@ -100,12 +103,26 @@ FSM action contract:
 | `GET_INTERNAL_UCP_ENDPOINT` | Execute the environment-locked internal endpoint command. On success create internal UCP checkout with the returned endpoint. On `NOT_IN_INTERNAL_UCP_LIST`, run the returned standard profile probe. Surface every other error without fallback. |
 | `POLL_PAYMENT_SUCCESS_EVENT` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json` after UCP checkout complete returns `completed`; wait for the matching payment success event. |
 | `RETURN_PAYMENT_SUCCESS_EVENT` | Surface the matched `agent_order.succeeded` event/message to the caller; do not claim merchant fulfillment. |
+| `RETURN_SKILL_TABLE` | Run `clink-cli skills list --all --format json`, preserve CLI Number values, and return the required four-column table. |
+| `REFRESH_SKILL_LIST` | Refresh the list immediately before a Number tip and compare Number, publisher, skill name, and skill ID with the displayed snapshot. |
+| `ASK_FOR_REAUTHORIZATION` | Stop before payment when a Number row is missing or changed; show the refreshed target and require fresh authorization. |
+| `RUN_SKILL_TIP` | Execute the exact authorized identity or Number tip command without adding currency or payment-instrument flags. |
+| `SEND_PASSKEY_AND_WAIT` | Surface the tip Passkey URL and preserve the CLI resume command; no tip payment has occurred yet. |
+| `START_OPTIONAL_ACCOUNT_EVENT_WATCH` | After synchronous tip payment success, immediately start bounded `account-created` and `account-reloaded` polls in parallel. |
+| `RETURN_TIP_SUCCESS` | Return `PAID` plus one correlated optional account event. |
+| `RETURN_TIP_SUCCESS_WITHOUT_ACCOUNT_EVENT` | Return `PAID` when neither optional account event is observed in the bounded window. |
+| `RETURN_TIP_SUCCESS_WITH_WARNING` | Return `PAID` plus an optional-monitoring warning when account polling fails. |
 | `SURFACE_ERROR` | Surface the CLI/API error and stop without inventing recovery. |
 
 ## Routing And Action Matrix
 
 | Observation | Action |
 | --- | --- |
+| User asks which skills support tipping | Run `clink-cli skills list --all --format json`, classify with `classifySkillListObservation`, and return Number, publisher, skill name, and skill ID. |
+| User explicitly authorizes an identity tip | Require exact publisher/name, a positive amount, and USD; run `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json`. |
+| User explicitly authorizes a Number tip | Require a displayed Number snapshot, refresh and compare the row, then run `clink-cli skills tip --number <number> --amount <amount> --format json` only when unchanged. |
+| Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the two optional account-event polls. |
+| Optional skill-tip account polls time out or fail | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
 | Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
 | `wallet init` returns `BOOTSTRAP_OTP_REQUIRED` / `71160015` / `cwallet.bootstrap.otp.required` | Ask the user to check the Clink verification email and provide the OTP, then retry `clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json` using the same email, name, and environment lock. |
 | User must bind/manage card or risk rules | Emit the link and immediately start a concurrent, non-blocking watch (bound command watch, or `events poll` for a hand-built URL such as the Visa Passkey registration link), then verify the matching event; do not wait for the user to report completion before listening |
@@ -124,6 +141,11 @@ FSM action contract:
 
 ## Hard Rules
 
+- Never run `clink-cli skills tip` unless the current request explicitly authorizes the exact skill target and positive USD amount. List questions and how-to questions are not payment authorization.
+- Number-based tips require the Number snapshot previously displayed in the current workflow. Refresh `skills list --all` immediately before payment; if Number, publisher, skill name, or skill ID changed, stop and require fresh authorization.
+- For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
+- `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.
+- Treat skill-tip exit code 6 or client timeout as an unknown payment state. Never retry the tip automatically.
 - Never run `clink-cli pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
 - Before old `clink-cli pay`, classify fulfillment. For `NO_SHIPPING_REQUIRED`, use the fixed Apple Park default US address (`One Apple Park Way`, Cupertino, CA 95014, `address_country=US`) as the payment-context placeholder. For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, collect a real US shipping address. For `UNKNOWN`, ask first.
 - Old agent pay must use the fixed merchant category code `5999` in `aiAgentInstructionBo.merchantInfo.merchantCategoryCode`; do not ask the user or merchant skill for this MCC.
@@ -155,6 +177,11 @@ FSM action contract:
 
 | Need | Command |
 | --- | --- |
+| List tippable public skills | `clink-cli skills list --all --format json` |
+| Tip by publisher/name | `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json` |
+| Tip by displayed Number | `clink-cli skills tip --number <number> --amount <amount> --format json` |
+| Wait for optional new-account evidence | `clink-cli events poll --type account-created --max-wait 60 --format json` |
+| Wait for optional reload evidence | `clink-cli events poll --type account-reloaded --max-wait 60 --format json` |
 | Initialize wallet | `clink-cli wallet init --email <email> --name <name> [--otp <email_otp>] --format json` (use credentials matching the prefix's environment) |
 | Check wallet readiness | `clink-cli wallet status --format json` |
 | Refresh payment-instrument list without waiting | `clink-cli card binding-link --no-watch --format json` (returns `paymentMethodsVoList` and updates the local cache) |
@@ -222,6 +249,10 @@ For a UCP checkout product order, the merchant/product skill owns product discov
 
 ## Common Mistakes
 
+- Treating a skill-list query as authorization to tip.
+- Treating a bare amount as a skill Number, or using a stale Number without comparing the refreshed row.
+- Waiting for `account-created` / `account-reloaded` before recognizing synchronous tip payment success.
+- Downgrading a paid tip because the merchant emitted no optional account event.
 - Calling `pay` before wallet/card pre-checks.
 - Forcing instruction matching for direct/session pay when the selected/default card is non-Visa or Visa without VIC readiness; this branch bypasses instruction matching.
 - Retrying exit code 6 payments before resolving the unknown state.

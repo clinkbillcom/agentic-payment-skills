@@ -28,6 +28,9 @@ To inspect help without installing a global binary, call the bundle directly:
 node vendor/clink-cli/clink-cli.bundle.mjs --help
 node vendor/clink-cli/clink-cli.bundle.mjs wallet --help
 node vendor/clink-cli/clink-cli.bundle.mjs instruction --help
+node vendor/clink-cli/clink-cli.bundle.mjs skills --help
+node vendor/clink-cli/clink-cli.bundle.mjs skills list --help
+node vendor/clink-cli/clink-cli.bundle.mjs skills tip --help
 ```
 
 ## JSON Output

@@ -10,6 +10,8 @@ const paymentRefund = await readFile(new URL('../references/clink-payment-refund
 const ucpCheckout = await readFile(new URL('../references/clink-ucp-checkout.md', import.meta.url), 'utf8');
 const asyncEvents = await readFile(new URL('../references/clink-async-events.md', import.meta.url), 'utf8');
 const instruction = await readFile(new URL('../references/clink-instruction.md', import.meta.url), 'utf8');
+const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
+const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('skill frontmatter stays compact and trigger-focused', () => {
   const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
@@ -62,6 +64,44 @@ test('skill documents intent routing and checkout route FSMs', () => {
   assert.match(skill, /explicit buy\/order\/checkout language or an upstream purchaseIntent/u);
   assert.match(skill, /lib\/ucp-checkout-route-fsm\.mjs/u);
   assert.match(skill, /UCP_CHECKOUT_ROUTE_FSM/u);
+});
+
+test('skill documents public skill listing and explicitly authorized tip routing', () => {
+  assert.match(skill, /references\/clink-skill-tip\.md/u);
+  assert.match(skill, /lib\/skill-tip-workflow-fsm\.mjs/u);
+  assert.match(skill, /SKILL_TIP_FSM/u);
+  assert.match(skill, /clink-cli skills list --all --format json/u);
+  assert.match(skill, /clink-cli skills tip --publisher/u);
+  assert.match(skill, /clink-cli skills tip --number/u);
+  assert.match(skill, /synchronous agent pay.*payment success/isu);
+  assert.match(skill, /account-created.*account-reloaded/isu);
+  assert.match(skill, /optional/iu);
+});
+
+test('skill tip reference fixes Number drift and optional account event semantics', () => {
+  assert.match(skillTip, /Number.*snapshot/isu);
+  assert.match(skillTip, /refresh.*clink-cli skills list --all/isu);
+  assert.match(skillTip, /changed.*fresh authorization/isu);
+  assert.match(skillTip, /status.*paid.*status.*1.*payment success/isu);
+  assert.match(skillTip, /account-created.*account-reloaded/isu);
+  assert.match(skillTip, /optional/iu);
+  assert.match(skillTip, /Never retry exit code 6/iu);
+  assert.match(skillTip, /clink-cli events poll --type account-created --max-wait 60 --format json/u);
+  assert.match(skillTip, /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u);
+});
+
+test('skill and package versions are bumped for tip routing', () => {
+  assert.match(skill, /version:\s*"1\.4\.0"/u);
+  assert.equal(packageJson.version, '1.4.0');
+});
+
+test('README summaries advertise both skill tip intents', () => {
+  assert.match(readme, /skills list --all/u);
+  assert.match(readme, /skills tip/u);
+  assert.match(readme, /account-created.*account-reloaded/isu);
+  assert.match(readmeZh, /skills list --all/u);
+  assert.match(readmeZh, /skills tip/u);
+  assert.match(readmeZh, /account-created.*account-reloaded/isu);
 });
 
 test('UCP checkout route delegates internal detection to clink-cli before profile fallback', () => {

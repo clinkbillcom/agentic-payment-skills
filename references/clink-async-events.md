@@ -1,6 +1,6 @@
 # Async Events
 
-Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, or post-3DS payment completion.
+Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, post-3DS payment completion, or optional skill-tip merchant account evidence.
 
 ## Model
 
@@ -95,6 +95,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
 | VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
+| Optional skill-tip account event | same `orderId`; when unavailable, require a compound identity with at least two stable fields such as `customerId + merchantId` or `customerId + skillId` |
 
 If the right event type appears for a different resource, keep the current workflow pending or use a status/get command to verify. Do not mark the workflow complete from a type-only match.
 
@@ -110,6 +111,7 @@ If the right event type appears for a different resource, keep the current workf
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
 | UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
+| Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |
 
 ## Rules
 
@@ -117,6 +119,7 @@ If the right event type appears for a different resource, keep the current workf
 - Start listening at URL-emit time; do not wait for the user to report completion before you begin.
 - Do not busy-retry the initiating link command to check status.
 - Do not acknowledge events with `--no-ack` unless you intentionally only want to peek.
+- A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
 - On timeout, return the timeout state and resume command; do not claim success.
 - A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.
 - For refund status, direct `refund get` polling is also acceptable.
