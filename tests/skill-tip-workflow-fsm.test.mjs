@@ -142,6 +142,14 @@ test('tip prerequisites reject missing authorization and unsupported currency', 
   assert.equal(nonUsd.reason, 'skill_tip_currency_unsupported');
 });
 
+test('tip prerequisites require an explicit normalized currency', () => {
+  const { currency: _currency, ...withoutCurrency } = identityTip;
+  const result = classifySkillTipPrerequisites({ tip: withoutCurrency });
+
+  assert.equal(result.state, SkillTipState.TIP_INPUT_REQUIRED);
+  assert.deepEqual(result.missing, ['currency']);
+});
+
 test('synchronous paid agent pay starts optional account event monitoring', () => {
   const result = classifySkillTipObservation({
     exitCode: 0,
@@ -290,6 +298,29 @@ test('optional account event timeouts preserve payment success', () => {
   assert.equal(result.paymentStatus, 'PAID');
   assert.equal(result.accountEventStatus, 'NOT_OBSERVED');
   assert.equal(result.terminal, true);
+});
+
+test('optional account event aggregation waits for the sibling poll', () => {
+  const result = classifySkillTipAccountEventObservation({
+    paymentStatus: 'PAID',
+    pollObservations: [{ eventType: 'account-created', timedOut: true }],
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ACCOUNT_EVENT_WAITING);
+  assert.equal(result.action, SkillTipAction.WAIT_OPTIONAL_ACCOUNT_EVENT);
+  assert.equal(result.paymentStatus, 'PAID');
+  assert.equal(result.terminal, false);
+});
+
+test('one optional poll error waits for the sibling before returning a warning', () => {
+  const result = classifySkillTipAccountEventObservation({
+    paymentStatus: 'PAID',
+    pollObservations: [{ eventType: 'account-created', error: { message: 'network' } }],
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ACCOUNT_EVENT_WAITING);
+  assert.equal(result.action, SkillTipAction.WAIT_OPTIONAL_ACCOUNT_EVENT);
+  assert.equal(result.terminal, false);
 });
 
 test('optional account poll errors preserve payment success with a warning', () => {

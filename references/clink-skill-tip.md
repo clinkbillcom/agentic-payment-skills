@@ -167,6 +167,8 @@ Treat them as ANY_OF. Correlate an event to the current tip using the strongest 
 
 Never accept an event-type-only match. When one correlated event arrives, return it and stop the sibling listener.
 
+Do not report `NOT_OBSERVED` after only one listener settles. Keep waiting until either listener returns a correlated event or both listeners have settled by timeout/error.
+
 If both polls time out, return accountEventStatus=NOT_OBSERVED. This means only that no account event was observed in the bounded window; it does not prove the merchant is unsupported.
 
 If optional polling fails, return accountEventStatus=POLL_ERROR with a warning. Both timeout and poll error preserve paymentStatus=PAID.
@@ -199,4 +201,3 @@ Valid account event statuses are:
 - NOT_STARTED
 
 Do not claim merchant entitlement or any business result beyond the correlated event.
-

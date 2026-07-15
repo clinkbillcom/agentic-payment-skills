@@ -109,6 +109,7 @@ FSM action contract:
 | `RUN_SKILL_TIP` | Execute the exact authorized identity or Number tip command without adding currency or payment-instrument flags. |
 | `SEND_PASSKEY_AND_WAIT` | Surface the tip Passkey URL and preserve the CLI resume command; no tip payment has occurred yet. |
 | `START_OPTIONAL_ACCOUNT_EVENT_WATCH` | After synchronous tip payment success, immediately start bounded `account-created` and `account-reloaded` polls in parallel. |
+| `WAIT_OPTIONAL_ACCOUNT_EVENT` | Keep `PAID` and wait when only one of the two optional account polls has settled; do not report absence until both settle. |
 | `RETURN_TIP_SUCCESS` | Return `PAID` plus one correlated optional account event. |
 | `RETURN_TIP_SUCCESS_WITHOUT_ACCOUNT_EVENT` | Return `PAID` when neither optional account event is observed in the bounded window. |
 | `RETURN_TIP_SUCCESS_WITH_WARNING` | Return `PAID` plus an optional-monitoring warning when account polling fails. |

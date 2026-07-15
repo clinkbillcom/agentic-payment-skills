@@ -80,6 +80,18 @@ test('correlates a skill tip account event by customer and merchant when order i
   assert.equal(result.matched, true);
 });
 
+test('customer and merchant correlation does not require an optional skill id', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'account-created',
+      data: { customerId: 'cust_1', merchantId: 'mcht_1' },
+    },
+    { customerId: 'cust_1', merchantId: 'mcht_1', skillId: 'skill_1' },
+  );
+
+  assert.equal(result.matched, true);
+});
+
 test('requires a compound identity when a skill tip order id is unavailable', () => {
   const result = correlateEventWorkflow(
     { type: 'account-created', data: { merchantId: 'mcht_1' } },
