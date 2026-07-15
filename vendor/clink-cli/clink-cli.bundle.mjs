@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/commander/lib/error.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "node_modules/commander/lib/error.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -71,9 +71,9 @@ var require_error = __commonJS({
   }
 });
 
-// node_modules/commander/lib/argument.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "node_modules/commander/lib/argument.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -199,9 +199,9 @@ var require_argument = __commonJS({
   }
 });
 
-// node_modules/commander/lib/help.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "node_modules/commander/lib/help.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -590,8 +590,8 @@ var require_help = __commonJS({
           helper.visibleOptions(cmd),
           (option) => option.helpGroupHeading ?? "Options:"
         );
-        optionGroups.forEach((options, group) => {
-          const optionList = options.map((option) => {
+        optionGroups.forEach((options2, group) => {
+          const optionList = options2.map((option) => {
             return callFormatItem(
               helper.styleOptionTerm(helper.optionTerm(option)),
               helper.styleOptionDescription(helper.optionDescription(option))
@@ -801,9 +801,9 @@ ${itemIndentStr}`);
   }
 });
 
-// node_modules/commander/lib/option.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "node_modules/commander/lib/option.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1033,11 +1033,11 @@ var require_option = __commonJS({
       /**
        * @param {Option[]} options
        */
-      constructor(options) {
+      constructor(options2) {
         this.positiveOptions = /* @__PURE__ */ new Map();
         this.negativeOptions = /* @__PURE__ */ new Map();
         this.dualOptions = /* @__PURE__ */ new Set();
-        options.forEach((option) => {
+        options2.forEach((option) => {
           if (option.negate) {
             this.negativeOptions.set(option.attributeName(), option);
           } else {
@@ -1114,9 +1114,9 @@ var require_option = __commonJS({
   }
 });
 
-// node_modules/commander/lib/suggestSimilar.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1194,12 +1194,12 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// node_modules/commander/lib/command.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "node_modules/commander/lib/command.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path2 = __require("node:path");
+    var path3 = __require("node:path");
     var fs = __require("node:fs");
     var process2 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2212,9 +2212,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path2.resolve(baseDir, baseName);
+          const localBin = path3.resolve(baseDir, baseName);
           if (fs.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path2.extname(baseName))) return void 0;
+          if (sourceExt.includes(path3.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs.existsSync(`${localBin}${ext}`)
           );
@@ -2232,17 +2232,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path2.resolve(
-            path2.dirname(resolvedScriptPath),
+          executableDir = path3.resolve(
+            path3.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path2.basename(
+            const legacyName = path3.basename(
               this._scriptPath,
-              path2.extname(this._scriptPath)
+              path3.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2253,7 +2253,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path2.extname(executableFile));
+        launchWithNode = sourceExt.includes(path3.extname(executableFile));
         let proc;
         if (process2.platform !== "win32") {
           if (launchWithNode) {
@@ -3168,7 +3168,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path2.basename(filename, path2.extname(filename));
+        this._name = path3.basename(filename, path3.extname(filename));
         return this;
       }
       /**
@@ -3182,9 +3182,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path3) {
-        if (path3 === void 0) return this._executableDir;
-        this._executableDir = path3;
+      executableDir(path4) {
+        if (path4 === void 0) return this._executableDir;
+        this._executableDir = path4;
         return this;
       }
       /**
@@ -3440,9 +3440,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// node_modules/commander/index.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/index.js
 var require_commander = __commonJS({
-  "node_modules/commander/index.js"(exports) {
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3462,10 +3462,1354 @@ var require_commander = __commonJS({
   }
 });
 
-// dist/cli.js
-import { randomUUID } from "node:crypto";
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/pend/index.js
+var require_pend = __commonJS({
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/pend/index.js"(exports, module) {
+    module.exports = Pend;
+    function Pend() {
+      this.pending = 0;
+      this.max = Infinity;
+      this.listeners = [];
+      this.waiting = [];
+      this.error = null;
+    }
+    Pend.prototype.go = function(fn) {
+      if (this.pending < this.max) {
+        pendGo(this, fn);
+      } else {
+        this.waiting.push(fn);
+      }
+    };
+    Pend.prototype.wait = function(cb) {
+      if (this.pending === 0) {
+        cb(this.error);
+      } else {
+        this.listeners.push(cb);
+      }
+    };
+    Pend.prototype.hold = function() {
+      return pendHold(this);
+    };
+    function pendHold(self) {
+      self.pending += 1;
+      var called = false;
+      return onCb;
+      function onCb(err) {
+        if (called) throw new Error("callback called twice");
+        called = true;
+        self.error = self.error || err;
+        self.pending -= 1;
+        if (self.waiting.length > 0 && self.pending < self.max) {
+          pendGo(self, self.waiting.shift());
+        } else if (self.pending === 0) {
+          var listeners = self.listeners;
+          self.listeners = [];
+          listeners.forEach(cbListener);
+        }
+      }
+      function cbListener(listener) {
+        listener(self.error);
+      }
+    }
+    function pendGo(self, fn) {
+      fn(pendHold(self));
+    }
+  }
+});
 
-// node_modules/commander/esm.mjs
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/fd-slicer.js
+var require_fd_slicer = __commonJS({
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/fd-slicer.js"(exports) {
+    var fs = __require("fs");
+    var util = __require("util");
+    var stream = __require("stream");
+    var Readable2 = stream.Readable;
+    var PassThrough = stream.PassThrough;
+    var Pend = require_pend();
+    var EventEmitter = __require("events").EventEmitter;
+    exports.BufferSlicer = BufferSlicer;
+    exports.FdSlicer = FdSlicer;
+    util.inherits(FdSlicer, EventEmitter);
+    function FdSlicer(fd) {
+      EventEmitter.call(this);
+      this.fd = fd;
+      this.pend = new Pend();
+      this.pend.max = 1;
+      this.refCount = 0;
+    }
+    FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
+      var self = this;
+      self.pend.go(function(cb) {
+        fs.read(self.fd, buffer, offset, length, position, function(err, bytesRead, buffer2) {
+          cb();
+          callback(err, bytesRead, buffer2);
+        });
+      });
+    };
+    FdSlicer.prototype.createReadStream = function(options2) {
+      return new ReadStream(this, options2);
+    };
+    FdSlicer.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    FdSlicer.prototype.unref = function() {
+      var self = this;
+      self.refCount -= 1;
+      if (self.refCount < 0) throw new Error("invalid unref");
+      if (self.refCount > 0) return;
+      fs.close(self.fd, onCloseDone);
+      function onCloseDone(err) {
+        if (err) {
+          self.emit("error", err);
+        } else {
+          self.emit("close");
+        }
+      }
+    };
+    util.inherits(ReadStream, Readable2);
+    function ReadStream(context, options2) {
+      options2 = options2 || {};
+      Readable2.call(this, options2);
+      this.context = context;
+      this.context.ref();
+      this.start = options2.start || 0;
+      this.endOffset = options2.end;
+      this.pos = this.start;
+    }
+    ReadStream.prototype._read = function(n) {
+      var self = this;
+      var toRead = Math.min(self._readableState.highWaterMark, n);
+      if (self.endOffset != null) {
+        toRead = Math.min(toRead, self.endOffset - self.pos);
+      }
+      if (toRead <= 0) {
+        self.push(null);
+        this._cleanup();
+        return;
+      }
+      self.context.pend.go(function(cb) {
+        var buffer = Buffer.allocUnsafe(toRead);
+        fs.read(self.context.fd, buffer, 0, toRead, self.pos, function(err, bytesRead) {
+          if (err) {
+            self.destroy(err);
+          } else if (bytesRead === 0) {
+            self.push(null);
+            self._cleanup();
+          } else {
+            self.pos += bytesRead;
+            self.push(buffer.slice(0, bytesRead));
+          }
+          cb();
+        });
+      });
+    };
+    ReadStream.prototype._destroy = function(err, cb) {
+      this._cleanup();
+      cb(err);
+    };
+    ReadStream.prototype._cleanup = function() {
+      if (this.context != null) {
+        this.context.unref();
+        this.context = null;
+      }
+    };
+    util.inherits(BufferSlicer, EventEmitter);
+    function BufferSlicer(buffer) {
+      EventEmitter.call(this);
+      this.refCount = 0;
+      this.buffer = buffer;
+    }
+    BufferSlicer.prototype.read = function(buffer, offset, length, position, callback) {
+      if (!(0 <= offset && offset <= buffer.length)) throw new RangeError("offset outside buffer: 0 <= " + offset + " <= " + buffer.length);
+      if (position < 0) throw new RangeError("position is negative: " + position);
+      if (offset + length > buffer.length) {
+        length = buffer.length - offset;
+      }
+      if (position + length > this.buffer.length) {
+        length = this.buffer.length - position;
+      }
+      if (length <= 0) {
+        setImmediate(function() {
+          callback(null, 0);
+        });
+        return;
+      }
+      this.buffer.copy(buffer, offset, position, position + length);
+      setImmediate(function() {
+        callback(null, length);
+      });
+    };
+    BufferSlicer.prototype.createReadStream = function(options2) {
+      options2 = options2 || {};
+      var readStream = new PassThrough(options2);
+      readStream.start = options2.start || 0;
+      readStream.endOffset = options2.end;
+      readStream.pos = readStream.endOffset || this.buffer.length;
+      var entireSlice = this.buffer.slice(readStream.start, readStream.pos);
+      var maxChunkSize = 65536;
+      var offset = 0;
+      while (true) {
+        var nextOffset = offset + maxChunkSize;
+        if (nextOffset >= entireSlice.length) {
+          if (offset < entireSlice.length) {
+            readStream.write(entireSlice.slice(offset, entireSlice.length));
+          }
+          break;
+        }
+        readStream.write(entireSlice.slice(offset, nextOffset));
+        offset = nextOffset;
+      }
+      readStream.end();
+      return readStream;
+    };
+    BufferSlicer.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    BufferSlicer.prototype.unref = function() {
+      this.refCount -= 1;
+      if (this.refCount < 0) {
+        throw new Error("invalid unref");
+      }
+    };
+  }
+});
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/crc32.js
+var require_crc32 = __commonJS({
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/crc32.js"(exports, module) {
+    var CRC_TABLE = new Int32Array([
+      0,
+      1996959894,
+      3993919788,
+      2567524794,
+      124634137,
+      1886057615,
+      3915621685,
+      2657392035,
+      249268274,
+      2044508324,
+      3772115230,
+      2547177864,
+      162941995,
+      2125561021,
+      3887607047,
+      2428444049,
+      498536548,
+      1789927666,
+      4089016648,
+      2227061214,
+      450548861,
+      1843258603,
+      4107580753,
+      2211677639,
+      325883990,
+      1684777152,
+      4251122042,
+      2321926636,
+      335633487,
+      1661365465,
+      4195302755,
+      2366115317,
+      997073096,
+      1281953886,
+      3579855332,
+      2724688242,
+      1006888145,
+      1258607687,
+      3524101629,
+      2768942443,
+      901097722,
+      1119000684,
+      3686517206,
+      2898065728,
+      853044451,
+      1172266101,
+      3705015759,
+      2882616665,
+      651767980,
+      1373503546,
+      3369554304,
+      3218104598,
+      565507253,
+      1454621731,
+      3485111705,
+      3099436303,
+      671266974,
+      1594198024,
+      3322730930,
+      2970347812,
+      795835527,
+      1483230225,
+      3244367275,
+      3060149565,
+      1994146192,
+      31158534,
+      2563907772,
+      4023717930,
+      1907459465,
+      112637215,
+      2680153253,
+      3904427059,
+      2013776290,
+      251722036,
+      2517215374,
+      3775830040,
+      2137656763,
+      141376813,
+      2439277719,
+      3865271297,
+      1802195444,
+      476864866,
+      2238001368,
+      4066508878,
+      1812370925,
+      453092731,
+      2181625025,
+      4111451223,
+      1706088902,
+      314042704,
+      2344532202,
+      4240017532,
+      1658658271,
+      366619977,
+      2362670323,
+      4224994405,
+      1303535960,
+      984961486,
+      2747007092,
+      3569037538,
+      1256170817,
+      1037604311,
+      2765210733,
+      3554079995,
+      1131014506,
+      879679996,
+      2909243462,
+      3663771856,
+      1141124467,
+      855842277,
+      2852801631,
+      3708648649,
+      1342533948,
+      654459306,
+      3188396048,
+      3373015174,
+      1466479909,
+      544179635,
+      3110523913,
+      3462522015,
+      1591671054,
+      702138776,
+      2966460450,
+      3352799412,
+      1504918807,
+      783551873,
+      3082640443,
+      3233442989,
+      3988292384,
+      2596254646,
+      62317068,
+      1957810842,
+      3939845945,
+      2647816111,
+      81470997,
+      1943803523,
+      3814918930,
+      2489596804,
+      225274430,
+      2053790376,
+      3826175755,
+      2466906013,
+      167816743,
+      2097651377,
+      4027552580,
+      2265490386,
+      503444072,
+      1762050814,
+      4150417245,
+      2154129355,
+      426522225,
+      1852507879,
+      4275313526,
+      2312317920,
+      282753626,
+      1742555852,
+      4189708143,
+      2394877945,
+      397917763,
+      1622183637,
+      3604390888,
+      2714866558,
+      953729732,
+      1340076626,
+      3518719985,
+      2797360999,
+      1068828381,
+      1219638859,
+      3624741850,
+      2936675148,
+      906185462,
+      1090812512,
+      3747672003,
+      2825379669,
+      829329135,
+      1181335161,
+      3412177804,
+      3160834842,
+      628085408,
+      1382605366,
+      3423369109,
+      3138078467,
+      570562233,
+      1426400815,
+      3317316542,
+      2998733608,
+      733239954,
+      1555261956,
+      3268935591,
+      3050360625,
+      752459403,
+      1541320221,
+      2607071920,
+      3965973030,
+      1969922972,
+      40735498,
+      2617837225,
+      3943577151,
+      1913087877,
+      83908371,
+      2512341634,
+      3803740692,
+      2075208622,
+      213261112,
+      2463272603,
+      3855990285,
+      2094854071,
+      198958881,
+      2262029012,
+      4057260610,
+      1759359992,
+      534414190,
+      2176718541,
+      4139329115,
+      1873836001,
+      414664567,
+      2282248934,
+      4279200368,
+      1711684554,
+      285281116,
+      2405801727,
+      4167216745,
+      1634467795,
+      376229701,
+      2685067896,
+      3608007406,
+      1308918612,
+      956543938,
+      2808555105,
+      3495958263,
+      1231636301,
+      1047427035,
+      2932959818,
+      3654703836,
+      1088359270,
+      936918e3,
+      2847714899,
+      3736837829,
+      1202900863,
+      817233897,
+      3183342108,
+      3401237130,
+      1404277552,
+      615818150,
+      3134207493,
+      3453421203,
+      1423857449,
+      601450431,
+      3009837614,
+      3294710456,
+      1567103746,
+      711928724,
+      3020668471,
+      3272380065,
+      1510334235,
+      755167117
+    ]);
+    function crc32(buf) {
+      let crc = -1;
+      for (let x of buf) {
+        crc = CRC_TABLE[(crc ^ x) & 255] ^ crc >>> 8;
+      }
+      return (crc ^ -1) >>> 0;
+    }
+    module.exports = crc32;
+  }
+});
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/index.js
+var require_yauzl = __commonJS({
+  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/index.js"(exports) {
+    var fs = __require("fs");
+    var zlib = __require("zlib");
+    var fd_slicer = require_fd_slicer();
+    var util = __require("util");
+    var EventEmitter = __require("events").EventEmitter;
+    var Transform3 = __require("stream").Transform;
+    var PassThrough = __require("stream").PassThrough;
+    var Writable = __require("stream").Writable;
+    var crc32 = typeof zlib.crc32 === "function" ? zlib.crc32 : require_crc32();
+    exports.open = open3;
+    exports.fromFd = fromFd;
+    exports.fromBuffer = fromBuffer;
+    exports.fromRandomAccessReader = fromRandomAccessReader;
+    exports.openPromise = openPromise2;
+    exports.fromFdPromise = fromFdPromise;
+    exports.fromBufferPromise = fromBufferPromise;
+    exports.fromRandomAccessReaderPromise = fromRandomAccessReaderPromise;
+    exports.dosDateTimeToDate = dosDateTimeToDate;
+    exports.getFileNameLowLevel = getFileNameLowLevel;
+    exports.validateFileName = validateFileName;
+    exports.parseExtraFields = parseExtraFields;
+    exports.ZipFile = ZipFile;
+    exports.Entry = Entry;
+    exports.LocalFileHeader = LocalFileHeader;
+    exports.RandomAccessReader = RandomAccessReader;
+    function openPromise2(path3, options2) {
+      return new Promise((resolve5, reject) => {
+        open3(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve5(zipfile);
+        });
+      });
+    }
+    function fromFdPromise(fd, options2) {
+      return new Promise((resolve5, reject) => {
+        fromFd(fd, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve5(zipfile);
+        });
+      });
+    }
+    function fromBufferPromise(buffer, options2) {
+      return new Promise((resolve5, reject) => {
+        fromBuffer(buffer, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve5(zipfile);
+        });
+      });
+    }
+    function fromRandomAccessReaderPromise(reader, totalSize, options2) {
+      return new Promise((resolve5, reject) => {
+        fromRandomAccessReader(reader, totalSize, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve5(zipfile);
+        });
+      });
+    }
+    function open3(path3, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = true;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      fs.open(path3, "r", function(err, fd) {
+        if (err) return callback(err);
+        fromFd(fd, options2, function(err2, zipfile) {
+          if (err2) fs.close(fd, defaultCallback);
+          callback(err2, zipfile);
+        });
+      });
+    }
+    function fromFd(fd, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = false;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      fs.fstat(fd, function(err, stats) {
+        if (err) return callback(err);
+        var reader = new fd_slicer.FdSlicer(fd);
+        fromRandomAccessReader(reader, stats.size, options2, callback);
+      });
+    }
+    function fromBuffer(buffer, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      options2.autoClose = false;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      var reader = new fd_slicer.BufferSlicer(buffer);
+      fromRandomAccessReader(reader, buffer.length, options2, callback);
+    }
+    function fromRandomAccessReader(reader, totalSize, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = true;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      var decodeStrings = !!options2.decodeStrings;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      if (typeof totalSize !== "number") throw new Error("expected totalSize parameter to be a number");
+      if (totalSize > Number.MAX_SAFE_INTEGER) {
+        throw new Error("zip file too large. only file sizes up to 2^52 are supported due to JavaScript's Number type being an IEEE 754 double.");
+      }
+      reader.ref();
+      var eocdrWithoutCommentSize = 22;
+      var zip64EocdlSize = 20;
+      var maxCommentSize = 65535;
+      var bufferSize = Math.min(zip64EocdlSize + eocdrWithoutCommentSize + maxCommentSize, totalSize);
+      var buffer = newBuffer(bufferSize);
+      var bufferReadStart = totalSize - buffer.length;
+      readAndAssertNoEof(reader, buffer, 0, bufferSize, bufferReadStart, function(err) {
+        if (err) return callback(err);
+        for (var i = bufferSize - eocdrWithoutCommentSize; i >= 0; i -= 1) {
+          if (buffer.readUInt32LE(i) !== 101010256) continue;
+          var eocdrBuffer = buffer.subarray(i);
+          var diskNumber = eocdrBuffer.readUInt16LE(4);
+          var entryCount = eocdrBuffer.readUInt16LE(10);
+          var centralDirectoryOffset = eocdrBuffer.readUInt32LE(16);
+          var commentLength = eocdrBuffer.readUInt16LE(20);
+          var expectedCommentLength = eocdrBuffer.length - eocdrWithoutCommentSize;
+          if (commentLength !== expectedCommentLength) {
+            return callback(new Error("Invalid comment length. Expected: " + expectedCommentLength + ". Found: " + commentLength + ". Are there extra bytes at the end of the file? Or is the end of central dir signature `PK\u263A\u263B` in the comment?"));
+          }
+          var comment = decodeStrings ? decodeBuffer(eocdrBuffer.subarray(22), false) : eocdrBuffer.subarray(22);
+          if (i - zip64EocdlSize >= 0 && buffer.readUInt32LE(i - zip64EocdlSize) === 117853008) {
+            var zip64EocdlBuffer = buffer.subarray(i - zip64EocdlSize, i - zip64EocdlSize + zip64EocdlSize);
+            var zip64EocdrOffset = readUInt64LE(zip64EocdlBuffer, 8);
+            var zip64EocdrBuffer = newBuffer(56);
+            return readAndAssertNoEof(reader, zip64EocdrBuffer, 0, zip64EocdrBuffer.length, zip64EocdrOffset, function(err2) {
+              if (err2) return callback(err2);
+              if (zip64EocdrBuffer.readUInt32LE(0) !== 101075792) {
+                return callback(new Error("invalid zip64 end of central directory record signature"));
+              }
+              diskNumber = zip64EocdrBuffer.readUInt32LE(16);
+              if (diskNumber !== 0) {
+                return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
+              }
+              entryCount = readUInt64LE(zip64EocdrBuffer, 32);
+              centralDirectoryOffset = readUInt64LE(zip64EocdrBuffer, 48);
+              return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
+            });
+          }
+          if (diskNumber !== 0) {
+            return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
+          }
+          return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
+        }
+        callback(new Error("End of central directory record signature not found. Either not a zip file, or file is truncated."));
+      });
+    }
+    util.inherits(ZipFile, EventEmitter);
+    function ZipFile(reader, centralDirectoryOffset, fileSize, entryCount, comment, autoClose, lazyEntries, decodeStrings, validateEntrySizes, strictFileNames) {
+      var self = this;
+      EventEmitter.call(self);
+      self.reader = reader;
+      self.reader.on("error", function(err) {
+        emitError(self, err);
+      });
+      self.reader.once("close", function() {
+        self.emit("close");
+      });
+      self.readEntryCursor = centralDirectoryOffset;
+      self.fileSize = fileSize;
+      self.entryCount = entryCount;
+      self.comment = comment;
+      self.entriesRead = 0;
+      self.autoClose = !!autoClose;
+      self.lazyEntries = !!lazyEntries;
+      self.decodeStrings = !!decodeStrings;
+      self.validateEntrySizes = !!validateEntrySizes;
+      self.strictFileNames = !!strictFileNames;
+      self.isOpen = true;
+      self.emittedError = false;
+      self.hasEachEntryBeenCalled = false;
+      if (!self.lazyEntries) self._readEntry();
+    }
+    ZipFile.prototype.close = function() {
+      if (!this.isOpen) return;
+      this.isOpen = false;
+      this.reader.unref();
+    };
+    function emitErrorAndAutoClose(self, err) {
+      if (self.autoClose) self.close();
+      emitError(self, err);
+    }
+    function emitError(self, err) {
+      if (self.emittedError) return;
+      self.emittedError = true;
+      self.emit("error", err);
+    }
+    ZipFile.prototype.readEntry = function() {
+      if (!this.lazyEntries) throw new Error("readEntry() called without lazyEntries:true");
+      this._readEntry();
+    };
+    ZipFile.prototype._readEntry = function() {
+      var self = this;
+      if (self.entryCount === self.entriesRead) {
+        setImmediate(function() {
+          if (self.autoClose) self.close();
+          if (self.emittedError) return;
+          self.emit("end");
+        });
+        return;
+      }
+      if (self.emittedError) return;
+      var buffer = newBuffer(46);
+      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err) {
+        if (err) return emitErrorAndAutoClose(self, err);
+        if (self.emittedError) return;
+        var entry = new Entry();
+        var signature = buffer.readUInt32LE(0);
+        if (signature !== 33639248) return emitErrorAndAutoClose(self, new Error("invalid central directory file header signature: 0x" + signature.toString(16)));
+        entry.versionMadeBy = buffer.readUInt16LE(4);
+        entry.versionNeededToExtract = buffer.readUInt16LE(6);
+        entry.generalPurposeBitFlag = buffer.readUInt16LE(8);
+        entry.compressionMethod = buffer.readUInt16LE(10);
+        entry.lastModFileTime = buffer.readUInt16LE(12);
+        entry.lastModFileDate = buffer.readUInt16LE(14);
+        entry.crc32 = buffer.readUInt32LE(16);
+        entry.compressedSize = buffer.readUInt32LE(20);
+        entry.uncompressedSize = buffer.readUInt32LE(24);
+        entry.fileNameLength = buffer.readUInt16LE(28);
+        entry.extraFieldLength = buffer.readUInt16LE(30);
+        entry.fileCommentLength = buffer.readUInt16LE(32);
+        entry.internalFileAttributes = buffer.readUInt16LE(36);
+        entry.externalFileAttributes = buffer.readUInt32LE(38);
+        entry.relativeOffsetOfLocalHeader = buffer.readUInt32LE(42);
+        if (entry.generalPurposeBitFlag & 64) return emitErrorAndAutoClose(self, new Error("strong encryption is not supported"));
+        self.readEntryCursor += 46;
+        buffer = newBuffer(entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
+        readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err2) {
+          if (err2) return emitErrorAndAutoClose(self, err2);
+          if (self.emittedError) return;
+          entry.fileNameRaw = buffer.subarray(0, entry.fileNameLength);
+          var fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
+          entry.extraFieldRaw = buffer.subarray(entry.fileNameLength, fileCommentStart);
+          entry.fileCommentRaw = buffer.subarray(fileCommentStart, fileCommentStart + entry.fileCommentLength);
+          try {
+            entry.extraFields = parseExtraFields(entry.extraFieldRaw);
+          } catch (err3) {
+            return emitErrorAndAutoClose(self, err3);
+          }
+          if (self.decodeStrings) {
+            var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
+            entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
+            entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
+            var errorMessage = validateFileName(entry.fileName);
+            if (errorMessage != null) return emitErrorAndAutoClose(self, new Error(errorMessage));
+          } else {
+            entry.fileComment = entry.fileCommentRaw;
+            entry.fileName = entry.fileNameRaw;
+          }
+          entry.comment = entry.fileComment;
+          self.readEntryCursor += buffer.length;
+          self.entriesRead += 1;
+          for (var i = 0; i < entry.extraFields.length; i++) {
+            var extraField = entry.extraFields[i];
+            if (extraField.id !== 1) continue;
+            var zip64EiefBuffer = extraField.data;
+            var index = 0;
+            if (entry.uncompressedSize === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include uncompressed size"));
+              }
+              entry.uncompressedSize = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            if (entry.compressedSize === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include compressed size"));
+              }
+              entry.compressedSize = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            if (entry.relativeOffsetOfLocalHeader === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include relative header offset"));
+              }
+              entry.relativeOffsetOfLocalHeader = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            break;
+          }
+          if (self.validateEntrySizes && entry.compressionMethod === 0) {
+            var expectedCompressedSize = entry.uncompressedSize;
+            if (entry.isEncrypted()) {
+              expectedCompressedSize += 12;
+            }
+            if (entry.compressedSize !== expectedCompressedSize) {
+              var msg = "compressed/uncompressed size mismatch for stored file: " + entry.compressedSize + " != " + entry.uncompressedSize;
+              return emitErrorAndAutoClose(self, new Error(msg));
+            }
+          }
+          self.emit("entry", entry);
+          if (!self.lazyEntries) self._readEntry();
+        });
+      });
+    };
+    ZipFile.prototype.eachEntry = function() {
+      const self = this;
+      if (!self.lazyEntries) throw new Error("eachEntry() requires lazyEntries: true");
+      if (self.hasEachEntryBeenCalled) throw new Error("eachEntry() must only be called once per ZipFile");
+      self.hasEachEntryBeenCalled = true;
+      let pendingResolveReject = null;
+      self.on("entry", onEntry);
+      self.on("end", onEnd);
+      self.on("error", onError);
+      function cleanup() {
+        self.removeListener("entry", onEntry);
+        self.removeListener("end", onEnd);
+        self.removeListener("error", onError);
+        if (self.autoClose) self.close();
+      }
+      function onEntry(entry) {
+        let { resolve: resolve5 } = pendingResolveReject;
+        pendingResolveReject = null;
+        resolve5({ value: entry });
+      }
+      function onEnd() {
+        let { resolve: resolve5 } = pendingResolveReject;
+        pendingResolveReject = null;
+        cleanup();
+        resolve5({ done: true });
+      }
+      function onError(err) {
+        let { reject } = pendingResolveReject;
+        pendingResolveReject = null;
+        cleanup();
+        reject(err);
+      }
+      return {
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+        next() {
+          const promise = new Promise((resolve5, reject) => {
+            if (pendingResolveReject != null) throw new Error("next() called before previous Promise was resolved.");
+            pendingResolveReject = { resolve: resolve5, reject };
+          });
+          self.readEntry();
+          return promise;
+        },
+        return(value) {
+          cleanup();
+          return Promise.resolve({ done: true, value });
+        },
+        throw(value) {
+          cleanup();
+          return Promise.reject(value);
+        }
+      };
+    };
+    ZipFile.prototype.openReadStream = function(entry, options2, callback) {
+      var self = this;
+      var relativeStart = 0;
+      var relativeEnd = entry.compressedSize;
+      if (callback == null) {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) {
+        options2 = {};
+      } else {
+        if (options2.decodeFileData === false) {
+          if (options2.decrypt != null) {
+            throw new Error("cannot use options.decrypt when options.decodeFileData === false");
+          }
+          if (options2.decompress != null) {
+            throw new Error("cannot use options.decompress when options.decodeFileData === false");
+          }
+        } else {
+          if (options2.decrypt != null) {
+            if (!entry.isEncrypted()) {
+              throw new Error("options.decrypt can only be specified for encrypted entries. See also option decodeFileData.");
+            }
+            if (options2.decrypt !== false) throw new Error("invalid options.decrypt value: " + options2.decrypt);
+            if (entry.isCompressed()) {
+              if (options2.decompress !== false) throw new Error("entry is encrypted and compressed, and options.decompress !== false. See also option decodeFileData.");
+            }
+          }
+          if (options2.decompress != null) {
+            if (!entry.isCompressed()) {
+              throw new Error("options.decompress can only be specified for compressed entries. See also option decodeFileData.");
+            }
+            if (!(options2.decompress === false || options2.decompress === true)) {
+              throw new Error("invalid options.decompress value: " + options2.decompress);
+            }
+            decompress = options2.decompress;
+          }
+        }
+        if (options2.start != null) {
+          relativeStart = options2.start;
+          if (relativeStart < 0) throw new Error("options.start < 0");
+          if (relativeStart > entry.compressedSize) throw new Error("options.start > entry.compressedSize");
+        }
+        if (options2.end != null) {
+          relativeEnd = options2.end;
+          if (relativeEnd < 0) throw new Error("options.end < 0");
+          if (relativeEnd > entry.compressedSize) throw new Error("options.end > entry.compressedSize");
+          if (relativeEnd < relativeStart) throw new Error("options.end < options.start");
+        }
+      }
+      var rawMode = options2.decodeFileData === false || // Explicitly requested raw.
+      (entry.compressionMethod === 0 || // Naturally without compression.
+      entry.compressionMethod === 8 && options2.decompress === false) && (!entry.isEncrypted() || // Naturally without encryption.
+      options2.decrypt === false);
+      if (options2.start != null || options2.end != null) {
+        if (!rawMode) throw new Error("start/end range require options.decodeFileData === false for non-trivial encoded entries.");
+      }
+      if (!self.isOpen) return callback(new Error("closed"));
+      if (entry.isEncrypted() && !rawMode) {
+        if (options2.decrypt !== false) return callback(new Error("entry is encrypted, and options.decodeFileData !== false"));
+      }
+      var decompress;
+      if (rawMode) {
+        decompress = false;
+      } else if (entry.compressionMethod === 8) {
+        decompress = options2.decodeFileData !== true;
+      } else {
+        return callback(new Error("unsupported compression method: " + entry.compressionMethod));
+      }
+      self.readLocalFileHeader(entry, { minimal: true }, function(err, localFileHeader) {
+        if (err) return callback(err);
+        self.openReadStreamLowLevel(
+          localFileHeader.fileDataStart,
+          entry.compressedSize,
+          relativeStart,
+          relativeEnd,
+          decompress,
+          entry.uncompressedSize,
+          callback
+        );
+      });
+    };
+    ZipFile.prototype.openReadStreamLowLevel = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, callback) {
+      var self = this;
+      var fileDataEnd = fileDataStart + compressedSize;
+      var readStream = self.reader.createReadStream({
+        start: fileDataStart + relativeStart,
+        end: fileDataStart + relativeEnd
+      });
+      var endpointStream = readStream;
+      if (decompress) {
+        var destroyed = false;
+        var inflateFilter = zlib.createInflateRaw();
+        readStream.on("error", function(err) {
+          setImmediate(function() {
+            if (!destroyed) inflateFilter.emit("error", err);
+          });
+        });
+        readStream.pipe(inflateFilter);
+        if (self.validateEntrySizes) {
+          endpointStream = new AssertByteCountStream(uncompressedSize);
+          inflateFilter.on("error", function(err) {
+            setImmediate(function() {
+              if (!destroyed) endpointStream.emit("error", err);
+            });
+          });
+          inflateFilter.pipe(endpointStream);
+        } else {
+          endpointStream = inflateFilter;
+        }
+        installDestroyFn(endpointStream, function() {
+          destroyed = true;
+          if (inflateFilter !== endpointStream) inflateFilter.unpipe(endpointStream);
+          readStream.unpipe(inflateFilter);
+          readStream.destroy();
+        });
+      }
+      callback(null, endpointStream);
+    };
+    ZipFile.prototype.readLocalFileHeader = function(entry, options2, callback) {
+      var self = this;
+      if (callback == null) {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      self.reader.ref();
+      var buffer = newBuffer(30);
+      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader, function(err) {
+        try {
+          if (err) return callback(err);
+          var signature = buffer.readUInt32LE(0);
+          if (signature !== 67324752) {
+            return callback(new Error("invalid local file header signature: 0x" + signature.toString(16)));
+          }
+          var fileNameLength = buffer.readUInt16LE(26);
+          var extraFieldLength = buffer.readUInt16LE(28);
+          var fileDataStart = entry.relativeOffsetOfLocalHeader + 30 + fileNameLength + extraFieldLength;
+          if (fileDataStart + entry.compressedSize > self.fileSize) {
+            return callback(new Error("file data overflows file bounds: " + fileDataStart + " + " + entry.compressedSize + " > " + self.fileSize));
+          }
+          if (options2.minimal) {
+            return callback(null, { fileDataStart });
+          }
+          var localFileHeader = new LocalFileHeader();
+          localFileHeader.fileDataStart = fileDataStart;
+          localFileHeader.versionNeededToExtract = buffer.readUInt16LE(4);
+          localFileHeader.generalPurposeBitFlag = buffer.readUInt16LE(6);
+          localFileHeader.compressionMethod = buffer.readUInt16LE(8);
+          localFileHeader.lastModFileTime = buffer.readUInt16LE(10);
+          localFileHeader.lastModFileDate = buffer.readUInt16LE(12);
+          localFileHeader.crc32 = buffer.readUInt32LE(14);
+          localFileHeader.compressedSize = buffer.readUInt32LE(18);
+          localFileHeader.uncompressedSize = buffer.readUInt32LE(22);
+          localFileHeader.fileNameLength = fileNameLength;
+          localFileHeader.extraFieldLength = extraFieldLength;
+          buffer = newBuffer(fileNameLength + extraFieldLength);
+          self.reader.ref();
+          readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader + 30, function(err2) {
+            try {
+              if (err2) return callback(err2);
+              localFileHeader.fileName = buffer.subarray(0, fileNameLength);
+              localFileHeader.extraField = buffer.subarray(fileNameLength);
+              return callback(null, localFileHeader);
+            } finally {
+              self.reader.unref();
+            }
+          });
+        } finally {
+          self.reader.unref();
+        }
+      });
+    };
+    ZipFile.prototype.openReadStreamPromise = function(entry, options2) {
+      return new Promise((resolve5, reject) => {
+        this.openReadStream(entry, options2, function(err, readStream) {
+          if (err) return reject(err);
+          resolve5(readStream);
+        });
+      });
+    };
+    ZipFile.prototype.openReadStreamLowLevelPromise = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize) {
+      return new Promise((resolve5, reject) => {
+        this.openReadStream(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, function(err, readStream) {
+          if (err) return reject(err);
+          resolve5(readStream);
+        });
+      });
+    };
+    ZipFile.prototype.readLocalFileHeaderPromise = function(entry, options2) {
+      return new Promise((resolve5, reject) => {
+        this.readLocalFileHeader(entry, options2, function(err, localFileHeader) {
+          if (err) return reject(err);
+          resolve5(localFileHeader);
+        });
+      });
+    };
+    function Entry() {
+    }
+    Entry.prototype.getLastModDate = function(options2) {
+      if (options2 == null) options2 = {};
+      if (!options2.forceDosFormat) {
+        for (var i = 0; i < this.extraFields.length; i++) {
+          var extraField = this.extraFields[i];
+          if (extraField.id === 21589) {
+            var data = extraField.data;
+            if (data.length < 5) continue;
+            var flags = data[0];
+            var HAS_MTIME = 1;
+            if (!(flags & HAS_MTIME)) continue;
+            var posixTimestamp = data.readInt32LE(1);
+            return new Date(posixTimestamp * 1e3);
+          } else if (extraField.id === 10) {
+            var data = extraField.data;
+            if (data.length !== 32) continue;
+            if (data.readUInt16LE(4) !== 1) continue;
+            if (data.readUInt16LE(6) !== 24) continue;
+            var hundredNanoSecondsSince1601 = data.readUInt32LE(8) + 4294967296 * data.readInt32LE(12);
+            var millisecondsSince1970 = hundredNanoSecondsSince1601 / 1e4 - 116444736e5;
+            return new Date(millisecondsSince1970);
+          }
+        }
+      }
+      return dosDateTimeToDate(this.lastModFileDate, this.lastModFileTime, options2.timezone);
+    };
+    Entry.prototype.canDecodeFileData = function() {
+      return !this.isEncrypted() && (this.compressionMethod === 0 || this.compressionMethod === 8);
+    };
+    Entry.prototype.isEncrypted = function() {
+      return (this.generalPurposeBitFlag & 1) !== 0;
+    };
+    Entry.prototype.isCompressed = function() {
+      return this.compressionMethod === 8;
+    };
+    function LocalFileHeader() {
+    }
+    function dosDateTimeToDate(date, time, timezone) {
+      var day = date & 31;
+      var month = (date >> 5 & 15) - 1;
+      var year = (date >> 9 & 127) + 1980;
+      var millisecond = 0;
+      var second = (time & 31) * 2;
+      var minute = time >> 5 & 63;
+      var hour = time >> 11 & 31;
+      if (timezone == null || timezone === "local") {
+        return new Date(year, month, day, hour, minute, second, millisecond);
+      } else if (timezone === "UTC") {
+        return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond));
+      } else {
+        throw new Error("unrecognized options.timezone: " + options.timezone);
+      }
+    }
+    function getFileNameLowLevel(generalPurposeBitFlag, fileNameBuffer, extraFields, strictFileNames) {
+      var fileName = null;
+      for (var i = 0; i < extraFields.length; i++) {
+        var extraField = extraFields[i];
+        if (extraField.id === 28789) {
+          if (extraField.data.length < 6) {
+            continue;
+          }
+          if (extraField.data.readUInt8(0) !== 1) {
+            continue;
+          }
+          var oldNameCrc32 = extraField.data.readUInt32LE(1);
+          if (crc32(fileNameBuffer) !== oldNameCrc32) {
+            continue;
+          }
+          fileName = decodeBuffer(extraField.data.subarray(5), true);
+          break;
+        }
+      }
+      if (fileName == null) {
+        var isUtf8 = (generalPurposeBitFlag & 2048) !== 0;
+        fileName = decodeBuffer(fileNameBuffer, isUtf8);
+      }
+      if (!strictFileNames) {
+        fileName = fileName.replace(/\\/g, "/");
+      }
+      return fileName;
+    }
+    function validateFileName(fileName) {
+      if (fileName.indexOf("\\") !== -1) {
+        return "invalid characters in fileName: " + fileName;
+      }
+      if (/^[a-zA-Z]:/.test(fileName) || /^\//.test(fileName)) {
+        return "absolute path: " + fileName;
+      }
+      if (fileName.split("/").indexOf("..") !== -1) {
+        return "invalid relative path: " + fileName;
+      }
+      return null;
+    }
+    function parseExtraFields(extraFieldBuffer) {
+      var extraFields = [];
+      var i = 0;
+      while (i < extraFieldBuffer.length - 3) {
+        var headerId = extraFieldBuffer.readUInt16LE(i + 0);
+        var dataSize = extraFieldBuffer.readUInt16LE(i + 2);
+        var dataStart = i + 4;
+        var dataEnd = dataStart + dataSize;
+        if (dataEnd > extraFieldBuffer.length) throw new Error("extra field length exceeds extra field buffer size");
+        var dataBuffer = extraFieldBuffer.subarray(dataStart, dataEnd);
+        extraFields.push({
+          id: headerId,
+          data: dataBuffer
+        });
+        i = dataEnd;
+      }
+      return extraFields;
+    }
+    function readAndAssertNoEof(reader, buffer, offset, length, position, callback) {
+      if (length === 0) {
+        return setImmediate(function() {
+          callback(null, newBuffer(0));
+        });
+      }
+      reader.read(buffer, offset, length, position, function(err, bytesRead) {
+        if (err) return callback(err);
+        if (bytesRead < length) {
+          return callback(new Error("unexpected EOF"));
+        }
+        callback();
+      });
+    }
+    util.inherits(AssertByteCountStream, Transform3);
+    function AssertByteCountStream(byteCount) {
+      Transform3.call(this);
+      this.actualByteCount = 0;
+      this.expectedByteCount = byteCount;
+    }
+    AssertByteCountStream.prototype._transform = function(chunk, encoding, cb) {
+      this.actualByteCount += chunk.length;
+      if (this.actualByteCount > this.expectedByteCount) {
+        var msg = "too many bytes in the stream. expected " + this.expectedByteCount + ". got at least " + this.actualByteCount;
+        return cb(new Error(msg));
+      }
+      cb(null, chunk);
+    };
+    AssertByteCountStream.prototype._flush = function(cb) {
+      if (this.actualByteCount < this.expectedByteCount) {
+        var msg = "not enough bytes in the stream. expected " + this.expectedByteCount + ". got only " + this.actualByteCount;
+        return cb(new Error(msg));
+      }
+      cb();
+    };
+    util.inherits(RandomAccessReader, EventEmitter);
+    function RandomAccessReader() {
+      EventEmitter.call(this);
+      this.refCount = 0;
+    }
+    RandomAccessReader.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    RandomAccessReader.prototype.unref = function() {
+      var self = this;
+      self.refCount -= 1;
+      if (self.refCount > 0) return;
+      if (self.refCount < 0) throw new Error("invalid unref");
+      self.close(onCloseDone);
+      function onCloseDone(err) {
+        if (err) return self.emit("error", err);
+        self.emit("close");
+      }
+    };
+    RandomAccessReader.prototype.createReadStream = function(options2) {
+      if (options2 == null) options2 = {};
+      var start = options2.start;
+      var end = options2.end;
+      if (start === end) {
+        var emptyStream = new PassThrough();
+        setImmediate(function() {
+          emptyStream.end();
+        });
+        return emptyStream;
+      }
+      var stream = this._readStreamForRange(start, end);
+      var destroyed = false;
+      var refUnrefFilter = new RefUnrefFilter(this);
+      stream.on("error", function(err) {
+        setImmediate(function() {
+          if (!destroyed) refUnrefFilter.emit("error", err);
+        });
+      });
+      installDestroyFn(refUnrefFilter, function() {
+        stream.unpipe(refUnrefFilter);
+        refUnrefFilter.unref();
+        stream.destroy();
+      });
+      var byteCounter = new AssertByteCountStream(end - start);
+      refUnrefFilter.on("error", function(err) {
+        setImmediate(function() {
+          if (!destroyed) byteCounter.emit("error", err);
+        });
+      });
+      installDestroyFn(byteCounter, function() {
+        destroyed = true;
+        refUnrefFilter.unpipe(byteCounter);
+        refUnrefFilter.destroy();
+      });
+      return stream.pipe(refUnrefFilter).pipe(byteCounter);
+    };
+    RandomAccessReader.prototype._readStreamForRange = function(start, end) {
+      throw new Error("not implemented");
+    };
+    RandomAccessReader.prototype.read = function(buffer, offset, length, position, callback) {
+      var readStream = this.createReadStream({ start: position, end: position + length });
+      var writeStream = new Writable();
+      var written = 0;
+      writeStream._write = function(chunk, encoding, cb) {
+        chunk.copy(buffer, offset + written, 0, chunk.length);
+        written += chunk.length;
+        cb();
+      };
+      writeStream.on("finish", callback);
+      readStream.on("error", function(error) {
+        callback(error);
+      });
+      readStream.pipe(writeStream);
+    };
+    RandomAccessReader.prototype.close = function(callback) {
+      setImmediate(callback);
+    };
+    util.inherits(RefUnrefFilter, PassThrough);
+    function RefUnrefFilter(context) {
+      PassThrough.call(this);
+      this.context = context;
+      this.context.ref();
+      this.unreffedYet = false;
+    }
+    RefUnrefFilter.prototype._flush = function(cb) {
+      this.unref();
+      cb();
+    };
+    RefUnrefFilter.prototype.unref = function(cb) {
+      if (this.unreffedYet) return;
+      this.unreffedYet = true;
+      this.context.unref();
+    };
+    var cp437 = "\0\u263A\u263B\u2665\u2666\u2663\u2660\u2022\u25D8\u25CB\u25D9\u2642\u2640\u266A\u266B\u263C\u25BA\u25C4\u2195\u203C\xB6\xA7\u25AC\u21A8\u2191\u2193\u2192\u2190\u221F\u2194\u25B2\u25BC !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2302\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0";
+    function decodeBuffer(buffer, isUtf8) {
+      if (isUtf8) {
+        return buffer.toString("utf8");
+      } else {
+        var result = "";
+        for (var i = 0; i < buffer.length; i++) {
+          result += cp437[buffer[i]];
+        }
+        return result;
+      }
+    }
+    function readUInt64LE(buffer, offset) {
+      var lower32 = buffer.readUInt32LE(offset);
+      var upper32 = buffer.readUInt32LE(offset + 4);
+      return upper32 * 4294967296 + lower32;
+    }
+    var newBuffer;
+    if (typeof Buffer.allocUnsafe === "function") {
+      newBuffer = function(len) {
+        return Buffer.allocUnsafe(len);
+      };
+    } else {
+      newBuffer = function(len) {
+        return new Buffer(len);
+      };
+    }
+    function installDestroyFn(stream, fn) {
+      if (typeof stream.destroy === "function") {
+        stream._destroy = function(err, cb) {
+          fn();
+          if (cb != null) cb(err);
+        };
+      } else {
+        stream.destroy = fn;
+      }
+    }
+    function defaultCallback(err) {
+      if (err) throw err;
+    }
+  }
+});
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/cli.js
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { homedir } from "node:os";
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -3482,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// dist/errors.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -3491,7 +4835,8 @@ var EXIT_CODES = {
   AUTH: 4,
   API: 5,
   NETWORK: 6,
-  THREE_DS: 7
+  THREE_DS: 7,
+  INSTALL: 8
 };
 var CliError = class extends Error {
   type;
@@ -3520,12 +4865,17 @@ function apiError(message, code = 400) {
 function networkError(message) {
   return new CliError("network_error", message, EXIT_CODES.NETWORK);
 }
+function installError(message) {
+  return new CliError("install_error", message, EXIT_CODES.INSTALL);
+}
 
-// dist/args.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
   { name: "dry-run", flags: "--dry-run" },
+  { name: "all", flags: "--all" },
+  { name: "force", flags: "--force" },
   { name: "open", flags: "--open" },
   { name: "base-url", flags: "--base-url <url>" },
   { name: "customer-id", flags: "--customer-id <id>" },
@@ -3534,6 +4884,8 @@ var OPTION_DEFINITIONS = [
   { name: "email", flags: "--email <email>" },
   { name: "otp", flags: "--otp <email_otp>" },
   { name: "name", flags: "--name <name>" },
+  { name: "publisher", flags: "--publisher <publisher>" },
+  { name: "number", flags: "--number <number>" },
   { name: "source", flags: "--source <value>" },
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
@@ -3645,12 +4997,12 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// dist/config.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/config.js
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// dist/domains.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/domains.js
 var API_BASE_URLS = {
   production: "https://api.clinkbill.com",
   sandbox: "https://uat-api.clinkbill.com"
@@ -3660,9 +5012,13 @@ var AGENT_BASE_URLS = {
   sandbox: "https://uat-agent.clinkbill.com",
   production: "https://agent.clinkbill.com"
 };
+var DASHBOARD_BASE_URLS = {
+  sandbox: "https://uat-dashboard.clinkbill.com",
+  production: "https://dashboard.clinkbill.com"
+};
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// dist/config.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 function defaultConfig() {
@@ -3852,10 +5208,10 @@ function assignRiskRules(target, value) {
   }
 }
 
-// dist/http.js
-async function requestJson(options) {
-  const url = new URL(options.path, ensureTrailingSlash(options.baseUrl));
-  for (const [key, value] of Object.entries(options.query ?? {})) {
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/http.js
+async function requestJson(options2) {
+  const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
+  for (const [key, value] of Object.entries(options2.query ?? {})) {
     if (value !== void 0) {
       url.searchParams.set(key, String(value));
     }
@@ -3863,34 +5219,34 @@ async function requestJson(options) {
   const headers = {
     Accept: "application/json",
     "Accept-Language": "en-US",
-    ...options.headers ?? {}
+    ...options2.headers ?? {}
   };
-  if (options.body !== void 0) {
+  if (options2.body !== void 0) {
     headers["Content-Type"] = "application/json";
   }
-  if (options.dryRun) {
+  if (options2.dryRun) {
     return {
       dryRun: true,
       request: {
-        method: options.method,
+        method: options2.method,
         url: url.toString(),
         // Redact credential headers: --dry-run is meant to show request shape, and its output lands
         // in logs / CI / shell history. The CLI never echoes customerApiKey elsewhere (see cli.ts).
         headers: redactSensitiveHeaders(headers),
-        body: options.body
+        body: options2.body
       }
     };
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), options2.timeoutMs);
   try {
     const init = {
-      method: options.method,
+      method: options2.method,
       headers,
       signal: controller.signal
     };
-    if (options.body !== void 0) {
-      init.body = JSON.stringify(options.body);
+    if (options2.body !== void 0) {
+      init.body = JSON.stringify(options2.body);
     }
     const response = await fetch(url, init);
     const rawText = await response.text();
@@ -3902,7 +5258,7 @@ async function requestJson(options) {
     };
   } catch (error) {
     if (error.name === "AbortError") {
-      throw networkError(`request timed out after ${options.timeoutMs}ms`);
+      throw networkError(`request timed out after ${options2.timeoutMs}ms`);
     }
     throw networkError(error.message);
   } finally {
@@ -3927,7 +5283,7 @@ function parseBody(rawText) {
   }
 }
 
-// dist/utils.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/utils.js
 import { spawn } from "node:child_process";
 function buildCustomerHeaders(config) {
   if (!config.customerId) {
@@ -3977,6 +5333,26 @@ function resolveAgentBaseUrl(apiBaseUrl) {
   }
   return AGENT_BASE_URLS.production;
 }
+function resolveDashboardBaseUrl(apiBaseUrl) {
+  try {
+    const url = new URL(apiBaseUrl);
+    if (url.origin === API_BASE_URLS.sandbox) {
+      return DASHBOARD_BASE_URLS.sandbox;
+    }
+    if (url.origin === API_BASE_URLS.production) {
+      return DASHBOARD_BASE_URLS.production;
+    }
+    const segments = url.hostname.split(".");
+    const first = segments[0] ?? "";
+    if (/(^|-)api$/i.test(first)) {
+      segments[0] = first.replace(/(^|-)api$/i, "$1dashboard");
+      url.hostname = segments.join(".");
+      return url.origin;
+    }
+  } catch {
+  }
+  return DASHBOARD_BASE_URLS.production;
+}
 function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId) {
   const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
   url.searchParams.set("type", "visa");
@@ -3985,8 +5361,8 @@ function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId) 
   }
   return url.toString();
 }
-function maybeOpenBrowser(open, url) {
-  if (!open) {
+function maybeOpenBrowser(open3, url) {
+  if (!open3) {
     return;
   }
   if (process.platform === "darwin") {
@@ -4092,7 +5468,7 @@ function extractPublicErrorPrefix(message) {
   const prefix = message.slice(0, firstMarkerIndex).replace(/[\s:：,，.。]+$/u, "").trim();
   return prefix.length > 0 ? prefix : void 0;
 }
-function pickDefaultPaymentInstrument(items) {
+function pickDefaultPaymentMethod(items) {
   if (!Array.isArray(items) || items.length === 0) {
     throw configError("no payment methods available; pass --payment-instrument-id explicitly");
   }
@@ -4110,10 +5486,13 @@ function pickDefaultPaymentInstrument(items) {
   if (typeof paymentInstrumentId !== "string" || paymentInstrumentId.length === 0) {
     throw configError("unable to resolve paymentInstrumentId from default card");
   }
-  return paymentInstrumentId;
+  return preferred;
+}
+function pickDefaultPaymentInstrument(items) {
+  return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// dist/events.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -4147,19 +5526,23 @@ var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   "purchase_instruction.updated",
   "purchase_instruction.cancelled"
 ]);
-var realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function eventMatchesInstruction(event, instructionId) {
+  const candidate = event.data.instructionId ?? event.data.purchaseInstructionId ?? event.resourceId;
+  return event.eventType === "purchase_instruction.activated" && candidate === instructionId;
+}
+var realSleep = (ms) => new Promise((resolve5) => setTimeout(resolve5, ms));
 var stderrLog = (message) => {
   process.stderr.write(`\u2022 ${message}
 `);
 };
-async function pollWebhookEvents(options) {
+async function pollWebhookEvents(options2) {
   const result = await requestJson({
-    baseUrl: options.runtimeConfig.baseUrl,
+    baseUrl: options2.runtimeConfig.baseUrl,
     method: "POST",
     path: EVENT_POLL_PATH,
-    headers: buildInstructionHeaders(options.runtimeConfig),
-    body: { pageSize: options.pageSize ?? DEFAULT_PAGE_SIZE },
-    timeoutMs: options.timeoutMs,
+    headers: buildInstructionHeaders(options2.runtimeConfig),
+    body: { pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE },
+    timeoutMs: options2.timeoutMs,
     dryRun: false
   });
   if ("dryRun" in result) {
@@ -4173,17 +5556,17 @@ async function pollWebhookEvents(options) {
   }
   return records.filter(isWebhookEventRecord);
 }
-async function ackWebhookEvents(options, eventIds) {
+async function ackWebhookEvents(options2, eventIds) {
   if (eventIds.length === 0) {
     return;
   }
   const result = await requestJson({
-    baseUrl: options.runtimeConfig.baseUrl,
+    baseUrl: options2.runtimeConfig.baseUrl,
     method: "POST",
     path: EVENT_ACK_PATH,
-    headers: buildInstructionHeaders(options.runtimeConfig),
+    headers: buildInstructionHeaders(options2.runtimeConfig),
     body: { eventIds },
-    timeoutMs: options.timeoutMs,
+    timeoutMs: options2.timeoutMs,
     dryRun: false
   });
   if ("dryRun" in result) {
@@ -4191,24 +5574,24 @@ async function ackWebhookEvents(options, eventIds) {
   }
   assertApiSuccess(result.status, result.body);
 }
-async function watchEvents(options) {
-  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const maxDurationMs = options.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
-  const sleep = options.sleep ?? realSleep;
-  const now = options.now ?? Date.now;
-  const log = options.log ?? stderrLog;
+async function watchEvents(options2) {
+  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+  const sleep = options2.sleep ?? realSleep;
+  const now = options2.now ?? Date.now;
+  const log = options2.log ?? stderrLog;
   const startedAtMs = now();
-  log(`Open this link in your browser to complete the ${options.label}:`);
-  log(`  ${options.url}`);
+  log(`Open this link in your browser to complete the ${options2.label}:`);
+  log(`  ${options2.url}`);
   log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
   const deadline = startedAtMs + maxDurationMs;
   for (; ; ) {
     let records;
     try {
       records = await pollWebhookEvents({
-        runtimeConfig: options.runtimeConfig,
-        timeoutMs: options.timeoutMs,
-        ...options.pageSize !== void 0 ? { pageSize: options.pageSize } : {}
+        runtimeConfig: options2.runtimeConfig,
+        timeoutMs: options2.timeoutMs,
+        ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
       });
     } catch (error) {
       if (!isRecoverableWatchPollError(error)) {
@@ -4225,7 +5608,7 @@ async function watchEvents(options) {
       const currentRecords = records.filter((record) => !isStaleForWatch(record, startedAtMs));
       const staleEventIds = staleRecords.map((record) => record.eventId).filter((id) => id.length > 0);
       if (staleEventIds.length > 0) {
-        await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, staleEventIds);
+        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, staleEventIds);
         log(`Ignored ${staleEventIds.length} stale event(s) from before the watch started.`);
       }
       if (currentRecords.length === 0) {
@@ -4241,9 +5624,9 @@ async function watchEvents(options) {
         log(`  ${event.summary}`);
       }
       const ackedEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-      await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ackedEventIds);
+      await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ackedEventIds);
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return { watched: true, url: options.url, timedOut: false, events, ackedEventIds };
+      return { watched: true, url: options2.url, timedOut: false, events, ackedEventIds };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
@@ -4251,7 +5634,7 @@ async function watchEvents(options) {
     await sleep(pollIntervalMs);
   }
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
-  return { watched: true, url: options.url, timedOut: true, events: [], ackedEventIds: [] };
+  return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
 }
 function isStaleForWatch(record, startedAtMs) {
   const eventTimeMs = parseEventTimeMs(record.eventTime);
@@ -4285,29 +5668,29 @@ function normalizeEpochMs(value) {
 function isRecoverableWatchPollError(error) {
   return error instanceof CliError && (error.type === "network_error" || error.type === "api_error" && error.code === 429);
 }
-async function collectWebhookEvents(options) {
-  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
-  const maxDurationMs = options.maxDurationMs ?? DEFAULT_COLLECT_MAX_DURATION_MS;
-  const ack = options.ack ?? true;
-  const sleep = options.sleep ?? realSleep;
-  const now = options.now ?? Date.now;
+async function collectWebhookEvents(options2) {
+  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_COLLECT_MAX_DURATION_MS;
+  const ack = options2.ack ?? true;
+  const sleep = options2.sleep ?? realSleep;
+  const now = options2.now ?? Date.now;
   const collected = [];
   const ackedEventIds = [];
-  const targetReached = () => options.type ? collected.some((event) => event.eventType === options.type) : collected.length > 0;
+  const targetReached = () => options2.type ? collected.some((event) => event.eventType === options2.type) : collected.length > 0;
   const deadline = now() + maxDurationMs;
   for (; ; ) {
     const records = await pollWebhookEvents({
-      runtimeConfig: options.runtimeConfig,
-      timeoutMs: options.timeoutMs,
-      ...options.pageSize !== void 0 ? { pageSize: options.pageSize } : {}
+      runtimeConfig: options2.runtimeConfig,
+      timeoutMs: options2.timeoutMs,
+      ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
     });
     if (records.length > 0) {
       const events = await processEvents(records);
       collected.push(...events);
       if (ack) {
-        const ackable = options.type ? events.filter((event) => event.eventType === options.type) : events;
+        const ackable = options2.type ? events.filter((event) => event.eventType === options2.type) : events;
         const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({ runtimeConfig: options.runtimeConfig, timeoutMs: options.timeoutMs }, ids);
+        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ids);
         ackedEventIds.push(...ids);
       }
       if (targetReached()) {
@@ -4506,7 +5889,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// dist/help.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -4547,6 +5930,7 @@ Commands:
   wallet            Initialize wallet and inspect local wallet status
   card              Generate card links and manage payment methods
   risk              Inspect or open risk rule settings
+  skills            Discover, install, and tip skills
   pay               Charge a payment instrument
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
@@ -4584,6 +5968,9 @@ Examples:
   clink-cli wallet init --sandbox --email user@example.com --name Alice
   clink-cli wallet status --format pretty
   clink-cli card setup-link --open
+  clink-cli skills list --all --format pretty
+  clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
+  clink-cli skills tip --number 2 --amount 2
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli ucp-checkout get --checkout-id chk_xxx
   clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
@@ -4592,11 +5979,113 @@ Examples:
 More Help:
   clink-cli wallet --help
   clink-cli card --help
+  clink-cli skills --help
   clink-cli ucp-checkout --help
   clink-cli refund --help
   clink-cli instruction --help
   clink-cli tool --help
   clink-cli config --help
+`;
+var SKILLS_HELP = `clink-cli skills
+
+Usage:
+  clink-cli skills <list|install|tip> [options]
+
+Actions:
+  list              List all public skills in reversed NEW order with one-based Number fields
+  install           Download and install a skill package into local agent skill directories
+  tip               Tip a skill publisher using the refreshed default payment method
+
+Examples:
+  clink-cli skills list --all --format pretty
+  clink-cli skills install clinkpay/PollyReach@v1.0.0
+  clink-cli skills install clinkpay/PollyReach --force
+  clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
+  clink-cli skills tip --number 2 --amount 2
+`;
+var SKILLS_LIST_HELP = `clink-cli skills list
+
+Usage:
+  clink-cli skills list --all [options]
+
+Required Arguments:
+  --all                        Request all public skills with pageSize=999
+
+Options:
+  --base-url <url>             Derive the dashboard environment from this API base URL
+  --sandbox                    Use the UAT dashboard environment unless the API base is overridden
+  --timeout <ms>               Request timeout in milliseconds
+${OUTPUT_OPTIONS}
+
+Endpoint:
+  GET /prod-api/skill-marketplace/public/skills?pageSize=999&sort=NEW
+
+Behavior:
+  Reverses the returned items array, then injects a one-based Number into every item.
+  The resulting JSON array is returned through the standard success envelope.
+
+Examples:
+  clink-cli skills list --all --format pretty
+`;
+var SKILLS_INSTALL_HELP = `clink-cli skills install
+
+Usage:
+  clink-cli skills install <publisher>/<skillName>[@<version>] [options]
+
+Arguments:
+  <publisher>/<skillName>[@<version>]
+                              Skill package identity. When @<version> is omitted, the marketplace
+                              returns the latest downloadable version.
+
+Options:
+  --force                     Replace an existing installation and agent link/copy backups
+  --base-url <url>            Resolve the download ticket from this API environment
+  --sandbox                   Use the sandbox API environment unless overridden
+  --timeout <ms>              Request/download timeout in milliseconds
+  --dry-run                   Plan the install without network calls or filesystem writes
+${OUTPUT_OPTIONS}
+
+Install Location:
+  Skill releases are stored under ~/.agents/skills and exposed through the skill's current path.
+
+Agent Integration:
+  Existing local agent homes are detected automatically and updated where supported:
+  Cursor/Claude/Codex/CodeBuddy/Trae, OpenCode/GitHub Copilot/Gemini CLI,
+  OpenClaw/Hermes, and CodeWork/ChatGPT.
+
+Endpoint:
+  GET /public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
+
+Examples:
+  clink-cli skills install clinkpay/PollyReach@v1.0.0
+  clink-cli skills install clinkpay/PollyReach
+  clink-cli skills install clinkpay/PollyReach --force
+  clink-cli skills install clinkpay/PollyReach --dry-run --format pretty
+`;
+var SKILLS_TIP_HELP = `clink-cli skills tip
+
+Usage:
+  clink-cli skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
+  clink-cli skills tip --number <number> --amount <amount> [options]
+
+Target (choose one):
+  --publisher <publisher>      Exact publisher; requires --name
+  --name <skillName>           Exact skill name; requires --publisher
+  --number <number>            Positive Number from 'skills list --all'
+
+Required Argument:
+  --amount <amount>            Any positive finite USD amount
+
+Options:
+  --open                       Open a newly-created Visa authorization link
+  --no-watch                   Return after creating authorization instead of waiting
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Tips use USD and the refreshed default payment method.
+  Number targets are resolved from a fresh list-all result and may change when the list changes.
+  Registered Visa cards use VIC instruction/mandate authorization.
+  Other cards are charged without instruction_id or mandate_id.
 `;
 var TOOL_HELP = `clink-cli tool
 
@@ -5600,6 +7089,17 @@ function printHelp(command, subcommand, nestedCommand) {
 }
 function getHelpText(command, subcommand, nestedCommand) {
   switch (command) {
+    case "skills":
+      switch (subcommand) {
+        case "list":
+          return SKILLS_LIST_HELP;
+        case "install":
+          return SKILLS_INSTALL_HELP;
+        case "tip":
+          return SKILLS_TIP_HELP;
+        default:
+          return SKILLS_HELP;
+      }
     case "wallet":
       switch (subcommand) {
         case "init":
@@ -5718,7 +7218,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// dist/internal-ucp.production.json
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -5730,7 +7230,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// dist/internal-ucp.sandbox.json
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -5738,7 +7238,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// dist/internal-ucp.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -5763,7 +7263,7 @@ function validateInternalUcpMerchants(value, source) {
 }
 var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(internal_ucp_production_default, "internal-ucp.production.json");
 var SANDBOX_MERCHANTS = validateInternalUcpMerchants(internal_ucp_sandbox_default, "internal-ucp.sandbox.json");
-function resolveInternalUcpEndpoint(rawProductUrl, options = {}) {
+function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl;
   try {
     productUrl = new URL(rawProductUrl);
@@ -5771,12 +7271,12 @@ function resolveInternalUcpEndpoint(rawProductUrl, options = {}) {
     throw validationError("invalid --product-url");
   }
   const domainName = canonicalDomain(productUrl.hostname);
-  const merchants = options.merchants ?? (options.sandbox ? SANDBOX_MERCHANTS : PRODUCTION_MERCHANTS);
+  const merchants = options2.merchants ?? (options2.sandbox ? SANDBOX_MERCHANTS : PRODUCTION_MERCHANTS);
   const merchantId = domainName ? merchants.get(domainName) : void 0;
   if (!domainName || !merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  const baseUrl = options.sandbox ? API_BASE_URLS.sandbox : API_BASE_URLS.production;
+  const baseUrl = options2.sandbox ? API_BASE_URLS.sandbox : API_BASE_URLS.production;
   return {
     domainName,
     merchantId,
@@ -5791,7 +7291,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// dist/output.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -5802,10 +7302,10 @@ function printSuccess(data, format) {
 function printJson(value, format) {
   process.stdout.write(serialize(value, format));
 }
-function printError(error, options) {
+function printError(error, options2) {
   const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
-  if (!options.explicitFormat) {
-    process.stderr.write(renderHumanError(cliError, options.helpHint));
+  if (!options2.explicitFormat) {
+    process.stderr.write(renderHumanError(cliError, options2.helpHint));
     return cliError.exitCode;
   }
   const envelope = {
@@ -5816,7 +7316,7 @@ function printError(error, options) {
       message: cliError.message
     }
   };
-  process.stderr.write(serialize(envelope, options.format));
+  process.stderr.write(serialize(envelope, options2.format));
   return cliError.exitCode;
 }
 function serialize(value, format) {
@@ -5836,20 +7336,3917 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// dist/tool.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/amount.js
+function parseAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw validationError("amount must be a positive number");
+  }
+  return amount;
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/authorization-api.js
+var INSTRUCTION_PATH = "/agent/cwallet/instructions";
+function createTipAuthorizationApi(input, overrides = {}) {
+  const dependencies = {
+    requestJson: overrides.requestJson ?? requestJson,
+    writeStoredConfig: overrides.writeStoredConfig ?? writeStoredConfig,
+    collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
+    ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
+  };
+  return {
+    refreshDefaultPaymentMethod: async () => {
+      const binding = await dependencies.requestJson({
+        baseUrl: input.runtimeConfig.baseUrl,
+        method: "POST",
+        path: "/agent/cwallet/card/bindingLink",
+        headers: buildCustomerHeaders(input.runtimeConfig),
+        body: {
+          customerId: input.runtimeConfig.customerId,
+          hasCustomerApiKey: Boolean(input.runtimeConfig.customerApiKey)
+        },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      });
+      const data = unwrapResponse(binding, "invalid card binding response");
+      const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
+      const nextConfig = cloneStoredConfig(input.storedConfig);
+      nextConfig.paymentMethods = paymentMethods.map((method) => ({ ...method }));
+      await dependencies.writeStoredConfig(nextConfig);
+      input.storedConfig.paymentMethods = nextConfig.paymentMethods.map((method) => ({ ...method }));
+      return pickDefaultPaymentMethod(input.storedConfig.paymentMethods);
+    },
+    listInstructions: async (paymentInstrumentId) => {
+      const result = await dependencies.requestJson({
+        baseUrl: input.runtimeConfig.baseUrl,
+        method: "GET",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(input.runtimeConfig),
+        query: { status: "ACTIVE", paymentInstrumentId },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      });
+      return unwrapResponse(result, "invalid instruction list response");
+    },
+    createInstruction: async (draft) => {
+      const result = await dependencies.requestJson({
+        baseUrl: input.runtimeConfig.baseUrl,
+        method: "POST",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(input.runtimeConfig),
+        body: draft,
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      });
+      const data = unwrapResponse(result, "invalid instruction create response");
+      const instructionId = optionalString(data.instructionId) ?? optionalString(data.purchaseInstructionId);
+      if (!instructionId) {
+        throw apiError("missing instructionId in instruction create response", 502);
+      }
+      return {
+        instructionId,
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(input.runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId)
+      };
+    },
+    waitForActivation: async (instructionId) => {
+      const collected = await dependencies.collectWebhookEvents({
+        runtimeConfig: input.runtimeConfig,
+        timeoutMs: input.timeoutMs,
+        type: "purchase_instruction.activated",
+        ack: false
+      });
+      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
+      if (matches.length === 0) {
+        return { activated: false };
+      }
+      const eventIds = matches.map((event) => event.eventId).filter(Boolean);
+      await dependencies.ackWebhookEvents({ runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs }, eventIds);
+      return { activated: true };
+    },
+    getInstruction: async (instructionId) => {
+      const result = await dependencies.requestJson({
+        baseUrl: input.runtimeConfig.baseUrl,
+        method: "GET",
+        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
+        headers: buildInstructionHeaders(input.runtimeConfig),
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      });
+      return unwrapResponse(result, "invalid instruction response");
+    },
+    now: input.now,
+    watch: input.watch,
+    onPasskeyUrl: input.onPasskeyUrl
+  };
+}
+function unwrapResponse(result, invalidMessage) {
+  if ("dryRun" in result) {
+    throw apiError(invalidMessage, 502);
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord(data)) {
+    throw apiError(invalidMessage, 502);
+  }
+  return data;
+}
+function normalizePaymentMethods(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0).map((item) => ({ ...item }));
+}
+function optionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/authorization.js
+var TIP_SHIPPING_ADDRESS = {
+  name: "Clink User",
+  line1: "One Apple Park Way",
+  city: "Cupertino",
+  state: "CA",
+  zip: "95014",
+  countryCode: "US",
+  deliveryContactDetails: {}
+};
+var TIP_PAY_SHIPPING_ADDRESS = {
+  street_address: "One Apple Park Way",
+  address_locality: "Cupertino",
+  address_region: "CA",
+  address_country: "US",
+  postal_code: "95014",
+  first_name: "Clink",
+  last_name: "User",
+  phone_number: "+14089961010"
+};
+function tipAuthorizationTitle(intent) {
+  return `Tip ${intent.publisher}/${intent.skillName}`;
+}
+function isVisaVicReady(method) {
+  const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
+  return typeof brand === "string" && brand.trim().toUpperCase() === "VISA" && method.visaRegistrationSucceeded === true;
+}
+function buildTipInstructionDraft(intent, paymentInstrumentId, nowMs) {
+  const effectiveUntilTime = formatUtcDateTime(nowMs + 30 * 6e4);
+  const title = tipAuthorizationTitle(intent);
+  return {
+    paymentInstrumentId,
+    title,
+    description: title,
+    effectiveUntilTime,
+    shippingAddress: { ...TIP_SHIPPING_ADDRESS },
+    mandates: [{
+      title,
+      description: title,
+      amountLimit: intent.amount,
+      currencyCode: "USD",
+      merchantCategoryCode: "5999",
+      effectiveUntilTime
+    }]
+  };
+}
+function selectTipAuthorization(payload, scope) {
+  const expectedTitle = tipAuthorizationTitle(scope).trim().toLowerCase();
+  const candidates = [];
+  for (const instruction of instructionArray(payload)) {
+    if (normalized(instruction.status) !== "ACTIVE") {
+      continue;
+    }
+    const paymentInstrumentId = optionalString2(instruction.paymentInstrumentId);
+    if (paymentInstrumentId && paymentInstrumentId !== scope.paymentInstrumentId) {
+      continue;
+    }
+    if (expired(instruction.effectiveUntilTime, scope.nowMs)) {
+      continue;
+    }
+    for (const mandate of mandateArray(instruction)) {
+      if (isOneTime(instruction) && !zeroLike(mandate.reserveStatus)) {
+        continue;
+      }
+      if (expired(mandate.effectiveUntilTime, scope.nowMs)) {
+        continue;
+      }
+      if (normalized(mandate.currencyCode ?? mandate.currency) !== scope.currency) {
+        continue;
+      }
+      const amountLimit = Number(mandate.amountLimit);
+      if (!Number.isFinite(amountLimit) || amountLimit < scope.amount) {
+        continue;
+      }
+      const titleMatches = [mandate.title, instruction.title].map(optionalString2).some((title) => title?.toLowerCase() === expectedTitle);
+      if (!titleMatches) {
+        continue;
+      }
+      const exposedMerchantId = optionalString2(mandate.merchantId) ?? optionalString2(instruction.merchantId);
+      if (exposedMerchantId && exposedMerchantId !== scope.merchantId) {
+        continue;
+      }
+      const instructionId = optionalString2(instruction.instructionId) ?? optionalString2(instruction.purchaseInstructionId);
+      const mandateId = optionalString2(mandate.mandateId) ?? optionalString2(mandate.mandateNo) ?? optionalString2(mandate.mandate_id) ?? optionalString2(mandate.id);
+      if (instructionId && mandateId) {
+        candidates.push({ instructionId, mandateId, amountLimit });
+      }
+    }
+  }
+  candidates.sort((left, right) => Number(right.amountLimit === scope.amount) - Number(left.amountLimit === scope.amount) || left.amountLimit - right.amountLimit || left.instructionId.localeCompare(right.instructionId) || left.mandateId.localeCompare(right.mandateId));
+  const selected = candidates[0];
+  return selected ? { instructionId: selected.instructionId, mandateId: selected.mandateId } : void 0;
+}
+async function resolveTipAuthorization(intent, dependencies) {
+  const paymentMethod = await dependencies.refreshDefaultPaymentMethod();
+  if (!isVisaVicReady(paymentMethod)) {
+    return { kind: "bypassed", paymentMethod };
+  }
+  const scope = {
+    ...intent,
+    paymentInstrumentId: paymentMethod.paymentInstrumentId,
+    nowMs: dependencies.now()
+  };
+  let match = selectTipAuthorization(await dependencies.listInstructions(paymentMethod.paymentInstrumentId), scope);
+  if (match) {
+    return { kind: "matched", paymentMethod, ...match };
+  }
+  const created = await dependencies.createInstruction(buildTipInstructionDraft(intent, paymentMethod.paymentInstrumentId, scope.nowMs));
+  dependencies.onPasskeyUrl(created.passkeyUrl);
+  const pending = () => ({
+    kind: "pending",
+    paymentMethod,
+    instructionId: created.instructionId,
+    passkeyUrl: created.passkeyUrl
+  });
+  if (!dependencies.watch) {
+    return pending();
+  }
+  const activation = await dependencies.waitForActivation(created.instructionId);
+  if (!activation.activated) {
+    return pending();
+  }
+  const verified = await dependencies.getInstruction(created.instructionId);
+  if (!isVerifiedActiveInstruction(verified, created.instructionId)) {
+    return pending();
+  }
+  match = selectTipAuthorization(await dependencies.listInstructions(paymentMethod.paymentInstrumentId), { ...scope, nowMs: dependencies.now() });
+  if (!match) {
+    throw apiError("activated tip authorization could not be verified", 409);
+  }
+  return { kind: "matched", paymentMethod, ...match };
+}
+function isVerifiedActiveInstruction(value, instructionId) {
+  if (!isRecord2(value)) {
+    return false;
+  }
+  const data = isRecord2(value.data) ? value.data : value;
+  const id = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
+  return id === instructionId && normalized(data.status) === "ACTIVE";
+}
+function formatUtcDateTime(value) {
+  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+}
+function instructionArray(payload) {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord2);
+  }
+  if (!isRecord2(payload)) {
+    return [];
+  }
+  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
+    if (Array.isArray(payload[key])) {
+      return payload[key].filter(isRecord2);
+    }
+  }
+  return [];
+}
+function mandateArray(instruction) {
+  for (const key of ["mandates", "mandateList", "mandateVoList"]) {
+    if (Array.isArray(instruction[key])) {
+      return instruction[key].filter(isRecord2);
+    }
+  }
+  return [];
+}
+function isOneTime(instruction) {
+  return zeroLike(instruction.isRecurring);
+}
+function zeroLike(value) {
+  return value === 0 || value === "0" || value === false;
+}
+function optionalString2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function normalized(value) {
+  return optionalString2(value)?.toUpperCase() ?? "";
+}
+function expired(value, nowMs) {
+  const text = optionalString2(value);
+  if (!text) {
+    return false;
+  }
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
+  const parsed = Date.parse(iso);
+  return Number.isFinite(parsed) && parsed < nowMs;
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/charge.js
+function buildChargeBody(input) {
+  const authorization = input.authorization;
+  const aiAgentInstructionBo = compact({
+    instructionId: authorization?.instructionId,
+    mandateId: authorization?.mandateId,
+    shippingAddressJson: input.shippingAddress === void 0 ? void 0 : JSON.stringify(input.shippingAddress),
+    merchantInfo: { merchantCategoryCode: "5999" },
+    products: input.products
+  });
+  const shared = compact({
+    paymentInstrumentId: input.paymentInstrumentId,
+    paymentMethodType: input.paymentMethodType,
+    instruction_id: authorization?.instructionId,
+    mandate_id: authorization?.mandateId,
+    shippingaddress: input.shippingAddress,
+    aiAgentInstructionBo,
+    purchaseInstructionId: authorization?.legacyInstructionId
+  });
+  return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
+    ...shared,
+    merchantId: input.merchantId,
+    customAmount: input.amount,
+    paymentCurrency: input.currency
+  };
+}
+function classifyChargeData(data) {
+  const channel = isRecord3(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord3(channel.action) ? channel.action : {};
+  const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
+  const statusValue = Number(data.status);
+  return {
+    status: Number.isFinite(statusValue) ? statusValue : void 0,
+    requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
+    ...redirectUrl ? { redirectUrl } : {}
+  };
+}
+async function executeCharge(input, runtime) {
+  const result = await requestJson({
+    baseUrl: runtime.runtimeConfig.baseUrl,
+    method: "POST",
+    path: "/agent/order/charge",
+    headers: buildCustomerHeaders(runtime.runtimeConfig),
+    body: buildChargeBody(input),
+    timeoutMs: runtime.timeoutMs,
+    dryRun: runtime.dryRun
+  });
+  if ("dryRun" in result) {
+    return { dryRun: true, request: result };
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  return {
+    dryRun: false,
+    data,
+    ...classifyChargeData(data)
+  };
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function compact(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/install.js
+import { randomUUID as createRandomUUID } from "node:crypto";
+import { mkdir as mkdir6, rm as rm6 } from "node:fs/promises";
+import { join as join4 } from "node:path";
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/agents.js
+import { constants } from "node:fs";
+import { cp, copyFile, lstat, mkdir as mkdir2, open, readlink, realpath, rename, rm, rmdir, symlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+var MARKER_FILE_NAME = ".clink-install.json";
+var DETECTION_FAILURE = "failed to detect installed agents";
+var PREPARE_FAILURE = "failed to prepare agent installation";
+var TARGET_CONFLICT = "agent target conflicts with existing content";
+var TARGET_CHANGED = "agent target changed after preflight";
+var APPLY_FAILURE = "failed to apply agent installation";
+var ROLLBACK_FAILURE = "failed to roll back agent installation";
+var UNSUPPORTED_REASON = "no supported local skill directory";
+async function detectAgents(input) {
+  const homeDir = resolve(input.homeDir);
+  const skillsRoot = resolve(input.skillsRoot);
+  const sharedTarget = join(skillsRoot, input.skillName);
+  const detected = [];
+  try {
+    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
+    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
+    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
+    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
+    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
+    const opencodeRoot = await firstExistingRoot(uniquePaths([
+      resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
+      join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
+      join(homeDir, ".opencode")
+    ]));
+    if (opencodeRoot !== null) {
+      detected.push({
+        agent: "opencode",
+        mode: "shared",
+        rootPath: opencodeRoot,
+        targetPath: sharedTarget
+      });
+    }
+    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
+    const copilotRoot = await firstExistingRoot(uniquePaths([
+      copilotCliRoot,
+      join(homeDir, ".config", "github-copilot")
+    ]));
+    if (copilotRoot !== null) {
+      detected.push({
+        agent: "github-copilot",
+        mode: "shared",
+        rootPath: copilotRoot,
+        targetPath: sharedTarget
+      });
+    }
+    const geminiHome = resolveEnvironmentRoot(input.env.GEMINI_CLI_HOME, homeDir);
+    const geminiRoot = join(geminiHome, ".gemini");
+    if (await isExistingRoot(geminiRoot)) {
+      const usesSharedHome = geminiHome === homeDir;
+      detected.push({
+        agent: "gemini-cli",
+        mode: usesSharedHome ? "shared" : "link",
+        rootPath: geminiRoot,
+        targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
+      });
+    }
+    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
+    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(DETECTION_FAILURE);
+  }
+  return detected;
+}
+async function prepareAgentPlans(input) {
+  try {
+    const preflighted = [];
+    for (const detected of input.detected) {
+      if (detected.mode === "shared" || detected.mode === "unsupported") {
+        preflighted.push({ mode: detected.mode, detected });
+        continue;
+      }
+      if (detected.targetPath === null) {
+        throw installError(PREPARE_FAILURE);
+      }
+      const writeDetected = detected;
+      const boundary = await inspectWritableBoundary(writeDetected);
+      const snapshot = await inspectTarget(writeDetected, input);
+      if (snapshot.kind === "conflict" && !input.force) {
+        throw installError(TARGET_CONFLICT);
+      }
+      const needsBackup = snapshot.kind !== "absent" && snapshot.kind !== "exact-link";
+      const copyTempPath = detected.mode === "copy" ? `${writeDetected.targetPath}.clink-${input.uuid}-${detected.agent}.copy` : null;
+      if (copyTempPath !== null && await pathEntryExists(copyTempPath)) {
+        throw installError(PREPARE_FAILURE);
+      }
+      const backupPath = needsBackup ? join(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
+      if (backupPath !== null && await pathEntryExists(backupPath)) {
+        throw installError(PREPARE_FAILURE);
+      }
+      preflighted.push({
+        mode: "write",
+        value: {
+          detected: writeDetected,
+          snapshot,
+          boundary,
+          copyTempPath,
+          backupPath,
+          keepBackup: snapshot.kind === "conflict"
+        }
+      });
+    }
+    return preflighted.map((entry) => {
+      if (entry.mode === "write") {
+        return createWritePlan(entry.value, input);
+      }
+      if (entry.mode === "shared") {
+        return createNoWritePlan(entry.detected, "shared");
+      }
+      return createNoWritePlan(entry.detected, "unsupported");
+    });
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PREPARE_FAILURE);
+  }
+}
+async function appendDetected(output, agent, mode, rootPath, targetPath) {
+  if (!await isExistingRoot(rootPath)) {
+    return;
+  }
+  output.push({ agent, mode, rootPath, targetPath: targetPath(rootPath) });
+}
+function resolveEnvironmentRoot(value, fallback) {
+  return value === void 0 || value.length === 0 ? resolve(fallback) : resolve(value);
+}
+function resolveOptionalEnvironmentRoot(value) {
+  return value === void 0 || value.length === 0 ? null : resolve(value);
+}
+function uniquePaths(paths) {
+  return [...new Set(paths.filter((value) => value !== null))];
+}
+async function firstExistingRoot(paths) {
+  for (const rootPath of paths) {
+    if (await isExistingRoot(rootPath)) {
+      return rootPath;
+    }
+  }
+  return null;
+}
+async function isExistingRoot(rootPath) {
+  const rootStat = await lstatIfExists(rootPath);
+  return rootStat !== null && (rootStat.isDirectory() || rootStat.isSymbolicLink());
+}
+function createNoWritePlan(detected, mode) {
+  return {
+    async apply() {
+      if (mode === "shared") {
+        return {
+          agent: detected.agent,
+          status: "shared",
+          path: detected.targetPath
+        };
+      }
+      return {
+        agent: detected.agent,
+        status: "unsupported",
+        path: null,
+        reason: UNSUPPORTED_REASON
+      };
+    },
+    async rollback() {
+    },
+    async finalize() {
+    }
+  };
+}
+function createWritePlan(preflight, input) {
+  const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
+  const targetPath = detected.targetPath;
+  const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
+  let appliedResult = null;
+  let backupMoved = false;
+  let backupVerified = false;
+  let backupContainerEntry = null;
+  let movedBackupFingerprint = null;
+  let preserveBackup = keepBackup;
+  let placedFingerprint = null;
+  let copyTempFingerprint = null;
+  let parentCreated = false;
+  let ownedParent = null;
+  let finalized = false;
+  let committed = false;
+  async function applyLink() {
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    if (snapshot.kind === "exact-link") {
+      return { agent: detected.agent, status: "unchanged", path: targetPath };
+    }
+    await ensureTargetParent();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await moveExistingTarget();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    const linkText = relative(dirname(targetPath), input.currentPath);
+    await symlink(linkText, targetPath, "dir");
+    placedFingerprint = await fingerprintPath(targetPath, detected.mode);
+    const installedSnapshot = await inspectTarget(detected, input);
+    if (installedSnapshot.kind !== "exact-link") {
+      throw new Error("link verification failed");
+    }
+    const installedLink = await readlink(targetPath);
+    if (installedLink !== linkText) {
+      throw new Error("link verification failed");
+    }
+    return { agent: detected.agent, status: "linked", path: targetPath };
+  }
+  async function applyCopy(releasePath, marker) {
+    if (!isMarker(marker) || marker.publisher !== input.publisher || marker.skillName !== input.skillName) {
+      throw new Error("invalid copy marker");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    if (snapshot.kind === "managed-copy" && markersMatchIdentityAndSha(snapshot.marker, marker)) {
+      return { agent: detected.agent, status: "unchanged", path: targetPath };
+    }
+    await ensureTargetParent();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await moveExistingTarget();
+    if (copyTempPath === null) {
+      throw new Error("missing copy staging path");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    await assertAuxiliaryAbsent(copyTempPath);
+    await copyDirectoryContents(releasePath, copyTempPath);
+    copyTempFingerprint = await fingerprintPath(copyTempPath, detected.mode);
+    const stagedMarker = await readMarkerRecord(copyTempPath);
+    if (stagedMarker === null || !markersMatchIdentityAndSha(stagedMarker.marker, marker)) {
+      throw new Error("copy verification failed");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    await mkdir2(targetPath);
+    const targetEntry = createEntryIdentity(await lstat(targetPath));
+    await allowPendingFilesystemEvents();
+    await assertPathNamesEntry(targetPath, targetEntry);
+    placedFingerprint = await fingerprintPath(targetPath, detected.mode);
+    await copyDirectoryContents(copyTempPath, targetPath);
+    await assertPathNamesEntry(targetPath, targetEntry);
+    const copiedFingerprint = await fingerprintPath(targetPath, detected.mode);
+    if (!sameCopiedObject(copyTempFingerprint, copiedFingerprint)) {
+      throw new Error("copy placement verification failed");
+    }
+    placedFingerprint = copiedFingerprint;
+    const installedSnapshot = await inspectTarget(detected, input);
+    if (installedSnapshot.kind !== "managed-copy" || !markersMatchIdentityAndSha(installedSnapshot.marker, marker)) {
+      throw new Error("copy verification failed");
+    }
+    await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
+    copyTempFingerprint = null;
+    return { agent: detected.agent, status: "copied", path: targetPath };
+  }
+  async function ensureTargetParent() {
+    await assertWritableBoundary(boundary, ownedParent);
+    if (boundary.parent.kind === "existing") {
+      return;
+    }
+    await mkdir2(boundary.parentPath);
+    parentCreated = true;
+    ownedParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    await assertWritableBoundary(boundary, ownedParent);
+  }
+  async function moveExistingTarget() {
+    if (snapshot.kind === "absent" || snapshot.kind === "exact-link") {
+      return;
+    }
+    if (backupPath === null || backupObjectPath === null) {
+      throw new Error("missing backup path");
+    }
+    await mkdir2(input.backupsRoot, { recursive: true, mode: 448 });
+    await mkdir2(backupPath, { mode: 448 });
+    backupContainerEntry = createEntryIdentity(await lstat(backupPath));
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await assertPathNamesEntry(backupPath, backupContainerEntry);
+    await rename(targetPath, backupObjectPath);
+    backupMoved = true;
+    await assertPathNamesEntry(backupPath, backupContainerEntry);
+    movedBackupFingerprint = await fingerprintPath(backupObjectPath, detected.mode);
+    if (!sameMovedObject(snapshot.fingerprint, movedBackupFingerprint)) {
+      preserveBackup = true;
+      throw new Error("moved target verification failed");
+    }
+    backupVerified = true;
+  }
+  async function undoMutation() {
+    if (copyTempPath !== null && copyTempFingerprint !== null) {
+      await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
+      copyTempFingerprint = null;
+    }
+    if (placedFingerprint !== null) {
+      const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
+      if (currentFingerprint !== null) {
+        if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
+          throw new Error("installed target changed before rollback");
+        }
+        await rm(targetPath, { recursive: true, force: true });
+      }
+      placedFingerprint = null;
+    }
+    if (backupMoved) {
+      if (backupPath === null || backupObjectPath === null) {
+        throw new Error("missing backup path");
+      }
+      await assertWritableBoundary(boundary, ownedParent);
+      await restoreBackupExclusively(backupObjectPath, targetPath, movedBackupFingerprint, detected.mode);
+      backupMoved = false;
+      backupVerified = false;
+      movedBackupFingerprint = null;
+    }
+    if (backupContainerEntry !== null && backupPath !== null) {
+      await removeOwnedDirectory(backupPath, backupContainerEntry);
+      backupContainerEntry = null;
+    }
+    if (parentCreated) {
+      await removeOwnedParent(boundary, ownedParent);
+      parentCreated = false;
+      ownedParent = null;
+    }
+  }
+  return {
+    async apply({ releasePath, marker }) {
+      if (appliedResult !== null) {
+        return appliedResult;
+      }
+      if (finalized) {
+        throw installError(APPLY_FAILURE);
+      }
+      try {
+        appliedResult = detected.mode === "link" ? await applyLink() : await applyCopy(releasePath, marker);
+        return appliedResult;
+      } catch {
+        try {
+          await undoMutation();
+        } catch {
+        }
+        throw installError(APPLY_FAILURE);
+      }
+    },
+    async rollback() {
+      if (committed) {
+        return;
+      }
+      if (appliedResult === null && !backupMoved && placedFingerprint === null) {
+        return;
+      }
+      try {
+        await undoMutation();
+        appliedResult = null;
+      } catch {
+        throw installError(ROLLBACK_FAILURE);
+      }
+    },
+    async finalize() {
+      if (finalized) {
+        return;
+      }
+      finalized = true;
+      committed = true;
+      if (backupMoved && !preserveBackup && backupVerified && backupPath !== null && backupObjectPath !== null && movedBackupFingerprint !== null) {
+        try {
+          if (backupContainerEntry === null) {
+            return;
+          }
+          await assertPathNamesEntry(backupPath, backupContainerEntry);
+          const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
+          if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
+            await rm(backupPath, { recursive: true, force: true });
+            backupMoved = false;
+            backupVerified = false;
+            backupContainerEntry = null;
+            movedBackupFingerprint = null;
+          }
+        } catch {
+        }
+      }
+    }
+  };
+}
+async function inspectWritableBoundary(detected) {
+  const rootPath = resolve(detected.rootPath);
+  const targetPath = resolve(detected.targetPath);
+  if (!isPathContained(rootPath, targetPath)) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const rootStat = await lstat(rootPath);
+  if (!rootStat.isDirectory() && !rootStat.isSymbolicLink()) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const canonicalRoot = await realpath(rootPath);
+  const canonicalRootStat = await lstat(canonicalRoot);
+  if (!canonicalRootStat.isDirectory()) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const parentPath = dirname(targetPath);
+  const parentStat = await lstatIfExists(parentPath);
+  const parent = parentStat === null ? { kind: "missing" } : await inspectExistingDirectoryBoundary(parentPath, canonicalRoot, true);
+  return {
+    rootPath,
+    rootEntry: createEntryIdentity(rootStat),
+    canonicalRoot,
+    canonicalRootEntry: createEntryIdentity(canonicalRootStat),
+    parentPath,
+    parent
+  };
+}
+async function inspectExistingDirectoryBoundary(directoryPath, canonicalRoot, allowSymlink) {
+  const entryStat = await lstat(directoryPath);
+  if (!entryStat.isDirectory() && !(allowSymlink && entryStat.isSymbolicLink())) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const canonicalPath = await realpath(directoryPath);
+  const canonicalStat = await lstat(canonicalPath);
+  if (!canonicalStat.isDirectory() || !isPathContained(canonicalRoot, canonicalPath)) {
+    throw installError(TARGET_CONFLICT);
+  }
+  return {
+    kind: "existing",
+    entry: createEntryIdentity(entryStat),
+    canonicalPath,
+    canonicalEntry: createEntryIdentity(canonicalStat)
+  };
+}
+async function assertWritableBoundary(boundary, ownedParent) {
+  const rootStat = await lstat(boundary.rootPath);
+  const canonicalRoot = await realpath(boundary.rootPath);
+  const canonicalRootStat = await lstat(canonicalRoot);
+  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(createEntryIdentity(canonicalRootStat), boundary.canonicalRootEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+  const expectedParent = ownedParent ?? boundary.parent;
+  if (expectedParent.kind === "missing") {
+    if (await pathEntryExists(boundary.parentPath)) {
+      throw installError(TARGET_CHANGED);
+    }
+    return;
+  }
+  const actualParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, true);
+  if (!sameEntryIdentity(actualParent.entry, expectedParent.entry) || actualParent.canonicalPath !== expectedParent.canonicalPath || !sameEntryIdentity(actualParent.canonicalEntry, expectedParent.canonicalEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function removeOwnedParent(boundary, ownedParent) {
+  if (ownedParent === null) {
+    return;
+  }
+  try {
+    const actual = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    if (!sameEntryIdentity(actual.entry, ownedParent.entry) || actual.canonicalPath !== ownedParent.canonicalPath || !sameEntryIdentity(actual.canonicalEntry, ownedParent.canonicalEntry)) {
+      return;
+    }
+    await rmdir(boundary.parentPath);
+  } catch (error) {
+    if (error instanceof CliError || isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTEMPTY") || isErrorCode(error, "EEXIST")) {
+      return;
+    }
+    throw error;
+  }
+}
+async function copyDirectoryContents(sourcePath, targetPath) {
+  const sourceStat = await lstat(sourcePath);
+  if (!sourceStat.isDirectory()) {
+    throw new Error("copy source is not a directory");
+  }
+  await cp(sourcePath, targetPath, {
+    recursive: true,
+    dereference: false,
+    errorOnExist: true,
+    force: false
+  });
+}
+async function allowPendingFilesystemEvents() {
+  await new Promise((resolveEvents) => setImmediate(resolveEvents));
+}
+async function assertPathNamesEntry(filePath, expectedEntry) {
+  const stats = await lstat(filePath);
+  if (!sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function removeOwnedDirectory(directoryPath, expectedEntry) {
+  const stats = await lstatIfExists(directoryPath);
+  if (stats === null || !sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
+    return;
+  }
+  try {
+    await rmdir(directoryPath);
+  } catch (error) {
+    if (!isErrorCode(error, "ENOENT") && !isErrorCode(error, "ENOTEMPTY") && !isErrorCode(error, "EEXIST")) {
+      throw error;
+    }
+  }
+}
+async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, mode) {
+  await assertTargetAbsent(targetPath);
+  const backupFingerprint = await fingerprintPath(backupPath, mode);
+  if (expectedBackup !== null && !sameMovedObject(expectedBackup, backupFingerprint)) {
+    throw new Error("backup changed before rollback");
+  }
+  if (backupFingerprint.type === "symlink") {
+    const linkText = await readlink(backupPath);
+    await symlink(linkText, targetPath, "dir");
+    await rm(backupPath, { force: true });
+    return;
+  }
+  if (backupFingerprint.type === "file") {
+    await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
+    await rm(backupPath, { force: true });
+    return;
+  }
+  if (backupFingerprint.type === "directory") {
+    await mkdir2(targetPath);
+    const placedDirectory = createEntryIdentity(await lstat(targetPath));
+    try {
+      await allowPendingFilesystemEvents();
+      await assertPathNamesEntry(targetPath, placedDirectory);
+      await copyDirectoryContents(backupPath, targetPath);
+      await assertPathNamesEntry(targetPath, placedDirectory);
+      const restoredFingerprint = await fingerprintPath(targetPath, mode);
+      if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
+        throw new Error("restored directory verification failed");
+      }
+      await rm(backupPath, { recursive: true });
+      return;
+    } catch (error) {
+      const currentTarget = await lstatIfExists(targetPath);
+      if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
+        await rm(targetPath, { recursive: true, force: true });
+      }
+      throw error;
+    }
+  }
+  throw new Error("unsupported backup type");
+}
+async function fingerprintPath(filePath, mode) {
+  const stats = await lstat(filePath);
+  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
+  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
+  return createFingerprint(stats, linkText, marker?.raw ?? null);
+}
+async function fingerprintPathIfExists(filePath, mode) {
+  const stats = await lstatIfExists(filePath);
+  if (stats === null) {
+    return null;
+  }
+  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
+  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
+  return createFingerprint(stats, linkText, marker?.raw ?? null);
+}
+async function inspectTarget(detected, input) {
+  const targetStat = await lstatIfExists(detected.targetPath);
+  if (targetStat === null) {
+    return { kind: "absent" };
+  }
+  if (detected.mode === "link") {
+    if (!targetStat.isSymbolicLink()) {
+      return {
+        kind: "conflict",
+        fingerprint: createFingerprint(targetStat, null, null)
+      };
+    }
+    const linkText = await readlink(detected.targetPath);
+    const resolvedTarget = resolve(dirname(detected.targetPath), linkText);
+    const fingerprint = createFingerprint(targetStat, linkText, null);
+    if (resolvedTarget === resolve(input.currentPath)) {
+      return { kind: "exact-link", fingerprint };
+    }
+    const releaseIdentity = await managedReleaseIdentity(input.currentPath, resolvedTarget);
+    if (releaseIdentity?.publisher === input.publisher && releaseIdentity.skillName === input.skillName) {
+      return { kind: "managed-link", fingerprint };
+    }
+    return { kind: "conflict", fingerprint };
+  }
+  if (detected.mode === "copy" && targetStat.isDirectory()) {
+    const markerRecord = await readMarkerRecord(detected.targetPath);
+    const fingerprint = createFingerprint(targetStat, null, markerRecord?.raw ?? null);
+    if (markerRecord !== null && markerRecord.marker.publisher === input.publisher && markerRecord.marker.skillName === input.skillName) {
+      return { kind: "managed-copy", fingerprint, marker: markerRecord.marker };
+    }
+    return { kind: "conflict", fingerprint };
+  }
+  return {
+    kind: "conflict",
+    fingerprint: createFingerprint(targetStat, null, null)
+  };
+}
+async function managedReleaseIdentity(currentPath, resolvedTarget) {
+  try {
+    const releasesRoot = await realpath(join(dirname(currentPath), ".clink", "releases"));
+    const releasesStat = await lstat(releasesRoot);
+    const targetStat = await lstat(resolvedTarget);
+    if (!releasesStat.isDirectory() || !targetStat.isDirectory()) {
+      return null;
+    }
+    const canonicalTarget = await realpath(resolvedTarget);
+    if (!isPathContained(releasesRoot, canonicalTarget)) {
+      return null;
+    }
+    const releasePath = relative(releasesRoot, canonicalTarget);
+    if (releasePath.length === 0 || isAbsolute(releasePath)) {
+      return null;
+    }
+    const parts = releasePath.split(/[\\/]/u);
+    if (parts.length !== 3 || parts.some((part) => part.length === 0) || !/^[a-f\d]{64}$/u.test(parts[2])) {
+      return null;
+    }
+    const marker = await readMarkerRecord(canonicalTarget);
+    if (marker === null || marker.marker.publisher !== parts[0] || marker.marker.skillName !== parts[1] || marker.marker.sha256 !== parts[2]) {
+      return null;
+    }
+    return { publisher: parts[0], skillName: parts[1] };
+  } catch {
+    return null;
+  }
+}
+async function assertTargetUnchanged(detected, input, expected) {
+  const actual = await inspectTarget(detected, input);
+  if (!sameSnapshot(actual, expected)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function assertTargetAbsent(targetPath) {
+  if (await pathEntryExists(targetPath)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function assertAuxiliaryAbsent(auxiliaryPath) {
+  if (await pathEntryExists(auxiliaryPath)) {
+    throw installError(PREPARE_FAILURE);
+  }
+}
+function sameSnapshot(first, second) {
+  if (first.kind !== second.kind) {
+    return false;
+  }
+  if (first.kind === "absent" || second.kind === "absent") {
+    return first.kind === second.kind;
+  }
+  return sameFingerprint(first.fingerprint, second.fingerprint);
+}
+function sameFingerprint(first, second) {
+  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.size === second.size && first.mtimeMs === second.mtimeMs && first.ctimeMs === second.ctimeMs && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+function sameMovedObject(first, second) {
+  return sameEntryIdentity(entryIdentityFromFingerprint(first), entryIdentityFromFingerprint(second)) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+function sameCopiedObject(first, second) {
+  return first.type === second.type && first.mode === second.mode && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+async function removeOwnedPath(filePath, expected, mode) {
+  const actual = await fingerprintPathIfExists(filePath, mode);
+  if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
+    return;
+  }
+  await rm(filePath, { recursive: true, force: true });
+}
+function createEntryIdentity(stats) {
+  return {
+    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode
+  };
+}
+function entryIdentityFromFingerprint(fingerprint) {
+  return {
+    type: fingerprint.type,
+    dev: fingerprint.dev,
+    ino: fingerprint.ino,
+    mode: fingerprint.mode
+  };
+}
+function sameEntryIdentity(first, second) {
+  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode;
+}
+function isPathContained(rootPath, candidatePath) {
+  const containedPath = relative(rootPath, candidatePath);
+  return containedPath === "" || !isAbsolute(containedPath) && containedPath !== ".." && !containedPath.startsWith("../") && !containedPath.startsWith("..\\");
+}
+function createFingerprint(stats, linkText, markerRaw) {
+  return {
+    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs,
+    linkText,
+    markerRaw
+  };
+}
+async function readMarkerRecord(rootPath) {
+  const markerPath = join(rootPath, MARKER_FILE_NAME);
+  let markerStat;
+  try {
+    markerStat = await lstatIfExists(markerPath);
+  } catch {
+    return null;
+  }
+  if (markerStat === null || !markerStat.isFile() || markerStat.isSymbolicLink()) {
+    return null;
+  }
+  let handle;
+  try {
+    handle = await open(markerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const raw = await handle.readFile({ encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return isMarker(parsed) ? { marker: parsed, raw } : null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+function isMarker(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value;
+  return marker.schemaVersion === 1 && typeof marker.publisher === "string" && marker.publisher.length > 0 && typeof marker.skillName === "string" && marker.skillName.length > 0 && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && /^[a-f\d]{64}$/iu.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string";
+}
+function markersMatchIdentityAndSha(first, second) {
+  return first.publisher === second.publisher && first.skillName === second.skillName && first.sha256.toLowerCase() === second.sha256.toLowerCase();
+}
+async function lstatIfExists(filePath) {
+  try {
+    return await lstat(filePath);
+  } catch (error) {
+    if (isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTDIR")) {
+      return null;
+    }
+    throw error;
+  }
+}
+async function pathEntryExists(filePath) {
+  return await lstatIfExists(filePath) !== null;
+}
+function isErrorCode(error, code) {
+  return error?.code === code;
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/archive.js
+var import_yauzl = __toESM(require_yauzl(), 1);
+import { createWriteStream } from "node:fs";
+import { chmod, lstat as lstat2, mkdir as mkdir3, readdir, rm as rm2 } from "node:fs/promises";
+import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
+  maxEntries: 4096,
+  maxTotalBytes: 200 * 1024 * 1024,
+  maxFileBytes: 50 * 1024 * 1024,
+  maxDepth: 20,
+  maxCompressionRatio: 100
+});
+var INSTALL_ERROR_MESSAGE = "failed to extract skill archive";
+var INSTALL_MARKER_NAME = ".clink-install.json";
+var UNIX_PLATFORM = 3;
+var UNIX_FILE_TYPE_MASK = 61440;
+var UNIX_REGULAR_FILE = 32768;
+var UNIX_DIRECTORY = 16384;
+function normalizeArchiveEntryPath(raw, maxDepth) {
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0) {
+    throw new Error("invalid archive depth limit");
+  }
+  if (raw.length === 0 || raw.includes("\0")) {
+    throw new Error("invalid archive entry path");
+  }
+  const withZipSeparators = raw.replace(/\\/g, "/");
+  if (withZipSeparators.startsWith("/") || /^[A-Za-z]:/.test(withZipSeparators)) {
+    throw new Error("invalid archive entry path");
+  }
+  const withoutDirectorySlash = withZipSeparators.endsWith("/") ? withZipSeparators.slice(0, -1) : withZipSeparators;
+  const segments = withoutDirectorySlash.split("/");
+  if (withoutDirectorySlash.length === 0 || segments.some((segment) => segment.length === 0 || segment === "." || segment === "..") || segments.length > maxDepth) {
+    throw new Error("invalid archive entry path");
+  }
+  return segments.join("/");
+}
+async function extractSkillArchive(zipPath, destination, overrides = {}) {
+  let zipFile;
+  const destinationRoot = resolve2(destination);
+  try {
+    const limits = resolveArchiveLimits(overrides);
+    zipFile = await (0, import_yauzl.openPromise)(zipPath, {
+      autoClose: true,
+      decodeStrings: true,
+      strictFileNames: false,
+      validateEntrySizes: true
+    });
+    assertSafeSize(zipFile.entryCount);
+    if (zipFile.entryCount > limits.maxEntries) {
+      throw new Error("archive entry limit exceeded");
+    }
+    await mkdir3(destinationRoot, { recursive: true, mode: 493 });
+    await chmod(destinationRoot, 493);
+    const rawRoot = resolve2(destinationRoot, "raw");
+    assertPathContained(destinationRoot, rawRoot);
+    await mkdir3(rawRoot, { mode: 493 });
+    await chmod(rawRoot, 493);
+    const registeredPaths = new ArchivePathRegistry();
+    const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
+    const byteCount = { total: 0 };
+    let declaredTotalBytes = 0;
+    let entryCount = 0;
+    for await (const entry of zipFile.eachEntry()) {
+      entryCount += 1;
+      if (entryCount > limits.maxEntries) {
+        throw new Error("archive entry limit exceeded");
+      }
+      const normalizedPath = normalizeArchiveEntryPath(entry.fileName, limits.maxDepth);
+      rejectInstallMarker(normalizedPath);
+      const classified = classifyEntry(entry);
+      registeredPaths.register(normalizedPath, classified.kind);
+      const outputPath = resolve2(rawRoot, normalizedPath);
+      assertPathContained(rawRoot, outputPath);
+      validateDeclaredEntry(entry, limits);
+      declaredTotalBytes = addBoundedSize(declaredTotalBytes, entry.uncompressedSize, limits.maxTotalBytes);
+      if (classified.kind === "directory") {
+        if (entry.uncompressedSize !== 0) {
+          throw new Error("archive directory contains data");
+        }
+        await ensureDirectoryTree(rawRoot, outputPath, knownDirectories);
+        continue;
+      }
+      await ensureDirectoryTree(rawRoot, dirname2(outputPath), knownDirectories);
+      const source = await zipFile.openReadStreamPromise(entry);
+      const meter = new ArchiveByteCounter(limits, byteCount);
+      const mode = classified.executable ? 493 : 420;
+      await pipeline(source, meter, createWriteStream(outputPath, { flags: "wx", mode }));
+      if (meter.fileBytes !== entry.uncompressedSize) {
+        throw new Error("archive entry size mismatch");
+      }
+      await chmod(outputPath, mode);
+    }
+    if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
+      throw new Error("archive size metadata mismatch");
+    }
+    closeZip(zipFile);
+    const skillRoot = await selectSkillRoot(rawRoot);
+    return {
+      skillRoot,
+      entryCount,
+      uncompressedBytes: byteCount.total
+    };
+  } catch {
+    closeZip(zipFile);
+    try {
+      await rm2(destinationRoot, { recursive: true, force: true });
+    } catch {
+    }
+    throw installError(INSTALL_ERROR_MESSAGE);
+  }
+}
+var ArchivePathRegistry = class {
+  #paths = /* @__PURE__ */ new Map();
+  register(path3, kind) {
+    const segments = path3.split("/");
+    for (let index = 1; index < segments.length; index += 1) {
+      this.#registerDirectory(segments.slice(0, index).join("/"), false);
+    }
+    if (kind === "directory") {
+      this.#registerDirectory(path3, true);
+      return;
+    }
+    const key = canonicalArchivePath(path3);
+    const existing = this.#paths.get(key);
+    if (existing !== void 0) {
+      throw new Error("archive path collision");
+    }
+    this.#paths.set(key, { kind: "file", path: path3, explicit: true });
+  }
+  #registerDirectory(path3, explicit) {
+    const key = canonicalArchivePath(path3);
+    const existing = this.#paths.get(key);
+    if (existing === void 0) {
+      this.#paths.set(key, { kind: "directory", path: path3, explicit });
+      return;
+    }
+    if (existing.kind !== "directory" || existing.path !== path3) {
+      throw new Error("archive path collision");
+    }
+    if (explicit && existing.explicit) {
+      throw new Error("archive path collision");
+    }
+    if (explicit) {
+      existing.explicit = true;
+    }
+  }
+};
+var ArchiveByteCounter = class extends Transform {
+  fileBytes = 0;
+  #limits;
+  #state;
+  constructor(limits, state) {
+    super();
+    this.#limits = limits;
+    this.#state = state;
+  }
+  _transform(chunk, _encoding, callback) {
+    this.fileBytes += chunk.byteLength;
+    this.#state.total += chunk.byteLength;
+    if (this.fileBytes > this.#limits.maxFileBytes || this.#state.total > this.#limits.maxTotalBytes) {
+      callback(new Error("archive byte limit exceeded"));
+      return;
+    }
+    callback(null, chunk);
+  }
+};
+function resolveArchiveLimits(overrides) {
+  const limits = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
+  for (const value of [
+    limits.maxEntries,
+    limits.maxTotalBytes,
+    limits.maxFileBytes,
+    limits.maxDepth
+  ]) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error("invalid archive limit");
+    }
+  }
+  if (!Number.isFinite(limits.maxCompressionRatio) || limits.maxCompressionRatio < 0) {
+    throw new Error("invalid archive limit");
+  }
+  return limits;
+}
+function classifyEntry(entry) {
+  if (entry.isEncrypted() || !entry.canDecodeFileData()) {
+    throw new Error("unsupported archive entry encoding");
+  }
+  const hasDirectorySlash = entry.fileName.endsWith("/");
+  if (entry.versionMadeBy >>> 8 !== UNIX_PLATFORM) {
+    return {
+      kind: hasDirectorySlash ? "directory" : "file",
+      executable: false
+    };
+  }
+  const unixMode = entry.externalFileAttributes >>> 16 & 65535;
+  const unixType = unixMode & UNIX_FILE_TYPE_MASK;
+  if (unixType !== 0 && unixType !== UNIX_REGULAR_FILE && unixType !== UNIX_DIRECTORY) {
+    throw new Error("unsupported Unix archive entry type");
+  }
+  if (unixType === UNIX_DIRECTORY && !hasDirectorySlash) {
+    throw new Error("Unix directory entry lacks a directory path");
+  }
+  if (unixType === UNIX_REGULAR_FILE && hasDirectorySlash) {
+    throw new Error("Unix regular file uses a directory path");
+  }
+  const kind = hasDirectorySlash ? "directory" : "file";
+  return {
+    kind,
+    executable: kind === "file" && (unixMode & 73) !== 0
+  };
+}
+function validateDeclaredEntry(entry, limits) {
+  assertSafeSize(entry.compressedSize);
+  assertSafeSize(entry.uncompressedSize);
+  if (entry.uncompressedSize > limits.maxFileBytes) {
+    throw new Error("archive file limit exceeded");
+  }
+  if (entry.uncompressedSize === 0) {
+    return;
+  }
+  if (entry.compressedSize === 0 || entry.uncompressedSize / entry.compressedSize > limits.maxCompressionRatio) {
+    throw new Error("archive compression ratio exceeded");
+  }
+}
+function assertSafeSize(value) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error("invalid archive size metadata");
+  }
+}
+function addBoundedSize(current, addition, maximum) {
+  const total = current + addition;
+  if (!Number.isSafeInteger(total) || total > maximum) {
+    throw new Error("archive total size limit exceeded");
+  }
+  return total;
+}
+function rejectInstallMarker(path3) {
+  if (path3.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
+    throw new Error("archive contains a reserved install marker");
+  }
+}
+function canonicalArchivePath(path3) {
+  return path3.normalize("NFC").toLowerCase();
+}
+function assertPathContained(root, candidate) {
+  const relativePath = relative2(root, candidate);
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute2(relativePath)) {
+    throw new Error("archive path escapes extraction root");
+  }
+}
+async function ensureDirectoryTree(root, target, knownDirectories) {
+  assertPathContained(root, target);
+  const relativePath = relative2(root, target);
+  if (relativePath.length === 0) {
+    return;
+  }
+  let current = root;
+  for (const segment of relativePath.split(sep)) {
+    current = resolve2(current, segment);
+    assertPathContained(root, current);
+    if (!knownDirectories.has(current)) {
+      try {
+        await mkdir3(current, { mode: 493 });
+      } catch (error) {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
+        const existing = await lstat2(current);
+        if (!existing.isDirectory()) {
+          throw new Error("archive directory conflicts with a file");
+        }
+      }
+      knownDirectories.add(current);
+    }
+    await chmod(current, 493);
+  }
+}
+async function selectSkillRoot(rawRoot) {
+  const topLevelNames = await readdir(rawRoot);
+  if (topLevelNames.includes("SKILL.md")) {
+    const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
+    if (rootSkill.isFile()) {
+      return rawRoot;
+    }
+  }
+  if (topLevelNames.length !== 1) {
+    throw new Error("archive must contain one skill root");
+  }
+  const wrapperRoot = resolve2(rawRoot, topLevelNames[0]);
+  assertPathContained(rawRoot, wrapperRoot);
+  const wrapper = await lstat2(wrapperRoot);
+  if (!wrapper.isDirectory()) {
+    throw new Error("archive wrapper is not a directory");
+  }
+  const wrapperNames = await readdir(wrapperRoot);
+  if (!wrapperNames.includes("SKILL.md")) {
+    throw new Error("archive wrapper lacks SKILL.md");
+  }
+  const wrappedSkill = await lstat2(resolve2(wrapperRoot, "SKILL.md"));
+  if (!wrappedSkill.isFile()) {
+    throw new Error("archive wrapper SKILL.md is not a regular file");
+  }
+  return wrapperRoot;
+}
+function closeZip(zipFile) {
+  if (zipFile?.isOpen === true) {
+    try {
+      zipFile.close();
+    } catch {
+    }
+  }
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/download.js
+import { createHash } from "node:crypto";
+import { createWriteStream as createFileWriteStream } from "node:fs";
+import { lstat as lstat3, rm as rm3 } from "node:fs/promises";
+import { Readable, Transform as Transform2 } from "node:stream";
+import { pipeline as pipeline2 } from "node:stream/promises";
+var DEFAULT_DEPENDENCIES = {
+  fetch: (...args) => globalThis.fetch(...args),
+  sleep: async (ms) => new Promise((resolve5) => setTimeout(resolve5, ms)),
+  createWriteStream: (destinationPath) => createFileWriteStream(destinationPath, { flags: "wx", mode: 384 })
+};
+var RETRYABLE = [408, 429, 500, 502, 503, 504];
+var REDIRECTS = [301, 302, 303, 307, 308];
+var MAX_ATTEMPTS = 2;
+var MAX_REDIRECTS = 3;
+var RETRY_DELAY_MS = 100;
+var NETWORK_ERROR_MESSAGE = "failed to download skill package";
+var REJECTED_TICKET_MESSAGE = "temporary skill download link was rejected";
+var INSTALL_ERROR_MESSAGE2 = "failed to write skill package";
+var RetryableDownloadError = class extends Error {
+};
+var NonRetryableDownloadError = class extends Error {
+};
+var RefreshTicketError = class extends Error {
+};
+var InstallDownloadError = class extends Error {
+};
+async function downloadSkillPackage(input, overrides) {
+  try {
+    await assertDestinationAbsent(input.destinationPath);
+  } catch {
+    throw installError(INSTALL_ERROR_MESSAGE2);
+  }
+  const dependencies = {
+    fetch: overrides?.fetch ?? DEFAULT_DEPENDENCIES.fetch,
+    sleep: overrides?.sleep ?? DEFAULT_DEPENDENCIES.sleep,
+    createWriteStream: overrides?.createWriteStream ?? DEFAULT_DEPENDENCIES.createWriteStream
+  };
+  const state = { createdDestination: false };
+  let ticket = input.ticket;
+  let refreshed = false;
+  try {
+    while (true) {
+      try {
+        return await downloadWithRetries(ticket, input.destinationPath, input.timeoutMs, dependencies, state);
+      } catch (error) {
+        if (!(error instanceof RefreshTicketError) || refreshed) {
+          throw error;
+        }
+        refreshed = true;
+        ticket = await input.refreshTicket();
+      }
+    }
+  } catch (error) {
+    const cleaned = await cleanupDestination(input.destinationPath, state);
+    if (!cleaned) {
+      throw installError(INSTALL_ERROR_MESSAGE2);
+    }
+    if (error instanceof InstallDownloadError) {
+      throw installError(INSTALL_ERROR_MESSAGE2);
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    if (error instanceof RefreshTicketError && refreshed) {
+      throw networkError(REJECTED_TICKET_MESSAGE);
+    }
+    throw networkError(NETWORK_ERROR_MESSAGE);
+  }
+}
+async function downloadWithRetries(ticket, destinationPath, timeoutMs, dependencies, state) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependencies, state);
+    } catch (error) {
+      if (!(error instanceof RetryableDownloadError)) {
+        throw error;
+      }
+      const cleaned = await cleanupDestination(destinationPath, state);
+      if (!cleaned || attempt === MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+      await dependencies.sleep(RETRY_DELAY_MS);
+    }
+  }
+  throw new RetryableDownloadError();
+}
+async function downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependencies, state) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await downloadAttempt(ticket, destinationPath, dependencies, state, controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function downloadAttempt(ticket, destinationPath, dependencies, state, signal) {
+  let requestUrl = validateDownloadUrl(ticket.url);
+  let response;
+  let followedRedirects = 0;
+  while (response === void 0) {
+    let candidate;
+    try {
+      candidate = await dependencies.fetch(requestUrl, {
+        method: "GET",
+        redirect: "manual",
+        signal
+      });
+    } catch {
+      throw new RetryableDownloadError();
+    }
+    if (!REDIRECTS.includes(candidate.status)) {
+      response = candidate;
+      break;
+    }
+    await cancelResponseBody(candidate);
+    if (followedRedirects === MAX_REDIRECTS) {
+      throw new NonRetryableDownloadError();
+    }
+    const location = candidate.headers.get("location");
+    if (location === null) {
+      throw new NonRetryableDownloadError();
+    }
+    try {
+      requestUrl = validateDownloadUrl(new URL(location, requestUrl));
+    } catch {
+      throw new NonRetryableDownloadError();
+    }
+    followedRedirects += 1;
+  }
+  if (response.status === 401 || response.status === 403) {
+    await cancelResponseBody(response);
+    throw new RefreshTicketError();
+  }
+  if (RETRYABLE.includes(response.status)) {
+    await cancelResponseBody(response);
+    throw new RetryableDownloadError();
+  }
+  if (response.status < 200 || response.status >= 300) {
+    await cancelResponseBody(response);
+    throw new NonRetryableDownloadError();
+  }
+  if (response.body === null) {
+    throw new RetryableDownloadError();
+  }
+  if (!hasExpectedContentLength(response.headers, ticket.sizeBytes)) {
+    await cancelResponseBody(response);
+    throw new NonRetryableDownloadError();
+  }
+  let firstFailureOrigin;
+  try {
+    const hash = createHash("sha256");
+    let actualBytes = 0;
+    const meter = new Transform2({
+      transform(chunk, _encoding, callback) {
+        if (actualBytes + chunk.byteLength > ticket.sizeBytes) {
+          callback(new RetryableDownloadError());
+          return;
+        }
+        actualBytes += chunk.byteLength;
+        hash.update(chunk);
+        callback(null, chunk);
+      }
+    });
+    const destination = dependencies.createWriteStream(destinationPath);
+    try {
+      await new Promise((resolve5, reject) => {
+        const onOpen = () => {
+          destination.off("error", onError);
+          resolve5();
+        };
+        const onError = (error) => {
+          destination.off("open", onOpen);
+          reject(error);
+        };
+        destination.once("open", onOpen);
+        destination.once("error", onError);
+      });
+    } catch {
+      await cancelResponseBody(response);
+      throw new InstallDownloadError();
+    }
+    state.createdDestination = true;
+    const source = Readable.fromWeb(response.body);
+    source.once("error", () => {
+      firstFailureOrigin ??= "source";
+    });
+    meter.once("error", () => {
+      firstFailureOrigin ??= "meter";
+    });
+    destination.once("error", () => {
+      firstFailureOrigin ??= "destination";
+    });
+    await pipeline2(source, meter, destination, { signal });
+    if (actualBytes !== ticket.sizeBytes) {
+      throw new RetryableDownloadError();
+    }
+    return {
+      path: destinationPath,
+      sizeBytes: actualBytes,
+      sha256: hash.digest("hex")
+    };
+  } catch (error) {
+    if (error instanceof InstallDownloadError) {
+      throw error;
+    }
+    if (!signal.aborted && firstFailureOrigin === "destination") {
+      throw new InstallDownloadError();
+    }
+    throw new RetryableDownloadError();
+  }
+}
+async function cleanupDestination(destinationPath, state) {
+  if (!state.createdDestination) {
+    return true;
+  }
+  try {
+    await rm3(destinationPath, { force: true });
+    state.createdDestination = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function assertDestinationAbsent(destinationPath) {
+  try {
+    await lstat3(destinationPath);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return;
+    }
+    throw new InstallDownloadError();
+  }
+  throw new InstallDownloadError();
+}
+function validateDownloadUrl(url) {
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
+    throw new NonRetryableDownloadError();
+  }
+  return url;
+}
+function hasExpectedContentLength(headers, expectedBytes) {
+  const value = headers.get("content-length");
+  if (value === null) {
+    return true;
+  }
+  if (!/^\d+$/.test(value)) {
+    return false;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 && parsed === expectedBytes;
+}
+async function cancelResponseBody(response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+  }
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/metrics.js
+var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
+var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
+async function reportSkillPublicDownload(input, overrides = {}) {
+  const dependencies = {
+    fetch: overrides.fetch ?? globalThis.fetch
+  };
+  const url = new URL(`${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/public-download`, ensureTrailingSlash2(input.dashboardBaseUrl));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+  try {
+    const response = await dependencies.fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ source: PUBLIC_DOWNLOAD_METRIC_SOURCE }),
+      signal: controller.signal
+    });
+    await response.body?.cancel();
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error("failed to report skill public download");
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function ensureTrailingSlash2(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/registry.js
+import path2 from "node:path";
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/public-api.js
+var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
+var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
+var MAX_ATTEMPTS2 = 3;
+var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
+var INVALID_RESPONSE_MESSAGE = "invalid public skills response";
+var NETWORK_ERROR_MESSAGE2 = "failed to request public skills API";
+var INVALID_BASE_URL_MESSAGE = "invalid skill registry base URL";
+async function requestPublicSkillsJson(input, overrides = {}) {
+  const dependencies = {
+    fetch: overrides.fetch ?? globalThis.fetch,
+    sleep: overrides.sleep ?? (async (ms) => new Promise((resolve5) => setTimeout(resolve5, ms))),
+    random: overrides.random ?? Math.random
+  };
+  const invalidResponseMessage = input.invalidResponseMessage ?? INVALID_RESPONSE_MESSAGE;
+  const invalidResponseCode = input.invalidResponseCode ?? 502;
+  const networkErrorMessage = input.networkErrorMessage ?? NETWORK_ERROR_MESSAGE2;
+  const maxResponseBodyBytes = input.maxResponseBodyBytes ?? DEFAULT_MAX_RESPONSE_BODY_BYTES;
+  const requestUrl = new URL(input.path, parseRegistryBaseUrl(input.baseUrl));
+  for (const [key, value] of Object.entries(input.query)) {
+    if (value !== void 0) {
+      requestUrl.searchParams.set(key, String(value));
+    }
+  }
+  for (let attempt = 0; attempt < MAX_ATTEMPTS2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+    try {
+      const response = await dependencies.fetch(requestUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Clientid: CLINK_PUBLIC_CLIENT_ID
+        },
+        signal: controller.signal
+      });
+      if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS2 - 1) {
+        await cancelResponseBody2(response);
+        await sleepBeforeRetry(dependencies, attempt);
+        continue;
+      }
+      if (response.status < 200 || response.status >= 300) {
+        await cancelResponseBody2(response);
+        assertApiSuccess(response.status, void 0);
+      }
+      return await readLimitedJsonBody(response, invalidResponseMessage, invalidResponseCode, maxResponseBodyBytes);
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      if (attempt === MAX_ATTEMPTS2 - 1) {
+        throw networkError(networkErrorMessage);
+      }
+      await sleepBeforeRetry(dependencies, attempt);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw networkError(networkErrorMessage);
+}
+function parseRegistryBaseUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configError(INVALID_BASE_URL_MESSAGE);
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
+    throw configError(INVALID_BASE_URL_MESSAGE);
+  }
+  return url;
+}
+async function readLimitedJsonBody(response, invalidResponseMessage, invalidResponseCode, maxResponseBodyBytes) {
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > maxResponseBodyBytes) {
+    await cancelResponseBody2(response);
+    throw apiError(invalidResponseMessage, invalidResponseCode);
+  }
+  if (response.body === null) {
+    throw apiError(invalidResponseMessage, invalidResponseCode);
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxResponseBodyBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+        }
+        throw apiError(invalidResponseMessage, invalidResponseCode);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw apiError(invalidResponseMessage, invalidResponseCode);
+  }
+}
+async function cancelResponseBody2(response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+  }
+}
+async function sleepBeforeRetry(dependencies, attempt) {
+  const delay = Math.min(1e3, 100 * 2 ** attempt) + Math.floor(dependencies.random() * 50);
+  await dependencies.sleep(delay);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/registry.js
+var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
+var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
+var SKILL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+var MAX_SKILL_ID_LENGTH = 128;
+async function getSkillDownloadTicket(input, overrides) {
+  const body = await requestPublicSkillsJson({
+    baseUrl: input.baseUrl,
+    path: "/public/skills/download-url",
+    query: {
+      publisher: input.packageSpec.publisher,
+      skillName: input.packageSpec.skillName,
+      versionNo: input.packageSpec.requestedVersion ?? void 0
+    },
+    timeoutMs: input.timeoutMs,
+    invalidResponseMessage: INVALID_RESPONSE_MESSAGE2,
+    invalidResponseCode: 400,
+    networkErrorMessage: NETWORK_ERROR_MESSAGE3
+  }, overrides);
+  return parseDownloadTicket(body);
+}
+function parseDownloadTicket(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  const candidate = body;
+  const downloadUrl = parseDownloadUrl(candidate.downloadUrl);
+  const skillId = parseOptionalSkillId(candidate.skillId);
+  if (!isPositiveSafeInteger(candidate.expireSeconds) || !isSafeFileName(candidate.fileName) || !isPositiveSafeInteger(candidate.sizeBytes) || candidate.sizeBytes > MAX_DOWNLOAD_SIZE_BYTES) {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  return {
+    ...skillId === void 0 ? {} : { skillId },
+    url: downloadUrl,
+    expireSeconds: candidate.expireSeconds,
+    fileName: candidate.fileName,
+    sizeBytes: candidate.sizeBytes
+  };
+}
+function parseDownloadUrl(value) {
+  if (typeof value !== "string") {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  return url;
+}
+function parseOptionalSkillId(value) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_SKILL_ID_LENGTH || !SKILL_ID_PATTERN.test(value)) {
+    throw apiError(INVALID_RESPONSE_MESSAGE2);
+  }
+  return value;
+}
+function isPositiveSafeInteger(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+function isSafeFileName(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store.js
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join3, resolve as resolve4 } from "node:path";
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store-publication.js
+import { randomUUID } from "node:crypto";
+import { constants as constants2 } from "node:fs";
+import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open2, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
+import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
+var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
+var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
+var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
+var PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
+var INSTALL_MARKER_NAME2 = ".clink-install.json";
+var PUBLICATION_GUARD_OWNER_NAME = "owner.json";
+var PUBLICATION_GUARD_STALE_MS = 6e5;
+var SHA256_PATTERN = /^[a-f0-9]{64}$/;
+var MovedBackupError = class extends Error {
+  backup;
+  constructor(backup) {
+    super("current changed while being backed up");
+    this.backup = backup;
+  }
+};
+async function publishSkillRelease(input) {
+  const paths = input.paths;
+  validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
+  let current;
+  let existingRelease;
+  let lockCapability;
+  try {
+    lockCapability = await requireAuthenticatedLockCapability(paths.lockPath);
+    current = await inspectCurrent(paths);
+    if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
+      if (!input.force) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+    }
+    if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
+      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
+      if (expectedRelease !== current.managed.canonicalReleasePath) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      const confirmedCurrent = await inspectCurrent(paths);
+      if (confirmedCurrent?.managed === null || confirmedCurrent?.managed === void 0 || !samePathFingerprint(confirmedCurrent.fingerprint, current.fingerprint) || confirmedCurrent.managed.canonicalReleasePath !== expectedRelease || confirmedCurrent.managed.marker.publisher !== input.marker.publisher || confirmedCurrent.managed.marker.skillName !== input.marker.skillName || confirmedCurrent.managed.marker.sha256 !== input.marker.sha256) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      return createUnchangedPublication(paths);
+    }
+    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const transaction = {
+    paths,
+    lockCapability,
+    marker: input.marker,
+    uuid: input.uuid,
+    oldCurrent: current,
+    backup: null,
+    newCurrent: null,
+    createdRelease: null
+  };
+  try {
+    if (existingRelease === null) {
+      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker, lockCapability);
+    }
+    const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (selectedRelease === null) {
+      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+    }
+    const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (expectedRelease === null) {
+      throw new Error("published release is missing");
+    }
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    if (current !== null) {
+      const compatibleManaged = current.managed !== null && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName;
+      const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
+      try {
+        await paths.publicationMutationHook?.({ phase: "before-current-backup" });
+        await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
+      } catch (error) {
+        if (error instanceof MovedBackupError) {
+          transaction.backup = error.backup;
+        }
+        throw error;
+      }
+      await paths.publicationMutationHook?.({ phase: "after-backup" });
+      await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    }
+    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+    const target = relative3(dirname3(paths.currentPath), paths.releasePath);
+    await symlink2(target, paths.currentPath, "dir");
+    const newCurrent = await fingerprintPath2(paths.currentPath);
+    if (newCurrent.kind !== "symlink" || newCurrent.linkTarget !== target) {
+      throw new Error("current link changed during creation");
+    }
+    transaction.newCurrent = newCurrent;
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    await paths.publicationMutationHook?.({ phase: "after-current-switch" });
+    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
+  } catch (error) {
+    try {
+      await rollbackPublicationTransaction(transaction);
+    } catch {
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function createUnchangedPublication(paths) {
+  let state = "active";
+  return {
+    action: "unchanged",
+    releasePath: paths.releasePath,
+    currentPath: paths.currentPath,
+    backupPath: null,
+    async rollback() {
+      if (state === "active") {
+        state = "rolled-back";
+      }
+    },
+    async finalize() {
+      if (state === "active") {
+        state = "committed";
+      }
+    }
+  };
+}
+function createPublishedTransaction(transaction, action) {
+  let state = "active";
+  return {
+    action,
+    releasePath: transaction.paths.releasePath,
+    currentPath: transaction.paths.currentPath,
+    backupPath: transaction.backup?.retained === true ? transaction.backup.containerPath : null,
+    async rollback() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        await rollbackPublicationTransaction(transaction);
+        state = "rolled-back";
+      } catch {
+        throw installError(PUBLISH_ROLLBACK_MESSAGE);
+      }
+    },
+    async finalize() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        if (transaction.backup !== null && !transaction.backup.retained) {
+          await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+          await removeAuthenticatedBackup(transaction.backup);
+          transaction.backup = null;
+        }
+        state = "committed";
+      } catch {
+        throw installError(PUBLISH_FINALIZE_MESSAGE);
+      }
+    }
+  };
+}
+function validatePublicationInput(paths, extractedRoot, marker, uuid) {
+  if (!isInstallMarker(marker) || !SHA256_PATTERN.test(marker.sha256)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(marker.publisher) || !isSafePathSegment(marker.skillName)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(uuid)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
+  if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function isSafePathSegment(value) {
+  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
+}
+async function requireAuthenticatedLockCapability(lockPath) {
+  const capability = getHeldInstallLockCapability(lockPath);
+  if (capability === null) {
+    throw new Error("skill install lock capability is unavailable");
+  }
+  await assertLockCapabilityAuthenticated(lockPath, capability);
+  return capability;
+}
+async function assertLockCapabilityAuthenticated(lockPath, expected) {
+  const registered = getHeldInstallLockCapability(lockPath);
+  const fingerprint = await fingerprintPath2(lockPath);
+  const owner = await readNoFollowLockOwner(join2(lockPath, "owner.json"));
+  if (registered?.token !== expected.token || fingerprint.kind !== "directory" || fingerprint.dev !== expected.dev || fingerprint.ino !== expected.ino || owner === null || owner.pid !== expected.pid || owner.id !== expected.id) {
+    throw new Error("skill install lock capability changed");
+  }
+}
+async function readNoFollowLockOwner(path3) {
+  const parsed = await readNoFollowJson(path3);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+  const owner = parsed;
+  if (typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.id !== "string" || owner.id.length === 0) {
+    return null;
+  }
+  return { pid: owner.pid, id: owner.id };
+}
+async function inspectCurrent(paths) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(paths.currentPath);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "symlink" || fingerprint.linkTarget === null) {
+    return { fingerprint, managed: null };
+  }
+  const managed = await inspectManagedCurrent(paths, fingerprint);
+  return { fingerprint, managed };
+}
+async function inspectManagedCurrent(paths, fingerprint) {
+  try {
+    const canonicalRoot = await realpath2(paths.releasesRoot);
+    const rootStat = await lstat4(paths.releasesRoot);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      return null;
+    }
+    const canonicalReleasePath = await realpath2(paths.currentPath);
+    const releaseStat = await lstat4(canonicalReleasePath);
+    if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink()) {
+      return null;
+    }
+    const releaseParts = pathPartsBelow(canonicalRoot, canonicalReleasePath);
+    if (releaseParts === null || releaseParts.length !== 3) {
+      return null;
+    }
+    const [publisher, skillName, sha256] = releaseParts;
+    if (!SHA256_PATTERN.test(sha256)) {
+      return null;
+    }
+    const marker = await readNoFollowInstallMarker(join2(canonicalReleasePath, INSTALL_MARKER_NAME2));
+    if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
+      return null;
+    }
+    const confirmed = await fingerprintPath2(paths.currentPath);
+    if (!samePathFingerprint(fingerprint, confirmed)) {
+      return null;
+    }
+    return {
+      fingerprint,
+      linkTarget: fingerprint.linkTarget,
+      canonicalReleasePath,
+      marker
+    };
+  } catch {
+    return null;
+  }
+}
+async function canonicalExistingReleasePath(releasePath, releasesRoot) {
+  const releaseStat = await lstat4(releasePath);
+  const rootStat = await lstat4(releasesRoot);
+  if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRoot = await realpath2(releasesRoot);
+  const canonicalRelease = await realpath2(releasePath);
+  const parts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  if (parts === null || parts.length !== 3) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return canonicalRelease;
+}
+async function inspectExistingRelease(releasePath, releasesRoot, marker) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(releasePath);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "directory") {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRelease = await canonicalExistingReleasePath(releasePath, releasesRoot);
+  const canonicalRoot = await realpath2(releasesRoot);
+  const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
+  const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  const existingMarker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
+  if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return fingerprint;
+}
+async function assertReleaseAuthenticated(paths, marker, expected) {
+  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (current === null || !samePathFingerprint(current, expected)) {
+    throw new Error("selected release changed during publication");
+  }
+}
+function pathPartsBelow(rootPath, candidatePath) {
+  const childPath = relative3(rootPath, candidatePath);
+  if (childPath.length === 0 || childPath === ".." || childPath.startsWith(`..${sep2}`) || isAbsolute3(childPath)) {
+    return null;
+  }
+  return childPath.split(sep2);
+}
+async function createImmutableRelease(paths, extractedRoot, marker, lockCapability) {
+  const extracted = await fingerprintPath2(extractedRoot);
+  if (extracted.kind !== "directory") {
+    throw new Error("extracted skill root is not a real directory");
+  }
+  await ensureReleaseParent(paths, marker);
+  const guard = await acquirePublicationGuard(paths, lockCapability);
+  let hasPrimaryError = false;
+  try {
+    await writeInstallMarker(extractedRoot, marker);
+    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+    await assertPublicationGuardAuthenticated(guard);
+    await paths.publicationMutationHook?.({ phase: "before-release-rename" });
+    const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+    await assertPublicationGuardAuthenticated(guard);
+    if (existingRelease !== null) {
+      return null;
+    }
+    await rename2(extractedRoot, paths.releasePath);
+    const releaseFingerprint = await fingerprintPath2(paths.releasePath);
+    if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
+      throw new Error("release changed during publication");
+    }
+    const installedMarker = await readNoFollowInstallMarker(join2(paths.releasePath, INSTALL_MARKER_NAME2));
+    if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
+      throw new Error("release marker changed during publication");
+    }
+    return { fingerprint: releaseFingerprint, marker };
+  } catch (error) {
+    hasPrimaryError = true;
+    throw error;
+  } finally {
+    try {
+      await removeOwnedPublicationGuard(guard, paths.publicationMutationHook);
+    } catch (cleanupError) {
+      if (!hasPrimaryError) {
+        throw cleanupError;
+      }
+    }
+  }
+}
+async function acquirePublicationGuard(paths, lockCapability) {
+  const guardPath = join2(dirname3(paths.releasePath), `.${basename(paths.releasePath)}.publishing`);
+  const owner = {
+    schemaVersion: 1,
+    pid: lockCapability.pid,
+    lockId: lockCapability.id,
+    guardId: randomUUID(),
+    createdAtMs: Date.now()
+  };
+  await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+  try {
+    return await createPublicationGuard(guardPath, owner);
+  } catch (error) {
+    if (!isErrorCode2(error, "EEXIST")) {
+      throw error;
+    }
+  }
+  if (!await recoverStalePublicationGuard(guardPath, paths.lockPath, lockCapability)) {
+    throw new Error("release publication guard is busy");
+  }
+  await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
+  try {
+    return await createPublicationGuard(guardPath, owner);
+  } catch (error) {
+    if (isErrorCode2(error, "EEXIST")) {
+      throw new Error("release publication guard is busy");
+    }
+    throw error;
+  }
+}
+async function createPublicationGuard(guardPath, owner) {
+  await mkdir4(guardPath, { mode: 448 });
+  let created = null;
+  try {
+    created = await fingerprintPath2(guardPath);
+    if (created.kind !== "directory") {
+      throw new Error("release publication guard is not a real directory");
+    }
+    await writePublicationGuardOwner(guardPath, owner);
+    const guard = { path: guardPath, fingerprint: created, owner };
+    await assertPublicationGuardAuthenticated(guard);
+    return guard;
+  } catch (error) {
+    if (created !== null) {
+      try {
+        await cleanupPublicationGuardInitialization(guardPath, created, owner);
+      } catch {
+      }
+    }
+    throw error;
+  }
+}
+async function writePublicationGuardOwner(guardPath, owner) {
+  const handle = await open2(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME), constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
+  try {
+    await handle.writeFile(JSON.stringify(owner), "utf8");
+    await handle.chmod(384);
+  } finally {
+    await handle.close();
+  }
+}
+async function cleanupPublicationGuardInitialization(guardPath, expectedFingerprint, expectedOwner) {
+  let current;
+  try {
+    current = await fingerprintPath2(guardPath);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (!samePathFingerprint(current, expectedFingerprint) || current.kind !== "directory") {
+    return;
+  }
+  const entries = await readdir2(guardPath);
+  const owner = await readPublicationGuardOwner(guardPath);
+  const isEmptyIncompleteGuard = entries.length === 0 && owner === null;
+  const isOwnedGuard = entries.length === 1 && entries[0] === PUBLICATION_GUARD_OWNER_NAME && owner !== null && samePublicationGuardOwner(owner, expectedOwner);
+  if (!isEmptyIncompleteGuard && !isOwnedGuard) {
+    return;
+  }
+  const cleanupPath = `${guardPath}.incomplete-${randomUUID()}`;
+  await rename2(guardPath, cleanupPath);
+  const movedFingerprint = await fingerprintPath2(cleanupPath);
+  const movedEntries = await readdir2(cleanupPath);
+  const movedOwner = await readPublicationGuardOwner(cleanupPath);
+  const movedIsEmpty = movedEntries.length === 0 && movedOwner === null;
+  const movedIsOwned = movedEntries.length === 1 && movedEntries[0] === PUBLICATION_GUARD_OWNER_NAME && movedOwner !== null && samePublicationGuardOwner(movedOwner, expectedOwner);
+  if (!samePathFingerprint(movedFingerprint, expectedFingerprint) || !movedIsEmpty && !movedIsOwned) {
+    throw new Error("release publication guard changed during initialization cleanup");
+  }
+  await rm4(cleanupPath, { recursive: true });
+}
+async function recoverStalePublicationGuard(guardPath, lockPath, lockCapability) {
+  const currentTime = Date.now();
+  const candidate = await inspectPublicationGuard(guardPath);
+  if (candidate === null || !isStaleDeadPublicationGuard(candidate, currentTime)) {
+    return false;
+  }
+  await assertLockCapabilityAuthenticated(lockPath, lockCapability);
+  const stalePath = `${guardPath}.stale-${randomUUID()}`;
+  await rename2(guardPath, stalePath);
+  const moved = await inspectPublicationGuard(stalePath);
+  if (moved === null || !samePublicationGuard(candidate, moved) || !isStaleDeadPublicationGuard(moved, currentTime)) {
+    throw new Error("release publication guard changed during stale recovery");
+  }
+  await assertLockCapabilityAuthenticated(lockPath, lockCapability);
+  await rm4(stalePath, { recursive: true });
+  return true;
+}
+function isStaleDeadPublicationGuard(guard, currentTime) {
+  return currentTime - guard.fingerprint.mtimeMs > PUBLICATION_GUARD_STALE_MS && currentTime - guard.owner.createdAtMs > PUBLICATION_GUARD_STALE_MS && !isProcessAlive(guard.owner.pid);
+}
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !isErrorCode2(error, "ESRCH");
+  }
+}
+async function inspectPublicationGuard(guardPath) {
+  const fingerprint = await fingerprintPath2(guardPath);
+  if (fingerprint.kind !== "directory") {
+    return null;
+  }
+  const entries = await readdir2(guardPath);
+  if (entries.length !== 1 || entries[0] !== PUBLICATION_GUARD_OWNER_NAME) {
+    return null;
+  }
+  const owner = await readPublicationGuardOwner(guardPath);
+  return owner === null ? null : { path: guardPath, fingerprint, owner };
+}
+async function readPublicationGuardOwner(guardPath) {
+  const parsed = await readNoFollowJson(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME));
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+  const owner = parsed;
+  const keys = Object.keys(owner).sort();
+  const expectedKeys = ["createdAtMs", "guardId", "lockId", "pid", "schemaVersion"];
+  if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index]) || owner.schemaVersion !== 1 || typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.lockId !== "string" || owner.lockId.length === 0 || typeof owner.guardId !== "string" || owner.guardId.length === 0 || typeof owner.createdAtMs !== "number" || !Number.isFinite(owner.createdAtMs)) {
+    return null;
+  }
+  return {
+    schemaVersion: 1,
+    pid: owner.pid,
+    lockId: owner.lockId,
+    guardId: owner.guardId,
+    createdAtMs: owner.createdAtMs
+  };
+}
+async function assertPublicationGuardAuthenticated(expected) {
+  const current = await inspectPublicationGuard(expected.path);
+  if (current === null || !samePublicationGuard(current, expected)) {
+    throw new Error("release publication guard changed");
+  }
+}
+function samePublicationGuard(first, second) {
+  return samePathFingerprint(first.fingerprint, second.fingerprint) && samePublicationGuardOwner(first.owner, second.owner);
+}
+function samePublicationGuardOwner(first, second) {
+  return first.schemaVersion === second.schemaVersion && first.pid === second.pid && first.lockId === second.lockId && first.guardId === second.guardId && first.createdAtMs === second.createdAtMs;
+}
+async function removeOwnedPublicationGuard(expected, mutationHook) {
+  const current = await inspectPublicationGuard(expected.path);
+  if (current === null || !samePublicationGuard(current, expected)) {
+    throw new Error("release publication guard changed before cleanup");
+  }
+  const cleanupPath = `${expected.path}.release-${randomUUID()}`;
+  await mutationHook?.({ phase: "before-publication-guard-cleanup-rename" });
+  try {
+    await rename2(expected.path, cleanupPath);
+  } catch (error) {
+    await ensurePublicationGuardFailureState(expected.path);
+    throw error;
+  }
+  await mutationHook?.({ phase: "after-publication-guard-cleanup-rename" });
+  const moved = await inspectPublicationGuard(cleanupPath);
+  if (moved === null || !samePublicationGuard(moved, expected)) {
+    await restoreMovedPublicationGuardReplacement(cleanupPath, expected.path, moved);
+    throw new Error("release publication guard changed during cleanup");
+  }
+  await rm4(cleanupPath, { recursive: true });
+}
+async function restoreMovedPublicationGuardReplacement(cleanupPath, canonicalPath, moved) {
+  if (moved !== null && await isPathVacant(canonicalPath)) {
+    try {
+      await rename2(cleanupPath, canonicalPath);
+      const restored = await inspectPublicationGuard(canonicalPath);
+      if (restored !== null && samePublicationGuard(restored, moved)) {
+        return;
+      }
+    } catch {
+    }
+  }
+  await ensurePublicationGuardFailureState(canonicalPath);
+}
+async function isPathVacant(path3) {
+  try {
+    await lstat4(path3);
+    return false;
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return true;
+    }
+    return false;
+  }
+}
+async function ensurePublicationGuardFailureState(path3) {
+  try {
+    await mkdir4(path3, { mode: 448 });
+  } catch {
+  }
+}
+async function ensureReleaseParent(paths, marker) {
+  await ensureRealDirectory(paths.releasesRoot);
+  const publisherPath = join2(paths.releasesRoot, marker.publisher);
+  await ensureRealDirectory(publisherPath);
+  await ensureRealDirectory(join2(publisherPath, marker.skillName));
+}
+async function ensureRealDirectory(path3) {
+  await mkdir4(path3, { recursive: true, mode: 448 });
+  const pathStat = await lstat4(path3);
+  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
+    throw new Error("store path is not a real directory");
+  }
+}
+async function writeInstallMarker(rootPath, marker) {
+  const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
+  const handle = await open2(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
+  try {
+    await handle.writeFile(JSON.stringify(marker), "utf8");
+    await handle.chmod(420);
+  } finally {
+    await handle.close();
+  }
+}
+async function readNoFollowInstallMarker(path3) {
+  const parsed = await readNoFollowJson(path3);
+  return isInstallMarker(parsed) ? parsed : null;
+}
+async function readNoFollowJson(path3) {
+  let handle;
+  try {
+    handle = await open2(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+    const before = await handle.stat();
+    if (!before.isFile()) {
+      return null;
+    }
+    const raw = await handle.readFile("utf8");
+    const after = await handle.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || !after.isFile()) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+function isInstallMarker(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value;
+  const keys = Object.keys(marker).sort();
+  const expectedKeys = [
+    "installedAt",
+    "publisher",
+    "requestedVersion",
+    "schemaVersion",
+    "sha256",
+    "sizeBytes",
+    "skillName"
+  ];
+  return keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index]) && marker.schemaVersion === 1 && typeof marker.publisher === "string" && typeof marker.skillName === "string" && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && SHA256_PATTERN.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string" && marker.installedAt.length > 0;
+}
+function sameInstallMarker(first, second) {
+  return first.schemaVersion === second.schemaVersion && first.publisher === second.publisher && first.skillName === second.skillName && first.requestedVersion === second.requestedVersion && first.sha256 === second.sha256 && first.sizeBytes === second.sizeBytes && first.installedAt === second.installedAt;
+}
+async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
+  await assertPathFingerprint(paths.currentPath, expectedCurrent);
+  await ensureRealDirectory(paths.backupsRoot);
+  const containerPath = join2(paths.backupsRoot, backupName);
+  await mkdir4(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  if (containerFingerprint.kind !== "directory") {
+    throw new Error("backup container is not a directory");
+  }
+  const entryPath = join2(containerPath, basename(paths.currentPath));
+  try {
+    await assertPathFingerprint(paths.currentPath, expectedCurrent);
+    await rename2(paths.currentPath, entryPath);
+  } catch (error) {
+    await removeEmptyOwnedContainer(containerPath, containerFingerprint);
+    throw error;
+  }
+  const entryFingerprint = await fingerprintPath2(entryPath);
+  const backup = {
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint,
+    retained
+  };
+  if (!samePathFingerprint(entryFingerprint, expectedCurrent)) {
+    throw new MovedBackupError(backup);
+  }
+  try {
+    await lstat4(paths.currentPath);
+    throw new MovedBackupError(backup);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return backup;
+    }
+    throw error;
+  }
+}
+async function removeEmptyOwnedContainer(containerPath, expected) {
+  try {
+    const current = await fingerprintPath2(containerPath);
+    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir2(containerPath)).length === 0) {
+      await rm4(containerPath, { recursive: true });
+    }
+  } catch {
+  }
+}
+async function rollbackPublicationTransaction(transaction) {
+  let rollbackFailed = false;
+  let currentSafeForReleaseCleanup = true;
+  await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+  if (transaction.newCurrent !== null) {
+    try {
+      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
+      transaction.newCurrent = null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  } else {
+    try {
+      const current = await fingerprintPath2(transaction.paths.currentPath);
+      if (transaction.oldCurrent === null || !samePathFingerprint(current, transaction.oldCurrent.fingerprint)) {
+        currentSafeForReleaseCleanup = false;
+      }
+    } catch (error) {
+      if (!isErrorCode2(error, "ENOENT")) {
+        rollbackFailed = true;
+        currentSafeForReleaseCleanup = false;
+      }
+    }
+  }
+  if (transaction.backup !== null) {
+    try {
+      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+      await restoreBackup(transaction.paths.currentPath, transaction.backup);
+      if (!transaction.backup.retained) {
+        await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+        await removeAuthenticatedBackup(transaction.backup);
+      }
+      transaction.backup = transaction.backup.retained ? transaction.backup : null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  }
+  if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
+    try {
+      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
+      transaction.createdRelease = null;
+    } catch {
+      rollbackFailed = true;
+    }
+  }
+  if (rollbackFailed) {
+    throw new Error("publication rollback was incomplete");
+  }
+}
+async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanupName) {
+  let current;
+  try {
+    current = await fingerprintPath2(currentPath);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("current was replaced before rollback");
+  }
+  await ensureRealDirectory(backupsRoot);
+  const containerPath = join2(backupsRoot, cleanupName);
+  await mkdir4(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  const entryPath = join2(containerPath, basename(currentPath));
+  await rename2(currentPath, entryPath);
+  const moved = await fingerprintPath2(entryPath);
+  if (!samePathFingerprint(moved, expected)) {
+    await restoreBackup(currentPath, {
+      containerPath,
+      entryPath,
+      containerFingerprint,
+      entryFingerprint: moved,
+      retained: true
+    });
+    throw new Error("current changed while rollback moved it");
+  }
+  await removeAuthenticatedBackup({
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint: expected,
+    retained: false
+  });
+}
+async function restoreBackup(currentPath, backup) {
+  await assertBackupAuthenticated(backup);
+  try {
+    await lstat4(currentPath);
+    throw new Error("current path is occupied during restoration");
+  } catch (error) {
+    if (!isErrorCode2(error, "ENOENT")) {
+      throw error;
+    }
+  }
+  switch (backup.entryFingerprint.kind) {
+    case "symlink": {
+      if (backup.entryFingerprint.linkTarget === null) {
+        throw new Error("backup link target is unavailable");
+      }
+      await symlink2(backup.entryFingerprint.linkTarget, currentPath, "dir");
+      break;
+    }
+    case "file":
+      if (backup.retained) {
+        await copyFile2(backup.entryPath, currentPath, constants2.COPYFILE_EXCL);
+        await chmod2(currentPath, backup.entryFingerprint.mode & 4095);
+        await assertBackupAuthenticated(backup);
+        const atime = backup.entryFingerprint.atimeMs / 1e3;
+        const mtime = backup.entryFingerprint.mtimeMs / 1e3;
+        await utimes(currentPath, atime, mtime);
+        await utimes(backup.entryPath, atime, mtime);
+      } else {
+        await link(backup.entryPath, currentPath);
+      }
+      break;
+    case "directory":
+      await restoreDirectory(backup.entryPath, currentPath, backup.entryFingerprint.mode);
+      break;
+    default:
+      throw new Error("backup type cannot be restored safely");
+  }
+  const restored = await fingerprintPath2(currentPath);
+  if (backup.entryFingerprint.kind === "symlink") {
+    if (restored.kind !== "symlink" || restored.linkTarget !== backup.entryFingerprint.linkTarget) {
+      throw new Error("restored link does not match its backup");
+    }
+  } else if (backup.entryFingerprint.kind === "file" && (restored.kind !== "file" || (backup.retained ? restored.dev !== backup.entryFingerprint.dev || restored.ino === backup.entryFingerprint.ino || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095) || Math.abs(restored.atimeMs - backup.entryFingerprint.atimeMs) > 1 || Math.abs(restored.mtimeMs - backup.entryFingerprint.mtimeMs) > 1 : restored.dev !== backup.entryFingerprint.dev || restored.ino !== backup.entryFingerprint.ino))) {
+    throw new Error("restored file does not match its backup");
+  } else if (backup.entryFingerprint.kind === "directory" && (restored.kind !== "directory" || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095))) {
+    throw new Error("restored directory does not match its backup");
+  }
+}
+async function restoreDirectory(sourcePath, destinationPath, mode) {
+  await mkdir4(destinationPath, { mode: mode & 4095 });
+  for (const entry of await readdir2(sourcePath)) {
+    await cp2(join2(sourcePath, entry), join2(destinationPath, entry), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      preserveTimestamps: true,
+      verbatimSymlinks: true
+    });
+  }
+  await chmod2(destinationPath, mode & 4095);
+}
+async function assertBackupAuthenticated(backup) {
+  const container = await fingerprintPath2(backup.containerPath);
+  const entry = await fingerprintPath2(backup.entryPath);
+  const entries = await readdir2(backup.containerPath);
+  if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
+    throw new Error("backup authentication failed");
+  }
+}
+async function removeAuthenticatedBackup(backup) {
+  await assertBackupAuthenticated(backup);
+  const cleanupPath = `${backup.containerPath}.remove-${randomUUID()}`;
+  await rename2(backup.containerPath, cleanupPath);
+  const movedContainer = await fingerprintPath2(cleanupPath);
+  const movedEntry = await fingerprintPath2(join2(cleanupPath, basename(backup.entryPath)));
+  if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
+    try {
+      await rename2(cleanupPath, backup.containerPath);
+    } catch {
+    }
+    throw new Error("backup changed during removal");
+  }
+  await rm4(cleanupPath, { recursive: true });
+}
+async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
+  const current = await fingerprintPath2(releasePath);
+  const marker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
+  await canonicalExistingReleasePath(releasePath, releasesRoot);
+  if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
+    throw new Error("created release changed before rollback");
+  }
+  const cleanupPath = `${releasePath}.rollback-${uuid}`;
+  await rename2(releasePath, cleanupPath);
+  const moved = await fingerprintPath2(cleanupPath);
+  const movedMarker = await readNoFollowInstallMarker(join2(cleanupPath, INSTALL_MARKER_NAME2));
+  if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
+    try {
+      await rename2(cleanupPath, releasePath);
+    } catch {
+    }
+    throw new Error("created release changed during rollback");
+  }
+  await rm4(cleanupPath, { recursive: true });
+}
+async function fingerprintPath2(path3) {
+  const before = await lstat4(path3);
+  const kind = pathKind(before);
+  const linkTarget = kind === "symlink" ? await readlink2(path3) : null;
+  const after = await lstat4(path3);
+  if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
+    throw new Error("path changed during inspection");
+  }
+  return {
+    dev: after.dev,
+    ino: after.ino,
+    mode: after.mode,
+    atimeMs: after.atimeMs,
+    mtimeMs: after.mtimeMs,
+    kind,
+    linkTarget
+  };
+}
+function pathKind(pathStat) {
+  if (pathStat.isSymbolicLink()) {
+    return "symlink";
+  }
+  if (pathStat.isFile()) {
+    return "file";
+  }
+  if (pathStat.isDirectory()) {
+    return "directory";
+  }
+  return "other";
+}
+async function assertPathFingerprint(path3, expected) {
+  const current = await fingerprintPath2(path3);
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("path changed before mutation");
+  }
+}
+function samePathFingerprint(first, second) {
+  return first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.kind === second.kind && first.linkTarget === second.linkTarget;
+}
+function isErrorCode2(error, code) {
+  return error?.code === code;
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store.js
+var INSTALL_LOCK_STALE_MS = 6e5;
+var OWNER_FILE_NAME = "owner.json";
+var LOCK_BUSY_MESSAGE = "another skill installation is in progress";
+var LOCK_ACQUIRE_MESSAGE = "failed to acquire skill install lock";
+var LOCK_RELEASE_MESSAGE = "failed to release skill install lock";
+var heldInstallLocks = /* @__PURE__ */ new Map();
+var LockInitializationError = class extends Error {
+};
+var MutationGuardBusyError = class extends Error {
+};
+function resolveStorePaths(homeDir, spec, sha256, uuid) {
+  const skillsRoot = join3(homeDir, ".agents", "skills");
+  const clinkRoot = join3(skillsRoot, ".clink");
+  const releasesRoot = join3(clinkRoot, "releases");
+  return {
+    skillsRoot,
+    clinkRoot,
+    lockPath: join3(clinkRoot, "install.lock"),
+    stagingPath: join3(clinkRoot, "staging", uuid),
+    releasesRoot,
+    releasePath: join3(releasesRoot, spec.publisher, spec.skillName, sha256),
+    backupsRoot: join3(clinkRoot, "backups"),
+    currentPath: join3(skillsRoot, spec.skillName)
+  };
+}
+async function acquireInstallLock(paths, options2) {
+  const pid = options2?.pid ?? process.pid;
+  const getCurrentTime = options2?.now ?? Date.now;
+  const isProcessAlive2 = options2?.isProcessAlive ?? defaultIsProcessAlive;
+  const mutationHook = options2?.mutationHook;
+  const mutationContext = {
+    pid,
+    getCurrentTime,
+    isProcessAlive: isProcessAlive2,
+    mutationHook
+  };
+  let currentTime;
+  let owner;
+  try {
+    if (!Number.isSafeInteger(pid) || pid <= 0) {
+      throw new Error("invalid lock owner PID");
+    }
+    currentTime = getCurrentTime();
+    if (!Number.isFinite(currentTime)) {
+      throw new Error("invalid lock time");
+    }
+    owner = { pid, id: randomUUID2() };
+    await mkdir5(paths.clinkRoot, { recursive: true, mode: 448 });
+  } catch {
+    throw installError(LOCK_ACQUIRE_MESSAGE);
+  }
+  try {
+    await createLockDirectory(paths.lockPath, owner, mutationContext);
+    return await createOwnedLockHandle(paths.lockPath, owner, mutationContext);
+  } catch (error) {
+    if (!isErrorCode3(error, "EEXIST")) {
+      throw installError(LOCK_ACQUIRE_MESSAGE);
+    }
+  }
+  try {
+    await callMutationHook(mutationHook, "reclaim", "before-guard-acquire");
+    await withMutationGuard(paths.lockPath, "reclaim", mutationContext, async () => {
+      let currentSnapshot;
+      try {
+        currentSnapshot = await inspectLock(paths.lockPath, currentTime, isProcessAlive2);
+      } catch (error) {
+        if (isErrorCode3(error, "ENOENT")) {
+          return;
+        }
+        throw error;
+      }
+      if (!currentSnapshot.reclaimable) {
+        throw installError(LOCK_BUSY_MESSAGE);
+      }
+      const stalePath = `${paths.lockPath}.stale-${randomUUID2()}`;
+      await callMutationHook(mutationHook, "reclaim", "before-lock-rename");
+      await rename3(paths.lockPath, stalePath);
+      await callMutationHook(mutationHook, "reclaim", "after-lock-rename");
+      let movedSnapshot;
+      try {
+        movedSnapshot = await inspectLock(stalePath, currentTime, isProcessAlive2);
+      } catch (error) {
+        await restoreMovedDirectory(stalePath, paths.lockPath);
+        throw error;
+      }
+      if (!sameLockSnapshot(currentSnapshot, movedSnapshot) || !movedSnapshot.reclaimable) {
+        await restoreMovedDirectory(stalePath, paths.lockPath);
+        throw installError(LOCK_BUSY_MESSAGE);
+      }
+      await rm5(stalePath, { recursive: true });
+    });
+  } catch (error) {
+    if (error instanceof MutationGuardBusyError) {
+      throw installError(LOCK_BUSY_MESSAGE);
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(LOCK_ACQUIRE_MESSAGE);
+  }
+  try {
+    await createLockDirectory(paths.lockPath, owner, mutationContext);
+    return await createOwnedLockHandle(paths.lockPath, owner, mutationContext);
+  } catch (error) {
+    if (isErrorCode3(error, "EEXIST")) {
+      throw installError(LOCK_BUSY_MESSAGE);
+    }
+    throw installError(LOCK_ACQUIRE_MESSAGE);
+  }
+}
+function getHeldInstallLockCapability(lockPath) {
+  return heldInstallLocks.get(resolve4(lockPath)) ?? null;
+}
+function registerHeldInstallLockCapability(input) {
+  const capability = Object.freeze({
+    ...input,
+    lockPath: resolve4(input.lockPath),
+    token: /* @__PURE__ */ Symbol("skill-install-lock")
+  });
+  heldInstallLocks.set(capability.lockPath, capability);
+  return capability;
+}
+function clearHeldInstallLockCapability(capability) {
+  const current = heldInstallLocks.get(capability.lockPath);
+  if (current?.token === capability.token) {
+    heldInstallLocks.delete(capability.lockPath);
+  }
+}
+async function createLockDirectory(lockPath, owner, mutationContext) {
+  await mkdir5(lockPath, { mode: 448 });
+  let identity;
+  try {
+    const lockStat = await stat(lockPath);
+    identity = {
+      dev: lockStat.dev,
+      ino: lockStat.ino,
+      owner
+    };
+    await callMutationHook(mutationContext.mutationHook, "initialize", "after-lock-mkdir");
+    await writeFile2(join3(lockPath, OWNER_FILE_NAME), JSON.stringify(owner), {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 384
+    });
+    await callMutationHook(mutationContext.mutationHook, "initialize", "after-owner-write");
+    await validateLockIdentity(lockPath, identity, mutationContext);
+  } catch {
+    if (identity !== void 0) {
+      try {
+        await cleanupLockIdentity(lockPath, identity, mutationContext);
+      } catch {
+      }
+    }
+    throw new LockInitializationError();
+  }
+}
+async function validateLockIdentity(lockPath, expected, mutationContext) {
+  try {
+    await withMutationGuard(lockPath, "initialize", mutationContext, async () => {
+      const current = await readLockIdentity(lockPath);
+      if (!sameLockIdentity(current, expected)) {
+        throw new LockInitializationError();
+      }
+    });
+  } catch (error) {
+    if (error instanceof MutationGuardBusyError) {
+      const current = await readLockIdentity(lockPath);
+      if (sameLockIdentity(current, expected)) {
+        return;
+      }
+    }
+    throw error;
+  }
+}
+async function cleanupLockIdentity(lockPath, expected, mutationContext) {
+  await withMutationGuard(lockPath, "initialize", mutationContext, async () => {
+    let currentStat;
+    try {
+      currentStat = await stat(lockPath);
+    } catch (error) {
+      if (isErrorCode3(error, "ENOENT")) {
+        return;
+      }
+      throw error;
+    }
+    if (currentStat.dev !== expected.dev || currentStat.ino !== expected.ino) {
+      return;
+    }
+    const recordedOwner = await readLockOwner(lockPath);
+    if (recordedOwner !== null && !sameLockOwner(recordedOwner, expected.owner)) {
+      return;
+    }
+    const cleanupPath = `${lockPath}.incomplete-${randomUUID2()}`;
+    await rename3(lockPath, cleanupPath);
+    const movedStat = await stat(cleanupPath);
+    const movedOwner = await readLockOwner(cleanupPath);
+    if (movedStat.dev !== expected.dev || movedStat.ino !== expected.ino || movedOwner !== null && !sameLockOwner(movedOwner, expected.owner)) {
+      return;
+    }
+    await rm5(cleanupPath, { recursive: true });
+  });
+}
+async function readLockIdentity(lockPath) {
+  try {
+    const lockStat = await stat(lockPath);
+    const owner = await readLockOwner(lockPath);
+    if (owner?.id === void 0) {
+      return null;
+    }
+    return {
+      dev: lockStat.dev,
+      ino: lockStat.ino,
+      owner: { pid: owner.pid, id: owner.id }
+    };
+  } catch {
+    return null;
+  }
+}
+function sameLockIdentity(first, second) {
+  return first !== null && first.dev === second.dev && first.ino === second.ino && sameLockOwner(first.owner, second.owner);
+}
+function sameLockOwner(first, second) {
+  return first.pid === second.pid && first.id === second.id;
+}
+async function inspectLock(lockPath, currentTime, isProcessAlive2) {
+  const lockStat = await stat(lockPath);
+  const owner = await readLockOwner(lockPath);
+  const ownerAlive = owner === null ? false : safelyCheckProcess(owner.pid, isProcessAlive2);
+  return {
+    dev: lockStat.dev,
+    ino: lockStat.ino,
+    owner,
+    reclaimable: currentTime - lockStat.mtimeMs > INSTALL_LOCK_STALE_MS && !ownerAlive
+  };
+}
+function sameLockSnapshot(first, second) {
+  return first.dev === second.dev && first.ino === second.ino && sameOptionalLockOwner(first.owner, second.owner);
+}
+function sameOptionalLockOwner(first, second) {
+  if (first === null || second === null) {
+    return first === second;
+  }
+  return sameLockOwner(first, second);
+}
+async function readLockOwner(lockPath) {
+  try {
+    const parsed = JSON.parse(await readFile2(join3(lockPath, OWNER_FILE_NAME), "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const pid = parsed.pid;
+    if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) {
+      return null;
+    }
+    const id = parsed.id;
+    return typeof id === "string" ? { pid, id } : { pid };
+  } catch {
+    return null;
+  }
+}
+function safelyCheckProcess(pid, isProcessAlive2) {
+  try {
+    return isProcessAlive2(pid);
+  } catch {
+    return true;
+  }
+}
+function defaultIsProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !isErrorCode3(error, "ESRCH");
+  }
+}
+async function createOwnedLockHandle(lockPath, owner, mutationContext) {
+  const identity = await readLockIdentity(lockPath);
+  if (identity === null || !sameLockOwner(identity.owner, owner)) {
+    throw new LockInitializationError();
+  }
+  const capability = registerHeldInstallLockCapability({
+    lockPath,
+    dev: identity.dev,
+    ino: identity.ino,
+    pid: owner.pid,
+    id: owner.id
+  });
+  return createLockHandle(lockPath, owner, mutationContext, capability);
+}
+function createLockHandle(lockPath, owner, mutationContext, capability) {
+  let released = false;
+  return {
+    async release() {
+      if (released) {
+        return;
+      }
+      let ownershipLost = false;
+      try {
+        await withMutationGuard(lockPath, "release", mutationContext, async () => {
+          const recordedOwner = await readLockOwner(lockPath);
+          if (recordedOwner?.pid !== owner.pid || recordedOwner.id !== owner.id) {
+            ownershipLost = true;
+            return;
+          }
+          const releasePath = `${lockPath}.release-${randomUUID2()}`;
+          await callMutationHook(mutationContext.mutationHook, "release", "before-lock-rename");
+          await rename3(lockPath, releasePath);
+          ownershipLost = true;
+          await callMutationHook(mutationContext.mutationHook, "release", "after-lock-rename");
+          await rm5(releasePath, { recursive: true });
+        });
+        released = true;
+      } catch {
+        if (ownershipLost || !await lockPathStillNamesCapability(lockPath, capability)) {
+          clearHeldInstallLockCapability(capability);
+        }
+        throw installError(LOCK_RELEASE_MESSAGE);
+      }
+      clearHeldInstallLockCapability(capability);
+    }
+  };
+}
+async function lockPathStillNamesCapability(lockPath, capability) {
+  const identity = await readLockIdentity(lockPath);
+  return identity !== null && identity.dev === capability.dev && identity.ino === capability.ino && identity.owner.pid === capability.pid && identity.owner.id === capability.id;
+}
+async function callMutationHook(hook, operation, phase) {
+  await hook?.({ operation, phase });
+}
+async function withMutationGuard(lockPath, operation, context, action) {
+  const guardPath = `${lockPath}.mutation`;
+  const guardOwner = {
+    pid: context.pid,
+    id: randomUUID2(),
+    createdAtMs: readCurrentTime(context.getCurrentTime)
+  };
+  const guardSnapshot = await acquireMutationGuard(guardPath, guardOwner, context, operation);
+  try {
+    await callMutationHook(context.mutationHook, operation, "guard-acquired");
+    return await action();
+  } finally {
+    await removeOwnedMutationGuard(guardPath, guardSnapshot);
+  }
+}
+async function acquireMutationGuard(guardPath, owner, context, operation) {
+  try {
+    return await createMutationGuard(guardPath, owner, context, operation);
+  } catch (error) {
+    if (!isErrorCode3(error, "EEXIST")) {
+      throw error;
+    }
+  }
+  const recovered = await recoverMutationGuard(guardPath, context, operation);
+  if (!recovered) {
+    throw new MutationGuardBusyError();
+  }
+  try {
+    return await createMutationGuard(guardPath, owner, context, operation);
+  } catch (error) {
+    if (isErrorCode3(error, "EEXIST")) {
+      throw new MutationGuardBusyError();
+    }
+    throw error;
+  }
+}
+async function createMutationGuard(guardPath, owner, context, operation) {
+  await mkdir5(guardPath, { mode: 448 });
+  let createdStat;
+  try {
+    createdStat = await stat(guardPath);
+    await callMutationHook(context.mutationHook, operation, "after-guard-mkdir");
+    await writeFile2(join3(guardPath, OWNER_FILE_NAME), JSON.stringify(owner), {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 384
+    });
+    const snapshot = await inspectMutationGuard(guardPath, owner.createdAtMs, () => true);
+    if (snapshot.dev !== createdStat.dev || snapshot.ino !== createdStat.ino || !sameMutationGuardOwner(snapshot.owner, owner)) {
+      throw new Error("mutation guard owner changed during initialization");
+    }
+    return snapshot;
+  } catch (error) {
+    if (createdStat !== void 0) {
+      try {
+        await cleanupMutationGuardInitialization(guardPath, createdStat, owner);
+      } catch {
+      }
+    }
+    throw error;
+  }
+}
+async function cleanupMutationGuardInitialization(guardPath, expectedStat, expectedOwner) {
+  let currentStat;
+  try {
+    currentStat = await stat(guardPath);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino) {
+    return;
+  }
+  const currentOwner = await readMutationGuardOwner(guardPath);
+  if (currentOwner !== null && !sameMutationGuardOwner(currentOwner, expectedOwner)) {
+    return;
+  }
+  const cleanupPath = `${guardPath}.incomplete-${randomUUID2()}`;
+  await rename3(guardPath, cleanupPath);
+  const movedStat = await stat(cleanupPath);
+  const movedOwner = await readMutationGuardOwner(cleanupPath);
+  if (movedStat.dev !== expectedStat.dev || movedStat.ino !== expectedStat.ino || movedOwner !== null && !sameMutationGuardOwner(movedOwner, expectedOwner)) {
+    await restoreMovedDirectory(cleanupPath, guardPath);
+    return;
+  }
+  await rm5(cleanupPath, { recursive: true });
+}
+async function recoverMutationGuard(guardPath, context, operation) {
+  const currentTime = readCurrentTime(context.getCurrentTime);
+  const candidate = await inspectMutationGuard(guardPath, currentTime, context.isProcessAlive);
+  if (!candidate.reclaimable) {
+    return false;
+  }
+  await callMutationHook(context.mutationHook, operation, "before-guard-reclaim-rename");
+  const stalePath = `${guardPath}.stale-${randomUUID2()}`;
+  await rename3(guardPath, stalePath);
+  const moved = await inspectMutationGuard(stalePath, currentTime, context.isProcessAlive);
+  if (!sameMutationGuardSnapshot(candidate, moved) || !moved.reclaimable) {
+    await restoreMovedDirectory(stalePath, guardPath);
+    return false;
+  }
+  await rm5(stalePath, { recursive: true });
+  return true;
+}
+async function inspectMutationGuard(guardPath, currentTime, isProcessAlive2) {
+  const guardStat = await stat(guardPath);
+  const owner = await readMutationGuardOwner(guardPath);
+  const ownerAlive = owner === null ? false : safelyCheckProcess(owner.pid, isProcessAlive2);
+  return {
+    dev: guardStat.dev,
+    ino: guardStat.ino,
+    owner,
+    reclaimable: currentTime - guardStat.mtimeMs > INSTALL_LOCK_STALE_MS && !ownerAlive
+  };
+}
+async function readMutationGuardOwner(guardPath) {
+  try {
+    const parsed = JSON.parse(await readFile2(join3(guardPath, OWNER_FILE_NAME), "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const owner = parsed;
+    if (typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.id !== "string" || owner.id.length === 0 || typeof owner.createdAtMs !== "number" || !Number.isFinite(owner.createdAtMs)) {
+      return null;
+    }
+    return {
+      pid: owner.pid,
+      id: owner.id,
+      createdAtMs: owner.createdAtMs
+    };
+  } catch {
+    return null;
+  }
+}
+async function removeOwnedMutationGuard(guardPath, expected) {
+  let current;
+  try {
+    current = await inspectMutationGuard(guardPath, 0, () => true);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (!sameMutationGuardSnapshot(expected, current)) {
+    return;
+  }
+  const releasePath = `${guardPath}.release-${randomUUID2()}`;
+  await rename3(guardPath, releasePath);
+  const moved = await inspectMutationGuard(releasePath, 0, () => true);
+  if (!sameMutationGuardSnapshot(expected, moved)) {
+    await restoreMovedDirectory(releasePath, guardPath);
+    return;
+  }
+  await rm5(releasePath, { recursive: true });
+}
+async function restoreMovedDirectory(movedPath, destinationPath) {
+  try {
+    await mkdir5(destinationPath, { mode: 448 });
+  } catch (error) {
+    if (isErrorCode3(error, "EEXIST")) {
+      return;
+    }
+    throw error;
+  }
+  try {
+    await rename3(movedPath, destinationPath);
+  } catch (error) {
+    try {
+      await rm5(destinationPath, { recursive: true, force: true });
+    } catch {
+    }
+    throw error;
+  }
+}
+function sameMutationGuardSnapshot(first, second) {
+  return first.dev === second.dev && first.ino === second.ino && sameMutationGuardOwner(first.owner, second.owner);
+}
+function sameMutationGuardOwner(first, second) {
+  if (first === null || second === null) {
+    return first === second;
+  }
+  return first.pid === second.pid && first.id === second.id && first.createdAtMs === second.createdAtMs;
+}
+function readCurrentTime(getCurrentTime) {
+  const currentTime = getCurrentTime();
+  if (!Number.isFinite(currentTime)) {
+    throw new Error("invalid lock time");
+  }
+  return currentTime;
+}
+function isErrorCode3(error, code) {
+  return error?.code === code;
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/install.js
+var PENDING_SHA_SENTINEL = "pending";
+var DEFAULT_DEPENDENCIES2 = {
+  getTicket: getSkillDownloadTicket,
+  downloadPackage: downloadSkillPackage,
+  extractArchive: extractSkillArchive,
+  reportPublicDownload: reportSkillPublicDownload,
+  acquireLock: acquireInstallLock,
+  publishRelease: publishSkillRelease,
+  detectAgentRoots: detectAgents,
+  prepareAgents: prepareAgentPlans,
+  randomUUID: createRandomUUID,
+  now: () => /* @__PURE__ */ new Date(),
+  remove: async (path3) => rm6(path3, { recursive: true, force: true }),
+  log: (message) => {
+    process.stderr.write(`${message}
+`);
+  }
+};
+async function installSkill(input, overrides = {}) {
+  const dependencies = {
+    ...DEFAULT_DEPENDENCIES2,
+    ...overrides
+  };
+  const packageSpec = toPackageSpec(input);
+  const skillsRoot = join4(input.homeDir, ".agents", "skills");
+  const installPath = join4(skillsRoot, input.skillName);
+  const detectedAgents = await dependencies.detectAgentRoots({
+    homeDir: input.homeDir,
+    env: input.env,
+    skillsRoot,
+    skillName: input.skillName
+  });
+  if (input.dryRun) {
+    return {
+      publisher: input.publisher,
+      skillName: input.skillName,
+      requestedVersion: input.requestedVersion,
+      action: "planned",
+      installPath,
+      sizeBytes: null,
+      sha256: null,
+      backupPath: null,
+      agents: detectedAgents.map(toDryRunAgentResult),
+      dryRun: true
+    };
+  }
+  const stagingUuid = dependencies.randomUUID();
+  const agentUuid = dependencies.randomUUID();
+  const publicationUuid = dependencies.randomUUID();
+  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
+  const agentPlans = await dependencies.prepareAgents({
+    detected: detectedAgents,
+    currentPath: preliminaryPaths.currentPath,
+    publisher: input.publisher,
+    skillName: input.skillName,
+    force: input.force,
+    backupsRoot: preliminaryPaths.backupsRoot,
+    uuid: agentUuid
+  });
+  let installLock = null;
+  let published = null;
+  const appliedAgents = [];
+  let committed = false;
+  let finalCleanupStarted = false;
+  try {
+    installLock = await dependencies.acquireLock(preliminaryPaths);
+    await mkdir6(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
+    dependencies.log("Resolving skill download URL");
+    const ticket = await dependencies.getTicket({
+      baseUrl: input.baseUrl,
+      packageSpec,
+      timeoutMs: input.timeoutMs
+    });
+    dependencies.log("Downloading skill package");
+    const downloaded = await dependencies.downloadPackage({
+      ticket,
+      destinationPath: join4(preliminaryPaths.stagingPath, "package.zip"),
+      timeoutMs: input.timeoutMs,
+      refreshTicket: () => dependencies.getTicket({
+        baseUrl: input.baseUrl,
+        packageSpec,
+        timeoutMs: input.timeoutMs
+      })
+    });
+    dependencies.log("Extracting skill archive");
+    const extracted = await dependencies.extractArchive(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
+    const finalPaths = resolveStorePaths(input.homeDir, packageSpec, downloaded.sha256, stagingUuid);
+    const marker = createInstallMarker(input, downloaded, dependencies.now());
+    dependencies.log("Publishing skill release");
+    published = await dependencies.publishRelease({
+      paths: finalPaths,
+      extractedRoot: extracted.skillRoot,
+      marker,
+      force: input.force,
+      uuid: publicationUuid
+    });
+    dependencies.log("Updating detected agents");
+    const agents = [];
+    for (const plan of agentPlans) {
+      const result2 = await plan.apply({
+        releasePath: published.releasePath,
+        marker
+      });
+      appliedAgents.push(plan);
+      agents.push(result2);
+    }
+    for (const plan of appliedAgents) {
+      await plan.finalize();
+    }
+    await published.finalize();
+    committed = true;
+    const result = {
+      publisher: input.publisher,
+      skillName: input.skillName,
+      requestedVersion: input.requestedVersion,
+      action: published.action,
+      installPath: published.currentPath,
+      sizeBytes: downloaded.sizeBytes,
+      sha256: downloaded.sha256,
+      backupPath: published.backupPath,
+      agents
+    };
+    finalCleanupStarted = true;
+    await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies);
+    installLock = null;
+    await reportPublicDownloadIfAvailable(input, ticket, dependencies);
+    return result;
+  } catch (error) {
+    if (!committed) {
+      await rollbackInstall(appliedAgents, published, error);
+    }
+    if (!finalCleanupStarted) {
+      await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies, error);
+    }
+    throw error;
+  }
+}
+async function reportPublicDownloadIfAvailable(input, ticket, dependencies) {
+  if (ticket.skillId === void 0) {
+    return;
+  }
+  try {
+    await dependencies.reportPublicDownload({
+      dashboardBaseUrl: input.dashboardBaseUrl,
+      skillId: ticket.skillId,
+      timeoutMs: input.timeoutMs
+    });
+  } catch {
+  }
+}
+function toPackageSpec(input) {
+  return {
+    publisher: input.publisher,
+    skillName: input.skillName,
+    requestedVersion: input.requestedVersion
+  };
+}
+function toDryRunAgentResult(agent) {
+  const status = agent.mode === "link" ? "linked" : agent.mode === "copy" ? "copied" : agent.mode === "shared" ? "shared" : "unsupported";
+  return {
+    agent: agent.agent,
+    status,
+    path: agent.targetPath,
+    ...status === "unsupported" ? { reason: "local skill directory is not supported" } : {}
+  };
+}
+function createInstallMarker(input, downloaded, installedAt) {
+  return {
+    schemaVersion: 1,
+    publisher: input.publisher,
+    skillName: input.skillName,
+    requestedVersion: input.requestedVersion,
+    sha256: downloaded.sha256,
+    sizeBytes: downloaded.sizeBytes,
+    installedAt: installedAt.toISOString()
+  };
+}
+async function rollbackInstall(appliedAgents, published, primaryError) {
+  let rollbackError;
+  for (const plan of [...appliedAgents].reverse()) {
+    try {
+      await plan.rollback();
+    } catch (error) {
+      rollbackError ??= error;
+    }
+  }
+  if (published !== null) {
+    try {
+      await published.rollback();
+    } catch (error) {
+      rollbackError ??= error;
+    }
+  }
+  if (primaryError === void 0 && rollbackError !== void 0) {
+    throw rollbackError;
+  }
+}
+async function releaseAndCleanup(installLock, stagingPath, dependencies, primaryError) {
+  let retainedError = primaryError;
+  if (installLock !== null) {
+    try {
+      await installLock.release();
+    } catch (error) {
+      retainedError ??= error;
+    }
+  }
+  try {
+    await dependencies.remove(stagingPath);
+  } catch (error) {
+    retainedError ??= error;
+  }
+  if (retainedError !== void 0) {
+    throw retainedError;
+  }
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/marketplace.js
+var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
+var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
+async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
+  const body = await request({
+    baseUrl: input.dashboardBaseUrl,
+    path: PUBLIC_SKILLS_MARKETPLACE_PATH,
+    query: { pageSize: 999, sort: "NEW" },
+    timeoutMs: input.timeoutMs,
+    maxResponseBodyBytes: LIST_ALL_MAX_RESPONSE_BODY_BYTES
+  });
+  if (!isRecord4(body) || !Array.isArray(body.items) || !body.items.every(isRecord4)) {
+    throw apiError("invalid public skills response", 502);
+  }
+  return [...body.items].reverse().map((item, index) => {
+    const copy = { ...item };
+    delete copy.Number;
+    return { Number: index + 1, ...copy };
+  });
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/spec.js
+var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
+var MAX_SEGMENT_LENGTH = 128;
+var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
+var TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
+var FORBIDDEN_TIP_FLAGS = [
+  "payment-instrument-id",
+  "instruction-id",
+  "purchase-instruction-id",
+  "mandate-id",
+  "merchant-id",
+  "session-id",
+  "payment-method-type",
+  "shipping-address",
+  "products",
+  "force"
+];
+function parseSkillPackageSpec(value) {
+  const slashIndex = value.indexOf("/");
+  if (slashIndex === -1 || slashIndex !== value.lastIndexOf("/")) {
+    throw invalidPackageSpec();
+  }
+  const publisher = value.slice(0, slashIndex);
+  const skillAndVersion = value.slice(slashIndex + 1);
+  const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
+  const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
+  const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && !isValidSegment(requestedVersion, VERSION_PATTERN)) {
+    throw invalidPackageSpec();
+  }
+  return { publisher, skillName, requestedVersion };
+}
+function parseSkillInstallArgs(operands, flags) {
+  if (operands.length === 0) {
+    throw validationError(`skills install requires a package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  if (operands.length !== 1) {
+    throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  return {
+    ...parseSkillPackageSpec(operands[0]),
+    force: getBooleanFlag(flags, "force")
+  };
+}
+function parseSkillTipArgs(operands, flags) {
+  if (operands.length !== 0) {
+    throw validationError("skills tip does not accept positional arguments; use --publisher with --name, or --number");
+  }
+  for (const name of FORBIDDEN_TIP_FLAGS) {
+    if (flags[name] !== void 0) {
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default payment method" : `--${name} is not supported by skills tip`);
+    }
+  }
+  const publisher = getStringFlag(flags, "publisher");
+  const skillName = getStringFlag(flags, "name");
+  const numberText = getStringFlag(flags, "number");
+  const hasPublisher = flags.publisher !== void 0;
+  const hasSkillName = flags.name !== void 0;
+  const hasNumber = flags.number !== void 0;
+  if (hasNumber && (hasPublisher || hasSkillName)) {
+    throw validationError("--number cannot be combined with --publisher or --name");
+  }
+  if (hasPublisher !== hasSkillName) {
+    throw validationError("skills tip requires both --publisher and --name");
+  }
+  let target;
+  if (hasNumber) {
+    if (numberText === void 0 || !/^[1-9]\d*$/.test(numberText) || !Number.isSafeInteger(Number(numberText))) {
+      throw validationError("--number must be a positive integer");
+    }
+    target = { kind: "number", number: Number(numberText) };
+  } else if (hasPublisher && hasSkillName) {
+    if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+      throw invalidTipIdentity();
+    }
+    target = { kind: "identity", publisher, skillName };
+  } else {
+    throw validationError("skills tip requires either --publisher with --name, or --number");
+  }
+  const currency = getStringFlag(flags, "currency");
+  if (currency !== void 0 && currency.toUpperCase() !== "USD") {
+    throw validationError("skills tip only supports USD");
+  }
+  return {
+    target,
+    amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
+    currency: "USD"
+  };
+}
+function isValidSkillIdentitySegment(value) {
+  return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
+}
+function isValidSegment(value, pattern) {
+  return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
+}
+function invalidPackageSpec() {
+  return validationError(`invalid skill package; expected ${PACKAGE_SPEC_SYNTAX}`);
+}
+function invalidTipIdentity() {
+  return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/tip.js
+async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
+  if (input.target.kind === "number") {
+    const number = input.target.number;
+    const rows = await listAllPublicSkills({
+      dashboardBaseUrl: input.dashboardBaseUrl,
+      timeoutMs: input.timeoutMs
+    }, request);
+    const selected = rows.find((row) => row.Number === number);
+    if (!selected) {
+      throw apiError(`skill number not found: ${number}; run 'clink-cli skills list --all' to refresh numbers`, 404);
+    }
+    const publisher2 = stringValue2(selected.publisher).trim();
+    const skillName2 = stringValue2(selected.name).trim();
+    if (!publisher2 || !skillName2) {
+      throw apiError("invalid public skills response", 502);
+    }
+    return recipientFromItem(selected, { publisher: publisher2, skillName: skillName2 });
+  }
+  const { publisher, skillName } = input.target;
+  const body = await request({
+    baseUrl: input.dashboardBaseUrl,
+    path: PUBLIC_SKILLS_MARKETPLACE_PATH,
+    query: {
+      publisher,
+      q: skillName,
+      pageSize: 1
+    },
+    timeoutMs: input.timeoutMs
+  });
+  if (!isRecord5(body) || !Array.isArray(body.items)) {
+    throw apiError("invalid public skills response", 502);
+  }
+  const matches = body.items.filter((item) => isRecord5(item) && equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName));
+  if (matches.length === 0) {
+    throw apiError(`skill not found: ${publisher}/${skillName}`, 404);
+  }
+  const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.merchantId).trim()}`));
+  if (uniqueRecipients.size !== 1) {
+    throw apiError(`skill lookup is ambiguous: ${publisher}/${skillName}`, 409);
+  }
+  return recipientFromItem(matches[0], { publisher, skillName });
+}
+async function executeSkillTip(args, runtime, dependencies) {
+  if (runtime.dryRun) {
+    const plan = {
+      status: "planned",
+      amount: args.amount,
+      currency: "USD",
+      dryRun: true
+    };
+    return args.target.kind === "identity" ? {
+      ...plan,
+      publisher: args.target.publisher,
+      skillName: args.target.skillName
+    } : { ...plan, number: args.target.number };
+  }
+  const recipient = await dependencies.resolveRecipient({
+    dashboardBaseUrl: runtime.dashboardBaseUrl,
+    target: args.target,
+    timeoutMs: runtime.timeoutMs
+  });
+  const authorization = await dependencies.resolveAuthorization({
+    publisher: recipient.publisher,
+    skillName: recipient.skillName,
+    merchantId: recipient.merchantId,
+    amount: args.amount,
+    currency: "USD"
+  });
+  if (authorization.kind === "pending") {
+    return {
+      status: "authorization_pending",
+      publisher: recipient.publisher,
+      skillName: recipient.skillName,
+      amount: args.amount,
+      currency: "USD",
+      paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
+      instructionId: authorization.instructionId,
+      passkeyUrl: authorization.passkeyUrl,
+      resumeCommand: `clink-cli skills tip --publisher ${serializeShellArgument(recipient.publisher)} --name ${serializeShellArgument(recipient.skillName)} --amount ${serializeShellArgument(String(args.amount))} --format json`
+    };
+  }
+  const execution = await dependencies.executeCharge({
+    mode: "direct",
+    paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
+    paymentMethodType: "CARD",
+    merchantId: recipient.merchantId,
+    amount: args.amount,
+    currency: "USD",
+    shippingAddress: { ...TIP_PAY_SHIPPING_ADDRESS },
+    ...authorization.kind === "matched" ? {
+      authorization: {
+        instructionId: authorization.instructionId,
+        mandateId: authorization.mandateId
+      }
+    } : {}
+  }, runtime.chargeRuntime);
+  if (execution.dryRun) {
+    throw new Error("charge dry-run is unreachable after tip lookup");
+  }
+  return {
+    status: execution.requires3ds ? "three_ds_required" : execution.status === 1 ? "paid" : "payment_failed",
+    publisher: recipient.publisher,
+    skillName: recipient.skillName,
+    merchantId: recipient.merchantId,
+    amount: args.amount,
+    currency: "USD",
+    paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
+    authorization: authorization.kind,
+    payment: execution.data,
+    ...execution.requires3ds ? { requires3ds: true } : {},
+    ...execution.redirectUrl ? { redirectUrl: execution.redirectUrl } : {}
+  };
+}
+function recipientFromItem(item, errorIdentity) {
+  const publisher = stringValue2(item.publisher).trim();
+  const skillName = stringValue2(item.name).trim();
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+    throw apiError("invalid public skills response", 502);
+  }
+  const merchantId = stringValue2(item.merchantId).trim();
+  if (!merchantId) {
+    throw apiError(`tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`, 422);
+  }
+  const skillId = stringValue2(item.skillId);
+  return {
+    publisher,
+    skillName,
+    ...skillId ? { skillId } : {},
+    merchantId
+  };
+}
+function serializeShellArgument(value) {
+  if (/^[A-Za-z0-9._+-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function stringValue2(value) {
+  return typeof value === "string" ? value : "";
+}
+function equalIdentity(value, expected) {
+  return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
+}
+
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
 var CHECKOUT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-async function resolveSiteTypeFromUrl(rawUrl, options = {}) {
+async function resolveSiteTypeFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
   const hostname = normalizeHostname(url.hostname);
   if (isMyShopifyHost(hostname)) {
     return siteTypeResult("shopify", "myshopify_domain");
   }
   try {
-    const fetchSite = options.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options.timeoutMs));
+    const fetchSite = options2.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options2.timeoutMs));
     const headers = await fetchSite(buildHttpsOriginUrl(url));
     if (hasShopifyPoweredByHeader(headers)) {
       return siteTypeResult("shopify", "powered_by_header");
@@ -5858,9 +11255,9 @@ async function resolveSiteTypeFromUrl(rawUrl, options = {}) {
   }
   return siteTypeResult("unknown", "unknown");
 }
-async function resolveCheckoutTotalFromUrl(rawUrl, options = {}) {
+async function resolveCheckoutTotalFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
-  const fetchHtml = options.fetchHtml ?? ((siteUrl) => fetchCheckoutHtml(siteUrl, options.timeoutMs, options.fetchPage));
+  const fetchHtml = options2.fetchHtml ?? ((siteUrl) => fetchCheckoutHtml(siteUrl, options2.timeoutMs, options2.fetchPage));
   const html = await fetchHtml(url.toString());
   const serializedGraphql = getMetaContent(html, "serialized-graphql");
   if (!serializedGraphql) {
@@ -5885,20 +11282,20 @@ async function resolveCheckoutTotalFromUrl(rawUrl, options = {}) {
     source: total.source
   };
 }
-async function resolveParseItemFromUrl(rawUrl, options = {}) {
-  const siteType = await resolveSiteTypeFromUrl(rawUrl, options);
+async function resolveParseItemFromUrl(rawUrl, options2 = {}) {
+  const siteType = await resolveSiteTypeFromUrl(rawUrl, options2);
   if (siteType.site_type !== "shopify") {
     throw validationError("unkonw site type");
   }
   const productJsonUrl = buildShopifyProductJsonUrl(rawUrl);
-  const fetchJson = options.fetchJson ?? ((url) => fetchJsonResource(url, options.timeoutMs));
+  const fetchJson = options2.fetchJson ?? ((url) => fetchJsonResource(url, options2.timeoutMs));
   const productJson = await fetchJson(productJsonUrl);
   const currency = readCurrency(productJson) ?? readCurrency(await fetchJson(buildShopifyCartJsonUrl(rawUrl))) ?? "unknown";
   return parseShopifyProductItems(rawUrl, productJson, currency);
 }
-async function resolveUcpProfileFromUrl(rawUrl, options = {}) {
+async function resolveUcpProfileFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
-  const fetchJson = options.fetchJsonIfOk ?? ((profileUrl) => fetchJsonResourceIfOk(profileUrl, options.timeoutMs));
+  const fetchJson = options2.fetchJsonIfOk ?? ((profileUrl) => fetchJsonResourceIfOk(profileUrl, options2.timeoutMs));
   const origin = buildHttpsOriginUrl(url);
   const profilePaths = ["/.well-known/ucp-clink", "/.well-known/ucp"];
   for (const profilePath of profilePaths) {
@@ -5920,13 +11317,13 @@ async function resolveUcpRestEndpointFromUrl(rawUrl) {
     provider
   };
 }
-async function resolveUcpItemIdFromUrl(rawUrl, options = {}) {
+async function resolveUcpItemIdFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
   const hostname = normalizeHostname(url.hostname);
   if (isMyShopifyHost(hostname)) {
     return shopifyResult(url, "myshopify_domain");
   }
-  const resolveCname = options.resolveCname ?? nodeResolveCname;
+  const resolveCname = options2.resolveCname ?? nodeResolveCname;
   if (await hasShopifyCname(hostname, resolveCname)) {
     return shopifyResult(url, "cname");
   }
@@ -6065,14 +11462,14 @@ function hasShopifyPoweredByHeader(headers) {
   return false;
 }
 async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ new Set()) {
-  const normalized = normalizeHostname(hostname);
-  if (seen.has(normalized) || seen.size >= 8) {
+  const normalized2 = normalizeHostname(hostname);
+  if (seen.has(normalized2) || seen.size >= 8) {
     return false;
   }
-  seen.add(normalized);
+  seen.add(normalized2);
   let cnames;
   try {
-    cnames = await resolveCname(normalized);
+    cnames = await resolveCname(normalized2);
   } catch {
     return false;
   }
@@ -6237,7 +11634,7 @@ function parseSetCookieHeader(header, url) {
   const value = nameValue.slice(separator + 1);
   let domain = url.hostname.toLowerCase();
   let hostOnly = true;
-  let path2 = defaultCookiePath(url.pathname);
+  let path3 = defaultCookiePath(url.pathname);
   for (const attribute of attributes) {
     const attributeSeparator = attribute.indexOf("=");
     const attributeName = (attributeSeparator >= 0 ? attribute.slice(0, attributeSeparator) : attribute).toLowerCase();
@@ -6246,7 +11643,7 @@ function parseSetCookieHeader(header, url) {
       domain = attributeValue.trim().toLowerCase().replace(/^\./, "");
       hostOnly = false;
     } else if (attributeName === "path" && attributeValue.startsWith("/")) {
-      path2 = attributeValue;
+      path3 = attributeValue;
     }
   }
   return {
@@ -6254,7 +11651,7 @@ function parseSetCookieHeader(header, url) {
     value,
     domain,
     hostOnly,
-    path: path2
+    path: path3
   };
 }
 function defaultCookiePath(pathname) {
@@ -6413,11 +11810,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord(value)) {
+  if (!isRecord6(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord(result)) {
+  if (isRecord6(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -6433,7 +11830,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord(runningTotal)) {
+  if (!isRecord6(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -6458,7 +11855,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord(productJson)) {
+  if (!isRecord6(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -6480,7 +11877,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord(variant)) {
+  if (!isRecord6(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -6514,27 +11911,27 @@ function buildVariantItemUrl(rawUrl, variantId) {
   return url.toString();
 }
 function readShopifyOptionNames(productJson) {
-  const options = Array.isArray(productJson.options) ? productJson.options : [];
-  return options.map((option, index) => {
-    if (!isRecord(option)) {
+  const options2 = Array.isArray(productJson.options) ? productJson.options : [];
+  return options2.map((option, index) => {
+    if (!isRecord6(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
   });
 }
 function readShopifyVariantOptions(variant, optionNames) {
-  const options = {};
+  const options2 = {};
   for (let index = 0; index < 3; index += 1) {
     const value = asTrimmedString(variant[`option${index + 1}`]);
     if (!value) {
       continue;
     }
-    options[optionNames[index] ?? `option${index + 1}`] = value;
+    options2[optionNames[index] ?? `option${index + 1}`] = value;
   }
-  return options;
+  return options2;
 }
 function readCurrency(value) {
-  if (!isRecord(value)) {
+  if (!isRecord6(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -6589,22 +11986,22 @@ function asIdString(value) {
 function asTrimmedString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function readPath(value, path2) {
+function readPath(value, path3) {
   let current = value;
-  for (const key of path2) {
-    if (!isRecord(current)) {
+  for (const key of path3) {
+    if (!isRecord6(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
-  const normalized = normalizeHostname(hostname);
-  if (normalized === "clinkbill.com" || normalized.endsWith(".clinkbill.com")) {
+  const normalized2 = normalizeHostname(hostname);
+  if (normalized2 === "clinkbill.com" || normalized2.endsWith(".clinkbill.com")) {
     return "clinkbill";
   }
   return void 0;
@@ -6613,13 +12010,12 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// dist/cli.js
-var INSTRUCTION_PATH = "/agent/cwallet/instructions";
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/cli.js
+var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
-var OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE = "5999";
 async function runCli(argv) {
   const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
@@ -6647,6 +12043,8 @@ async function runCli(argv) {
       return handleCardCommand(subcommand, context);
     case "risk":
       return handleRiskRuleCommand(subcommand, context);
+    case "skills":
+      return handleSkillsCommand(subcommand, context);
     case "pay":
       return handlePayCommand(context);
     case "refund":
@@ -6664,6 +12062,87 @@ async function runCli(argv) {
     default:
       throw validationError(`unsupported command: ${command}`);
   }
+}
+async function handleSkillsCommand(subcommand, context) {
+  if (!subcommand) {
+    printHelp("skills");
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "list":
+      return skillsList(context);
+    case "install":
+      return skillsInstall(context);
+    case "tip":
+      return skillsTip(context);
+    default:
+      throw validationError(`unsupported skills command: ${subcommand}`);
+  }
+}
+async function skillsList(context) {
+  if (!getBooleanFlag(context.args.flags, "all")) {
+    throw validationError("skills list requires --all");
+  }
+  if (context.args.positionals.length !== 2) {
+    throw validationError("skills list --all does not accept positional arguments");
+  }
+  const rows = await listAllPublicSkills({
+    dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
+    timeoutMs: context.globalOptions.timeoutMs
+  });
+  printSuccess(rows, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function skillsInstall(context) {
+  const args = parseSkillInstallArgs(context.args.positionals.slice(2), context.args.flags);
+  const result = await installSkill({
+    ...args,
+    baseUrl: context.runtimeConfig.baseUrl,
+    dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    homeDir: homedir(),
+    env: process.env
+  });
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function skillsTip(context) {
+  const args = parseSkillTipArgs(context.args.positionals.slice(2), context.args.flags);
+  const authorizationApi = createTipAuthorizationApi({
+    runtimeConfig: context.runtimeConfig,
+    storedConfig: context.storedConfig,
+    timeoutMs: context.globalOptions.timeoutMs,
+    watch: context.globalOptions.watch,
+    now: Date.now,
+    onPasskeyUrl: (url) => {
+      process.stderr.write(`Open this link to authorize the tip:
+${url}
+`);
+      maybeOpenBrowser(context.globalOptions.open, url);
+    }
+  });
+  const result = await executeSkillTip(args, {
+    baseUrl: context.runtimeConfig.baseUrl,
+    dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    chargeRuntime: {
+      runtimeConfig: context.runtimeConfig,
+      timeoutMs: context.globalOptions.timeoutMs,
+      dryRun: context.globalOptions.dryRun
+    }
+  }, {
+    resolveRecipient: resolveSkillTipRecipient,
+    resolveAuthorization: (intent) => resolveTipAuthorization(intent, authorizationApi),
+    executeCharge
+  });
+  printSuccess(result, context.globalOptions.format);
+  if (result.status === "three_ds_required" && result.redirectUrl) {
+    await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication");
+    return EXIT_CODES.THREE_DS;
+  }
+  return EXIT_CODES.OK;
 }
 async function handleToolCommand(subcommand, context) {
   if (!subcommand) {
@@ -6910,7 +12389,7 @@ async function walletInit(context) {
     baseUrl,
     method: "POST",
     path: "/agent/cwallet/customer/bootstrap",
-    body: compact({
+    body: compact2({
       email,
       name,
       otp,
@@ -7154,55 +12633,42 @@ async function handlePayCommand(context) {
   const mandateId = getStringFlag(flags, "mandate-id");
   const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
   const products = optionalJsonArrayFlag(flags, "products");
-  const aiAgentInstructionBo = compact({
-    instructionId,
-    mandateId,
-    shippingAddressJson: shippingAddress === void 0 ? void 0 : JSON.stringify(shippingAddress),
-    merchantInfo: { merchantCategoryCode: OLD_PAY_FIXED_MERCHANT_CATEGORY_CODE },
-    products
-  });
-  const vicChargeFields = {
-    instruction_id: instructionId,
-    mandate_id: mandateId,
-    shippingaddress: shippingAddress,
-    aiAgentInstructionBo: Object.keys(aiAgentInstructionBo).length > 0 ? aiAgentInstructionBo : void 0,
-    // Backward-compatible alias for older callers/backend revisions; new charge integrations should
-    // use instruction_id.
-    purchaseInstructionId: legacyPurchaseInstructionId
-  };
-  const body = sessionId ? compact({
+  const authorization = instructionId || mandateId || legacyPurchaseInstructionId ? {
+    ...instructionId ? { instructionId } : {},
+    ...mandateId ? { mandateId } : {},
+    ...legacyPurchaseInstructionId ? { legacyInstructionId: legacyPurchaseInstructionId } : {}
+  } : void 0;
+  const chargeInput = sessionId ? {
+    mode: "session",
     paymentInstrumentId,
     paymentMethodType,
     sessionId,
-    ...vicChargeFields
-  }) : compact({
+    ...authorization ? { authorization } : {},
+    ...shippingAddress ? { shippingAddress } : {},
+    ...products ? { products } : {}
+  } : {
+    mode: "direct",
     paymentInstrumentId,
     paymentMethodType,
     merchantId,
-    customAmount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
-    paymentCurrency: requireStringFlag(flags, "missing --currency", "currency"),
-    ...vicChargeFields
-  });
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
-    method: "POST",
-    path: "/agent/order/charge",
-    headers: buildCustomerHeaders(context.runtimeConfig),
-    body,
+    amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
+    currency: requireStringFlag(flags, "missing --currency", "currency"),
+    ...authorization ? { authorization } : {},
+    ...shippingAddress ? { shippingAddress } : {},
+    ...products ? { products } : {}
+  };
+  const execution = await executeCharge(chargeInput, {
+    runtimeConfig: context.runtimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
-  if (isDryRun(result)) {
-    printSuccess(result, context.globalOptions.format);
+  if (execution.dryRun) {
+    printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  const flag3DS = Number(data.channelPaymentResponse?.flag3DS ?? 0);
-  const redirectUrl = data.channelPaymentResponse?.action?.redirectUrl;
-  printSuccess(data, context.globalOptions.format);
-  if (flag3DS === 1 && typeof redirectUrl === "string" && redirectUrl.length > 0) {
-    await maybeWatchEvents(context, redirectUrl, "3-D Secure authentication");
+  printSuccess(execution.data, context.globalOptions.format);
+  if (execution.requires3ds && execution.redirectUrl) {
+    await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication");
     return EXIT_CODES.THREE_DS;
   }
   return EXIT_CODES.OK;
@@ -7276,7 +12742,7 @@ async function ucpCheckoutCreate(context) {
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
   const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
-  const body = compact({
+  const body = compact2({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
     merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
@@ -7321,7 +12787,7 @@ async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
-  const body = compact({
+  const body = compact2({
     line_items: requireJsonArrayFlag(flags, "line-items"),
     buyer: optionalJsonFlag(flags, "buyer"),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
@@ -7425,22 +12891,22 @@ var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
 function normalizeExternalCheckoutCreateLineItems(lineItems, currency) {
   return lineItems.map((lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`));
 }
-function normalizeExternalCheckoutMoneyFields(value, currency, path2) {
+function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeExternalCheckoutMoneyFields(item, currency, `${path2}[${index}]`));
+    return value.map((item, index) => normalizeExternalCheckoutMoneyFields(item, currency, `${path3}[${index}]`));
   }
-  if (!isRecord2(value)) {
+  if (!isRecord7(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
-    const fieldPath = `${path2}.${key}`;
+    const fieldPath = `${path3}.${key}`;
     if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
       return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
     }
     return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
   }));
 }
-function isRecord2(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null;
 }
 function isDecimalInput(value) {
@@ -7512,7 +12978,7 @@ function rejectUcpCheckoutUnsupportedFlags(flags) {
 function buildUcpCheckoutHeaders(context) {
   return {
     ...buildCustomerApiKeyHeaders(context.runtimeConfig),
-    "Idempotency-Key": randomUUID()
+    "Idempotency-Key": randomUUID3()
   };
 }
 async function handleInstructionCommand(subcommand, context) {
@@ -7540,7 +13006,7 @@ function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
   const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
-  const body = compact({
+  const body = compact2({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
@@ -7602,7 +13068,7 @@ async function instructionCreate(context) {
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
-    path: INSTRUCTION_PATH,
+    path: INSTRUCTION_PATH2,
     headers: buildInstructionHeaders(context.runtimeConfig),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
@@ -7636,7 +13102,7 @@ async function instructionGet(context) {
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "GET",
-    path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
+    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId)}`,
     headers: buildInstructionHeaders(context.runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
@@ -7667,7 +13133,7 @@ async function instructionList(context) {
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "GET",
-    path: INSTRUCTION_PATH,
+    path: INSTRUCTION_PATH2,
     headers: buildInstructionHeaders(context.runtimeConfig),
     query: { status, paymentInstrumentId },
     timeoutMs: context.globalOptions.timeoutMs,
@@ -7684,7 +13150,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord2(data)) {
+  if (!isRecord7(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -7697,7 +13163,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord2(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord7(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -7722,7 +13188,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord2(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord7(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -7886,13 +13352,6 @@ function parseTimeout(value) {
   }
   return timeoutMs;
 }
-function parseAmount(value) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw validationError("amount must be a positive number");
-  }
-  return amount;
-}
 function optionalJsonFlag(flags, name) {
   const value = getStringFlag(flags, name);
   if (value === void 0) {
@@ -7925,7 +13384,7 @@ function optionalJsonArrayFlag(flags, name) {
 function isJsonObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function compact(value) {
+function compact2(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
 }
 function asOptionalString(value) {
@@ -7942,7 +13401,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord2(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord7(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
@@ -7954,7 +13413,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/index.js
+// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));
@@ -8002,7 +13461,7 @@ function detectHelpHint(argv) {
   if (!command) {
     return "Run `clink-cli --help`.";
   }
-  if (["wallet", "card", "risk", "pay", "refund", "ucp-checkout", "instruction", "events", "tool", "config"].includes(command)) {
+  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "instruction", "events", "tool", "config"].includes(command)) {
     return `Run \`clink-cli ${command} --help\`.`;
   }
   return "Run `clink-cli --help`.";

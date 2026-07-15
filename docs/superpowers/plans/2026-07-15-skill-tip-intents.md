@@ -4,7 +4,7 @@
 
 **Goal:** Add safe public-skill listing and skill tipping by identity or list Number, with synchronous agent-pay success semantics and optional merchant account-event enrichment.
 
-**Architecture:** Extend the existing payment intent router only for classification, add a focused skill-tip FSM for side-effecting lifecycle decisions and output normalization, and extend the generic event FSM with correlated account-event states. Synchronize the vendored CLI to published @clink-ai/clink-cli 0.1.4, then document the command workflow in a dedicated reference.
+**Architecture:** Extend the existing payment intent router only for classification, add a focused skill-tip FSM for side-effecting lifecycle decisions and output normalization, and extend the generic event FSM with correlated account-event states. Synchronize the vendored CLI from verified clink-cli feature commit b14c787 (package version 0.1.4), then document the command workflow in a dedicated reference.
 
 **Tech Stack:** Node.js 20+, ESM JavaScript, Node test runner, Markdown skill documentation, esbuild single-file CLI vendoring.
 
@@ -244,7 +244,7 @@ git add lib/event-workflow-fsm.mjs tests/event-workflow-fsm.test.mjs
 git commit -m "feat: classify skill tip account events"
 ~~~
 
-### Task 4: Synchronize and Contract-Test CLI 0.1.4
+### Task 4: Synchronize and Contract-Test the Feature-Bearing CLI 0.1.4
 
 **Files:**
 - Create: tests/vendor-clink-cli-skills.test.mjs
@@ -283,12 +283,12 @@ node --test tests/vendor-clink-cli-skills.test.mjs
 
 Expected: current vendored root help does not list skills.
 
-- [ ] **Step 3: Generate the official bundle**
+- [ ] **Step 3: Generate the verified feature bundle**
 
-Verify the installed package reports 0.1.4, then run:
+Create a temporary Git archive from clean clink-cli commit b14c787, verify its package version is 0.1.4, install its locked dependencies, run its complete test suite, and bundle the built entry. Do not switch or modify the adjacent CLI working tree. The bundle command inside the temporary archive is:
 
 ~~~bash
-npx esbuild /Users/dylan/.nvm/versions/node/v20.19.4/lib/node_modules/@clink-ai/clink-cli/dist/index.js \
+npx esbuild <temporary-clink-cli-archive>/dist/index.js \
   --bundle --platform=node --format=esm \
   --outfile=vendor/clink-cli/clink-cli.bundle.mjs \
   --banner:js="import{createRequire as __cr}from'module';const require=__cr(import.meta.url);"
@@ -389,4 +389,3 @@ Inspect git diff 35849d4..HEAD and every acceptance criterion in docs/superpower
 - [ ] **Step 4: Re-run complete verification**
 
 Repeat npm test and git diff --check after review fixes before reporting completion.
-

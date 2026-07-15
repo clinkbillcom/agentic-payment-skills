@@ -13,7 +13,7 @@ This change is contained in `agentic-payment-skills` and covers:
 - a dedicated skill-tip workflow FSM;
 - optional `account-created` / `account-reloaded` event classification and correlation;
 - command and safety documentation;
-- synchronization of the vendored CLI bundle to `@clink-ai/clink-cli` `0.1.4`.
+- synchronization of the vendored CLI bundle to the verified `@clink-ai/clink-cli` `0.1.4` feature commit `b14c787`.
 
 It does not add skill installation, search, subscriptions, recurring tips, non-USD tips, merchant entitlement confirmation, or a new top-level `clink-cli poll` command.
 
@@ -153,7 +153,7 @@ A successful result exposes payment and optional account evidence separately:
 
 ## Vendored CLI
 
-Replace `vendor/clink-cli/clink-cli.bundle.mjs` with the single-file ESM bundle generated from published `@clink-ai/clink-cli` `0.1.4`. Keep `bin/clink-cli` as the only normal workflow entrypoint and preserve its sandbox environment lock.
+Replace `vendor/clink-cli/clink-cli.bundle.mjs` with the single-file ESM bundle generated from the clean `clink-cli` feature commit `b14c787`, whose package version is `0.1.4` and which contains the committed `skills list/tip` implementation together with the current UCP baseline. Build from a temporary Git archive so the adjacent CLI working tree is neither switched nor modified. Keep `bin/clink-cli` as the only normal workflow entrypoint and preserve its sandbox environment lock.
 
 Bundle acceptance checks are:
 
