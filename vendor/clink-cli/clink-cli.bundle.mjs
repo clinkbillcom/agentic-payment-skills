@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/error.js
+// node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/error.js"(exports) {
+  "node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -71,9 +71,9 @@ var require_error = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/argument.js
+// node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/argument.js"(exports) {
+  "node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -199,9 +199,9 @@ var require_argument = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/help.js
+// node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/help.js"(exports) {
+  "node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -801,9 +801,9 @@ ${itemIndentStr}`);
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/option.js
+// node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/option.js"(exports) {
+  "node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1114,9 +1114,9 @@ var require_option = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/suggestSimilar.js
+// node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1194,9 +1194,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/command.js
+// node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/lib/command.js"(exports) {
+  "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path3 = __require("node:path");
@@ -3440,9 +3440,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/index.js
+// node_modules/commander/index.js
 var require_commander = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/index.js"(exports) {
+  "node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3462,9 +3462,9 @@ var require_commander = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/pend/index.js
+// node_modules/pend/index.js
 var require_pend = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/pend/index.js"(exports, module) {
+  "node_modules/pend/index.js"(exports, module) {
     module.exports = Pend;
     function Pend() {
       this.pending = 0;
@@ -3517,9 +3517,9 @@ var require_pend = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/fd-slicer.js
+// node_modules/yauzl/fd-slicer.js
 var require_fd_slicer = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/fd-slicer.js"(exports) {
+  "node_modules/yauzl/fd-slicer.js"(exports) {
     var fs = __require("fs");
     var util = __require("util");
     var stream = __require("stream");
@@ -3674,9 +3674,9 @@ var require_fd_slicer = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/crc32.js
+// node_modules/yauzl/crc32.js
 var require_crc32 = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/crc32.js"(exports, module) {
+  "node_modules/yauzl/crc32.js"(exports, module) {
     var CRC_TABLE = new Int32Array([
       0,
       1996959894,
@@ -3946,9 +3946,9 @@ var require_crc32 = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/index.js
+// node_modules/yauzl/index.js
 var require_yauzl = __commonJS({
-  "../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/yauzl/index.js"(exports) {
+  "node_modules/yauzl/index.js"(exports) {
     var fs = __require("fs");
     var zlib = __require("zlib");
     var fd_slicer = require_fd_slicer();
@@ -4805,11 +4805,11 @@ var require_yauzl = __commonJS({
   }
 });
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/cli.js
+// dist/cli.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { homedir } from "node:os";
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/node_modules/commander/esm.mjs
+// node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/errors.js
+// dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/args.js
+// dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4997,12 +4997,12 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/config.js
+// dist/config.js
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/domains.js
+// dist/domains.js
 var API_BASE_URLS = {
   production: "https://api.clinkbill.com",
   sandbox: "https://uat-api.clinkbill.com"
@@ -5018,7 +5018,7 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/config.js
+// dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 function defaultConfig() {
@@ -5208,7 +5208,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/http.js
+// dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5283,7 +5283,7 @@ function parseBody(rawText) {
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/utils.js
+// dist/utils.js
 import { spawn } from "node:child_process";
 function buildCustomerHeaders(config) {
   if (!config.customerId) {
@@ -5492,7 +5492,7 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/events.js
+// dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -5623,10 +5623,22 @@ async function watchEvents(options2) {
       for (const event of events) {
         log(`  ${event.summary}`);
       }
-      const ackedEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
+      const watchTargetEnabled = hasWatchTarget(options2);
+      const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
+      if (watchTargetEnabled && matchedEvents.length === 0) {
+        const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
+        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ignoredEventIds);
+        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep(pollIntervalMs);
+        continue;
+      }
+      const ackedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
       await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ackedEventIds);
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return { watched: true, url: options2.url, timedOut: false, events, ackedEventIds };
+      return { watched: true, url: options2.url, timedOut: false, events: matchedEvents, ackedEventIds };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
@@ -5639,6 +5651,53 @@ async function watchEvents(options2) {
 function isStaleForWatch(record, startedAtMs) {
   const eventTimeMs = parseEventTimeMs(record.eventTime);
   return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
+}
+function hasWatchTarget(options2) {
+  return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
+}
+function eventMatchesWatchTarget(event, options2) {
+  if (options2.eventType && event.eventType !== options2.eventType) {
+    return false;
+  }
+  const expectedResource = options2.expectedResource ?? {};
+  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
+  if (expectedEntries.length === 0) {
+    return true;
+  }
+  const instructionExpectedValues = [
+    expectedResource.instructionId,
+    expectedResource.instruction_id,
+    expectedResource.purchaseInstructionId,
+    expectedResource.purchase_instruction_id
+  ].map(normalizedValue).filter((value) => value !== void 0);
+  if (instructionExpectedValues.length > 0) {
+    const eventValues = compactValues([
+      event.resourceId,
+      event.data.instructionId,
+      event.data.instruction_id,
+      event.data.purchaseInstructionId,
+      event.data.purchase_instruction_id
+    ]);
+    return instructionExpectedValues.some((value) => eventValues.includes(value));
+  }
+  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
+}
+function eventFieldValues(event, key) {
+  const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+  return compactValues([
+    event.data[key],
+    event.data[snakeKey],
+    key.toLowerCase().endsWith("id") ? event.resourceId : void 0
+  ]);
+}
+function compactValues(values) {
+  return values.map(normalizedValue).filter((value) => value !== void 0);
+}
+function normalizedValue(value) {
+  if (value === void 0 || value === null || value === "") {
+    return void 0;
+  }
+  return String(value);
 }
 function parseEventTimeMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -5889,7 +5948,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/help.js
+// dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -7218,7 +7277,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.production.json
+// dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7230,7 +7289,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.sandbox.json
+// dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7238,7 +7297,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/internal-ucp.js
+// dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7291,7 +7350,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/output.js
+// dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -7336,7 +7395,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/amount.js
+// dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -7345,7 +7404,7 @@ function parseAmount(value) {
   return amount;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/authorization-api.js
+// dist/payment/authorization-api.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
@@ -7463,7 +7522,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/authorization.js
+// dist/payment/authorization.js
 var TIP_SHIPPING_ADDRESS = {
   name: "Clink User",
   line1: "One Apple Park Way",
@@ -7653,7 +7712,7 @@ function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/payment/charge.js
+// dist/payment/charge.js
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -7718,12 +7777,12 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/install.js
+// dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
 import { mkdir as mkdir6, rm as rm6 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/agents.js
+// dist/skills/agents.js
 import { constants } from "node:fs";
 import { cp, copyFile, lstat, mkdir as mkdir2, open, readlink, realpath, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -8479,7 +8538,7 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/archive.js
+// dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
 import { chmod, lstat as lstat2, mkdir as mkdir3, readdir, rm as rm2 } from "node:fs/promises";
@@ -8794,7 +8853,7 @@ function closeZip(zipFile) {
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/download.js
+// dist/skills/download.js
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm3 } from "node:fs/promises";
@@ -9053,7 +9112,7 @@ async function cancelResponseBody(response) {
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/metrics.js
+// dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
 async function reportSkillPublicDownload(input, overrides = {}) {
@@ -9084,10 +9143,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/registry.js
+// dist/skills/registry.js
 import path2 from "node:path";
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/public-api.js
+// dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -9213,7 +9272,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/registry.js
+// dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
@@ -9284,12 +9343,12 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store.js
+// dist/skills/store.js
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join3, resolve as resolve4 } from "node:path";
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store-publication.js
+// dist/skills/store-publication.js
 import { randomUUID } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open2, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
@@ -10214,7 +10273,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/store.js
+// dist/skills/store.js
 var INSTALL_LOCK_STALE_MS = 6e5;
 var OWNER_FILE_NAME = "owner.json";
 var LOCK_BUSY_MESSAGE = "another skill installation is in progress";
@@ -10741,7 +10800,7 @@ function isErrorCode3(error, code) {
   return error?.code === code;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/install.js
+// dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
 var DEFAULT_DEPENDENCIES2 = {
   getTicket: getSkillDownloadTicket,
@@ -10958,7 +11017,7 @@ async function releaseAndCleanup(installLock, stagingPath, dependencies, primary
   }
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/marketplace.js
+// dist/skills/marketplace.js
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -10982,7 +11041,7 @@ function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/spec.js
+// dist/skills/spec.js
 var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -11085,7 +11144,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/skills/tip.js
+// dist/skills/tip.js
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   if (input.target.kind === "number") {
     const number = input.target.number;
@@ -11233,7 +11292,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/tool.js
+// dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -12010,7 +12069,7 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/cli.js
+// dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
@@ -12293,7 +12352,7 @@ function resolveWatchFlag(flags) {
   }
   return true;
 }
-async function maybeWatchEvents(context, url, label) {
+async function maybeWatchEvents(context, url, label, watchTarget = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     return;
   }
@@ -12301,7 +12360,8 @@ async function maybeWatchEvents(context, url, label) {
     runtimeConfig: context.runtimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     url,
-    label
+    label,
+    ...watchTarget
   });
   printSuccess(result, context.globalOptions.format);
 }
@@ -13094,7 +13154,10 @@ async function instructionCreate(context) {
     requiresPasskey: true,
     passkeyUrl
   }, context.globalOptions.format);
-  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization");
+  await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
+    eventType: "purchase_instruction.activated",
+    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+  });
   return EXIT_CODES.OK;
 }
 async function instructionGet(context) {
@@ -13115,8 +13178,11 @@ async function instructionSignUrl(context) {
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, url);
-  printSuccess({ url }, context.globalOptions.format);
-  await maybeWatchEvents(context, url, "purchase instruction authorization");
+  printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
+  await maybeWatchEvents(context, url, "purchase instruction authorization", {
+    eventType: "purchase_instruction.activated",
+    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+  });
   return EXIT_CODES.OK;
 }
 async function instructionList(context) {
@@ -13413,7 +13479,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// ../../../../../private/tmp/clink-cli-b14c787.Nktc9T/dist/index.js
+// dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));

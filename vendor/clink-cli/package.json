@@ -1,0 +1,8 @@
+{
+  "name": "clink-cli-vendored",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "bin": { "clink-cli": "clink-cli.bundle.mjs" },
+  "description": "Vendored single-file bundle of @clink-ai/clink-cli (../../../clink-cli). Re-vendor from the clink-cli source dir: cd <repo>/clink-cli && npm run build && npx esbuild dist/index.js --bundle --platform=node --format=esm --outfile=../agentic-payment-skills/vendor/clink-cli/clink-cli.bundle.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\""
+}

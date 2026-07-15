@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const bundlePath = fileURLToPath(
   new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
+);
+const vendorPackage = JSON.parse(
+  await readFile(new URL('../vendor/clink-cli/package.json', import.meta.url), 'utf8'),
 );
 
 const testEnv = {
@@ -37,6 +41,24 @@ test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['skills', 'list', '--help']), /skills list --all/u);
   assert.match(runBundle(['skills', 'tip', '--help']), /--publisher <publisher>/u);
   assert.match(runBundle(['skills', 'tip', '--help']), /--number <number>/u);
+});
+
+test('vendored CLI metadata tracks the latest upstream package version', () => {
+  assert.equal(vendorPackage.version, '0.1.4');
+});
+
+test('vendored instruction sign-url exposes identifiers for correlated activation watches', () => {
+  const result = runBundleJson([
+    'instruction', 'sign-url',
+    '--payment-instrument-id', 'pi_contract',
+    '--purchase-instruction-id', 'ins_contract',
+    '--no-watch',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.instructionId, 'ins_contract');
+  assert.equal(result.data.paymentInstrumentId, 'pi_contract');
 });
 
 test('vendored CLI identity tip dry-run is side-effect free and normalized', () => {
