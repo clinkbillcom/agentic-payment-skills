@@ -26,6 +26,12 @@ test('routes a structured tippable skill list intent', () => {
   assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_LIST_WORKFLOW);
 });
 
+test('routes a Chinese list request expressed with 列出', () => {
+  const result = classifyPaymentIntent({ text: '列出可以打赏的技能' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_LIST);
+});
+
 test('routes an explicitly authorized identity tip', () => {
   const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach 2usd' });
 
@@ -37,6 +43,17 @@ test('routes an explicitly authorized identity tip', () => {
     amount: '2',
     currency: 'USD',
     explicitlyAuthorized: true,
+  });
+});
+
+test('does not mistake list inside a skill identity for a list query', () => {
+  const result = classifyPaymentIntent({ text: 'tip clinkpay/skill-list 2usd' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.deepEqual(result.tip.target, {
+    kind: 'identity',
+    publisher: 'clinkpay',
+    skillName: 'skill-list',
   });
 });
 

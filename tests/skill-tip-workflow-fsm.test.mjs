@@ -300,6 +300,20 @@ test('optional account event timeouts preserve payment success', () => {
   assert.equal(result.terminal, true);
 });
 
+test('optional account aggregation accepts event FSM timeout results', () => {
+  const result = classifySkillTipAccountEventObservation({
+    paymentStatus: 'PAID',
+    pollObservations: [
+      { eventType: 'account-created', state: 'EVENT_TIMEOUT' },
+      { eventType: 'account-reloaded', state: 'EVENT_TIMEOUT' },
+    ],
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ACCOUNT_EVENT_NOT_OBSERVED);
+  assert.equal(result.accountEventStatus, 'NOT_OBSERVED');
+  assert.equal(result.paymentStatus, 'PAID');
+});
+
 test('optional account event aggregation waits for the sibling poll', () => {
   const result = classifySkillTipAccountEventObservation({
     paymentStatus: 'PAID',
