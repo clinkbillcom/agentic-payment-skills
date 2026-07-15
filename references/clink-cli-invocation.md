@@ -6,9 +6,15 @@ Command examples are execution recipes for the agent. Run them through the avail
 
 ## Command Resolution
 
-Every example in this skill uses `clink-cli` as the stable command name. This repository provides that command through package.json `bin.clink-cli`, which points to `bin/clink-cli`. Use that single command for every operation. Do not repeat the bundle path or `--sandbox` on individual examples; the wrapper already carries them.
+Every example in this skill uses `clink-cli` as the stable command name. This repository provides that command through package.json `bin.clink-cli`, which points to `bin/clink-cli`. Use that single entrypoint for every operation instead of repeating the bundle path.
 
-**`bin/clink-cli` hardcodes `--sandbox` and is the only supported `clink-cli` command definition for normal skill workflows.** Every other example and reference is environment-neutral because `clink-cli` already points to UAT/sandbox.
+**`bin/clink-cli` uses production by default and does not hardcode `--sandbox`.** Select the environment once at the start of a workflow, bind the logical `clink-cli` command to that exact invocation, and reuse it for every follow-up command:
+
+- production: `bin/clink-cli`;
+- sandbox/UAT: `bin/clink-cli --sandbox`;
+- explicit API host: `bin/clink-cli --base-url <url>` or one fixed `CLINK_BASE_URL` value.
+
+To select sandbox/UAT, include `--sandbox` in that locked logical wrapper.
 
 The wrapper is:
 
@@ -16,11 +22,9 @@ The wrapper is:
 bin/clink-cli
 ```
 
-Do not create a production `clink-cli` bin in this skill. If an explicitly approved production flow is ever needed, use a separately named command and separate credentials so it cannot be confused with the default UAT/sandbox wrapper.
+Credentials must match the selected environment. Never use a production customer API key with a sandbox/UAT command, or sandbox/UAT credentials with a production command.
 
-Use sandbox/UAT customer credentials only. Never reuse a production customer API key with this wrapper.
-
-Resolve `clink-cli` to this repository wrapper at the start of a workflow and keep it for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. For local developer debugging, a locally linked `clink-cli` executable may be used only after confirming it points to this wrapper and already hardcodes `--sandbox`.
+Resolve `clink-cli` to the selected invocation at the start of a workflow and keep the same flags and `CLINK_BASE_URL` for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper and preserves the same environment selection.
 
 To inspect help without installing a global binary, call the bundle directly:
 
@@ -68,12 +72,12 @@ Inspect the process exit code first, then parse the stream that contains the env
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--sandbox` | wrapper | Uses sandbox API and sandbox agent pages. Hardcoded in the `clink-cli` wrapper (see Command Resolution); never repeat it on individual commands. |
+| `--sandbox` | false | Selects sandbox/UAT API, dashboard, and agent pages. Bind it into the workflow's logical `clink-cli` command when sandbox is selected. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |
 
-Config resolution is flags first, then environment variables (`CLINK_BASE_URL`, `CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
+Base URL resolution is `--base-url`, then `CLINK_BASE_URL`, then `--sandbox`, then stored/default production config. Customer credentials resolve from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
 
 ## Secret Handling
 

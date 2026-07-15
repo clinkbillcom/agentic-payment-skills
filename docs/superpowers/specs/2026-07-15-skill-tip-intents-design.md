@@ -153,7 +153,7 @@ A successful result exposes payment and optional account evidence separately:
 
 ## Vendored CLI
 
-Replace `vendor/clink-cli/clink-cli.bundle.mjs` with the single-file ESM bundle generated from the clean `clink-cli` feature commit `b14c787`, whose package version is `0.1.4` and which contains the committed `skills list/tip` implementation together with the current UCP baseline. Build from a temporary Git archive so the adjacent CLI working tree is neither switched nor modified. Keep `bin/clink-cli` as the only normal workflow entrypoint and preserve its sandbox environment lock.
+Replace `vendor/clink-cli/clink-cli.bundle.mjs` with the single-file ESM bundle generated from the clean `clink-cli` feature commit `b14c787`, whose package version is `0.1.4` and which contains the committed `skills list/tip` implementation together with the current UCP baseline. Build from a temporary Git archive so the adjacent CLI working tree is neither switched nor modified. Keep `bin/clink-cli` as the only normal workflow entrypoint and preserve the environment selected at workflow start; the entrypoint is production by default and sandbox/UAT requires `--sandbox` in the locked logical wrapper.
 
 Bundle acceptance checks are:
 

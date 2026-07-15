@@ -9,8 +9,10 @@ const walletConfig = await readFile(new URL('../references/clink-wallet-config.m
 const paymentRefund = await readFile(new URL('../references/clink-payment-refund.md', import.meta.url), 'utf8');
 const ucpCheckout = await readFile(new URL('../references/clink-ucp-checkout.md', import.meta.url), 'utf8');
 const asyncEvents = await readFile(new URL('../references/clink-async-events.md', import.meta.url), 'utf8');
+const cliInvocation = await readFile(new URL('../references/clink-cli-invocation.md', import.meta.url), 'utf8');
 const instruction = await readFile(new URL('../references/clink-instruction.md', import.meta.url), 'utf8');
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
+const cliWrapper = await readFile(new URL('../bin/clink-cli', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('skill frontmatter stays compact and trigger-focused', () => {
@@ -19,6 +21,14 @@ test('skill frontmatter stays compact and trigger-focused', () => {
 
   assert.ok(frontmatter.length <= 1024, `frontmatter length ${frontmatter.length} exceeds 1024`);
   assert.match(description, /^Use when/u);
+});
+
+test('environment guidance matches the production-default CLI wrapper', () => {
+  assert.doesNotMatch(cliWrapper, /--sandbox/u);
+  assert.match(cliInvocation, /does not hardcode `--sandbox`/u);
+  assert.match(cliInvocation, /production by default/u);
+  assert.match(cliInvocation, /select sandbox.*--sandbox/isu);
+  assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
 });
 
 test('main skill routes direct and session pay through authorization resolver before pay', () => {

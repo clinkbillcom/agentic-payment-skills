@@ -76,7 +76,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain an **environment lock**: define the `clink-cli` wrapper once (see `references/clink-cli-invocation.md`) as the hardcoded UAT/sandbox command that already carries `--sandbox`, and reuse it for every command in the workflow. Individual commands stay environment-neutral and must not repeat `--sandbox`.
+Maintain an **environment lock**: select production, sandbox/UAT, or one explicit base URL once (see `references/clink-cli-invocation.md`), bind `clink-cli` to that exact wrapper invocation, and reuse it for every command in the workflow. `bin/clink-cli` defaults to production; a sandbox workflow binds `--sandbox` into the logical wrapper once. Individual command recipes stay environment-neutral.
 
 FSM action contract:
 

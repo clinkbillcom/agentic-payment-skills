@@ -4,13 +4,13 @@ Read this before wallet setup, local config work, card readiness checks, payment
 
 ## Wallet Setup
 
-Define the hardcoded sandbox `clink-cli` wrapper once (see `references/clink-cli-invocation.md`). Wallet init then only needs the account fields:
+Select and lock the `clink-cli` environment once (see `references/clink-cli-invocation.md`). Wallet init then only needs the account fields:
 
 ```bash
 clink-cli wallet init --email <email> --name <name> --format json
 ```
 
-Use sandbox/UAT customer credentials only. Never reuse a production customer API key with the hardcoded sandbox wrapper.
+`bin/clink-cli` targets production by default; bind `--sandbox` into the logical wrapper for sandbox/UAT. Use credentials that belong to the locked environment and never mix production with sandbox/UAT credentials.
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
 

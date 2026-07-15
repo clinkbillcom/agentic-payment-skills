@@ -16,7 +16,7 @@
 - account-created and account-reloaded are optional and mutually exclusive; absence or poll failure never downgrades PAID.
 - Exit code 6 or client timeout is unknown payment state and must never be retried automatically.
 - Number mode requires a displayed list snapshot and stops for fresh authorization if the selected row changes.
-- The normal skill entrypoint remains bin/clink-cli with its sandbox/UAT environment lock.
+- The normal skill entrypoint remains bin/clink-cli; lock its production-default, sandbox/UAT, or explicit-base-url selection for the whole workflow.
 
 ---
 
