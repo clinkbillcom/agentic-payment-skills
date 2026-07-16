@@ -1,3 +1,4 @@
 .omx/
 tests/*
 !tests/skill-install-workflow-fsm.test.mjs
+!tests/skill-tip-batch-workflow-fsm.test.mjs
