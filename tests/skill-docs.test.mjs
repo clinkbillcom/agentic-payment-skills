@@ -49,6 +49,33 @@ test('payment reference documents Visa VIC resolver bypass branch', () => {
   assert.match(paymentRefund, /Visa \+ VIC ready/u);
 });
 
+test('Agent Pay account event monitoring is optional, correlated, and user-visible', () => {
+  assert.match(skill, /classifyPaymentAccountEventObservation/u);
+  assert.match(skill, /classifyAgentPayAccountEventCandidate/u);
+  assert.match(skill, /`pay status=1`[\s\S]*account-created[\s\S]*account-reloaded/iu);
+  assert.match(skill, /Agent Pay[\s\S]*AMBIGUOUS[\s\S]*PAID/iu);
+
+  assert.match(
+    paymentRefund,
+    /clink-cli events poll --type account-created --max-wait 60 --format json/u,
+  );
+  assert.match(
+    paymentRefund,
+    /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u,
+  );
+  assert.match(paymentRefund, /账户创建和商户订单确认成功/u);
+  assert.match(paymentRefund, /商户订单确认成功/u);
+  assert.match(
+    paymentRefund,
+    /customerEmail[\s\S]*webSite[\s\S]*userId[\s\S]*amount[\s\S]*currency/u,
+  );
+  assert.match(paymentRefund, /account\.created[\s\S]*account\.reloaded/iu);
+
+  assert.match(asyncEvents, /Agent Pay[\s\S]*unique candidate/iu);
+  assert.match(asyncEvents, /Agent Pay[\s\S]*AMBIGUOUS/iu);
+  assert.match(asyncEvents, /timeout[\s\S]*poll error[\s\S]*AMBIGUOUS[\s\S]*PAID/iu);
+});
+
 test('wallet init documents email OTP recovery flow', () => {
   assert.match(walletConfig, /BOOTSTRAP_OTP_REQUIRED/u);
   assert.match(walletConfig, /71160015/u);

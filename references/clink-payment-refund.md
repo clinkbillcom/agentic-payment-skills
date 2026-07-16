@@ -122,7 +122,7 @@ Never invent amount, currency, merchant ID, session ID, order ID, payment method
 
 Exit 0:
 
-- `data.status === 1`: payment succeeded. Save `data.orderId`.
+- `data.status === 1`: payment succeeded. Save `data.orderId` when present, return `paymentStatus=PAID` immediately, and start the optional account-event flow below.
 - `data.status === 3`: card declined. Offer `card setup-link` and ask before retry.
 - `data.status === 4`: risk rule blocked. Show `risk get`, generate `risk link`, ask before retry.
 - `data.status === 6`: other failure. Show the API message.
@@ -145,6 +145,66 @@ Exit 6:
 Exit 5:
 
 - API error. Show `error.message`.
+
+### Optional Account Confirmation After Agent Pay Success
+
+Agent Pay `status=1` is synchronous payment success. Do not wait for a merchant account event before returning `PAID`. Immediately start both bounded polls in parallel under the same environment lock used by `pay`:
+
+```bash
+clink-cli events poll --type account-created --max-wait 60 --format json
+```
+
+```bash
+clink-cli events poll --type account-reloaded --max-wait 60 --format json
+```
+
+The CLI filters use `account-created` and `account-reloaded`; event bodies may contain `account.created` and `account.reloaded`. Treat each pair as the same semantic type. The events are mutually exclusive for one payment, and a merchant may emit neither.
+
+Build the wait specs with `purpose=AGENT_PAY_ACCOUNT`. Pass each poll result, the current payment watch, and all active watches in the same environment/wallet scope to `classifyEventPollObservation`; it invokes `classifyAgentPayAccountEventCandidate`. Then pass both classified poll observations to `classifyPaymentAccountEventObservation`.
+
+Because the event has no `orderId/sessionId`, attribute it only to a unique candidate:
+
+1. Keep active watches from the same environment and wallet/customer scope within the 60-second window.
+2. Require matching `amount` and case-normalized `currency`.
+3. Reject a candidate when both sides provide and disagree on `customerEmail`, `webSite`, or `userId`.
+4. When multiple candidates remain, use matching optional identity fields only if they produce one unique positive highest score.
+5. If multiple candidates still remain, return `AMBIGUOUS`; never choose the first event or payment.
+
+A uniquely attributed `account.created` returns `CONFIRMED_CREATED`. For a Chinese user, say:
+
+```text
+账户创建和商户订单确认成功
+```
+
+A uniquely attributed `account.reloaded` returns `CONFIRMED_RELOADED`. For a Chinese user, say:
+
+```text
+商户订单确认成功
+```
+
+Use the equivalent message in the user's language. Then show only core values actually present in `event.data`:
+
+```json
+{
+  "customerEmail": "customer@example.com",
+  "webSite": "https://example.com",
+  "userId": "usr_xxxxx",
+  "amount": 19.99,
+  "currency": "USD"
+}
+```
+
+Do not invent missing fields or copy fallback values from the payment context into the event output. Do not expose any other event-body field as core information.
+
+Account monitoring outcomes remain separate from payment outcome:
+
+- `CONFIRMED_CREATED` or `CONFIRMED_RELOADED`: show the matching confirmation and core information.
+- `NOT_OBSERVED`: both polls settled without a uniquely attributed event; keep `PAID`.
+- `POLL_ERROR`: polling failed or both mutually exclusive event types appeared; keep `PAID` with a warning.
+- `AMBIGUOUS`: more than one active payment remains a valid candidate; keep `PAID` and do not claim merchant-order confirmation.
+- `PENDING`: only one poll has settled; keep waiting for the sibling optional poll.
+
+Missing merchant support, timeout, poll error, and ambiguity never trigger payment retry and never downgrade the synchronous Agent Pay success.
 
 ## Refund Create
 

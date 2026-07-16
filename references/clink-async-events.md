@@ -1,6 +1,6 @@
 # Async Events
 
-Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, post-3DS payment completion, or optional skill-tip merchant account evidence.
+Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, post-3DS payment completion, optional Agent Pay account confirmation, or optional skill-tip merchant account evidence.
 
 ## Model
 
@@ -42,7 +42,7 @@ Use `events poll` when you need to wait for a state change without printing a ne
 clink-cli events poll --type <eventType> --format json
 ```
 
-Pass the process exit code into `classifyEventPollObservation`. A nonzero CLI exit becomes `EVENT_INVALID` with `SURFACE_EVENT_ERROR`; optional skill-tip aggregation converts that monitoring failure to `POLL_ERROR` without changing `PAID`.
+Pass the process exit code into `classifyEventPollObservation`. A nonzero CLI exit becomes `EVENT_INVALID` with `SURFACE_EVENT_ERROR`; optional Agent Pay and Skill Tip aggregation convert that monitoring failure to `POLL_ERROR` without changing `PAID`.
 
 Options:
 
@@ -97,6 +97,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
 | VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
+| Optional Agent Pay account event | one unique candidate among active watches in the same environment and wallet/customer scope within 60 seconds: matching `amount + currency`, no explicit `customerEmail` / `webSite` / `userId` conflict, and optional identities used only as a unique positive tie-breaker |
 | Optional skill-tip account event | same `orderId`; when unavailable, require a compound identity with at least two stable fields such as `customerId + merchantId` or `customerId + skillId` |
 
 If the right event type appears for a different resource, keep the current workflow pending or use a status/get command to verify. Do not mark the workflow complete from a type-only match.
@@ -113,6 +114,7 @@ If the right event type appears for a different resource, keep the current workf
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
 | UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
+| Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |
 
 ## Rules
@@ -122,6 +124,8 @@ If the right event type appears for a different resource, keep the current workf
 - Do not busy-retry the initiating link command to check status.
 - Do not acknowledge events with `--no-ack` unless you intentionally only want to peek.
 - A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
+- A synchronous successful Agent Pay is already `PAID`. Run both optional polls immediately and use `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.
+- For Agent Pay, timeout, poll error, and `AMBIGUOUS` attribution all preserve `PAID`; do not retry payment or claim merchant-order confirmation. Amount/currency are mandatory correlation fields, while `customerEmail`, `webSite`, and `userId` are optional conflict checks and tie-breakers.
 - On timeout, return the timeout state and resume command; do not claim success.
 - A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.
 - For refund status, direct `refund get` polling is also acceptable.
