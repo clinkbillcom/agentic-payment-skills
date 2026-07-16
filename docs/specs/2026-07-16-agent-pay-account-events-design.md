@@ -62,6 +62,7 @@ Each successful Agent Pay creates a bounded watch context containing available v
 
 ```json
 {
+  "accountWatchId": "local-stable-watch-identity",
   "paymentId": "local-or-upstream-payment-identity",
   "environment": "locked-environment-identity",
   "walletId": "wallet-or-customer-identity",
@@ -74,7 +75,7 @@ Each successful Agent Pay creates a bounded watch context containing available v
 }
 ```
 
-`paymentId`, `customerEmail`, `webSite`, and `userId` may be absent. `amount` and `currency` come from the authorized payment context, not from newly invented values. The caller supplies all active watch contexts for the same environment and wallet/customer scope when classifying a candidate event. Watches expire after the 60-second monitoring window.
+`paymentId`, `customerEmail`, `webSite`, and `userId` may be absent. `accountWatchId` is always present: reuse a stable upstream payment identity when available, otherwise generate a local UUID once and preserve it across serialization and both poll specs. `amount` and `currency` come from the authorized payment context, not from newly invented values. The caller supplies all active watch contexts for the same environment and wallet/customer scope when classifying a candidate event. Watches expire after the 60-second monitoring window.
 
 Independent runtimes cannot share an in-memory active-watch set. If concurrent Agent Pays can run across processes, the orchestrator must provide a shared pending-watch snapshot or accept that only a future event `orderId/paymentId` can fully solve cross-process attribution.
 

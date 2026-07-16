@@ -59,6 +59,44 @@ test('Agent Pay synchronous success starts optional account event monitoring', (
   );
 });
 
+test('Agent Pay synchronous success stamps a missing account-watch start time', () => {
+  const { startedAtMs: _startedAtMs, ...contextWithoutTime } = paymentContext;
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: JSON.stringify({ ok: true, data: { status: 1 } }),
+    paymentContext: contextWithoutTime,
+    observedAtMs: 5_000,
+  });
+
+  assert.equal(result.currentPayment.startedAtMs, 5_000);
+  assert.equal(result.accountWaitSpecs[0].currentPayment.startedAtMs, 5_000);
+  assert.equal(result.accountWaitSpecs[1].currentPayment.startedAtMs, 5_000);
+});
+
+test('Agent Pay synchronous success creates a stable local watch id when payment id is absent', () => {
+  const {
+    paymentId: _paymentId,
+    startedAtMs: _startedAtMs,
+    ...contextWithoutPaymentId
+  } = paymentContext;
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: JSON.stringify({ ok: true, data: { status: 1 } }),
+    paymentContext: contextWithoutPaymentId,
+    observedAtMs: 5_000,
+  });
+
+  assert.match(result.currentPayment.accountWatchId, /^[0-9a-f-]{36}$/u);
+  assert.equal(
+    result.accountWaitSpecs[0].currentPayment.accountWatchId,
+    result.currentPayment.accountWatchId,
+  );
+  assert.equal(
+    result.accountWaitSpecs[1].currentPayment.accountWatchId,
+    result.currentPayment.accountWatchId,
+  );
+});
+
 test('Agent Pay synchronous failure does not start account event monitoring', () => {
   const result = classifyPaymentObservation({
     exitCode: 0,
@@ -123,6 +161,8 @@ test('Agent Pay account aggregation returns created confirmation and core event 
   const result = classifyPaymentAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{
+      domain: 'AGENT_PAY_ACCOUNT',
+      state: 'AGENT_PAY_ACCOUNT_EVENT_CORRELATED',
       eventType: 'account-created',
       canonicalEventType: 'account.created',
       matched: true,
@@ -148,6 +188,8 @@ test('Agent Pay account aggregation returns reloaded merchant-order confirmation
   const result = classifyPaymentAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{
+      domain: 'AGENT_PAY_ACCOUNT',
+      state: 'AGENT_PAY_ACCOUNT_EVENT_CORRELATED',
       eventType: 'account-reloaded',
       matched: true,
       event: {
@@ -174,6 +216,8 @@ test('Agent Pay account aggregation omits absent core fields instead of inventin
   const result = classifyPaymentAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{
+      domain: 'AGENT_PAY_ACCOUNT',
+      state: 'AGENT_PAY_ACCOUNT_EVENT_CORRELATED',
       eventType: 'account-created',
       matched: true,
       event: {
@@ -257,11 +301,15 @@ test('optional Agent Pay account double match preserves payment success with an 
     paymentStatus: 'PAID',
     pollObservations: [
       {
+        domain: 'AGENT_PAY_ACCOUNT',
+        state: 'AGENT_PAY_ACCOUNT_EVENT_CORRELATED',
         eventType: 'account-created',
         matched: true,
         event: { type: 'account.created', data: { amount: 19.99, currency: 'USD' } },
       },
       {
+        domain: 'AGENT_PAY_ACCOUNT',
+        state: 'AGENT_PAY_ACCOUNT_EVENT_CORRELATED',
         eventType: 'account-reloaded',
         matched: true,
         event: { type: 'account.reloaded', data: { amount: 19.99, currency: 'USD' } },
@@ -291,4 +339,21 @@ test('optional Agent Pay account aggregation rejects confirmation without a paid
   assert.equal(result.action, PaymentWorkflowAction.SURFACE_ERROR);
   assert.equal(result.accountEventStatus, 'NOT_STARTED');
   assert.equal(result.paymentStatus, 'UNKNOWN');
+});
+
+test('Agent Pay account aggregation rejects an unproven generic matched event', () => {
+  const result = classifyPaymentAccountEventObservation({
+    paymentStatus: 'PAID',
+    pollObservations: [{
+      eventType: 'account-created',
+      matched: true,
+      event: {
+        type: 'account.created',
+        data: { amount: 19.99, currency: 'USD' },
+      },
+    }],
+  });
+
+  assert.notEqual(result.accountEventStatus, 'CONFIRMED_CREATED');
+  assert.equal(result.messageKey, undefined);
 });

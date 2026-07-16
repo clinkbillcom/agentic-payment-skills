@@ -162,6 +162,8 @@ The CLI filters use `account-created` and `account-reloaded`; event bodies may c
 
 Build the wait specs with `purpose=AGENT_PAY_ACCOUNT`. Pass each poll result, the current payment watch, and all active watches in the same environment/wallet scope to `classifyEventPollObservation`; it invokes `classifyAgentPayAccountEventCandidate`. Then pass both classified poll observations to `classifyPaymentAccountEventObservation`.
 
+Every watch must have a stable `accountWatchId`. Reuse the upstream payment identity when one exists; when `paymentId` is absent, the Payment FSM generates a local UUID `accountWatchId`. Preserve that identifier in the active-watch snapshot and both wait specs so serialization does not duplicate the current payment or collapse two distinct payments.
+
 Because the event has no `orderId/sessionId`, attribute it only to a unique candidate:
 
 1. Keep active watches from the same environment and wallet/customer scope within the 60-second window.

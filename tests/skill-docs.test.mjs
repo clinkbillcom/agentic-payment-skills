@@ -70,6 +70,7 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
     /customerEmail[\s\S]*webSite[\s\S]*userId[\s\S]*amount[\s\S]*currency/u,
   );
   assert.match(paymentRefund, /account\.created[\s\S]*account\.reloaded/iu);
+  assert.match(paymentRefund, /accountWatchId[\s\S]*paymentId.*absent/iu);
 
   assert.match(asyncEvents, /Agent Pay[\s\S]*unique candidate/iu);
   assert.match(asyncEvents, /Agent Pay[\s\S]*AMBIGUOUS/iu);

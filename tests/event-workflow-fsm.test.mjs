@@ -154,6 +154,24 @@ test('Agent Pay account candidate remains ambiguous for indistinguishable paymen
   assert.equal(result.candidate, undefined);
 });
 
+test('Agent Pay account candidate recognizes a serialized current watch without an upstream payment id', () => {
+  const currentPayment = {
+    ...currentAgentPayment,
+    paymentId: undefined,
+    accountWatchId: 'watch_1',
+  };
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment,
+    activePayments: [{ ...currentPayment }],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.matched, true);
+  assert.equal(result.candidate.accountWatchId, 'watch_1');
+});
+
 test('Agent Pay account candidate excludes other scopes and expired watches', () => {
   const result = classifyAgentPayAccountEventCandidate({
     event: agentPayAccountEvent,
@@ -190,6 +208,27 @@ test('Agent Pay account candidate requires event amount and currency', () => {
   assert.equal(missingCurrency.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
 });
 
+test('Agent Pay account candidate does not collapse distinct unsafe integer amounts', () => {
+  const result = classifyAgentPayAccountEventCandidate({
+    event: {
+      type: 'account.created',
+      data: { amount: '9007199254740993', currency: 'USD' },
+    },
+    currentPayment: {
+      ...currentAgentPayment,
+      amount: '9007199254740992',
+    },
+    activePayments: [{
+      ...currentAgentPayment,
+      amount: '9007199254740992',
+    }],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
+  assert.equal(result.matched, false);
+});
+
 test('Agent Pay account poll routes a dotted body through unique-candidate attribution', () => {
   const result = classifyEventPollObservation(
     {
@@ -215,6 +254,35 @@ test('Agent Pay account poll routes a dotted body through unique-candidate attri
   assert.equal(result.canonicalEventType, 'account.created');
   assert.equal(result.matched, true);
   assert.equal(result.candidate.paymentId, 'pay_1');
+});
+
+test('Agent Pay account poll checks every same-type event before returning no match', () => {
+  const result = classifyEventPollObservation(
+    {
+      ready: true,
+      timedOut: false,
+      events: [
+        {
+          type: 'account.created',
+          data: { amount: 5, currency: 'USD' },
+        },
+        agentPayAccountEvent,
+      ],
+    },
+    {
+      eventType: 'account-created',
+      purpose: 'AGENT_PAY_ACCOUNT',
+      currentPayment: currentAgentPayment,
+      activePayments: [currentAgentPayment],
+      nowMs: 2_000,
+      maxWaitSeconds: 60,
+      noAck: false,
+    },
+  );
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.matched, true);
+  assert.equal(result.event, agentPayAccountEvent);
 });
 
 test('classifies account-created as optional skill tip account confirmation', () => {
