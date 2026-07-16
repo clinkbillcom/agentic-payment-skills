@@ -22,13 +22,23 @@ Execute through the environment-locked wrapper:
 clink-cli skills list --all --tippable --format json
 ~~~
 
-Inspect the exit code before parsing the JSON envelope. Require `data` to be an array. Every displayed row requires a positive CLI `Number`, nonempty `publisher`, `name`, and `skillId`. Preserve optional `versionNo` in context. Do not renumber rows.
+Inspect the exit code before parsing the JSON envelope. Require `data` to be an array. Every normalized row requires a positive CLI `Number`, nonempty `publisher`, `name`, and `skillId`. Preserve optional `versionNo` and `skillId` only as hidden snapshot metadata. Do not renumber rows.
 
-Return the requested four-column table:
+Return exactly three columns. Render all three headers in the same language as the user's current request; if that is ambiguous, use the conversation's dominant language, then English as the final fallback. Do not mix languages within one header row. Do not translate publisher or Skill-name values.
 
-| 序号 | 发布者 | Skill 名称 | skill_id |
-| ---: | --- | --- | --- |
-| Number | publisher | name | skillId |
+Chinese:
+
+| 编号 | 发布者 | 技能名称 |
+| ---: | --- | --- |
+| 1 | clinkpay | PollyReach |
+
+English:
+
+| Number | Publisher | Skill Name |
+| ---: | --- | --- |
+| 1 | clinkpay | PollyReach |
+
+Call `classifySkillListObservation(observation, { language })` for Chinese or English. For another language, pass one complete localized `headers` object containing `number`, `publisher`, and `skillName`; never mix a custom label with fallback labels.
 
 Escape Markdown separators and line breaks. An empty array means no tippable Skill is available. A malformed envelope, duplicate Number, malformed version, or incomplete row is an error.
 
@@ -62,7 +72,7 @@ Do not reconstruct this snapshot by scraping a historical Markdown table.
 Normalize one target:
 
 ~~~json
-{ "kind": "identity", "publisher": "clinkpay", "skillName": "PollyReach", "versionNo": "v1.2.3" }
+{ "kind": "identity", "publisher": "clinkpay", "skillName": "PollyReach" }
 ~~~
 
 or:
@@ -71,7 +81,7 @@ or:
 { "kind": "number", "number": 2 }
 ~~~
 
-Identity versions are optional. Accept forms such as `clinkpay/PollyReach@v1.2.3`; omission means the CLI resolves the latest exact publisher/name match. Version syntax is 1–128 letters, digits, `.`, `_`, `+`, or `-` and version matching is case-sensitive.
+Skill Tip execution is versionless. Normalize the target to publisher/name. If an upstream parser includes version information, discard it before confirmation and command construction; the CLI applies its default publisher/name version selection. Never claim that a tip targeted an exact version.
 
 Natural-language Number targets require a marker such as `序号 2`, `2号`, `#2`, or `number 2`. A bare number beside USD is an amount, not a Skill Number. Missing target, missing/non-positive amount, non-USD currency, or missing authorization stops before execution.
 
@@ -89,7 +99,7 @@ Select the newest valid displayed snapshot satisfying all of these conditions:
 
 Select the newest same-context, in-window, `tippable` snapshot before validating its rows. Do not fall back to an older snapshot when that selected snapshot is malformed, has duplicate Number values, or lacks the requested Number. Run the list workflow again instead.
 
-When a valid snapshot exists, freeze that row's `publisher`, `skillName`, optional `versionNo`, and `skillId`. Execute the identity command immediately because the imperative Number request is already authorization against the displayed mapping. Do not refresh the list and do not resolve the Number against the live marketplace.
+When a valid snapshot exists, freeze that row's `publisher`, `skillName`, and internal `skillId` for the tip. Ignore snapshot `versionNo` when constructing the target. Execute the identity command immediately because the imperative Number request is already authorization against the displayed mapping. Do not refresh the list and do not resolve the Number against the live marketplace.
 
 When no valid snapshot exists, the `RUN_SKILL_TIP_LIST_WORKFLOW` result carries `confirmationRequired: true` both at the top level and inside the original `tipDraft`. The runtime must preserve that tip draft, run the list workflow, display its table, and then create one pending confirmation:
 
@@ -101,8 +111,7 @@ When no valid snapshot exists, the `RUN_SKILL_TIP_LIST_WORKFLOW` result carries 
   "resolvedTarget": {
     "publisher": "clinkpay",
     "skillName": "PollyReach",
-    "skillId": "skill_2",
-    "versionNo": "v1.2.3"
+    "skillId": "skill_2"
   },
   "amount": "2",
   "currency": "USD",
@@ -115,7 +124,7 @@ When no valid snapshot exists, the `RUN_SKILL_TIP_LIST_WORKFLOW` result carries 
 }
 ~~~
 
-The confirmation prompt includes Number, `publisher/name@version` when present, amount, and USD. If the fresh list still does not contain the requested Number, ask the user to select again and create no pending payment.
+The confirmation prompt includes Number, `publisher/name`, amount, and USD without a version. If the fresh list still does not contain the requested Number, ask the user to select again and create no pending payment.
 
 ## Confirmation Claim
 
@@ -131,20 +140,19 @@ After a terminal CLI result, the runtime changes `EXECUTING` to `CONSUMED`. Neve
 
 ## Execute a Tip
 
-The latest CLI accepts only publisher/name identity with an optional version:
+Execute Skill Tip by publisher/name without a version:
 
 ~~~bash
 clink-cli skills tip \
   --publisher <publisher> \
   --name <skill_name> \
-  [--version <versionNo>] \
   --amount <amount> \
   --format json
 ~~~
 
-Do not pass `--number`, `--expected-skill-id`, `--currency`, or `--payment-instrument-id`. If the frozen row has no version, omit `--version`; the CLI resolves the newest exact publisher/name record. If an explicitly requested version is missing or mismatched, stop before payment and never fall back to latest.
+Do not pass a version, `--number`, `--expected-skill-id`, `--currency`, or `--payment-instrument-id`. The CLI resolves the publisher/name target using its default version behavior.
 
-Every `RUN_SKILL_TIP` result also returns an `expectedTip` binding. This binding is required and contains `publisher`, `skillName`, `amount`, and `currency`, plus frozen `skillId` and `versionNo` when known. Pass it unchanged to `classifySkillTipObservation`; a missing or incomplete binding leaves a synchronous result `UNKNOWN` instead of accepting an unbound payment result.
+Every `RUN_SKILL_TIP` result also returns an `expectedTip` binding. This binding is required and contains `publisher`, `skillName`, `amount`, and `currency`, plus frozen `skillId` when known. It never contains version as an authorization constraint. Pass it unchanged to `classifySkillTipObservation`; a missing or incomplete binding leaves a synchronous result `UNKNOWN` instead of accepting an unbound payment result.
 
 The latest CLI refreshes and requires a sufficient explicitly default USD Credit balance. It does not use cards, mixed Credit/card payment, VIC instructions, or mandates for normal Skill Tip execution. The FSM may continue classifying legacy `authorization_pending` and 3DS payloads defensively, but they are not the current normal path.
 
@@ -161,7 +169,7 @@ Use the CLI exit code first, then the first JSON result envelope.
 | exit 7 / `three_ds_required` | `PENDING_3DS` | Use the correlated order-event flow |
 | other exit 2–5 | `NOT_PAID` or error | Surface the typed error |
 
-Synchronous `paid` plus underlying status `1` is payment success. Verify returned `publisher`, `skillName`, `skillId`, `versionNo` when frozen, amount, and currency against the authorization binding. Do not wait for an order or merchant account event before returning `PAID`.
+Synchronous `paid` plus underlying status `1` is payment success. Verify returned `publisher`, `skillName`, `skillId` when frozen, amount, and currency against the authorization binding. Accept the version resolved by the CLI as result metadata; do not compare it as user authorization. Do not wait for an order or merchant account event before returning `PAID`.
 
 After paid status, the CLI reports the tip metric with the verified `skillId`, resolved `versionNo`, and order ID as a best-effort side effect. Metric failure never changes `PAID` and never triggers another charge.
 
@@ -194,8 +202,7 @@ Keep payment outcome separate from optional merchant evidence:
   "intent": "SKILL_TIP",
   "target": {
     "publisher": "clinkpay",
-    "skillName": "PollyReach",
-    "versionNo": "v1.2.3"
+    "skillName": "PollyReach"
   },
   "amount": 2,
   "currency": "USD",

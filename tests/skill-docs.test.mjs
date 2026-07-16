@@ -83,8 +83,10 @@ test('skill documents public skill listing and explicitly authorized tip routing
   assert.match(skill, /SKILL_TIP_FSM/u);
   assert.match(skill, /clink-cli skills list --all --tippable --format json/u);
   assert.match(skill, /clink-cli skills tip --publisher/u);
-  assert.match(skill, /--version <versionNo>/u);
-  assert.doesNotMatch(skill, /clink-cli skills tip --number|--expected-skill-id/u);
+  assert.doesNotMatch(
+    skill,
+    /clink-cli skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
+  );
   assert.match(skill, /synchronous agent pay.*payment success/isu);
   assert.match(skill, /account-created.*account-reloaded/isu);
   assert.match(skill, /optional/iu);
@@ -93,7 +95,7 @@ test('skill documents public skill listing and explicitly authorized tip routing
 test('skill tip reference binds Number through recent context and optional account event semantics', () => {
   assert.match(skillTip, /Number.*snapshot/isu);
   assert.match(skillTip, /two hours|2 hours|两小时|2 小时/iu);
-  assert.match(skillTip, /publisher.*skillName.*versionNo/isu);
+  assert.match(skillTip, /publisher.*skillName.*skillId/isu);
   assert.match(skillTip, /newest valid displayed snapshot.*do not fall back to an older/isu);
   assert.match(skillTip, /skills list --all --tippable/iu);
   assert.match(skillTip, /confirmationRequired.*true/isu);
@@ -101,7 +103,7 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /confirmation|确认/iu);
   assert.doesNotMatch(
     skillTip,
-    /clink-cli skills tip[^\n]*(?:--number|--expected-skill-id)/iu,
+    /clink-cli skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
   );
   assert.match(skillTip, /status.*paid.*status.*1.*payment success/isu);
   assert.match(skillTip, /expectedTip.*required.*publisher.*skillName.*amount.*currency/isu);
@@ -111,6 +113,13 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /Never retry exit code 6/iu);
   assert.match(skillTip, /clink-cli events poll --type account-created --max-wait 60 --format json/u);
   assert.match(skillTip, /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u);
+});
+
+test('skill tip reference requires a localized three-column table', () => {
+  assert.match(skillTip, /\| 编号 \| 发布者 \| 技能名称 \|/u);
+  assert.match(skillTip, /\| Number \| Publisher \| Skill Name \|/u);
+  assert.match(skillTip, /same language.*user|user.*language.*all three headers/isu);
+  assert.doesNotMatch(skillTip, /\| 序号 \| 发布者 \| Skill 名称 \| skill_id \|/u);
 });
 
 test('skill tip reference documents authorization questions and fallback correlation context', () => {
@@ -163,13 +172,17 @@ test('README summaries advertise both skill tip intents', () => {
   assert.match(readme, /skills list --all --tippable/u);
   assert.match(readme, /skills tip/u);
   assert.match(readme, /two hours|2 hours/iu);
-  assert.match(readme, /publisher\/name.*version/iu);
+  assert.match(readme, /Number, publisher, and Skill name/iu);
+  assert.match(readme, /tips.*publisher\/name.*without.*version/iu);
+  assert.doesNotMatch(readme, /tips[^\n]*optional version/iu);
   assert.doesNotMatch(readme, /clink-cli skills tip[^\n]*--number|expected-skill-id/iu);
   assert.match(readme, /account-created.*account-reloaded/isu);
   assert.match(readmeZh, /skills list --all --tippable/u);
   assert.match(readmeZh, /skills tip/u);
   assert.match(readmeZh, /两小时|2 小时/iu);
-  assert.match(readmeZh, /publisher\/name.*version/iu);
+  assert.match(readmeZh, /编号、发布者、技能名称/u);
+  assert.match(readmeZh, /打赏.*publisher\/name.*不传.*version/iu);
+  assert.doesNotMatch(readmeZh, /打赏[^\n]*可选 version/iu);
   assert.doesNotMatch(readmeZh, /clink-cli skills tip[^\n]*--number|expected-skill-id/iu);
   assert.match(readmeZh, /account-created.*account-reloaded/isu);
 });

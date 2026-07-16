@@ -64,7 +64,7 @@ function workflowContext(overrides = {}) {
   };
 }
 
-test('skill list observation renders the required table and snapshot', () => {
+test('skill list observation renders a Chinese three-column table and keeps hidden snapshot metadata', () => {
   const result = classifySkillListObservation({
     ok: true,
     data: [
@@ -76,13 +76,18 @@ test('skill list observation renders the required table and snapshot', () => {
         versionNo: 'v1.2.3',
       },
     ],
+  }, {
+    language: 'zh-CN',
   });
 
   assert.equal(result.state, SkillTipState.TIP_LIST_READY);
   assert.equal(result.action, SkillTipAction.RETURN_SKILL_TABLE);
   assert.equal(result.snapshot.scope, 'tippable');
-  assert.match(result.table, /\| 序号 \| 发布者 \| Skill 名称 \| skill_id \|/u);
-  assert.match(result.table, /\| 2 \| clinkpay \| Polly\\\|Reach \| skill_2 \|/u);
+  assert.equal(result.table, [
+    '| 编号 | 发布者 | 技能名称 |',
+    '| ---: | --- | --- |',
+    '| 2 | clinkpay | Polly\\|Reach |',
+  ].join('\n'));
   assert.deepEqual(result.snapshot.rows[0], {
     number: 2,
     publisher: 'clinkpay',
@@ -90,6 +95,40 @@ test('skill list observation renders the required table and snapshot', () => {
     skillId: 'skill_2',
     versionNo: 'v1.2.3',
   });
+});
+
+test('skill list observation renders all table headers in English', () => {
+  const result = classifySkillListObservation({
+    ok: true,
+    data: [{ Number: 1, publisher: 'acme', name: 'Demo', skillId: 'skill_1' }],
+  }, {
+    language: 'en-US',
+  });
+
+  assert.equal(result.table, [
+    '| Number | Publisher | Skill Name |',
+    '| ---: | --- | --- |',
+    '| 1 | acme | Demo |',
+  ].join('\n'));
+});
+
+test('skill list observation accepts one localized header set for another user language', () => {
+  const result = classifySkillListObservation({
+    ok: true,
+    data: [{ Number: 1, publisher: 'acme', name: 'Demo', skillId: 'skill_1' }],
+  }, {
+    headers: {
+      number: 'Número',
+      publisher: 'Publicador',
+      skillName: 'Nombre de habilidad',
+    },
+  });
+
+  assert.equal(result.table, [
+    '| Número | Publicador | Nombre de habilidad |',
+    '| ---: | --- | --- |',
+    '| 1 | acme | Demo |',
+  ].join('\n'));
 });
 
 test('skill list observation reads a JSON stdout envelope', () => {
@@ -155,7 +194,7 @@ test('identity tip prerequisites build the identity command', () => {
   });
 });
 
-test('identity tip prerequisites preserve an optional exact version', () => {
+test('identity tip prerequisites ignore an optional version for execution', () => {
   const result = classifySkillTipPrerequisites({
     tip: {
       ...identityTip,
@@ -165,8 +204,15 @@ test('identity tip prerequisites preserve an optional exact version', () => {
 
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name pollyreach --version v1.2.3 --amount 2 --format json',
+    'clink-cli skills tip --publisher clinkpay --name pollyreach --amount 2 --format json',
   );
+  assert.equal(result.resolvedTarget.versionNo, undefined);
+  assert.deepEqual(result.expectedTip, {
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    amount: '2',
+    currency: 'USD',
+  });
 });
 
 test('Number tip without a recent displayed snapshot requests the list workflow', () => {
@@ -229,7 +275,7 @@ test('fresh list without the requested Number asks the user to select again', ()
   assert.equal(result.pendingTipConfirmation, undefined);
 });
 
-test('Number tip resolves a recent context row to the identity and version command', () => {
+test('Number tip resolves a versioned context row to a versionless identity command', () => {
   const snapshot = displayedSnapshot();
   const result = classifySkillTipPrerequisites({
     tip: numberedTip,
@@ -240,15 +286,14 @@ test('Number tip resolves a recent context row to the identity and version comma
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP);
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2 --format json',
+    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
   assert.equal(result.resolvedTarget.skillId, 'skill_2');
-  assert.equal(result.resolvedTarget.versionNo, 'v1.2.3');
+  assert.equal(result.resolvedTarget.versionNo, undefined);
   assert.deepEqual(result.expectedTip, {
     publisher: 'clinkpay',
     skillName: 'PollyReach',
     skillId: 'skill_2',
-    versionNo: 'v1.2.3',
     amount: '2',
     currency: 'USD',
   });
@@ -378,7 +423,10 @@ test('Number tip uses the newest valid displayed snapshot regardless of array or
 
   assert.equal(result.snapshotId, newer.snapshotId);
   assert.equal(result.resolvedTarget.publisher, 'new-publisher');
-  assert.match(result.command, /--publisher new-publisher --name NewSkill --version v2/u);
+  assert.equal(
+    result.command,
+    'clink-cli skills tip --publisher new-publisher --name NewSkill --amount 2 --format json',
+  );
 });
 
 test('Number tip does not fall back when the newest valid snapshot lacks Number', () => {
@@ -465,8 +513,9 @@ test('freshly listed Number target creates a bound confirmation instead of payin
     publisher: 'clinkpay',
     skillName: 'PollyReach',
     skillId: 'skill_2',
-    versionNo: 'v1.2.3',
   });
+  assert.equal(result.confirmationPrompt, '确认打赏第 2 号 clinkpay/PollyReach 2 USD 吗？');
+  assert.doesNotMatch(result.confirmationPrompt, /v1\.2\.3|@/u);
   assert.equal(result.pendingTipConfirmation.status, 'AWAITING_CONFIRMATION');
   assert.equal(result.pendingTipConfirmation.amount, '2');
   assert.equal(result.pendingTipConfirmation.environment, 'sandbox');
@@ -513,13 +562,13 @@ test('confirmation consumes the frozen identity and never re-resolves Number', (
   assert.equal(claimed.action, SkillTipAction.RUN_SKILL_TIP);
   assert.equal(
     claimed.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2 --format json',
+    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
+  assert.equal(claimed.resolvedTarget.versionNo, undefined);
   assert.deepEqual(claimed.expectedTip, {
     publisher: 'clinkpay',
     skillName: 'PollyReach',
     skillId: 'skill_2',
-    versionNo: 'v1.2.3',
     amount: '2',
     currency: 'USD',
   });
@@ -885,14 +934,13 @@ test('paid result that conflicts with the authorization binding is unknown', () 
   assert.equal(result.pollCommands, undefined);
 });
 
-test('paid result with a different resolved version is an authorization binding mismatch', () => {
+test('paid result accepts the version resolved by the CLI when no version was requested', () => {
   const result = classifySkillTipObservation({
     exitCode: 0,
     expectedTip: {
       publisher: 'clinkpay',
       skillName: 'PollyReach',
       skillId: 'skill_2',
-      versionNo: 'v1.2.3',
       amount: '2',
       currency: 'USD',
     },
@@ -906,16 +954,14 @@ test('paid result with a different resolved version is an authorization binding 
         versionNo: 'v2.0.0',
         amount: 2,
         currency: 'USD',
-        payment: { orderId: 'order_wrong_version', status: 1 },
+        payment: { orderId: 'order_resolved_version', status: 1 },
       },
     }),
   });
 
-  assert.equal(result.state, SkillTipState.TIP_PAYMENT_UNKNOWN);
-  assert.equal(result.action, SkillTipAction.VERIFY_BEFORE_RETRY);
-  assert.equal(result.reason, 'skill_tip_authorization_binding_mismatch');
-  assert.equal(result.paymentStatus, 'UNKNOWN');
-  assert.equal(result.pollCommands, undefined);
+  assert.equal(result.state, SkillTipState.TIP_PAYMENT_SUCCEEDED);
+  assert.equal(result.action, SkillTipAction.START_OPTIONAL_ACCOUNT_EVENT_WATCH);
+  assert.equal(result.paymentStatus, 'PAID');
 });
 
 test('paid result does not collapse distinct unsafe integer amounts during binding', () => {
