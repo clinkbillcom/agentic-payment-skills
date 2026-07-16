@@ -190,6 +190,33 @@ test('Agent Pay account candidate requires event amount and currency', () => {
   assert.equal(missingCurrency.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
 });
 
+test('Agent Pay account poll routes a dotted body through unique-candidate attribution', () => {
+  const result = classifyEventPollObservation(
+    {
+      ready: true,
+      timedOut: false,
+      events: [agentPayAccountEvent],
+    },
+    {
+      eventType: 'account-created',
+      purpose: 'AGENT_PAY_ACCOUNT',
+      currentPayment: currentAgentPayment,
+      activePayments: [currentAgentPayment],
+      nowMs: 2_000,
+      maxWaitSeconds: 60,
+      noAck: false,
+    },
+  );
+
+  assert.equal(result.domain, EventWorkflowDomain.AGENT_PAY_ACCOUNT);
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.action, EventWorkflowAction.RETURN_AGENT_PAY_ACCOUNT_EVENT);
+  assert.equal(result.eventType, 'account-created');
+  assert.equal(result.canonicalEventType, 'account.created');
+  assert.equal(result.matched, true);
+  assert.equal(result.candidate.paymentId, 'pay_1');
+});
+
 test('classifies account-created as optional skill tip account confirmation', () => {
   const result = classifyEventWorkflow({ type: 'account-created' });
 
