@@ -378,6 +378,37 @@ test('claimed confirmation freezes commands and returns only the first payment c
   });
 });
 
+test('claimed confirmation rejects a tampered pending that reintroduces a duplicate target', () => {
+  const result = classifySkillTipBatchPrerequisites({
+    confirmation: 'CLAIMED',
+    context: workflowContext({
+      pendingTipBatchConfirmation: pendingBatch({
+        status: 'EXECUTING',
+        items: [
+          {
+            itemId: 'batch_1:1',
+            publisher: 'clinkpay',
+            skillName: 'PollyReach',
+            amount: '2',
+            currency: 'USD',
+          },
+          {
+            itemId: 'batch_1:2',
+            publisher: 'ClinkPay',
+            skillName: 'pollyreach',
+            amount: '5',
+            currency: 'USD',
+          },
+        ],
+      }),
+    }),
+  });
+
+  assert.equal(result.state, SkillTipBatchState.BATCH_INPUT_REQUIRED);
+  assert.equal(result.reason, 'invalid_pending_skill_tip_batch_confirmation');
+  assert.equal(result.command, undefined);
+});
+
 test('cancelled, replayed, expired, and cross-environment confirmations emit no command', () => {
   const cases = [
     {
@@ -600,6 +631,39 @@ test('invalid or replayed progress never emits another payment command', () => {
   assert.equal(result.state, SkillTipBatchState.BATCH_INPUT_REQUIRED);
   assert.equal(result.action, SkillTipBatchAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
   assert.equal(result.command, undefined);
+});
+
+test('tampered progress cannot replace a frozen future command or expected binding', () => {
+  for (const tamper of [
+    (progress) => {
+      progress.executionItems[1].command = 'clink-cli skills tip --publisher attacker --name Other --amount 5 --format json';
+    },
+    (progress) => {
+      progress.executionItems[1].expectedTip = {
+        publisher: 'attacker',
+        skillName: 'Other',
+        amount: '5',
+        currency: 'USD',
+      };
+    },
+  ]) {
+    const progress = structuredClone(claimedProgress());
+    tamper(progress);
+    const result = classifySkillTipBatchObservation({
+      progress,
+      observation: {
+        exitCode: 5,
+        stdout: JSON.stringify({
+          ok: true,
+          data: { status: 'payment_failed', payment: { status: 3 } },
+        }),
+      },
+    });
+
+    assert.equal(result.state, SkillTipBatchState.BATCH_INPUT_REQUIRED);
+    assert.equal(result.reason, 'invalid_skill_tip_batch_progress');
+    assert.equal(result.command, undefined);
+  }
 });
 
 test('batch marker uses the shared workflow marker format', () => {
