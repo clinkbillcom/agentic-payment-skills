@@ -13,7 +13,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -3954,7 +3958,7 @@ var require_yauzl = __commonJS({
     var PassThrough = __require("stream").PassThrough;
     var Writable = __require("stream").Writable;
     var crc32 = typeof zlib.crc32 === "function" ? zlib.crc32 : require_crc32();
-    exports.open = open3;
+    exports.open = open4;
     exports.fromFd = fromFd;
     exports.fromBuffer = fromBuffer;
     exports.fromRandomAccessReader = fromRandomAccessReader;
@@ -3972,7 +3976,7 @@ var require_yauzl = __commonJS({
     exports.RandomAccessReader = RandomAccessReader;
     function openPromise2(path3, options2) {
       return new Promise((resolve5, reject) => {
-        open3(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
+        open4(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
           resolve5(zipfile);
         });
@@ -4002,7 +4006,7 @@ var require_yauzl = __commonJS({
         });
       });
     }
-    function open3(path3, options2, callback) {
+    function open4(path3, options2, callback) {
       if (typeof options2 === "function") {
         callback = options2;
         options2 = null;
@@ -5360,8 +5364,8 @@ function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId) 
   }
   return url.toString();
 }
-function maybeOpenBrowser(open3, url) {
-  if (!open3) {
+function maybeOpenBrowser(open4, url) {
+  if (!open4) {
     return;
   }
   if (process.platform === "darwin") {
@@ -6052,7 +6056,7 @@ Usage:
 Actions:
   list              List all public skills in reversed NEW order with one-based Number fields
   install           Download and install a skill package into local agent skill directories
-  tip               Tip a skill publisher using a sufficient default USD Credit balance
+  tip               Tip a skill publisher using the refreshed default payment method
 
 Examples:
   clink-cli skills list --all --format pretty
@@ -6070,7 +6074,7 @@ Required Arguments:
   --all                        Request all public skills with pageSize=999
 
 Options:
-  --tippable                  Keep only rows with valid publisher, name, skillId, and merchantId
+  --tippable                  Also require valid skillId/merchantId and tipsConfigJson.enabled=true
   --base-url <url>             Derive the dashboard environment from this API base URL
   --sandbox                    Use https://dashboard.clinkbill.dev unless the API base is overridden
   --timeout <ms>               Request timeout in milliseconds
@@ -6080,8 +6084,9 @@ Endpoint:
   GET /prod-api/skill-marketplace/public/skills?pageSize=999&sort=NEW
 
 Behavior:
-  With --tippable, filters non-chargeable rows before numbering.
-  Reverses the selected items array, then injects a one-based Number into every item.
+  Keeps only rows with nonempty publisher, name, and versionNo.
+  With --tippable, also requires nonempty skillId/merchantId and boolean tipsConfigJson.enabled=true.
+  Filtering happens before the CLI reverses rows and assigns contiguous one-based Number values.
   The resulting JSON array is returned through the standard success envelope.
 
 Examples:
@@ -6107,10 +6112,13 @@ Options:
 ${OUTPUT_OPTIONS}
 
 Install Location:
-  A single-skill archive contains SKILL.md at its root or in one wrapper directory and is exposed
-  through ~/.agents/skills/<skillName>.
-  A multi-skill archive contains two or more first-level directories with their own SKILL.md files.
-  Those skills are exposed as sibling entries under ~/.agents/skills using the directory names.
+  A single-skill download may be a raw UTF-8 SKILL.md file or a ZIP containing SKILL.md at its
+  root or in one wrapper directory. It is exposed through ~/.agents/skills/<skillName>.
+  A multi-skill archive contains two or more directories with their own direct SKILL.md files.
+  At the archive root, ordinary root files may accompany the Skill directories, but extra non-Skill
+  root directories are rejected.
+  Inside a common wrapper directory, non-Skill files and directories are ignored. Those skills are
+  exposed as sibling entries under ~/.agents/skills using the Skill directory names.
   Multi-skill releases and Agent updates are committed or rolled back together.
 
 Agent Integration:
@@ -6144,14 +6152,18 @@ Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
+  Publisher and skill names accept Unicode letters and numbers, including Chinese.
   Omit --version to select the latest Marketplace version.
-  An explicit version is verified against the Marketplace response before Credit refresh.
+  An explicit version is verified against the Marketplace response before payment-method refresh.
   Missing or mismatched versions fail with 404 and never create a charge.
   Successful results include the resolved versionNo when the Marketplace supplies it.
-  Tips use only a refreshed, explicitly default USD Credit balance.
-  The default Credit must be enabled and its finite availableBalance must cover the full amount.
-  Cards and mixed Credit/card payments are not used.
-  Otherwise the command fails with: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
+  Tips use the refreshed explicit default payment method.
+  A default CARD is charged without a Credit balance check.
+  A default BALANCE must have enough finite availableBalance to cover the full amount.
+  No explicit default fails with: No default payment method
+  An unsupported explicit default fails with: Unsupported default payment method
+  Insufficient or invalid default Credit fails with: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
+  The backend calculates Credit allocation.
 `;
 var TOOL_HELP = `clink-cli tool
 
@@ -8414,13 +8426,14 @@ function isErrorCode(error, code) {
 // dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
-import { chmod, lstat as lstat2, mkdir as mkdir3, readdir, rm as rm2 } from "node:fs/promises";
+import { chmod, lstat as lstat2, mkdir as mkdir3, open as open2, readdir, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 // dist/skills/spec.js
 var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
 var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
@@ -8447,7 +8460,7 @@ function parseSkillPackageSpec(value) {
   const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
   const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
   const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
-  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && !isValidSegment(requestedVersion, VERSION_PATTERN)) {
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && (requestedVersion.toLowerCase() === "latest" || !isValidSegment(requestedVersion, VERSION_PATTERN))) {
     throw invalidPackageSpec();
   }
   return { publisher, skillName, requestedVersion };
@@ -8458,6 +8471,9 @@ function parseSkillInstallArgs(operands, flags) {
   }
   if (operands.length !== 1) {
     throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  if (flags.version !== void 0) {
+    throw validationError("--version is not supported by skills install; use publisher/skillName@version");
   }
   return {
     ...parseSkillPackageSpec(operands[0]),
@@ -8470,7 +8486,7 @@ function parseSkillTipArgs(operands, flags) {
   }
   for (const name of FORBIDDEN_TIP_FLAGS) {
     if (flags[name] !== void 0) {
-      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default USD Credit balance" : `--${name} is not supported by skills tip`);
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`);
     }
   }
   const publisher = getStringFlag(flags, "publisher");
@@ -8483,7 +8499,7 @@ function parseSkillTipArgs(operands, flags) {
   if (hasPublisher !== hasSkillName) {
     throw validationError("skills tip requires both --publisher and --name");
   }
-  if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+  if (publisher === void 0 || skillName === void 0 || !isValidSkillTipIdentitySegment(publisher) || !isValidSkillTipIdentitySegment(skillName)) {
     throw invalidTipIdentity();
   }
   const version = getStringFlag(flags, "version");
@@ -8508,6 +8524,9 @@ function parseSkillTipArgs(operands, flags) {
 function isValidSkillIdentitySegment(value) {
   return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
 }
+function isValidSkillTipIdentitySegment(value) {
+  return isValidSegment(value, TIP_IDENTITY_SEGMENT_PATTERN);
+}
 function isValidSkillVersion(value) {
   return isValidSegment(value, VERSION_PATTERN);
 }
@@ -8531,6 +8550,7 @@ var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
 });
 var INSTALL_ERROR_MESSAGE = "failed to extract skill archive";
 var INSTALL_MARKER_NAME = ".clink-install.json";
+var ZIP_SIGNATURES = /* @__PURE__ */ new Set([67324752, 101010256, 134695760]);
 var UNIX_PLATFORM = 3;
 var UNIX_FILE_TYPE_MASK = 61440;
 var UNIX_REGULAR_FILE = 32768;
@@ -8552,6 +8572,66 @@ function normalizeArchiveEntryPath(raw, maxDepth) {
     throw new Error("invalid archive entry path");
   }
   return segments.join("/");
+}
+async function extractSkillPackage(packagePath, destination, overrides = {}) {
+  const destinationRoot = resolve2(destination);
+  try {
+    const limits = resolveArchiveLimits(overrides);
+    const classified = await classifySkillPackage(packagePath, limits);
+    if (classified.kind === "zip") {
+      return await extractSkillArchive(packagePath, destinationRoot, overrides);
+    }
+    return await materializeRawSkill(classified.bytes, destinationRoot);
+  } catch {
+    try {
+      await rm2(destinationRoot, { recursive: true, force: true });
+    } catch {
+    }
+    throw installError(INSTALL_ERROR_MESSAGE);
+  }
+}
+async function classifySkillPackage(packagePath, limits) {
+  const handle = await open2(packagePath, "r");
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile() || !Number.isSafeInteger(metadata.size) || metadata.size < 0) {
+      throw new Error("skill package is not a regular file");
+    }
+    const header = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
+    if (bytesRead === 4 && ZIP_SIGNATURES.has(header.readUInt32LE(0))) {
+      return { kind: "zip" };
+    }
+    if (metadata.size > limits.maxFileBytes || metadata.size > limits.maxTotalBytes) {
+      throw new Error("raw skill size limit exceeded");
+    }
+    const bytes = await handle.readFile();
+    if (bytes.byteLength !== metadata.size) {
+      throw new Error("raw skill size changed while reading");
+    }
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { kind: "raw", bytes };
+  } finally {
+    await handle.close();
+  }
+}
+async function materializeRawSkill(bytes, destinationRoot) {
+  await mkdir3(destinationRoot, { recursive: true, mode: 493 });
+  await chmod(destinationRoot, 493);
+  const rawRoot = resolve2(destinationRoot, "raw");
+  assertPathContained(destinationRoot, rawRoot);
+  await mkdir3(rawRoot, { mode: 493 });
+  await chmod(rawRoot, 493);
+  const skillPath = resolve2(rawRoot, "SKILL.md");
+  assertPathContained(rawRoot, skillPath);
+  await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
+  await chmod(skillPath, 420);
+  return {
+    layout: "single",
+    skillRoot: rawRoot,
+    entryCount: 1,
+    uncompressedBytes: bytes.byteLength
+  };
 }
 async function extractSkillArchive(zipPath, destination, overrides = {}) {
   let zipFile;
@@ -8804,6 +8884,7 @@ async function selectSkillLayout(rawRoot) {
   }
   const skillRoots = [];
   const nonSkillDirectories = [];
+  const topLevelDirectories = [];
   for (const name of topLevelNames) {
     const candidateRoot = resolve2(rawRoot, name);
     assertPathContained(rawRoot, candidateRoot);
@@ -8811,6 +8892,7 @@ async function selectSkillLayout(rawRoot) {
     if (!candidate.isDirectory()) {
       continue;
     }
+    topLevelDirectories.push({ name, root: candidateRoot });
     const candidateNames = await readdir(candidateRoot);
     if (!candidateNames.includes("SKILL.md")) {
       nonSkillDirectories.push(name);
@@ -8825,15 +8907,47 @@ async function selectSkillLayout(rawRoot) {
   if (skillRoots.length === 1 && nonSkillDirectories.length === 0) {
     return { layout: "single", skillRoot: skillRoots[0].skillRoot };
   }
-  if (skillRoots.length < 2 || nonSkillDirectories.length > 0) {
-    throw new Error("archive must contain one skill root or multiple one-level skill roots");
+  if (skillRoots.length >= 2 && nonSkillDirectories.length === 0) {
+    assertValidMultiSkillRoots(skillRoots);
+    return { layout: "multi", skillRoots };
   }
+  if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
+    const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
+    if (wrappedSkillRoots.length >= 2) {
+      assertValidMultiSkillRoots(wrappedSkillRoots);
+      return { layout: "multi", skillRoots: wrappedSkillRoots };
+    }
+  }
+  throw new Error("archive must contain one skill root or multiple one-level skill roots");
+}
+async function findDirectSkillRoots(parentRoot) {
+  const names = (await readdir(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const skillRoots = [];
+  for (const name of names) {
+    const candidateRoot = resolve2(parentRoot, name);
+    assertPathContained(parentRoot, candidateRoot);
+    const candidate = await lstat2(candidateRoot);
+    if (!candidate.isDirectory()) {
+      continue;
+    }
+    const candidateNames = await readdir(candidateRoot);
+    if (!candidateNames.includes("SKILL.md")) {
+      continue;
+    }
+    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
+    if (!skillFile.isFile()) {
+      throw new Error("archive skill SKILL.md is not a regular file");
+    }
+    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
+  }
+  return skillRoots;
+}
+function assertValidMultiSkillRoots(skillRoots) {
   for (const skill of skillRoots) {
     if (!isValidSkillIdentitySegment(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
       throw new Error("archive contains an invalid multi-skill name");
     }
   }
-  return { layout: "multi", skillRoots };
 }
 function closeZip(zipFile) {
   if (zipFile?.isOpen === true) {
@@ -9294,15 +9408,33 @@ async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
   if (!items) {
     throw apiError("invalid public skills response", 502);
   }
-  const selectedItems = input.tippableOnly ? items.filter(isTippablePublicSkill) : items;
+  const listableItems = items.filter(isListablePublicSkill);
+  const selectedItems = input.tippableOnly ? listableItems.filter(isTippablePublicSkill) : listableItems;
   return [...selectedItems].reverse().map((item, index) => {
     const copy = { ...item };
     delete copy.Number;
     return { Number: index + 1, ...copy };
   });
 }
+function isListablePublicSkill(item) {
+  return hasNonemptyString(item.publisher) && hasNonemptyString(item.name) && hasNonemptyString(item.versionNo);
+}
 function isTippablePublicSkill(item) {
-  return hasNonemptyString(item.publisher) && hasNonemptyString(item.name) && hasNonemptyString(item.skillId) && hasNonemptyString(item.merchantId);
+  if (!hasNonemptyString(item.skillId) || !hasNonemptyString(item.merchantId)) {
+    return false;
+  }
+  return parseTipsConfig(item.tipsConfigJson)?.enabled === true;
+}
+function parseTipsConfig(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord3(parsed) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
 }
 function hasNonemptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -9401,13 +9533,13 @@ function isSafeFileName(value) {
 
 // dist/skills/store.js
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile2 } from "node:fs/promises";
+import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile3 } from "node:fs/promises";
 import { join as join3, resolve as resolve4 } from "node:path";
 
 // dist/skills/store-publication.js
 import { randomUUID } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open2, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
+import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open3, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
 import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
 var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
 var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
@@ -9815,7 +9947,7 @@ async function createPublicationGuard(guardPath, owner) {
   }
 }
 async function writePublicationGuardOwner(guardPath, owner) {
-  const handle = await open2(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME), constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
+  const handle = await open3(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME), constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
   try {
     await handle.writeFile(JSON.stringify(owner), "utf8");
     await handle.chmod(384);
@@ -9992,7 +10124,7 @@ async function ensureRealDirectory(path3) {
 }
 async function writeInstallMarker(rootPath, marker) {
   const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open2(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
+  const handle = await open3(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
   try {
     await handle.writeFile(JSON.stringify(marker), "utf8");
     await handle.chmod(420);
@@ -10007,7 +10139,7 @@ async function readNoFollowInstallMarker(path3) {
 async function readNoFollowJson(path3) {
   let handle;
   try {
-    handle = await open2(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+    handle = await open3(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
     const before = await handle.stat();
     if (!before.isFile()) {
       return null;
@@ -10447,7 +10579,7 @@ function registerHeldInstallLockCapability(input) {
   const capability = Object.freeze({
     ...input,
     lockPath: resolve4(input.lockPath),
-    token: Symbol("skill-install-lock")
+    token: /* @__PURE__ */ Symbol("skill-install-lock")
   });
   heldInstallLocks.set(capability.lockPath, capability);
   return capability;
@@ -10469,7 +10601,7 @@ async function createLockDirectory(lockPath, owner, mutationContext) {
       owner
     };
     await callMutationHook(mutationContext.mutationHook, "initialize", "after-lock-mkdir");
-    await writeFile2(join3(lockPath, OWNER_FILE_NAME), JSON.stringify(owner), {
+    await writeFile3(join3(lockPath, OWNER_FILE_NAME), JSON.stringify(owner), {
       encoding: "utf8",
       flag: "wx",
       mode: 384
@@ -10701,7 +10833,7 @@ async function createMutationGuard(guardPath, owner, context, operation) {
   try {
     createdStat = await stat(guardPath);
     await callMutationHook(context.mutationHook, operation, "after-guard-mkdir");
-    await writeFile2(join3(guardPath, OWNER_FILE_NAME), JSON.stringify(owner), {
+    await writeFile3(join3(guardPath, OWNER_FILE_NAME), JSON.stringify(owner), {
       encoding: "utf8",
       flag: "wx",
       mode: 384
@@ -10861,7 +10993,7 @@ var PENDING_SHA_SENTINEL = "pending";
 var DEFAULT_DEPENDENCIES2 = {
   getTicket: getSkillDownloadTicket,
   downloadPackage: downloadSkillPackage,
-  extractArchive: extractSkillArchive,
+  materializePackage: extractSkillPackage,
   reportPublicDownload: reportSkillPublicDownload,
   acquireLock: acquireInstallLock,
   publishRelease: publishSkillRelease,
@@ -10922,7 +11054,7 @@ async function installSkill(input, overrides = {}) {
     dependencies.log("Downloading skill package");
     const downloaded = await dependencies.downloadPackage({
       ticket,
-      destinationPath: join4(preliminaryPaths.stagingPath, "package.zip"),
+      destinationPath: join4(preliminaryPaths.stagingPath, "package"),
       timeoutMs: input.timeoutMs,
       refreshTicket: () => dependencies.getTicket({
         baseUrl: input.dashboardBaseUrl,
@@ -10930,8 +11062,8 @@ async function installSkill(input, overrides = {}) {
         timeoutMs: input.timeoutMs
       })
     });
-    dependencies.log("Extracting skill archive");
-    const extracted = await dependencies.extractArchive(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
+    dependencies.log("Materializing skill package");
+    const extracted = await dependencies.materializePackage(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
     const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
     dependencies.log("Publishing skill release");
     for (const unit of installUnits) {
@@ -11210,15 +11342,14 @@ async function executeSkillTip(args, runtime, dependencies) {
     target: args.target,
     timeoutMs: runtime.timeoutMs
   });
-  const credit = requireSufficientDefaultUsdCredit(await dependencies.refreshPaymentMethods(), args.amount);
+  const paymentMethod = selectDefaultTipPaymentMethod(await dependencies.refreshPaymentMethods(), args.amount);
   const execution = await dependencies.executeCharge({
     mode: "direct",
-    paymentInstrumentId: credit.paymentInstrumentId,
-    paymentMethodType: "BALANCE",
+    paymentInstrumentId: paymentMethod.paymentInstrumentId,
+    paymentMethodType: paymentMethod.paymentMethodType,
     merchantId: recipient.merchantId,
     amount: args.amount,
-    currency: "USD",
-    customerPointsAmount: args.amount
+    currency: "USD"
   }, runtime.chargeRuntime);
   if (execution.dryRun) {
     throw new Error("charge dry-run is unreachable after tip lookup");
@@ -11248,7 +11379,7 @@ async function executeSkillTip(args, runtime, dependencies) {
     merchantId: recipient.merchantId,
     amount: args.amount,
     currency: "USD",
-    paymentInstrumentId: credit.paymentInstrumentId,
+    paymentInstrumentId: paymentMethod.paymentInstrumentId,
     authorization: "bypassed",
     payment: execution.data,
     ...execution.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: execution.paymentMethodsRefreshWarning } : {},
@@ -11256,18 +11387,34 @@ async function executeSkillTip(args, runtime, dependencies) {
     ...execution.redirectUrl ? { redirectUrl: execution.redirectUrl } : {}
   };
 }
-function requireSufficientDefaultUsdCredit(paymentMethods, amount) {
+function selectDefaultTipPaymentMethod(paymentMethods, amount) {
   const paymentMethod = paymentMethods.find((method) => method.isDefault === true);
-  const availableBalance = paymentMethod?.availableBalance;
-  if (paymentMethod === void 0 || normalizedUppercase(paymentMethod.paymentMethodType) !== "BALANCE" || normalizedUppercase(paymentMethod.currency) !== "USD" || paymentMethod.isDisabled === true || typeof availableBalance !== "number" || !Number.isFinite(availableBalance) || availableBalance < amount) {
+  if (paymentMethod === void 0) {
+    throw apiError("No default payment method", 422);
+  }
+  const paymentMethodType = normalizedUppercase(paymentMethod.paymentMethodType);
+  if (paymentMethodType === "CARD") {
+    return {
+      paymentInstrumentId: paymentMethod.paymentInstrumentId,
+      paymentMethodType
+    };
+  }
+  if (paymentMethodType !== "BALANCE") {
+    throw apiError("Unsupported default payment method", 422);
+  }
+  const availableBalance = paymentMethod.availableBalance;
+  if (typeof availableBalance !== "number" || !Number.isFinite(availableBalance) || availableBalance < amount) {
     throw apiError("Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361", 422);
   }
-  return paymentMethod;
+  return {
+    paymentInstrumentId: paymentMethod.paymentInstrumentId,
+    paymentMethodType
+  };
 }
 function recipientFromItem(item, errorIdentity) {
   const publisher = stringValue2(item.publisher).trim();
   const skillName = stringValue2(item.name).trim();
-  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+  if (!isValidSkillTipIdentitySegment(publisher) || !isValidSkillTipIdentitySegment(skillName)) {
     throw apiError("invalid public skills response", 502);
   }
   const merchantId = stringValue2(item.merchantId).trim();

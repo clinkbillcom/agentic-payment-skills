@@ -43,12 +43,19 @@ function runBundleJson(args) {
 test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);
   assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
-  assert.match(runBundle(['skills', 'list', '--help']), /skills list --all/u);
-  assert.match(runBundle(['skills', 'list', '--help']), /--tippable/u);
+  const listHelp = runBundle(['skills', 'list', '--help']);
+  assert.match(listHelp, /skills list --all/u);
+  assert.match(listHelp, /--tippable/u);
+  assert.match(listHelp, /nonempty publisher, name, and versionNo/u);
+  assert.match(listHelp, /tipsConfigJson\.enabled=true/u);
   const tipHelp = runBundle(['skills', 'tip', '--help']);
   assert.match(tipHelp, /--publisher <publisher>/u);
   assert.match(tipHelp, /\[--version <versionNo>\]/u);
   assert.doesNotMatch(tipHelp, /--number|--expected-skill-id/u);
+  assert.match(
+    runBundle(['skills', 'install', '--help']),
+    /skills install <publisher>\/<skillName>\[@<version>\]/u,
+  );
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
@@ -110,4 +117,61 @@ test('vendored CLI rejects Number as a payment target', () => {
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown option: --number/u);
+});
+
+test('vendored CLI latest Skill install dry-run omits the requested version', () => {
+  const result = runBundleJson([
+    'skills', 'install',
+    'clinkpay/PollyReach',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.publisher, 'clinkpay');
+  assert.equal(result.data.skillName, 'PollyReach');
+  assert.equal(result.data.requestedVersion, null);
+  assert.equal(result.data.action, 'planned');
+  assert.equal(result.data.dryRun, true);
+});
+
+test('vendored CLI exact Skill install dry-run keeps version in the package operand', () => {
+  const result = runBundleJson([
+    'skills', 'install',
+    'clinkpay/PollyReach@v1.2.3',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.publisher, 'clinkpay');
+  assert.equal(result.data.skillName, 'PollyReach');
+  assert.equal(result.data.requestedVersion, 'v1.2.3');
+  assert.equal(result.data.action, 'planned');
+  assert.equal(result.data.dryRun, true);
+});
+
+test('vendored CLI rejects a separate Skill install version flag', () => {
+  const result = runBundleRaw([
+    'skills', 'install',
+    'clinkpay/PollyReach',
+    '--version', 'v1.2.3',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /--version is not supported by skills install/u);
+});
+
+test('vendored CLI rejects a literal latest Skill install version', () => {
+  const result = runBundleRaw([
+    'skills', 'install',
+    'clinkpay/PollyReach@latest',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /invalid skill package/u);
 });

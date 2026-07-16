@@ -1,7 +1,7 @@
 ---
 name: clink-payment-skill
-description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), or tipping a skill by publisher/name with optional version or a Number from recent context."
-version: "1.5.0"
+description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), tipping a skill, or installing a public skill by publisher/name with optional version or a Number from recent context."
+version: "1.6.0"
 requires:
   node: ">=20"
   bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -11,7 +11,7 @@ requires:
 
 Use this skill for direct Clink payment operations through `clink-cli`.
 
-This skill executes wallet, card, payment, refund, risk, VIC instruction, public-skill listing/tipping, internal/external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
+This skill executes wallet, card, payment, refund, risk, VIC instruction, public-skill listing/tipping/installation, internal/external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
 
 ## Execution Ownership
 
@@ -32,6 +32,7 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
 | UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, checkout route resolution, checkout create/complete | `references/clink-ucp-checkout.md` |
 | Public skill listing, skill tip input/authorization, Number snapshot safety, tip result handling, optional merchant account events | `references/clink-skill-tip.md` |
+| Public Skill installation by identity or Number, confirmation safety, CLI result handling, install conflicts | `references/clink-skill-install.md` |
 
 Read multiple references when a workflow crosses boundaries. Example: a product order through UCP checkout needs `clink-cli-invocation.md`, `clink-wallet-config.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`.
 
@@ -47,6 +48,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - wait for async completion events from the Clink event hub
 - list public skills that support tipping and present Number, publisher, skill name, and skill ID while retaining optional version in context
 - tip one skill in USD by exact publisher/name with optional version, or resolve a Number from a list displayed in the same context within two hours
+- install one public Skill by exact publisher/name with optional version, or resolve and confirm a Number from a list displayed in the same context within two hours
 - inspect or update local Clink CLI configuration
 
 ## Do Not Use
@@ -71,7 +73,7 @@ Every workflow follows:
 `Observe → Classify → Act → Verify → Return`
 
 1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For wallet init output, use `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and include `[WALLET_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. For payment intent routing, use `lib/payment-intent-router-fsm.mjs` (`classifyPaymentIntent`) and include `[PAYMENT_INTENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Skill-tip list questions route to `SKILL_TIP_LIST`; an explicitly authorized tip with one exact target and USD amount routes to `SKILL_TIP`. Use `lib/skill-tip-workflow-fsm.mjs` and include `[SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Product signals route to UCP checkout only with explicit buy/order/checkout language or an upstream purchaseIntent; otherwise ask for the missing purchase intent. For direct/session pre-pay authorization routing, use `lib/authorization-workflow-fsm.mjs` (`classifyPaymentAuthorizationResolver`) and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. After `instruction create` or `instruction sign-url`, use `classifyAuthorizationDraftObservation` to build the activation waitSpec; after a correlated activation event, use `classifyAuthorizationActiveVerification` on `instruction get --purchase-instruction-id <id> --format json` before resuming. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpParseItemObservation`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`, `classifyUcpPaymentSuccessEventObservation`) and `lib/ucp-checkout-route-fsm.mjs` (`classifyUcpCheckoutRoute`); include `[UCP_CHECKOUT_FSM]` and `[UCP_CHECKOUT_ROUTE_FSM]` markers. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` (`classifyEventWaitRequest`, `classifyEventPollObservation`, and `correlateEventWorkflow`) to start the typed poll and produce the `event_fsm` classification only after resource correlation.
+2. **Classify:** map the observation to a route, status, exit code, or event type before acting. For wallet init output, use `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and include `[WALLET_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. For payment intent routing, use `lib/payment-intent-router-fsm.mjs` (`classifyPaymentIntent`) and include `[PAYMENT_INTENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Skill-tip list questions route to `SKILL_TIP_LIST`; an explicitly authorized tip with one exact target and USD amount routes to `SKILL_TIP`. Use `lib/skill-tip-workflow-fsm.mjs` and include `[SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. An explicitly authorized public Skill installation routes to `SKILL_INSTALL`; use `lib/skill-install-workflow-fsm.mjs` and include `[SKILL_INSTALL_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. Product signals route to UCP checkout only with explicit buy/order/checkout language or an upstream purchaseIntent; otherwise ask for the missing purchase intent. For direct/session pre-pay authorization routing, use `lib/authorization-workflow-fsm.mjs` (`classifyPaymentAuthorizationResolver`) and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>`. After `instruction create` or `instruction sign-url`, use `classifyAuthorizationDraftObservation` to build the activation waitSpec; after a correlated activation event, use `classifyAuthorizationActiveVerification` on `instruction get --purchase-instruction-id <id> --format json` before resuming. For payment output, prefer the explicit classifier in `lib/payment-workflow-fsm.mjs` and include `[PAYMENT_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs. For product URL/link UCP checkout, use `lib/ucp-checkout-workflow-fsm.mjs` (`classifyUcpProductIntent`, `classifyUcpParseItemObservation`, `classifyUcpCheckoutPrerequisites`, `classifyAuthorizationSelection`, `classifyUcpCheckoutObservation`, `classifyUcpPaymentSuccessEventObservation`) and `lib/ucp-checkout-route-fsm.mjs` (`classifyUcpCheckoutRoute`); include `[UCP_CHECKOUT_FSM]` and `[UCP_CHECKOUT_ROUTE_FSM]` markers. Use `lib/workflow-marker.mjs` `formatWorkflowMarker` for marker formatting. For async events, use `lib/event-workflow-fsm.mjs` (`classifyEventWaitRequest`, `classifyEventPollObservation`, and `correlateEventWorkflow`) to start the typed poll and produce the `event_fsm` classification only after resource correlation.
 3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
@@ -109,6 +111,12 @@ FSM action contract:
 | `CLAIM_PENDING_TIP` | Atomically change the same pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
 | `CANCEL_PENDING_TIP` | Atomically change `AWAITING_CONFIRMATION` to `CANCELLED`; never execute payment. |
 | `RUN_SKILL_TIP` | Execute only the exact authorized publisher/name command with optional `--version <versionNo>`; never pass Number to the CLI. Preserve the returned complete `expectedTip` binding for result classification. |
+| `ASK_FOR_INSTALL_CONFIRMATION` | For a Number target, show the frozen publisher/name/version and create one bound pending confirmation; do not install yet. |
+| `CLAIM_PENDING_INSTALL` | Atomically change the same install pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
+| `CANCEL_PENDING_INSTALL` | Atomically change the install pending object from `AWAITING_CONFIRMATION` to `CANCELLED`; never execute installation. |
+| `RUN_SKILL_INSTALL` | Execute `clink-cli skills install <publisher>/<skillName>[@<version>] --format json` using one exact authorized identity. Omit the version to select latest. |
+| `RETURN_INSTALL_PLAN` | Report a dry-run as `PLANNED`, not installed. |
+| `RETURN_INSTALL_SUCCESS` | Return only a binding-matched `INSTALLED`, `UPDATED`, or `UNCHANGED` result. |
 | `SEND_PASSKEY_AND_WAIT` | Handle a legacy tip authorization continuation defensively; it is not the latest Credit-only normal path and no tip payment has occurred yet. |
 | `START_OPTIONAL_ACCOUNT_EVENT_WATCH` | After synchronous tip payment success, immediately start bounded `account-created` and `account-reloaded` polls in parallel. |
 | `WAIT_OPTIONAL_ACCOUNT_EVENT` | Keep `PAID` and wait when only one of the two optional account polls has settled; do not report absence until both settle. |
@@ -127,6 +135,11 @@ FSM action contract:
 | Number tip has no valid two-hour context snapshot | List and display tippable Skills, freeze the selected row, then require confirmation before atomically claiming and executing the identity command. |
 | Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the two optional account-event polls. |
 | Optional skill-tip account polls time out or fail | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
+| User explicitly authorizes `publisher/name` installation | Run the identity install command without a version so Marketplace selects latest. |
+| User explicitly authorizes `publisher/name@version` installation | Run one exact versioned package operand; never translate it into a separate version flag. |
+| User requests installation by Number from a valid two-hour snapshot | Freeze publisher/name/version/skillId, ask for confirmation, atomically claim the pending object, then run the frozen identity command. |
+| Number installation lacks a valid scoped snapshot | Ask for publisher/name/version or ask the user to list Skills first; never scan Markdown, refresh and reuse Number silently, or guess. |
+| Skill installation returns `planned` | Report `PLANNED`, not installed. |
 | Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
 | `wallet init` returns `BOOTSTRAP_OTP_REQUIRED` / `71160015` / `cwallet.bootstrap.otp.required` | Ask the user to check the Clink verification email and provide the OTP, then retry `clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json` using the same email, name, and environment lock. |
 | User must bind/manage card or risk rules | Emit the link and immediately start a concurrent, non-blocking watch (bound command watch, or `events poll` for a hand-built URL such as the Visa Passkey registration link), then verify the matching event; do not wait for the user to report completion before listening |
@@ -145,6 +158,11 @@ FSM action contract:
 
 ## Hard Rules
 
+- Never run a Skill installation from a question, tutorial/status request, negated, historical, conditional, malformed, multi-target, or conflicting request. An identity installation requires one exact imperative package target; a Number installation always requires a bound confirmation.
+- For Skill installation, Number is context only. Use the newest explicit-scope (`all` or `tippable`) structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Freeze publisher/name/optional version/skillId; never pass Number to the CLI, scrape Markdown, or fall back to an older snapshot when the newest selected snapshot is invalid.
+- The latest install syntax is one package operand. Omit version to select latest; reject literal `latest` and noncanonical version wording. Do not use a separate version flag, and do not add replacement behavior unless the user explicitly authorizes `--force` after a conflict.
+- Number confirmation first returns `CLAIM_PENDING_INSTALL`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce an install command. Consumed, cancelled, expired, cross-context, or already-executing pending objects never execute again.
+- Treat a Skill install as successful only from one strict `{ok:true,data}` envelope whose publisher, skill name, and requested version match `expectedInstall`. `planned` is preview only; a nonzero exit, malformed envelope, or binding mismatch is not success.
 - Never run `clink-cli skills tip` unless the current request affirmatively authorizes one exact skill target and one positive USD amount. Negated, cancelled, questioned, historical, conditional, counterfactual, advice, multi-target, and multi-amount requests are not payment authorization.
 - Number is a context index, never a `skills tip` CLI target. Use only the newest structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Resolve Number to frozen publisher/name/optional version; never scrape history or refresh the list when that snapshot is valid.
 - Without a valid Number snapshot, run `skills list --all --tippable`, display it, freeze publisher/name/version/skillId, and require confirmation. Confirmation first returns `CLAIM_PENDING_TIP`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce the payment command. Consumed, cancelled, expired, or already-executing pending objects never execute again.
@@ -188,6 +206,9 @@ FSM action contract:
 | List tippable public skills | `clink-cli skills list --all --tippable --format json` |
 | Tip by publisher/name | `clink-cli skills tip --publisher <publisher> --name <skill_name> [--version <versionNo>] --amount <amount> --format json` |
 | Tip by displayed Number | Resolve the recent-context Number to publisher/name/version, then use the identity command above. |
+| Install latest Skill by identity | `clink-cli skills install <publisher>/<skillName> --format json` |
+| Install exact Skill version | `clink-cli skills install <publisher>/<skillName>@<version> --format json` |
+| Install by displayed Number | Resolve the recent scoped snapshot, freeze publisher/name/version, confirm, atomically claim, then use the identity command. |
 | Wait for optional new-account evidence | `clink-cli events poll --type account-created --max-wait 60 --format json` |
 | Wait for optional reload evidence | `clink-cli events poll --type account-reloaded --max-wait 60 --format json` |
 | Initialize wallet | `clink-cli wallet init --email <email> --name <name> [--otp <email_otp>] --format json` (use credentials matching the prefix's environment) |
@@ -257,6 +278,9 @@ For a UCP checkout product order, the merchant/product skill owns product discov
 
 ## Common Mistakes
 
+- Treating install tutorials, status checks, historical/conditional language, product installation services, or malformed package text as authorization to modify local Skills.
+- Passing a displayed Number, a literal latest version, or a separate version flag to the install CLI instead of resolving one canonical identity operand.
+- Installing a Number immediately without freezing the newest scoped snapshot and atomically claiming the user's confirmation.
 - Treating a skill-list query as authorization to tip.
 - Treating a bare amount as a Skill Number, scanning Markdown history, using a snapshot older than two hours, or passing `--number` to `skills tip`.
 - Executing immediately after a confirmation without first atomically claiming its pending object.

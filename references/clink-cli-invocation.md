@@ -34,6 +34,7 @@ node vendor/clink-cli/clink-cli.bundle.mjs wallet --help
 node vendor/clink-cli/clink-cli.bundle.mjs instruction --help
 node vendor/clink-cli/clink-cli.bundle.mjs skills --help
 node vendor/clink-cli/clink-cli.bundle.mjs skills list --help
+node vendor/clink-cli/clink-cli.bundle.mjs skills install --help
 node vendor/clink-cli/clink-cli.bundle.mjs skills tip --help
 ```
 
@@ -66,6 +67,7 @@ Inspect the process exit code first, then parse the stream that contains the env
 | 5 | API error | Show `error.message`; do not invent recovery. |
 | 6 | Network error or ambiguous timeout | Treat payment state as unknown; verify before retrying. |
 | 7 | 3DS required | Send redirect URL and wait for order event. |
+| 8 | Install error | Surface the installation conflict or transaction failure; do not claim success. |
 
 ## Global Options
 

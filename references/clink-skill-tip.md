@@ -37,6 +37,7 @@ After the table is actually displayed, store a structured snapshot in the workfl
 ~~~json
 {
   "snapshotId": "snapshot_1",
+  "scope": "tippable",
   "userId": "user_1",
   "conversationId": "conversation_1",
   "environment": "sandbox:https://api.clinkbill.dev",
@@ -83,9 +84,10 @@ Select the newest valid displayed snapshot satisfying all of these conditions:
 - it was displayed no more than two hours (2 hours) ago, including exactly two hours;
 - its display time is not in the future;
 - it belongs to the same user, conversation/session, and exact environment lock;
+- it has the explicit `tippable` scope; an `all` or unscoped list uses a different Number namespace and is invalid for tipping;
 - all rows are valid and Number values are unique.
 
-Do not fall back to an older snapshot merely because it contains the requested Number. Resolve the Number only in the newest valid displayed snapshot. If that snapshot does not contain the Number, run the list workflow again.
+Select the newest same-context, in-window, `tippable` snapshot before validating its rows. Do not fall back to an older snapshot when that selected snapshot is malformed, has duplicate Number values, or lacks the requested Number. Run the list workflow again instead.
 
 When a valid snapshot exists, freeze that row's `publisher`, `skillName`, optional `versionNo`, and `skillId`. Execute the identity command immediately because the imperative Number request is already authorization against the displayed mapping. Do not refresh the list and do not resolve the Number against the live marketplace.
 

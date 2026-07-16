@@ -32,6 +32,659 @@ test('routes a Chinese list request expressed with 列出', () => {
   assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_LIST);
 });
 
+test('routes an explicitly authorized latest Skill install by identity', () => {
+  const result = classifyPaymentIntent({ text: '安装 clinkpay/pollyreach' });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_INSTALL_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  assert.deepEqual(result.install, {
+    target: { kind: 'identity', publisher: 'clinkpay', skillName: 'pollyreach' },
+    explicitlyAuthorized: true,
+  });
+});
+
+test('routes a Chinese Skill install command without whitespace before the identity', () => {
+  const result = classifyPaymentIntent({ text: '安装clinkpay/pollyreach' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+});
+
+test('routes an explicitly authorized exact-version Skill install by identity', () => {
+  const result = classifyPaymentIntent({ text: '安装 clinkpay/pollyreach@v1.2.3' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.deepEqual(result.install.target, {
+    kind: 'identity',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    versionNo: 'v1.2.3',
+  });
+});
+
+test('routes an explicitly authorized Skill install by displayed Number', () => {
+  const result = classifyPaymentIntent({ text: '安装第 2 个 skill' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  assert.deepEqual(result.install.target, { kind: 'number', number: 2 });
+});
+
+test('routes a structured exact-version Skill install', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    skillVersion: 'v2',
+    installAuthorized: true,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.deepEqual(result.install.target, {
+    kind: 'identity',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    versionNo: 'v2',
+  });
+});
+
+test('enriches a structured install identity with the exact version from canonical text', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    text: '安装 clinkpay/pollyreach@v2',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  assert.deepEqual(result.install.target, {
+    kind: 'identity',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    versionNo: 'v2',
+  });
+});
+
+for (const malformedFields of [
+  { publisher: true, skillName: 123 },
+  { publisher: 'clinkpay', skillName: true },
+  { publisher: 'clinkpay', skillName: 'pollyreach', skillVersion: 123 },
+]) {
+  test(`rejects non-string structured install identity fields: ${JSON.stringify(malformedFields)}`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      installAuthorized: true,
+      ...malformedFields,
+    });
+
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  });
+}
+
+for (const malformedNumber of [true, [2], { value: 2 }]) {
+  test(`rejects a non-scalar structured install Number: ${JSON.stringify(malformedNumber)}`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      installAuthorized: true,
+      installNumber: malformedNumber,
+    });
+
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  });
+}
+
+for (const input of [
+  {
+    text: 'install clinkpay/PollyReach',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'PollyReach',
+    installAuthorized: true,
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+]) {
+  test('incidental merchant amount fields cannot turn an authorized install into payment', () => {
+    const result = classifyPaymentIntent(input);
+
+    assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+    assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  });
+}
+
+for (const text of [
+  'How to install clinkpay/PollyReach?',
+  '不要安装 clinkpay/PollyReach',
+  'If safe, install clinkpay/PollyReach',
+  '安装 clinkpay/One 或 clinkpay/Two',
+  '安装 clinkpay/PollyReach@',
+]) {
+  test(`merchant amount fields cannot turn unsafe install language into payment: ${text}`, () => {
+    const result = classifyPaymentIntent({
+      text,
+      merchantId: 'merchant_1',
+      amount: '50',
+      currency: 'USD',
+    });
+
+    assert.notEqual(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  });
+}
+
+test('rejects a structured exact version when canonical text requests latest by omission', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    skillVersion: 'v2',
+    installAuthorized: true,
+    text: '安装 clinkpay/pollyreach',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+  assert.equal(result.reason, 'skill_install_structured_text_conflict');
+  assert.deepEqual(result.missing, ['consistent_authorization']);
+});
+
+test('rejects structured and textual install targets whose spelling or case differs', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    text: '安装 CLINKPAY/PollyReach',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+  assert.equal(result.reason, 'skill_install_structured_text_conflict');
+});
+
+for (const text of [
+  '如何安装 clinkpay/pollyreach？',
+  '不要安装 clinkpay/pollyreach',
+  '我之前安装了 clinkpay/pollyreach',
+  '如果安装 clinkpay/pollyreach 就继续',
+  '检查 clinkpay/pollyreach 的安装状态',
+  '我安装过 clinkpay/pollyreach',
+  '暂时不安装 clinkpay/pollyreach',
+  '无需安装 clinkpay/pollyreach',
+  '不需要安装 clinkpay/pollyreach',
+  '安装教程 clinkpay/pollyreach',
+  '安装状态 clinkpay/pollyreach',
+  '安装过 clinkpay/pollyreach',
+  '安装 clinkpay/pollyreach 有什么风险',
+]) {
+  test(`does not execute a non-authorizing Skill install request: ${text}`, () => {
+    const result = classifyPaymentIntent({ text });
+
+    assert.equal(result.state, PaymentIntentState.SKILL_INSTALL_INPUT_MISSING);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+    assert.deepEqual(result.missing, ['authorization']);
+  });
+}
+
+for (const text of [
+  '安装 clinkpay/pollyreach@',
+  '安装 clinkpay/pollyreach/extra',
+  '安装 clinkpay/pollyreach:beta',
+  '安装 @clinkpay/pollyreach',
+  '安装 https://market.example/clinkpay/pollyreach',
+  '安装 clinkpay/pollyreach version v1.2.3',
+  '安装 clinkpay/pollyreach --version v1.2.3',
+  '安装 clinkpay/pollyreach，版本 v1.2.3',
+  '安装 clinkpay/pollyreach，版本为 v1.2.3',
+  '安装 clinkpay/pollyreach$beta',
+  '安装 clinkpay/pollyreach%beta',
+  '安装 clinkpay/pollyreach@v1$bad',
+  '安装 clinkpay/pollyreach@latest',
+  '安装 ../foo',
+  '安装 ./foo',
+  '安装 pub/..',
+  '安装 pub/.',
+  '安装 pub/foo@..',
+  '安装 pub/foo@.',
+]) {
+  test(`does not truncate a malformed Skill package into an executable target: ${text}`, () => {
+    const result = classifyPaymentIntent({ text });
+
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  });
+}
+
+test('does not confuse paying an installation fee with installing a Skill', () => {
+  const result = classifyPaymentIntent({
+    text: '支付空调安装费',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+  assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+});
+
+for (const text of [
+  '暂时不安装 clinkpay/pollyreach',
+  '无需安装 clinkpay/pollyreach',
+  '不需要安装 clinkpay/pollyreach',
+]) {
+  test(`structured authorization cannot override negated install text: ${text}`, () => {
+    const result = classifyPaymentIntent({ text, installAuthorized: true });
+
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+    assert.deepEqual(result.missing, ['authorization']);
+  });
+}
+
+for (const text of [
+  '先看看 clinkpay/pollyreach 的安装文档',
+  '为什么安装 clinkpay/pollyreach',
+  '安装 clinkpay/pollyreach，仅在兼容时执行',
+]) {
+  test(`structured authorization cannot turn non-imperative text into an install: ${text}`, () => {
+    const result = classifyPaymentIntent({ text, installAuthorized: true });
+
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+    assert.deepEqual(result.missing, ['authorization']);
+  });
+}
+
+test('structured install fields cannot hide a malformed package in canonical text', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    text: '安装 clinkpay/pollyreach$beta',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+  assert.notEqual(result.reason, 'skill_install_intent');
+});
+
+test('does not confuse a product installation service URL with installing a Skill', () => {
+  const result = classifyPaymentIntent({
+    text: '购买包含安装服务的空调 https://shop.test/products/ac',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+});
+
+test('does not let a product named Skill installation service preempt UCP checkout', () => {
+  const result = classifyPaymentIntent({
+    text: '购买 skill 安装服务 https://shop.test/products/ac',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+});
+
+test('does not let an installation-fee payment preempt direct pay', () => {
+  const result = classifyPaymentIntent({
+    text: '支付安装费给 clinkpay/store',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+  assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+});
+
+for (const input of [
+  {
+    text: '安装费 50 USD',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    text: 'install fee $50',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    text: '安装费',
+    merchantId: 'merchant_1',
+    paymentAuthorized: true,
+  },
+  {
+    text: 'install charge $50',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    text: 'install cost $50',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    text: '安装款 50 USD',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+  {
+    text: '安装价款 50 USD',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  },
+]) {
+  test(`known merchant installation-fee context stays on direct pay: ${input.text}`, () => {
+    const result = classifyPaymentIntent(input);
+
+    assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+    assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+  });
+}
+
+test('does not let productName purchase context get preempted by Skill installation wording', () => {
+  const result = classifyPaymentIntent({
+    text: '购买 skill 安装服务',
+    productName: 'skill 安装服务',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+});
+
+test('does not let itemId purchase context get preempted by Skill installation wording', () => {
+  const result = classifyPaymentIntent({
+    text: '购买 skill 安装服务',
+    itemId: 'sku_1',
+    purchaseIntent: true,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+});
+
+test('raw product purchase context wins over a conflicting structured install intent', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    text: '购买空调 https://shop.test/products/ac',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+});
+
+for (const text of [
+  '安装 https://shop.test/products/ac',
+  'install product https://shop.test/products/ac',
+]) {
+  test(`an install prefix cannot preempt a product URL route: ${text}`, () => {
+    const result = classifyPaymentIntent({ text });
+
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
+    assert.equal(result.reason, 'purchase_intent_missing');
+  });
+}
+
+test('an install prefix cannot preempt an explicit merchant payment route', () => {
+  const result = classifyPaymentIntent({
+    text: 'install skill setup and pay $50',
+    merchantId: 'merchant_1',
+    amount: '50',
+    currency: 'USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+  assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+});
+
+for (const input of [
+  {
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    productName: 'Laptop',
+    purchaseIntent: true,
+  },
+  {
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    installAuthorized: true,
+    itemId: 'sku_1',
+    checkoutIntent: true,
+  },
+]) {
+  test('structured product purchase context cannot be preempted by structured install fields', () => {
+    const result = classifyPaymentIntent(input);
+
+    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+  });
+}
+
+for (const [field, productUrl] of [
+  ['productUrl', 'https://shop.test/item/sku_1'],
+  ['product_url', 'https://shop.test/p/sku_1'],
+  ['itemUrl', 'https://shop.test/sku_1'],
+  ['item_url', 'https://shop.test/'],
+]) {
+  test(`an explicit structured ${field} purchase cannot be preempted by install fields`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'PollyReach',
+      installAuthorized: true,
+      [field]: productUrl,
+      purchaseIntent: true,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+    assert.equal(result.productUrl, productUrl);
+  });
+
+  test(`an explicit structured ${field} without purchase intent stays on the product route`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'PollyReach',
+      installAuthorized: true,
+      [field]: productUrl,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
+    assert.equal(result.reason, 'purchase_intent_missing');
+    assert.equal(result.productUrl, productUrl);
+  });
+}
+
+for (const input of [
+  {
+    productUrl: '',
+    itemUrl: 'https://shop.test/item/sku_1',
+  },
+  {
+    productUrl: '   ',
+    product_url: '',
+    item_url: 'https://shop.test/p/sku_1',
+  },
+  {
+    productName: '',
+    product_name: '   ',
+    itemName: 'Laptop',
+  },
+  {
+    itemId: '',
+    item_id: '   ',
+    productId: 'sku_1',
+  },
+]) {
+  test(`an empty product alias cannot hide a valid lower-priority alias: ${JSON.stringify(input)}`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'PollyReach',
+      installAuthorized: true,
+      purchaseIntent: true,
+      ...input,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+  });
+}
+
+test('an empty merchant alias cannot hide a valid merchant payment target', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_install',
+    publisher: 'clinkpay',
+    skillName: 'PollyReach',
+    installAuthorized: true,
+    merchantId: '   ',
+    merchant_id: 'merchant_1',
+    paymentAuthorized: true,
+    amount: '10',
+    currency: 'USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+  assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+  assert.equal(result.merchantId, 'merchant_1');
+});
+
+for (const productFields of [
+  { productName: 'Laptop' },
+  { itemId: 'sku_1' },
+  { productUrl: 'https://shop.test/products/ac' },
+]) {
+  test(`structured product target without purchase intent cannot be preempted by install: ${JSON.stringify(productFields)}`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'PollyReach',
+      installAuthorized: true,
+      ...productFields,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
+    assert.equal(result.reason, 'purchase_intent_missing');
+  });
+}
+
+for (const purchaseSignal of ['purchaseIntent', 'checkoutIntent']) {
+  test(`structured merchant ${purchaseSignal} cannot be preempted by structured install fields`, () => {
+    const result = classifyPaymentIntent({
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'pollyreach',
+      installAuthorized: true,
+      merchantId: 'merchant_1',
+      [purchaseSignal]: true,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+    assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+  });
+}
+
+for (const input of [
+  { text: '看看 skill 安装服务', productName: 'skill 安装服务' },
+  { text: '查看 clinkpay/pollyreach 安装服务详情', itemId: 'sku_1' },
+]) {
+  test(`product context without purchase intent stays on the product route: ${input.text}`, () => {
+    const result = classifyPaymentIntent(input);
+
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
+    assert.equal(result.reason, 'purchase_intent_missing');
+    assert.deepEqual(result.missing, ['purchaseIntent']);
+  });
+}
+
+test('rejects multiple Skill install targets', () => {
+  const result = classifyPaymentIntent({ text: '安装 clinkpay/a 或 clinkpay/b' });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+  assert.equal(result.reason, 'skill_install_target_ambiguous');
+  assert.deepEqual(result.missing, ['single_target']);
+});
+
+test('routes a bare confirmation through the only pending Skill install', () => {
+  const pendingSkillInstallConfirmation = {
+    pendingId: 'install_pending_1',
+    status: 'AWAITING_CONFIRMATION',
+    number: 2,
+  };
+  const result = classifyPaymentIntent({
+    text: '确认',
+    pendingSkillInstallConfirmation,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_INSTALL_CONFIRMATION_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RESUME_SKILL_INSTALL_WORKFLOW);
+  assert.equal(result.confirmation, 'CONFIRMED');
+  assert.equal(result.pendingSkillInstallConfirmation, pendingSkillInstallConfirmation);
+});
+
+test('routes explicit install confirmation when tip and install are both pending', () => {
+  const result = classifyPaymentIntent({
+    text: '确认安装',
+    pendingTipConfirmation: {
+      pendingId: 'tip_pending_1',
+      status: 'AWAITING_CONFIRMATION',
+    },
+    pendingSkillInstallConfirmation: {
+      pendingId: 'install_pending_1',
+      status: 'AWAITING_CONFIRMATION',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RESUME_SKILL_INSTALL_WORKFLOW);
+});
+
+test('requires a confirmation target when tip and install are both pending', () => {
+  const result = classifyPaymentIntent({
+    text: '确认',
+    pendingTipConfirmation: {
+      pendingId: 'tip_pending_1',
+      status: 'AWAITING_CONFIRMATION',
+    },
+    pendingSkillInstallConfirmation: {
+      pendingId: 'install_pending_1',
+      status: 'AWAITING_CONFIRMATION',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_INSTALL_INPUT);
+  assert.equal(result.reason, 'skill_confirmation_ambiguous');
+  assert.deepEqual(result.missing, ['confirmation_target']);
+});
+
 test('routes an explicitly authorized identity tip', () => {
   const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach 2usd' });
 
@@ -68,6 +721,26 @@ test('does not mistake list inside a skill identity for a list query', () => {
     skillName: 'skill-list',
   });
 });
+
+for (const input of [
+  { text: 'tip clinkpay/install $1' },
+  { text: '打赏 clinkpay/skill-install 1 USD' },
+  {
+    intent: 'skill_tip',
+    publisher: 'clinkpay',
+    skillName: 'install',
+    amount: '1',
+    tipAuthorized: true,
+    text: 'tip clinkpay/install $1',
+  },
+]) {
+  test(`does not treat install inside a tipped Skill identity as an install command: ${JSON.stringify(input)}`, () => {
+    const result = classifyPaymentIntent(input);
+
+    assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+    assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  });
+}
 
 test('routes a marked Number tip without confusing the amount', () => {
   const result = classifyPaymentIntent({ text: '打赏序号2的skill 2 USD' });

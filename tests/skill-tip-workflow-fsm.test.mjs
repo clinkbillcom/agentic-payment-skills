@@ -34,6 +34,7 @@ const workflowIdentity = {
 
 function displayedSnapshot({
   ageMs = 60 * 60 * 1000,
+  scope = 'tippable',
   environment = workflowIdentity.environment,
   rows = [{
     number: 2,
@@ -46,6 +47,7 @@ function displayedSnapshot({
   const listedAt = new Date(NOW - ageMs).toISOString();
   return {
     snapshotId: `snapshot_${ageMs}`,
+    scope,
     ...workflowIdentity,
     environment,
     listedAt,
@@ -78,6 +80,7 @@ test('skill list observation renders the required table and snapshot', () => {
 
   assert.equal(result.state, SkillTipState.TIP_LIST_READY);
   assert.equal(result.action, SkillTipAction.RETURN_SKILL_TABLE);
+  assert.equal(result.snapshot.scope, 'tippable');
   assert.match(result.table, /\| 序号 \| 发布者 \| Skill 名称 \| skill_id \|/u);
   assert.match(result.table, /\| 2 \| clinkpay \| Polly\\\|Reach \| skill_2 \|/u);
   assert.deepEqual(result.snapshot.rows[0], {
@@ -287,6 +290,21 @@ test('Number tip does not reuse a snapshot from another environment', () => {
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP_LIST_WORKFLOW);
 });
 
+for (const [label, snapshot] of [
+  ['all-list scope', displayedSnapshot({ scope: 'all' })],
+  ['missing scope', { ...displayedSnapshot(), scope: undefined }],
+]) {
+  test(`Number tip rejects a snapshot with ${label}`, () => {
+    const result = classifySkillTipPrerequisites({
+      tip: numberedTip,
+      context: workflowContext({ skillListSnapshots: [snapshot] }),
+    });
+
+    assert.equal(result.state, SkillTipState.TIP_LIST_REQUIRED);
+    assert.equal(result.reason, 'recent_skill_list_snapshot_missing');
+  });
+}
+
 for (const [label, snapshotOverrides] of [
   ['user', { userId: 'user_2' }],
   ['conversation', { conversationId: 'conversation_2' }],
@@ -382,6 +400,27 @@ test('Number tip does not fall back when the newest valid snapshot lacks Number'
   assert.equal(result.state, SkillTipState.TIP_LIST_REQUIRED);
   assert.equal(result.reason, 'skill_number_not_in_recent_snapshot');
   assert.equal(result.command, 'clink-cli skills list --all --tippable --format json');
+});
+
+test('Number tip does not fall back when the newest displayed snapshot is malformed', () => {
+  const older = displayedSnapshot({ ageMs: 120_000 });
+  const newer = displayedSnapshot({
+    ageMs: 60_000,
+    rows: [{
+      number: 2,
+      publisher: 'clinkpay',
+      skillName: 'ChangedSkill',
+      skillId: 'skill_changed',
+      versionNo: 'bad version',
+    }],
+  });
+  const result = classifySkillTipPrerequisites({
+    tip: numberedTip,
+    context: workflowContext({ skillListSnapshots: [older, newer] }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_LIST_REQUIRED);
+  assert.equal(result.reason, 'recent_skill_list_snapshot_missing');
 });
 
 for (const [label, rows] of [

@@ -12,6 +12,7 @@ const asyncEvents = await readFile(new URL('../references/clink-async-events.md'
 const cliInvocation = await readFile(new URL('../references/clink-cli-invocation.md', import.meta.url), 'utf8');
 const instruction = await readFile(new URL('../references/clink-instruction.md', import.meta.url), 'utf8');
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
+const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink-cli', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -122,9 +123,39 @@ test('skill tip reference documents authorization questions and fallback correla
   assert.match(asyncEvents, /nonzero CLI exit.*SURFACE_EVENT_ERROR/isu);
 });
 
-test('skill and package versions are bumped for hardened tip routing', () => {
-  assert.match(skill, /version:\s*"1\.5\.0"/u);
-  assert.equal(packageJson.version, '1.5.0');
+test('skill documents context-bound Skill installation routing', () => {
+  assert.match(skill, /references\/clink-skill-install\.md/u);
+  assert.match(skill, /lib\/skill-install-workflow-fsm\.mjs/u);
+  assert.match(skill, /SKILL_INSTALL_FSM/u);
+  assert.match(skill, /clink-cli skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
+  assert.match(skill, /omit.*version.*latest/isu);
+  assert.match(skill, /Number.*confirmation/isu);
+  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*--version/iu);
+  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*--number/iu);
+  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*@latest/iu);
+});
+
+test('Skill install reference freezes Number context before atomic confirmation', () => {
+  assert.match(skillInstall, /same user.*conversation.*exact environment/isu);
+  assert.match(skillInstall, /two hours|2 hours/iu);
+  assert.match(skillInstall, /newest valid displayed snapshot.*not fall back/isu);
+  assert.match(skillInstall, /publisher.*skillName.*versionNo.*skillId/isu);
+  assert.match(skillInstall, /AWAITING_CONFIRMATION.*EXECUTING/isu);
+  assert.match(skillInstall, /clink-cli skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
+  assert.match(skillInstall, /omit.*version.*latest/isu);
+  assert.match(skillInstall, /planned.*not.*installed/isu);
+  assert.match(skillInstall, /--force.*explicit/isu);
+  assert.doesNotMatch(skillInstall, /skills install[^\n]*(?:--number|--version|@latest)/iu);
+});
+
+test('CLI invocation reference documents Skill install help and exit code 8', () => {
+  assert.match(cliInvocation, /skills install --help/u);
+  assert.match(cliInvocation, /\| 8 \| Install error/u);
+});
+
+test('skill and package versions are bumped for Skill install routing', () => {
+  assert.match(skill, /version:\s*"1\.6\.0"/u);
+  assert.equal(packageJson.version, '1.6.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -141,6 +172,16 @@ test('README summaries advertise both skill tip intents', () => {
   assert.match(readmeZh, /publisher\/name.*version/iu);
   assert.doesNotMatch(readmeZh, /clink-cli skills tip[^\n]*--number|expected-skill-id/iu);
   assert.match(readmeZh, /account-created.*account-reloaded/isu);
+});
+
+test('README summaries advertise latest, exact-version, and Number Skill installs', () => {
+  for (const summary of [readme, readmeZh]) {
+    assert.match(summary, /skills install/u);
+    assert.match(summary, /publisher\/name\[@version\]|publisher\/name.*version/iu);
+    assert.match(summary, /latest/iu);
+    assert.match(summary, /Number|序号/iu);
+    assert.match(summary, /confirm|确认/iu);
+  }
 });
 
 test('UCP checkout route delegates internal detection to clink-cli before profile fallback', () => {
