@@ -5,6 +5,8 @@ import {
   EventWorkflowAction,
   EventWorkflowDomain,
   EventWorkflowState,
+  canonicalAccountEventType,
+  classifyAgentPayAccountEventCandidate,
   classifyEventWorkflow,
   classifyEventPollObservation,
   classifyEventWaitRequest,
@@ -19,6 +21,174 @@ const instructionWaitSpec = {
   },
   verifyCommand: 'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
 };
+
+test('normalizes CLI and body account event type aliases', () => {
+  assert.equal(canonicalAccountEventType('account-created'), 'account.created');
+  assert.equal(canonicalAccountEventType('account.created'), 'account.created');
+  assert.equal(canonicalAccountEventType('account-reloaded'), 'account.reloaded');
+  assert.equal(canonicalAccountEventType('account.reloaded'), 'account.reloaded');
+  assert.equal(canonicalAccountEventType('agent_order.succeeded'), null);
+});
+
+test('classifies dotted account event body types', () => {
+  const created = classifyEventWorkflow({ type: 'account.created' });
+  const reloaded = classifyEventWorkflow({ type: 'account.reloaded' });
+
+  assert.equal(created.state, EventWorkflowState.SKILL_TIP_ACCOUNT_CREATED);
+  assert.equal(created.action, EventWorkflowAction.RETURN_SKILL_TIP_ACCOUNT_EVENT);
+  assert.equal(reloaded.state, EventWorkflowState.SKILL_TIP_ACCOUNT_RELOADED);
+  assert.equal(reloaded.action, EventWorkflowAction.RETURN_SKILL_TIP_ACCOUNT_EVENT);
+});
+
+test('a hyphenated account wait accepts a dotted event body type', () => {
+  const result = classifyEventPollObservation(
+    {
+      ready: true,
+      timedOut: false,
+      events: [{ type: 'account.created', data: { orderId: 'order_1' } }],
+    },
+    {
+      eventType: 'account-created',
+      expectedResource: { orderId: 'order_1' },
+      noAck: false,
+      maxWaitSeconds: 60,
+    },
+  );
+
+  assert.equal(result.state, EventWorkflowState.SKILL_TIP_ACCOUNT_CREATED);
+  assert.equal(result.matched, true);
+});
+
+const agentPayAccountEvent = {
+  type: 'account.created',
+  data: {
+    customerEmail: 'customer@example.com',
+    webSite: 'https://example.com',
+    userId: 'usr_1',
+    amount: 19.99,
+    currency: 'USD',
+  },
+};
+
+const currentAgentPayment = {
+  paymentId: 'pay_1',
+  environment: 'sandbox',
+  walletId: 'wallet_1',
+  startedAtMs: 1_000,
+  amount: 19.99,
+  currency: 'USD',
+};
+
+test('Agent Pay account candidate correlates one amount and currency match without optional identity', () => {
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment: currentAgentPayment,
+    activePayments: [currentAgentPayment],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.domain, EventWorkflowDomain.AGENT_PAY_ACCOUNT);
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.action, EventWorkflowAction.RETURN_AGENT_PAY_ACCOUNT_EVENT);
+  assert.equal(result.matched, true);
+  assert.equal(result.ambiguous, false);
+  assert.equal(result.canonicalEventType, 'account.created');
+  assert.equal(result.candidate.paymentId, 'pay_1');
+});
+
+test('Agent Pay account candidate rejects an explicit optional identity conflict', () => {
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment: {
+      ...currentAgentPayment,
+      customerEmail: 'other@example.com',
+    },
+    activePayments: [{
+      ...currentAgentPayment,
+      customerEmail: 'other@example.com',
+    }],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
+  assert.equal(result.matched, false);
+  assert.equal(result.ambiguous, false);
+  assert.equal(result.candidate, undefined);
+});
+
+test('Agent Pay account candidate uses optional identity as a unique positive tie-breaker', () => {
+  const matchedPayment = {
+    ...currentAgentPayment,
+    customerEmail: 'customer@example.com',
+  };
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment: matchedPayment,
+    activePayments: [
+      matchedPayment,
+      { ...currentAgentPayment, paymentId: 'pay_2' },
+    ],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.matched, true);
+  assert.equal(result.candidate.paymentId, 'pay_1');
+});
+
+test('Agent Pay account candidate remains ambiguous for indistinguishable payments', () => {
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment: currentAgentPayment,
+    activePayments: [
+      currentAgentPayment,
+      { ...currentAgentPayment, paymentId: 'pay_2' },
+    ],
+    nowMs: 2_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_AMBIGUOUS);
+  assert.equal(result.action, EventWorkflowAction.RETURN_AGENT_PAY_ACCOUNT_AMBIGUOUS);
+  assert.equal(result.matched, false);
+  assert.equal(result.ambiguous, true);
+  assert.equal(result.candidate, undefined);
+});
+
+test('Agent Pay account candidate excludes other scopes and expired watches', () => {
+  const result = classifyAgentPayAccountEventCandidate({
+    event: agentPayAccountEvent,
+    currentPayment: currentAgentPayment,
+    activePayments: [
+      currentAgentPayment,
+      { ...currentAgentPayment, paymentId: 'pay_env', environment: 'production' },
+      { ...currentAgentPayment, paymentId: 'pay_wallet', walletId: 'wallet_2' },
+      { ...currentAgentPayment, paymentId: 'pay_old', startedAtMs: -100_000 },
+    ],
+    nowMs: 2_000,
+    maxAgeMs: 60_000,
+  });
+
+  assert.equal(result.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_CORRELATED);
+  assert.equal(result.candidate.paymentId, 'pay_1');
+});
+
+test('Agent Pay account candidate requires event amount and currency', () => {
+  const missingAmount = classifyAgentPayAccountEventCandidate({
+    event: { type: 'account.created', data: { currency: 'USD' } },
+    currentPayment: currentAgentPayment,
+    activePayments: [currentAgentPayment],
+    nowMs: 2_000,
+  });
+  const missingCurrency = classifyAgentPayAccountEventCandidate({
+    event: { type: 'account.created', data: { amount: 19.99 } },
+    currentPayment: currentAgentPayment,
+    activePayments: [currentAgentPayment],
+    nowMs: 2_000,
+  });
+
+  assert.equal(missingAmount.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
+  assert.equal(missingCurrency.state, EventWorkflowState.AGENT_PAY_ACCOUNT_EVENT_NOT_CORRELATED);
+});
 
 test('classifies account-created as optional skill tip account confirmation', () => {
   const result = classifyEventWorkflow({ type: 'account-created' });
