@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   SkillTipBatchAction,
   SkillTipBatchState,
+  classifySkillTipBatchObservation,
   classifySkillTipBatchPrerequisites,
   formatSkillTipBatchFsmMarker,
 } from '../lib/skill-tip-batch-workflow-fsm.mjs';
@@ -91,6 +92,42 @@ function pendingBatch(overrides = {}) {
     createdAt: new Date(NOW - 1000).toISOString(),
     expiresAt: new Date(NOW + 60_000).toISOString(),
     ...overrides,
+  };
+}
+
+function claimedProgress(overrides = {}) {
+  const result = classifySkillTipBatchPrerequisites({
+    confirmation: 'CLAIMED',
+    context: workflowContext({
+      pendingTipBatchConfirmation: pendingBatch({ status: 'EXECUTING', ...overrides }),
+    }),
+  });
+  assert.equal(result.state, SkillTipBatchState.BATCH_EXECUTION_READY);
+  return result.progress;
+}
+
+function paidObservation({
+  publisher = 'clinkpay',
+  skillName = 'PollyReach',
+  skillId,
+  amount = 2,
+  orderId = 'order_1',
+} = {}) {
+  return {
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        status: 'paid',
+        publisher,
+        skillName,
+        ...(skillId ? { skillId } : {}),
+        merchantId: `merchant_${skillName}`,
+        amount,
+        currency: 'USD',
+        payment: { orderId, status: 1 },
+      },
+    }),
   };
 }
 
@@ -373,6 +410,196 @@ test('cancelled, replayed, expired, and cross-environment confirmations emit no 
     assert.equal(result.action, item.action);
     assert.equal(result.command, undefined);
   }
+});
+
+test('a failed item is recorded and the next frozen payment command still runs', () => {
+  const result = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: {
+      exitCode: 5,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { status: 'payment_failed', payment: { status: 3 } },
+      }),
+    },
+  });
+
+  assert.equal(result.state, SkillTipBatchState.BATCH_IN_PROGRESS);
+  assert.equal(result.action, SkillTipBatchAction.RUN_NEXT_SKILL_TIP);
+  assert.equal(result.progress.currentIndex, 1);
+  assert.equal(result.progress.results[0].paymentStatus, 'FAILED');
+  assert.equal(result.progress.results[0].itemId, 'batch_1:1');
+  assert.equal(
+    result.command,
+    'clink-cli skills tip --publisher clinkpay --name ModelMax --amount 5 --format json',
+  );
+});
+
+test('an unknown item is not retried and the next frozen payment command still runs', () => {
+  const result = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: {
+      exitCode: 6,
+      stderr: JSON.stringify({ ok: false, error: { message: 'timeout' } }),
+    },
+  });
+
+  assert.equal(result.state, SkillTipBatchState.BATCH_IN_PROGRESS);
+  assert.equal(result.action, SkillTipBatchAction.RUN_NEXT_SKILL_TIP);
+  assert.equal(result.progress.results[0].paymentStatus, 'UNKNOWN');
+  assert.equal(result.progress.currentIndex, 1);
+  assert.doesNotMatch(result.command, /PollyReach/u);
+});
+
+test('a synchronously paid item advances and exposes non-blocking optional account watches', () => {
+  const result = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: paidObservation(),
+  });
+
+  assert.equal(result.state, SkillTipBatchState.BATCH_IN_PROGRESS);
+  assert.equal(result.progress.results[0].paymentStatus, 'PAID');
+  assert.equal(result.progress.currentIndex, 1);
+  assert.deepEqual(result.optionalAccountWatch.pollCommands, [
+    'clink-cli events poll --type account-created --max-wait 60 --format json',
+    'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
+  ]);
+  assert.equal(result.optionalAccountWatch.expectedResource.orderId, 'order_1');
+  assert.match(result.command, /--name ModelMax/u);
+});
+
+test('authorization and 3DS continuations block later payment submission', () => {
+  const authorization = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          status: 'authorization_pending',
+          passkeyUrl: 'https://agent.example/passkey',
+        },
+      }),
+    },
+  });
+  assert.equal(authorization.state, SkillTipBatchState.BATCH_ITEM_CONTINUATION_REQUIRED);
+  assert.equal(authorization.action, SkillTipBatchAction.WAIT_FOR_SKILL_TIP_ITEM);
+  assert.equal(authorization.progress.currentIndex, 0);
+  assert.equal(authorization.command, undefined);
+
+  const threeDs = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: {
+      exitCode: 7,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          status: 'three_ds_required',
+          redirectUrl: 'https://agent.example/3ds',
+          payment: { orderId: 'order_3ds' },
+        },
+      }),
+    },
+  });
+  assert.equal(threeDs.state, SkillTipBatchState.BATCH_ITEM_CONTINUATION_REQUIRED);
+  assert.equal(threeDs.action, SkillTipBatchAction.WAIT_FOR_SKILL_TIP_ITEM);
+  assert.equal(threeDs.progress.currentIndex, 0);
+  assert.equal(threeDs.command, undefined);
+});
+
+test('all paid items return a completed ALL_PAID aggregate in frozen order', () => {
+  const first = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: paidObservation(),
+  });
+  const completed = classifySkillTipBatchObservation({
+    progress: first.progress,
+    observation: paidObservation({
+      skillName: 'ModelMax',
+      amount: 5,
+      orderId: 'order_2',
+    }),
+  });
+
+  assert.equal(completed.state, SkillTipBatchState.BATCH_COMPLETED);
+  assert.equal(completed.action, SkillTipBatchAction.RETURN_SKILL_TIP_BATCH_RESULT);
+  assert.equal(completed.status, 'COMPLETED');
+  assert.equal(completed.aggregateOutcome, 'ALL_PAID');
+  assert.deepEqual(completed.counts, {
+    total: 2,
+    paid: 2,
+    failed: 0,
+    unknown: 0,
+  });
+  assert.deepEqual(completed.items.map((item) => item.skillName), ['PollyReach', 'ModelMax']);
+  assert.equal(completed.command, undefined);
+});
+
+test('mixed paid and unknown items return PARTIAL without retrying the unknown item', () => {
+  const first = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: paidObservation(),
+  });
+  const completed = classifySkillTipBatchObservation({
+    progress: first.progress,
+    observation: {
+      exitCode: 6,
+      stderr: JSON.stringify({ ok: false, error: { message: 'timeout' } }),
+    },
+  });
+
+  assert.equal(completed.aggregateOutcome, 'PARTIAL');
+  assert.deepEqual(completed.counts, {
+    total: 2,
+    paid: 1,
+    failed: 0,
+    unknown: 1,
+  });
+  assert.equal(completed.items[1].paymentStatus, 'UNKNOWN');
+});
+
+test('failed and unknown items return NONE_PAID after every item is attempted', () => {
+  const first = classifySkillTipBatchObservation({
+    progress: claimedProgress(),
+    observation: {
+      exitCode: 5,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { status: 'payment_failed', payment: { status: 3 } },
+      }),
+    },
+  });
+  const completed = classifySkillTipBatchObservation({
+    progress: first.progress,
+    observation: {
+      exitCode: 6,
+      stderr: JSON.stringify({ ok: false, error: { message: 'unknown' } }),
+    },
+  });
+
+  assert.equal(completed.aggregateOutcome, 'NONE_PAID');
+  assert.deepEqual(completed.counts, {
+    total: 2,
+    paid: 0,
+    failed: 1,
+    unknown: 1,
+  });
+});
+
+test('invalid or replayed progress never emits another payment command', () => {
+  const completedProgress = {
+    ...claimedProgress(),
+    status: 'COMPLETED',
+    currentIndex: 2,
+  };
+  const result = classifySkillTipBatchObservation({
+    progress: completedProgress,
+    observation: paidObservation(),
+  });
+
+  assert.equal(result.state, SkillTipBatchState.BATCH_INPUT_REQUIRED);
+  assert.equal(result.action, SkillTipBatchAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
+  assert.equal(result.command, undefined);
 });
 
 test('batch marker uses the shared workflow marker format', () => {
