@@ -5005,18 +5005,18 @@ import path from "node:path";
 
 // dist/domains.js
 var API_BASE_URLS = {
-  //sandbox: "https://uat-api.clinkbill.com",
-  sandbox: "https://api.clinkbill.dev",
+  sandbox: "https://uat-api.clinkbill.com",
+  // sandbox: "https://api.clinkbill.dev",
   production: "https://api.clinkbill.com"
 };
 var AGENT_BASE_URLS = {
-  // sandbox: "https://uat-agent.clinkbill.com",
-  sandbox: "https://agent.clinkbill.dev",
+  sandbox: "https://uat-agent.clinkbill.com",
+  test: "https://agent.clinkbill.dev",
   production: "https://agent.clinkbill.com"
 };
 var DASHBOARD_BASE_URLS = {
-  //sandbox: "https://uat-dashboard.clinkbill.com",
-  sandbox: "https://dashboard.clinkbill.dev",
+  sandbox: "https://uat-dashboard.clinkbill.com",
+  // sandbox: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
@@ -6032,7 +6032,6 @@ Examples:
   clink-cli card setup-link --open
   clink-cli skills list --all --format pretty
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli ucp-checkout get --checkout-id chk_xxx
   clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
@@ -6063,7 +6062,6 @@ Examples:
   clink-cli skills install clinkpay/PollyReach@v1.0.0
   clink-cli skills install clinkpay/PollyReach --force
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2
 `;
 var SKILLS_LIST_HELP = `clink-cli skills list
 
@@ -6138,24 +6136,21 @@ Examples:
 var SKILLS_TIP_HELP = `clink-cli skills tip
 
 Usage:
-  clink-cli skills tip --publisher <publisher> --name <skillName> [--version <versionNo>] --amount <amount> [options]
+  clink-cli skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
 
 Target:
   --publisher <publisher>      Exact publisher; requires --name
   --name <skillName>           Exact skill name; requires --publisher
-  --version <versionNo>        Optional exact Marketplace version
 
 Required Argument:
-  --amount <amount>            Any positive finite USD amount
+  --amount <amount>            USD amount from 1 to 100 (inclusive)
 
 Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   Publisher and skill names accept Unicode letters and numbers, including Chinese.
-  Omit --version to select the latest Marketplace version.
-  An explicit version is verified against the Marketplace response before payment-method refresh.
-  Missing or mismatched versions fail with 404 and never create a charge.
+  Tips select the latest Marketplace version with sort=NEW.
   Successful results include the resolved versionNo when the Marketplace supplies it.
   Tips use the refreshed explicit default payment method.
   A default CARD is charged without a Credit balance check.
@@ -8439,6 +8434,7 @@ var MAX_SEGMENT_LENGTH = 128;
 var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
 var TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
 var FORBIDDEN_TIP_FLAGS = [
+  "version",
   "payment-instrument-id",
   "instruction-id",
   "purchase-instruction-id",
@@ -8502,22 +8498,21 @@ function parseSkillTipArgs(operands, flags) {
   if (publisher === void 0 || skillName === void 0 || !isValidSkillTipIdentitySegment(publisher) || !isValidSkillTipIdentitySegment(skillName)) {
     throw invalidTipIdentity();
   }
-  const version = getStringFlag(flags, "version");
-  if (flags.version !== void 0 && (version === void 0 || !isValidSkillVersion(version))) {
-    throw validationError("invalid --version");
-  }
   const target = {
     publisher,
-    skillName,
-    ...version ? { requestedVersion: version } : {}
+    skillName
   };
   const currency = getStringFlag(flags, "currency");
   if (currency !== void 0 && currency.toUpperCase() !== "USD") {
     throw validationError("skills tip only supports USD");
   }
+  const amount = parseAmount(requireStringFlag(flags, "missing --amount", "amount"));
+  if (amount < 1 || amount > 100) {
+    throw validationError("skills tip amount must be between 1 and 100 USD");
+  }
   return {
     target,
-    amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
+    amount,
     currency: "USD"
   };
 }
@@ -8526,9 +8521,6 @@ function isValidSkillIdentitySegment(value) {
 }
 function isValidSkillTipIdentitySegment(value) {
   return isValidSegment(value, TIP_IDENTITY_SEGMENT_PATTERN);
-}
-function isValidSkillVersion(value) {
-  return isValidSegment(value, VERSION_PATTERN);
 }
 function isValidSegment(value, pattern) {
   return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
@@ -11306,7 +11298,7 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
       publisher,
       q: skillName,
       ...requestedVersion ? { versionNo: requestedVersion } : {},
-      pageSize: 1,
+      pageSize: 999,
       sort: "NEW"
     },
     timeoutMs: input.timeoutMs

@@ -111,6 +111,7 @@ FSM action contract:
 | `CLAIM_PENDING_TIP` | Atomically change the same pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
 | `CANCEL_PENDING_TIP` | Atomically change `AWAITING_CONFIRMATION` to `CANCELLED`; never execute payment. |
 | `RUN_SKILL_TIP` | Execute only the exact authorized publisher/name and amount; never pass version or Number to the CLI. Preserve the returned complete `expectedTip` binding for result classification. |
+| `START_CARD_BINDING` | For the exact insufficient-default-Balance error, return only `Credit 余额不足，请先绑定银行卡`, run `clink-cli card binding-link --format json`, send the binding URL, and keep the binding watch active. Never tell the user to recharge Credit or Balance. |
 | `ASK_FOR_TIP_BATCH_CONFIRMATION` | Show every distinct Skill, each USD amount, authorized total, ignored duplicates, and the continue-after-error policy; require one confirmation for the frozen batch. |
 | `CLAIM_PENDING_TIP_BATCH` | Atomically change the same batch from `AWAITING_CONFIRMATION` to `EXECUTING`; return no payment command until the claim succeeds. |
 | `RUN_NEXT_SKILL_TIP` | Run exactly one frozen `clink-cli skills tip` call for the current distinct Skill. Payment calls are sequential. |
@@ -145,6 +146,7 @@ FSM action contract:
 | User requests multiple Skill tips with per-item amounts | Validate every target and amount before confirmation, freeze the complete batch, then execute one `clink-cli skills tip` invocation per distinct Skill in sequential order. |
 | A batch item is `FAILED` or `UNKNOWN` | Record the item, never automatically retry it, and continue with the next frozen Skill. |
 | A batch item requires authorization or 3DS | Keep it active and do not submit the next payment until the existing single-tip workflow reaches a terminal payment classification. |
+| Skill tip returns `Credit 余额不足，请先绑定银行卡` | Payment was not attempted. Return the same stable message, start `clink-cli card binding-link --format json`, send the binding URL, and wait for binding. Never suggest recharge/top-up. |
 | Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the two optional account-event polls. |
 | Optional skill-tip account polls time out or fail | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
 | User explicitly authorizes `publisher/name` installation | Run the identity install command without a version so Marketplace selects latest. |
@@ -184,7 +186,8 @@ FSM action contract:
 - Batch `COMPLETED` means all distinct items were attempted or resolved; it does not mean all were paid. Return every item plus `ALL_PAID`, `PARTIAL`, or `NONE_PAID`.
 - Number is a context index, never a `skills tip` CLI target. Use only the newest structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Resolve Number to frozen publisher/name and optional internal skill ID; never bind a tip to snapshot version, scrape history, or refresh the list when that snapshot is valid.
 - Without a valid Number snapshot, run `skills list --all --tippable`, display exactly the localized three-column table, freeze publisher/name and optional internal skill ID, and require confirmation. Confirmation first returns `CLAIM_PENDING_TIP`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce the payment command. Consumed, cancelled, expired, or already-executing pending objects never execute again.
-- The latest Skill Tip command uses only a sufficient explicitly default USD Credit balance. Do not add card, VIC instruction, mandate, mixed-payment, currency, or payment-instrument flags.
+- The latest Skill Tip command refreshes and uses the explicit default payment method. A default `CARD` is charged directly; a default `BALANCE` must have enough finite `availableBalance`. Do not add VIC instruction, mandate, mixed-payment, currency, or payment-instrument flags.
+- When Skill Tip returns the exact error `Credit 余额不足，请先绑定银行卡`, classify `TIP_CARD_BINDING_REQUIRED / START_CARD_BINDING`. The stable user message is exactly `Credit 余额不足，请先绑定银行卡`; immediately start `clink-cli card binding-link --format json` and its binding watch. Never tell the user to recharge, top up, or add funds to Credit/Balance in this branch.
 - Treat a `payment_unknown` payload or exit code 6 as unknown even when the charge request returned an HTTP response. Never retry until an order/idempotency status path proves retry safety.
 - For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
 - A paid Skill Tip result requires the execution-ready `expectedTip` binding and must match its publisher, skill name, optional skill ID, amount, and USD currency. The version resolved by the CLI is result metadata, not an authorization constraint. Missing or mismatched binding is `UNKNOWN`, never an unbound success.

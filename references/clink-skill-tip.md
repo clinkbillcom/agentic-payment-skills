@@ -227,7 +227,15 @@ Do not pass a version, `--number`, `--expected-skill-id`, `--currency`, or `--pa
 
 Every `RUN_SKILL_TIP` result also returns an `expectedTip` binding. This binding is required and contains `publisher`, `skillName`, `amount`, and `currency`, plus frozen `skillId` when known. It never contains version as an authorization constraint. Pass it unchanged to `classifySkillTipObservation`; a missing or incomplete binding leaves a synchronous result `UNKNOWN` instead of accepting an unbound payment result.
 
-The latest CLI refreshes and requires a sufficient explicitly default USD Credit balance. It does not use cards, mixed Credit/card payment, VIC instructions, or mandates for normal Skill Tip execution. The FSM may continue classifying legacy `authorization_pending` and 3DS payloads defensively, but they are not the current normal path.
+The latest CLI refreshes and uses the explicit default payment method. A default `CARD` is charged directly without a Credit-balance check. A default `BALANCE` must have enough finite `availableBalance` to cover the complete tip. It does not use mixed Credit/card payment, VIC instructions, or mandates for normal Skill Tip execution. The FSM may continue classifying legacy `authorization_pending` and 3DS payloads defensively, but they are not the current normal path.
+
+If the explicit default is `BALANCE` and its balance is insufficient or invalid, the CLI stops before payment and returns the exact error `Credit 余额不足，请先绑定银行卡`. Classify this as `TIP_CARD_BINDING_REQUIRED / START_CARD_BINDING`, return exactly that stable user message, then run:
+
+~~~bash
+clink-cli card binding-link --format json
+~~~
+
+Send the returned binding URL and keep the built-in binding watch active. This branch means the user must bind a bank card; never tell the user to recharge, top up, reload, or add funds to Credit/Balance. After binding completes and the card is the explicit default payment method, retry only the same frozen tip intent.
 
 ## Classify the Result
 
@@ -237,6 +245,7 @@ Use the CLI exit code first, then the first JSON result envelope.
 | --- | --- | --- |
 | `status=paid` and agent pay `status=1` | `PAID` | Start optional account-event monitoring |
 | legacy `authorization_pending` | `NOT_PAID` | Preserve its continuation without claiming payment |
+| exact error `Credit 余额不足，请先绑定银行卡` | `NOT_PAID` | Return the same message and start the card-binding workflow; never suggest recharge/top-up |
 | exit 5 with `payment_failed` | `FAILED` | Stop |
 | exit 6 or `payment_unknown` | `UNKNOWN` | Verify safely; never retry automatically |
 | exit 7 / `three_ds_required` | `PENDING_3DS` | Use the correlated order-event flow |
