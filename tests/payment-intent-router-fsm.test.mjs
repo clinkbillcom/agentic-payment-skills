@@ -944,12 +944,12 @@ for (const text of [
   });
 }
 
-test('rejects multiple distinct identity targets instead of choosing the first', () => {
+test('multiple targets without explicit shared or per-item amounts ask for batch clarification', () => {
   const result = classifyPaymentIntent({ text: '打赏 clinkpay/a 或 clinkpay/b 2 USD' });
 
-  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
-  assert.equal(result.reason, 'skill_tip_target_ambiguous');
-  assert.deepEqual(result.missing, ['single_target']);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
+  assert.equal(result.reason, 'skill_tip_batch_amount_ambiguous');
+  assert.deepEqual(result.missing, ['per_item_amounts']);
 });
 
 test('rejects multiple distinct amounts instead of choosing the first', () => {
@@ -1119,4 +1119,222 @@ test('asks for a payment target when neither merchant nor product is clear', () 
   assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
   assert.equal(result.reason, 'payment_target_missing');
   assert.deepEqual(result.missing, ['merchantId_or_product']);
+});
+
+test('routes a structured multi-Skill request with one shared amount', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    targets: [
+      { publisher: 'clinkpay', skillName: 'PollyReach' },
+      { publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'USD',
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_BATCH_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_BATCH_WORKFLOW);
+  assert.deepEqual(result.batch, {
+    targets: [
+      { kind: 'identity', publisher: 'clinkpay', skillName: 'PollyReach' },
+      { kind: 'identity', publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'USD',
+    explicitlyAuthorized: true,
+  });
+});
+
+test('routes a structured multi-Skill request with per-item amounts', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    tips: [
+      { publisher: 'clinkpay', skillName: 'PollyReach', amount: '2' },
+      { publisher: 'clinkpay', skillName: 'ModelMax', amount: '5' },
+    ],
+    currency: 'USD',
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.deepEqual(result.batch, {
+    tips: [
+      {
+        target: { kind: 'identity', publisher: 'clinkpay', skillName: 'PollyReach' },
+        amount: '2',
+      },
+      {
+        target: { kind: 'identity', publisher: 'clinkpay', skillName: 'ModelMax' },
+        amount: '5',
+      },
+    ],
+    currency: 'USD',
+    explicitlyAuthorized: true,
+  });
+});
+
+test('routes a natural-language multi-Skill request with a shared amount', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏 clinkpay/PollyReach 和 clinkpay/ModelMax，每个 2 USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_BATCH_WORKFLOW);
+  assert.deepEqual(result.batch, {
+    targets: [
+      { kind: 'identity', publisher: 'clinkpay', skillName: 'PollyReach' },
+      { kind: 'identity', publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'USD',
+    explicitlyAuthorized: true,
+  });
+});
+
+test('routes a natural-language multi-Skill request with per-item amounts', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏 clinkpay/PollyReach 2 USD，clinkpay/ModelMax 5 USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.deepEqual(result.batch.tips, [
+    {
+      target: { kind: 'identity', publisher: 'clinkpay', skillName: 'PollyReach' },
+      amount: '2',
+    },
+    {
+      target: { kind: 'identity', publisher: 'clinkpay', skillName: 'ModelMax' },
+      amount: '5',
+    },
+  ]);
+});
+
+test('batch routing preserves duplicate occurrences for first-win confirmation metadata', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    tips: [
+      { publisher: 'ClinkPay', skillName: 'PollyReach', amount: '2' },
+      { publisher: 'clinkpay', skillName: 'pollyreach', amount: '9' },
+    ],
+    currency: 'USD',
+    tipAuthorized: true,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.equal(result.batch.tips.length, 2);
+  assert.equal(result.batch.tips[0].amount, '2');
+  assert.equal(result.batch.tips[1].amount, '9');
+});
+
+test('structured and textual batch authorizations must describe the same targets and amounts', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    targets: [
+      { publisher: 'clinkpay', skillName: 'PollyReach' },
+      { publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'USD',
+    tipAuthorized: true,
+    text: '打赏 clinkpay/Another 和 clinkpay/ModelMax，每个 2 USD',
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_BATCH_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
+  assert.equal(result.reason, 'skill_tip_batch_structured_text_conflict');
+  assert.deepEqual(result.missing, ['consistent_authorization']);
+});
+
+test('invalid batch input stops before the batch workflow', () => {
+  const invalidItem = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    tips: [
+      { publisher: 'clinkpay', skillName: 'PollyReach', amount: '2' },
+      { publisher: 'clinkpay', skillName: '', amount: '5' },
+    ],
+    currency: 'USD',
+    tipAuthorized: true,
+  });
+  assert.equal(invalidItem.state, PaymentIntentState.SKILL_TIP_BATCH_INPUT_MISSING);
+  assert.equal(invalidItem.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
+
+  const nonUsd = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    targets: [
+      { publisher: 'clinkpay', skillName: 'PollyReach' },
+      { publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'EUR',
+    tipAuthorized: true,
+  });
+  assert.equal(nonUsd.reason, 'skill_tip_batch_currency_unsupported');
+
+  const unauthorized = classifyPaymentIntent({
+    intent: 'skill_tip_batch',
+    targets: [
+      { publisher: 'clinkpay', skillName: 'PollyReach' },
+      { publisher: 'clinkpay', skillName: 'ModelMax' },
+    ],
+    amount: '2',
+    currency: 'USD',
+    tipAuthorized: false,
+  });
+  assert.deepEqual(unauthorized.missing, ['authorization']);
+});
+
+test('ambiguous batch prose asks for explicit per-item or shared amounts', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏 clinkpay/PollyReach 和 clinkpay/ModelMax 2 USD',
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_BATCH_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_BATCH_INPUT);
+  assert.equal(result.reason, 'skill_tip_batch_amount_ambiguous');
+});
+
+test('explicit batch confirmation and cancellation route through the batch pending', () => {
+  const pendingTipBatchConfirmation = {
+    batchId: 'batch_1',
+    status: 'AWAITING_CONFIRMATION',
+  };
+  const confirmed = classifyPaymentIntent({
+    text: '确认批量打赏',
+    pendingTipBatchConfirmation,
+  });
+  assert.equal(confirmed.state, PaymentIntentState.SKILL_TIP_BATCH_CONFIRMATION_SELECTED);
+  assert.equal(confirmed.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.equal(confirmed.action, PaymentIntentAction.RESUME_SKILL_TIP_BATCH_WORKFLOW);
+  assert.equal(confirmed.confirmation, 'CONFIRMED');
+
+  const cancelled = classifyPaymentIntent({
+    text: '取消批量打赏',
+    pendingTipBatchConfirmation,
+  });
+  assert.equal(cancelled.state, PaymentIntentState.SKILL_TIP_BATCH_CONFIRMATION_REJECTED);
+  assert.equal(cancelled.action, PaymentIntentAction.CANCEL_PENDING_SKILL_TIP_BATCH);
+  assert.equal(cancelled.confirmation, 'CANCELLED');
+});
+
+test('generic confirmation resumes a batch only when it is the sole pending skill action', () => {
+  const pendingTipBatchConfirmation = {
+    batchId: 'batch_1',
+    status: 'AWAITING_CONFIRMATION',
+  };
+  const sole = classifyPaymentIntent({ text: '确认', pendingTipBatchConfirmation });
+  assert.equal(sole.route, PaymentIntentRoute.SKILL_TIP_BATCH);
+  assert.equal(sole.confirmation, 'CONFIRMED');
+
+  const ambiguous = classifyPaymentIntent({
+    text: '确认',
+    pendingTipBatchConfirmation,
+    pendingTipConfirmation: {
+      pendingId: 'tip_1',
+      status: 'AWAITING_CONFIRMATION',
+    },
+  });
+  assert.equal(ambiguous.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(ambiguous.reason, 'skill_confirmation_ambiguous');
 });
