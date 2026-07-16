@@ -8,11 +8,14 @@ Use `lib/payment-intent-router-fsm.mjs` before choosing a payment workflow.
 
 - `SKILL_TIP_LIST` is read-only.
 - `SKILL_TIP` requires one imperative request, one exact target, one positive USD amount, and authorization bound to that request.
-- How-to, counterfactual, advice, negated, cancelled, questioned, historical, and conditional language is not authorization. Multiple targets or amounts stop for clarification.
+- `SKILL_TIP_BATCH` accepts multiple targets with one shared amount or per-item amounts and requires one confirmation for the complete frozen batch.
+- How-to, counterfactual, advice, negated, cancelled, questioned, historical, and conditional language is not authorization. Ambiguous batch amount wording stops for clarification.
 - List/query language wins over execution language. A combined list-and-tip request displays the list and then requires confirmation before payment.
-- Bare confirmation or cancellation is meaningful only when the same context contains one `AWAITING_CONFIRMATION` Skill Tip pending object.
+- Bare confirmation or cancellation is meaningful only when the same context contains one unambiguous `AWAITING_CONFIRMATION` single-tip or batch pending object.
 
 Use `lib/skill-tip-workflow-fsm.mjs` for list parsing, recent-context selection, Number-to-identity resolution, confirmation claiming, CLI result classification, and optional account-event aggregation. Emit `[SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>`.
+
+Use `lib/skill-tip-batch-workflow-fsm.mjs` for batch normalization, de-duplication, atomic confirmation, sequential progress, and aggregate results. Emit `[SKILL_TIP_BATCH_FSM] state=<STATE> action=<ACTION> reason=<REASON>`.
 
 ## List Public Skills
 
@@ -84,6 +87,76 @@ or:
 Skill Tip execution is versionless. Normalize the target to publisher/name. If an upstream parser includes version information, discard it before confirmation and command construction; the CLI applies its default publisher/name version selection. Never claim that a tip targeted an exact version.
 
 Natural-language Number targets require a marker such as `序号 2`, `2号`, `#2`, or `number 2`. A bare number beside USD is an amount, not a Skill Number. Missing target, missing/non-positive amount, non-USD currency, or missing authorization stops before execution.
+
+## Batch Tip Input and Confirmation
+
+A batch may use one shared amount:
+
+~~~json
+{
+  "targets": [
+    { "kind": "identity", "publisher": "clinkpay", "skillName": "PollyReach" },
+    { "kind": "identity", "publisher": "clinkpay", "skillName": "ModelMax" }
+  ],
+  "amount": "2",
+  "currency": "USD",
+  "explicitlyAuthorized": true
+}
+~~~
+
+or per-item amounts:
+
+~~~json
+{
+  "tips": [
+    {
+      "target": { "kind": "identity", "publisher": "clinkpay", "skillName": "PollyReach" },
+      "amount": "2"
+    },
+    {
+      "target": { "kind": "identity", "publisher": "clinkpay", "skillName": "ModelMax" },
+      "amount": "5"
+    }
+  ],
+  "currency": "USD",
+  "explicitlyAuthorized": true
+}
+~~~
+
+Natural language must state either one shared amount with `每个` / `each`, or place one amount after every target. If the amount assignment is ambiguous, ask for clarification. Never guess whether a trailing amount applies to the last Skill or the whole batch.
+
+Resolve every Number target through the same newest valid `tippable` snapshot before creating a pending batch. If any target or amount is invalid or unresolved, stop the complete batch; do not confirm or execute the valid subset.
+
+De-duplicate by trimmed case-insensitive publisher/name. The first occurrence wins and preserves its original spelling and amount. Ignore every later duplicate without adding or replacing its amount, and include each ignored occurrence in confirmation metadata.
+
+Every batch requires one confirmation showing:
+
+- every distinct publisher/name and USD amount in frozen execution order;
+- the authorized total and number of payment calls;
+- ignored duplicate occurrences;
+- that failed or unknown items do not stop later items.
+
+Freeze this information with `batchId`, user, conversation, exact environment lock, and expiry. `CONFIRMED + AWAITING_CONFIRMATION` returns `CLAIM_PENDING_TIP_BATCH` without a payment command. Only a successful atomic transition to `EXECUTING` may return the first payment command. A replayed, cancelled, expired, consumed, or cross-context batch returns no payment command.
+
+## Sequential Batch Execution
+
+Run one `clink-cli skills tip` call per distinct Skill. Payment calls are sequential in frozen order and every item retains its own `expectedTip` binding:
+
+~~~bash
+clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json
+~~~
+
+Never add a combined target list, aggregate amount, version, Number, or batch flag to the CLI. An interactive authorization or 3DS continuation remains the active item and blocks later payment submission until the single-tip workflow reaches a terminal payment classification.
+
+A terminal failed or unknown item does not stop later items: record it and continue with the next frozen Skill. Never automatically retry a failed or unknown item. A synchronously paid item may start its optional account-event watches without delaying the next payment; polling errors or ambiguity remain warnings and never downgrade `PAID`.
+
+The final ordered result uses these aggregate outcomes:
+
+- `ALL_PAID`: every distinct item is `PAID`;
+- `PARTIAL`: at least one item is `PAID` and at least one is `FAILED` or `UNKNOWN`;
+- `NONE_PAID`: no item is `PAID` after every item is terminal.
+
+Batch `COMPLETED` does not mean all items were paid. It means all distinct items were attempted or resolved through an allowed continuation. Always return per-item payment status and counts with the aggregate outcome.
 
 ## Recent Number Context
 

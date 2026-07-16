@@ -153,7 +153,7 @@ test('skill tip reference requires a localized three-column table', () => {
 test('skill tip reference documents authorization questions and fallback correlation context', () => {
   assert.match(skillTip, /counterfactual.*advice.*not authorization/isu);
   assert.match(skillTip, /negated.*historical.*conditional.*not authorization/isu);
-  assert.match(skillTip, /multiple.*targets.*amounts.*stop/isu);
+  assert.match(skillTip, /ambiguous.*amount.*clarif/isu);
   assert.match(skillTip, /payment_unknown/iu);
   assert.match(skillTip, /expectedResource.*customerId.*merchantId.*skillId/isu);
   assert.match(skillTip, /explicit.*conflicting orderId.*reject/isu);
@@ -190,10 +190,26 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
   assert.match(cliInvocation, /\| 8 \| Install error/u);
 });
 
-test('skill and package versions are bumped for Skill install routing', () => {
-  assert.match(skill, /version:\s*"1\.6\.0"/u);
-  assert.equal(packageJson.version, '1.6.0');
+test('skill and package versions are bumped for batch Skill Tip routing', () => {
+  assert.match(skill, /version:\s*"1\.7\.0"/u);
+  assert.equal(packageJson.version, '1.7.0');
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('skill documents atomic sequential batch tipping with itemized outcomes', () => {
+  for (const document of [skill, skillTip]) {
+    assert.match(document, /SKILL_TIP_BATCH_FSM/u);
+    assert.match(document, /one confirmation|一次确认/iu);
+    assert.match(document, /first occurrence|首次出现/iu);
+    assert.match(document, /sequential|串行/iu);
+    assert.match(document, /one.*clink-cli skills tip.*(?:call|invocation).*distinct Skill/isu);
+    assert.match(document, /fail(?:ed|ure).*unknown.*(?:continue|do not stop|不阻断)/isu);
+    assert.match(document, /never.*(?:automatically )?retry|不.*自动重试/isu);
+    assert.match(document, /COMPLETED.*does not mean.*all.*paid|COMPLETED.*不代表.*全部/isu);
+  }
+  assert.match(skillTip, /shared amount|统一金额/iu);
+  assert.match(skillTip, /per-item amounts|分别指定金额/iu);
+  assert.match(skillTip, /ALL_PAID.*PARTIAL.*NONE_PAID/isu);
 });
 
 test('README summaries advertise both skill tip intents', () => {
