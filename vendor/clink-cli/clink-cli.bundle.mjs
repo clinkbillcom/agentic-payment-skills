@@ -4805,7 +4805,7 @@ var require_yauzl = __commonJS({
   }
 });
 
-// dist/cli.js
+// src/cli.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { homedir } from "node:os";
 
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// dist/errors.js
+// src/errors.ts
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// dist/args.js
+// src/args.ts
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4998,12 +4998,12 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// dist/config.js
+// src/config.ts
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// dist/domains.js
+// src/domains.ts
 var API_BASE_URLS = {
   sandbox: "https://uat-api.clinkbill.com",
   // sandbox: "https://api.clinkbill.dev",
@@ -5021,7 +5021,7 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// dist/config.js
+// src/config.ts
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 function defaultConfig() {
@@ -5211,7 +5211,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// dist/http.js
+// src/http.ts
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5273,7 +5273,11 @@ function ensureTrailingSlash(value) {
 }
 var SENSITIVE_HEADERS = /* @__PURE__ */ new Set(["x-customer-api-key", "authorization"]);
 function redactSensitiveHeaders(headers) {
-  return Object.fromEntries(Object.entries(headers).map(([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]));
+  return Object.fromEntries(
+    Object.entries(headers).map(
+      ([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]
+    )
+  );
 }
 function parseBody(rawText) {
   if (!rawText) {
@@ -5286,14 +5290,18 @@ function parseBody(rawText) {
   }
 }
 
-// dist/utils.js
+// src/utils.ts
 import { spawn } from "node:child_process";
 function buildCustomerHeaders(config) {
   if (!config.customerId) {
-    throw configError("missing customerId; run `clink-cli wallet init` or pass --customer-id");
+    throw configError(
+      "missing customerId; run `clink-cli wallet init` or pass --customer-id"
+    );
   }
   if (!config.customerApiKey) {
-    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
+    throw configError(
+      "missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key"
+    );
   }
   return {
     "X-Customer-ID": config.customerId,
@@ -5303,7 +5311,9 @@ function buildCustomerHeaders(config) {
 }
 function buildCustomerApiKeyHeaders(config) {
   if (!config.customerApiKey) {
-    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
+    throw configError(
+      "missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key"
+    );
   }
   return {
     "X-Customer-API-Key": config.customerApiKey,
@@ -5495,7 +5505,7 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// dist/events.js
+// src/events.ts
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -5586,7 +5596,11 @@ async function watchEvents(options2) {
   const startedAtMs = now();
   log(`Open this link in your browser to complete the ${options2.label}:`);
   log(`  ${options2.url}`);
-  log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
+  log(
+    `Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(
+      maxDurationMs / 6e4
+    )} min). This will continue automatically once an event arrives.`
+  );
   const deadline = startedAtMs + maxDurationMs;
   for (; ; ) {
     let records;
@@ -5630,8 +5644,13 @@ async function watchEvents(options2) {
       const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
       if (watchTargetEnabled && matchedEvents.length === 0) {
         const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ignoredEventIds);
-        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        await ackWebhookEvents(
+          { runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs },
+          ignoredEventIds
+        );
+        log(
+          `No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`
+        );
         if (now() + pollIntervalMs >= deadline) {
           break;
         }
@@ -5656,7 +5675,9 @@ function isStaleForWatch(record, startedAtMs) {
   return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
 }
 function hasWatchTarget(options2) {
-  return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
+  return Boolean(
+    options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0)
+  );
 }
 function eventMatchesWatchTarget(event, options2) {
   if (options2.eventType && event.eventType !== options2.eventType) {
@@ -5719,7 +5740,15 @@ function parseEventTimeMs(value) {
   const utcDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(trimmed);
   if (utcDateTime) {
     const [, year, month, day, hour, minute, second, millisecond = "0"] = utcDateTime;
-    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond.padEnd(3, "0")));
+    return Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+      Number(millisecond.padEnd(3, "0"))
+    );
   }
   const parsed = Date.parse(trimmed);
   return Number.isFinite(parsed) ? parsed : void 0;
@@ -5869,7 +5898,11 @@ function summarizeEvent(record, data) {
     case "payment_method.deleted":
       return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} deleted${cardSuffix(data)}`;
     case "payment_method.default_change":
-      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record.resourceId))}`;
+      return `default payment method changed to ${str(
+        data,
+        "defaultPaymentMethodId",
+        str(data, "paymentInstrumentId", record.resourceId)
+      )}`;
     case "risk_rule.updated":
       return `risk rules updated for ${str(data, "customerId", record.customerId)}`;
     case "vic_device.binding_succeeded":
@@ -5951,7 +5984,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// dist/help.js
+// src/help.ts
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -7291,7 +7324,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// dist/internal-ucp.production.json
+// src/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7303,7 +7336,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// dist/internal-ucp.sandbox.json
+// src/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7311,7 +7344,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// dist/internal-ucp.js
+// src/internal-ucp.ts
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7334,8 +7367,14 @@ function validateInternalUcpMerchants(value, source) {
   });
   return merchants;
 }
-var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(internal_ucp_production_default, "internal-ucp.production.json");
-var SANDBOX_MERCHANTS = validateInternalUcpMerchants(internal_ucp_sandbox_default, "internal-ucp.sandbox.json");
+var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(
+  internal_ucp_production_default,
+  "internal-ucp.production.json"
+);
+var SANDBOX_MERCHANTS = validateInternalUcpMerchants(
+  internal_ucp_sandbox_default,
+  "internal-ucp.sandbox.json"
+);
 function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl;
   try {
@@ -7364,7 +7403,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// dist/output.js
+// src/output.ts
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -7409,7 +7448,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// dist/payment/amount.js
+// src/payment/amount.ts
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -7418,7 +7457,7 @@ function parseAmount(value) {
   return amount;
 }
 
-// dist/payment/authorization-api.js
+// src/payment/authorization-api.ts
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
@@ -7480,7 +7519,11 @@ function createTipAuthorizationApi(input, overrides = {}) {
       }
       return {
         instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(input.runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId)
+        passkeyUrl: buildAgentPasskeyUrl(
+          resolveAgentBaseUrl(input.runtimeConfig.baseUrl),
+          draft.paymentInstrumentId,
+          instructionId
+        )
       };
     },
     waitForActivation: async (instructionId) => {
@@ -7490,12 +7533,17 @@ function createTipAuthorizationApi(input, overrides = {}) {
         type: "purchase_instruction.activated",
         ack: false
       });
-      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
+      const matches = collected.events.filter(
+        (event) => eventMatchesInstruction(event, instructionId)
+      );
       if (matches.length === 0) {
         return { activated: false };
       }
       const eventIds = matches.map((event) => event.eventId).filter(Boolean);
-      await dependencies.ackWebhookEvents({ runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs }, eventIds);
+      await dependencies.ackWebhookEvents(
+        { runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs },
+        eventIds
+      );
       return { activated: true };
     },
     getInstruction: async (instructionId) => {
@@ -7529,7 +7577,9 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.filter((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0).map((item) => ({ ...item }));
+  return value.filter(
+    (item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0
+  ).map((item) => ({ ...item }));
 }
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
@@ -7538,7 +7588,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/payment/post-payment-refresh.js
+// src/payment/post-payment-refresh.ts
 var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
 async function executePaymentRequestWithRefresh(input) {
   if (input.dryRun) {
@@ -7551,7 +7601,9 @@ async function executePaymentRequestWithRefresh(input) {
     await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
     throw error;
   }
-  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(
+    input.refreshPaymentMethods
+  );
   return {
     result,
     ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
@@ -7575,7 +7627,7 @@ function errorMessage(error) {
   return String(error);
 }
 
-// dist/payment/charge.js
+// src/payment/charge.ts
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -7657,14 +7709,26 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// dist/skills/install.js
+// src/skills/install.ts
 import { randomUUID as createRandomUUID } from "node:crypto";
 import { mkdir as mkdir6, rm as rm6 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// dist/skills/agents.js
+// src/skills/agents.ts
 import { constants } from "node:fs";
-import { cp, copyFile, lstat, mkdir as mkdir2, open, readlink, realpath, rename, rm, rmdir, symlink } from "node:fs/promises";
+import {
+  cp,
+  copyFile,
+  lstat,
+  mkdir as mkdir2,
+  open,
+  readlink,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  symlink
+} from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 var MARKER_FILE_NAME = ".clink-install.json";
 var DETECTION_FAILURE = "failed to detect installed agents";
@@ -7680,15 +7744,57 @@ async function detectAgents(input) {
   const sharedTarget = join(skillsRoot, input.skillName);
   const detected = [];
   try {
-    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(
+      detected,
+      "cursor",
+      "link",
+      join(homeDir, ".cursor"),
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
+    await appendDetected(
+      detected,
+      "claude-code",
+      "link",
+      join(homeDir, ".claude"),
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
     const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
-    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
+    await appendDetected(
+      detected,
+      "codex",
+      "link",
+      codexRoot,
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
+    await appendDetected(
+      detected,
+      "codebuddy",
+      "link",
+      join(homeDir, ".codebuddy"),
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
+    await appendDetected(
+      detected,
+      "openclaw",
+      "shared",
+      join(homeDir, ".openclaw"),
+      () => sharedTarget
+    );
     const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
-    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(
+      detected,
+      "hermes",
+      "copy",
+      hermesRoot,
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
+    await appendDetected(
+      detected,
+      "trae",
+      "link",
+      join(homeDir, ".trae"),
+      (rootPath) => join(rootPath, "skills", input.skillName)
+    );
     const opencodeRoot = await firstExistingRoot(uniquePaths([
       resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
       join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
@@ -7702,7 +7808,10 @@ async function detectAgents(input) {
         targetPath: sharedTarget
       });
     }
-    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
+    const copilotCliRoot = resolveEnvironmentRoot(
+      input.env.COPILOT_HOME,
+      join(homeDir, ".copilot")
+    );
     const copilotRoot = await firstExistingRoot(uniquePaths([
       copilotCliRoot,
       join(homeDir, ".config", "github-copilot")
@@ -7726,8 +7835,20 @@ async function detectAgents(input) {
         targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
       });
     }
-    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
-    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
+    await appendDetected(
+      detected,
+      "codework",
+      "unsupported",
+      join(homeDir, ".codework"),
+      () => null
+    );
+    await appendDetected(
+      detected,
+      "chatgpt",
+      "unsupported",
+      join(homeDir, ".chatgpt"),
+      () => null
+    );
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -7841,7 +7962,14 @@ function createNoWritePlan(detected, mode) {
   };
 }
 function createWritePlan(preflight, input) {
-  const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
+  const {
+    detected,
+    snapshot,
+    boundary,
+    copyTempPath,
+    backupPath,
+    keepBackup
+  } = preflight;
   const targetPath = detected.targetPath;
   const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
   let appliedResult = null;
@@ -7935,7 +8063,11 @@ function createWritePlan(preflight, input) {
     }
     await mkdir2(boundary.parentPath);
     parentCreated = true;
-    ownedParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    ownedParent = await inspectExistingDirectoryBoundary(
+      boundary.parentPath,
+      boundary.canonicalRoot,
+      false
+    );
     await assertWritableBoundary(boundary, ownedParent);
   }
   async function moveExistingTarget() {
@@ -7969,7 +8101,10 @@ function createWritePlan(preflight, input) {
     if (placedFingerprint !== null) {
       const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
       if (currentFingerprint !== null) {
-        if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
+        if (!sameEntryIdentity(
+          entryIdentityFromFingerprint(currentFingerprint),
+          entryIdentityFromFingerprint(placedFingerprint)
+        )) {
           throw new Error("installed target changed before rollback");
         }
         await rm(targetPath, { recursive: true, force: true });
@@ -7981,7 +8116,12 @@ function createWritePlan(preflight, input) {
         throw new Error("missing backup path");
       }
       await assertWritableBoundary(boundary, ownedParent);
-      await restoreBackupExclusively(backupObjectPath, targetPath, movedBackupFingerprint, detected.mode);
+      await restoreBackupExclusively(
+        backupObjectPath,
+        targetPath,
+        movedBackupFingerprint,
+        detected.mode
+      );
       backupMoved = false;
       backupVerified = false;
       movedBackupFingerprint = null;
@@ -8041,7 +8181,10 @@ function createWritePlan(preflight, input) {
             return;
           }
           await assertPathNamesEntry(backupPath, backupContainerEntry);
-          const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
+          const currentBackup = await fingerprintPathIfExists(
+            backupObjectPath,
+            detected.mode
+          );
           if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
             await rm(backupPath, { recursive: true, force: true });
             backupMoved = false;
@@ -8103,7 +8246,10 @@ async function assertWritableBoundary(boundary, ownedParent) {
   const rootStat = await lstat(boundary.rootPath);
   const canonicalRoot = await realpath(boundary.rootPath);
   const canonicalRootStat = await lstat(canonicalRoot);
-  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(createEntryIdentity(canonicalRootStat), boundary.canonicalRootEntry)) {
+  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(
+    createEntryIdentity(canonicalRootStat),
+    boundary.canonicalRootEntry
+  )) {
     throw installError(TARGET_CHANGED);
   }
   const expectedParent = ownedParent ?? boundary.parent;
@@ -8113,7 +8259,11 @@ async function assertWritableBoundary(boundary, ownedParent) {
     }
     return;
   }
-  const actualParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, true);
+  const actualParent = await inspectExistingDirectoryBoundary(
+    boundary.parentPath,
+    boundary.canonicalRoot,
+    true
+  );
   if (!sameEntryIdentity(actualParent.entry, expectedParent.entry) || actualParent.canonicalPath !== expectedParent.canonicalPath || !sameEntryIdentity(actualParent.canonicalEntry, expectedParent.canonicalEntry)) {
     throw installError(TARGET_CHANGED);
   }
@@ -8123,7 +8273,11 @@ async function removeOwnedParent(boundary, ownedParent) {
     return;
   }
   try {
-    const actual = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    const actual = await inspectExistingDirectoryBoundary(
+      boundary.parentPath,
+      boundary.canonicalRoot,
+      false
+    );
     if (!sameEntryIdentity(actual.entry, ownedParent.entry) || actual.canonicalPath !== ownedParent.canonicalPath || !sameEntryIdentity(actual.canonicalEntry, ownedParent.canonicalEntry)) {
       return;
     }
@@ -8251,7 +8405,11 @@ async function inspectTarget(detected, input) {
   }
   if (detected.mode === "copy" && targetStat.isDirectory()) {
     const markerRecord = await readMarkerRecord(detected.targetPath);
-    const fingerprint = createFingerprint(targetStat, null, markerRecord?.raw ?? null);
+    const fingerprint = createFingerprint(
+      targetStat,
+      null,
+      markerRecord?.raw ?? null
+    );
     if (markerRecord !== null && markerRecord.marker.publisher === input.publisher && markerRecord.marker.skillName === input.skillName) {
       return { kind: "managed-copy", fingerprint, marker: markerRecord.marker };
     }
@@ -8320,14 +8478,20 @@ function sameFingerprint(first, second) {
   return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.size === second.size && first.mtimeMs === second.mtimeMs && first.ctimeMs === second.ctimeMs && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 function sameMovedObject(first, second) {
-  return sameEntryIdentity(entryIdentityFromFingerprint(first), entryIdentityFromFingerprint(second)) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+  return sameEntryIdentity(
+    entryIdentityFromFingerprint(first),
+    entryIdentityFromFingerprint(second)
+  ) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 function sameCopiedObject(first, second) {
   return first.type === second.type && first.mode === second.mode && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 async function removeOwnedPath(filePath, expected, mode) {
   const actual = await fingerprintPathIfExists(filePath, mode);
-  if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
+  if (actual === null || !sameEntryIdentity(
+    entryIdentityFromFingerprint(actual),
+    entryIdentityFromFingerprint(expected)
+  )) {
     return;
   }
   await rm(filePath, { recursive: true, force: true });
@@ -8418,7 +8582,7 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/archive.js
+// src/skills/archive.ts
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
 import { chmod, lstat as lstat2, mkdir as mkdir3, open as open2, readdir, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
@@ -8426,7 +8590,7 @@ import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, 
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// dist/skills/spec.js
+// src/skills/spec.ts
 var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
 var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
@@ -8469,7 +8633,9 @@ function parseSkillInstallArgs(operands, flags) {
     throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
   }
   if (flags.version !== void 0) {
-    throw validationError("--version is not supported by skills install; use publisher/skillName@version");
+    throw validationError(
+      "--version is not supported by skills install; use publisher/skillName@version"
+    );
   }
   return {
     ...parseSkillPackageSpec(operands[0]),
@@ -8478,11 +8644,15 @@ function parseSkillInstallArgs(operands, flags) {
 }
 function parseSkillTipArgs(operands, flags) {
   if (operands.length !== 0) {
-    throw validationError("skills tip does not accept positional arguments; use --publisher with --name");
+    throw validationError(
+      "skills tip does not accept positional arguments; use --publisher with --name"
+    );
   }
   for (const name of FORBIDDEN_TIP_FLAGS) {
     if (flags[name] !== void 0) {
-      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`);
+      throw validationError(
+        name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`
+      );
     }
   }
   const publisher = getStringFlag(flags, "publisher");
@@ -8532,7 +8702,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// dist/skills/archive.js
+// src/skills/archive.ts
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -8663,7 +8833,11 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       const outputPath = resolve2(rawRoot, normalizedPath);
       assertPathContained(rawRoot, outputPath);
       validateDeclaredEntry(entry, limits);
-      declaredTotalBytes = addBoundedSize(declaredTotalBytes, entry.uncompressedSize, limits.maxTotalBytes);
+      declaredTotalBytes = addBoundedSize(
+        declaredTotalBytes,
+        entry.uncompressedSize,
+        limits.maxTotalBytes
+      );
       if (classified.kind === "directory") {
         if (entry.uncompressedSize !== 0) {
           throw new Error("archive directory contains data");
@@ -8675,7 +8849,11 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       const source = await zipFile.openReadStreamPromise(entry);
       const meter = new ArchiveByteCounter(limits, byteCount);
       const mode = classified.executable ? 493 : 420;
-      await pipeline(source, meter, createWriteStream(outputPath, { flags: "wx", mode }));
+      await pipeline(
+        source,
+        meter,
+        createWriteStream(outputPath, { flags: "wx", mode })
+      );
       if (meter.fileBytes !== entry.uncompressedSize) {
         throw new Error("archive entry size mismatch");
       }
@@ -8867,7 +9045,9 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
   }
 }
 async function selectSkillLayout(rawRoot) {
-  const topLevelNames = (await readdir(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const topLevelNames = (await readdir(rawRoot)).sort(
+    (left, right) => left.localeCompare(right, "en")
+  );
   if (topLevelNames.includes("SKILL.md")) {
     const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
     if (rootSkill.isFile()) {
@@ -8904,7 +9084,9 @@ async function selectSkillLayout(rawRoot) {
     return { layout: "multi", skillRoots };
   }
   if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
-    const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
+    const wrappedSkillRoots = await findDirectSkillRoots(
+      topLevelDirectories[0].root
+    );
     if (wrappedSkillRoots.length >= 2) {
       assertValidMultiSkillRoots(wrappedSkillRoots);
       return { layout: "multi", skillRoots: wrappedSkillRoots };
@@ -8913,7 +9095,9 @@ async function selectSkillLayout(rawRoot) {
   throw new Error("archive must contain one skill root or multiple one-level skill roots");
 }
 async function findDirectSkillRoots(parentRoot) {
-  const names = (await readdir(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const names = (await readdir(parentRoot)).sort(
+    (left, right) => left.localeCompare(right, "en")
+  );
   const skillRoots = [];
   for (const name of names) {
     const candidateRoot = resolve2(parentRoot, name);
@@ -8950,7 +9134,7 @@ function closeZip(zipFile) {
   }
 }
 
-// dist/skills/download.js
+// src/skills/download.ts
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm3 } from "node:fs/promises";
@@ -8994,7 +9178,13 @@ async function downloadSkillPackage(input, overrides) {
   try {
     while (true) {
       try {
-        return await downloadWithRetries(ticket, input.destinationPath, input.timeoutMs, dependencies, state);
+        return await downloadWithRetries(
+          ticket,
+          input.destinationPath,
+          input.timeoutMs,
+          dependencies,
+          state
+        );
       } catch (error) {
         if (!(error instanceof RefreshTicketError) || refreshed) {
           throw error;
@@ -9023,7 +9213,13 @@ async function downloadSkillPackage(input, overrides) {
 async function downloadWithRetries(ticket, destinationPath, timeoutMs, dependencies, state) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependencies, state);
+      return await downloadTimedAttempt(
+        ticket,
+        destinationPath,
+        timeoutMs,
+        dependencies,
+        state
+      );
     } catch (error) {
       if (!(error instanceof RetryableDownloadError)) {
         throw error;
@@ -9041,7 +9237,13 @@ async function downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependen
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await downloadAttempt(ticket, destinationPath, dependencies, state, controller.signal);
+    return await downloadAttempt(
+      ticket,
+      destinationPath,
+      dependencies,
+      state,
+      controller.signal
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -9143,7 +9345,12 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
     destination.once("error", () => {
       firstFailureOrigin ??= "destination";
     });
-    await pipeline2(source, meter, destination, { signal });
+    await pipeline2(
+      source,
+      meter,
+      destination,
+      { signal }
+    );
     if (actualBytes !== ticket.sizeBytes) {
       throw new RetryableDownloadError();
     }
@@ -9209,21 +9416,31 @@ async function cancelResponseBody(response) {
   }
 }
 
-// dist/skills/metrics.js
+// src/skills/metrics.ts
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
 async function reportSkillPublicDownload(input, overrides = {}) {
-  await reportSkillMetric(input, "public-download", { source: PUBLIC_DOWNLOAD_METRIC_SOURCE }, overrides);
+  await reportSkillMetric(
+    input,
+    "public-download",
+    { source: PUBLIC_DOWNLOAD_METRIC_SOURCE },
+    overrides
+  );
 }
 async function reportSkillTip(input, overrides = {}) {
-  await reportSkillMetric(input, "tip", compact2({
-    orderId: input.orderId,
-    versionNo: input.versionNo,
-    amount: input.amount,
-    currency: input.currency,
-    source: TIP_METRIC_SOURCE
-  }), overrides);
+  await reportSkillMetric(
+    input,
+    "tip",
+    compact2({
+      orderId: input.orderId,
+      versionNo: input.versionNo,
+      amount: input.amount,
+      currency: input.currency,
+      source: TIP_METRIC_SOURCE
+    }),
+    overrides
+  );
 }
 function compact2(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
@@ -9232,7 +9449,10 @@ async function reportSkillMetric(input, metric, body, overrides) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch
   };
-  const url = new URL(`${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/${metric}`, ensureTrailingSlash2(input.dashboardBaseUrl));
+  const url = new URL(
+    `${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/${metric}`,
+    ensureTrailingSlash2(input.dashboardBaseUrl)
+  );
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
   try {
@@ -9256,10 +9476,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// dist/skills/registry.js
+// src/skills/registry.ts
 import path2 from "node:path";
 
-// dist/skills/public-api.js
+// src/skills/public-api.ts
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -9304,7 +9524,12 @@ async function requestPublicSkillsJson(input, overrides = {}) {
         await cancelResponseBody2(response);
         assertApiSuccess(response.status, void 0);
       }
-      return await readLimitedJsonBody(response, invalidResponseMessage, invalidResponseCode, maxResponseBodyBytes);
+      return await readLimitedJsonBody(
+        response,
+        invalidResponseMessage,
+        invalidResponseCode,
+        maxResponseBodyBytes
+      );
     } catch (error) {
       if (error instanceof CliError) {
         throw error;
@@ -9385,7 +9610,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// dist/skills/marketplace.js
+// src/skills/marketplace.ts
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -9452,26 +9677,29 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/skills/registry.js
+// src/skills/registry.ts
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
 var SKILL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 var MAX_SKILL_ID_LENGTH = 128;
 async function getSkillDownloadTicket(input, overrides) {
-  const body = await requestPublicSkillsJson({
-    baseUrl: input.baseUrl,
-    path: `${PUBLIC_SKILLS_MARKETPLACE_PATH}/download-url`,
-    query: {
-      publisher: input.packageSpec.publisher,
-      skillName: input.packageSpec.skillName,
-      versionNo: input.packageSpec.requestedVersion ?? void 0
+  const body = await requestPublicSkillsJson(
+    {
+      baseUrl: input.baseUrl,
+      path: `${PUBLIC_SKILLS_MARKETPLACE_PATH}/download-url`,
+      query: {
+        publisher: input.packageSpec.publisher,
+        skillName: input.packageSpec.skillName,
+        versionNo: input.packageSpec.requestedVersion ?? void 0
+      },
+      timeoutMs: input.timeoutMs,
+      invalidResponseMessage: INVALID_RESPONSE_MESSAGE2,
+      invalidResponseCode: 400,
+      networkErrorMessage: NETWORK_ERROR_MESSAGE3
     },
-    timeoutMs: input.timeoutMs,
-    invalidResponseMessage: INVALID_RESPONSE_MESSAGE2,
-    invalidResponseCode: 400,
-    networkErrorMessage: NETWORK_ERROR_MESSAGE3
-  }, overrides);
+    overrides
+  );
   return parseDownloadTicket(unwrapApiData(body));
 }
 function parseDownloadTicket(body) {
@@ -9523,15 +9751,30 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// dist/skills/store.js
+// src/skills/store.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile3 } from "node:fs/promises";
 import { join as join3, resolve as resolve4 } from "node:path";
 
-// dist/skills/store-publication.js
+// src/skills/store-publication.ts
 import { randomUUID } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open3, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
+import {
+  chmod as chmod2,
+  cp as cp2,
+  copyFile as copyFile2,
+  link,
+  lstat as lstat4,
+  mkdir as mkdir4,
+  open as open3,
+  readdir as readdir2,
+  readlink as readlink2,
+  realpath as realpath2,
+  rename as rename2,
+  rm as rm4,
+  symlink as symlink2,
+  utimes
+} from "node:fs/promises";
 import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
 var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
 var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
@@ -9542,11 +9785,11 @@ var PUBLICATION_GUARD_OWNER_NAME = "owner.json";
 var PUBLICATION_GUARD_STALE_MS = 6e5;
 var SHA256_PATTERN = /^[a-f0-9]{64}$/;
 var MovedBackupError = class extends Error {
-  backup;
   constructor(backup) {
     super("current changed while being backed up");
     this.backup = backup;
   }
+  backup;
 };
 async function publishSkillRelease(input) {
   const paths = input.paths;
@@ -9563,7 +9806,10 @@ async function publishSkillRelease(input) {
       }
     }
     if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
-      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
+      const expectedRelease = await canonicalExistingReleasePath(
+        paths.releasePath,
+        paths.releasesRoot
+      );
       if (expectedRelease !== current.managed.canonicalReleasePath) {
         throw installError(PUBLISH_CONFLICT_MESSAGE);
       }
@@ -9573,7 +9819,11 @@ async function publishSkillRelease(input) {
       }
       return createUnchangedPublication(paths);
     }
-    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+    existingRelease = await inspectExistingRelease(
+      paths.releasePath,
+      paths.releasesRoot,
+      input.marker
+    );
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -9592,11 +9842,20 @@ async function publishSkillRelease(input) {
   };
   try {
     if (existingRelease === null) {
-      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker, lockCapability);
+      transaction.createdRelease = await createImmutableRelease(
+        paths,
+        input.extractedRoot,
+        input.marker,
+        lockCapability
+      );
     }
     const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
     if (selectedRelease === null) {
-      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+      existingRelease = await inspectExistingRelease(
+        paths.releasePath,
+        paths.releasesRoot,
+        input.marker
+      );
     }
     const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
     if (expectedRelease === null) {
@@ -9609,7 +9868,12 @@ async function publishSkillRelease(input) {
       try {
         await paths.publicationMutationHook?.({ phase: "before-current-backup" });
         await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
+        transaction.backup = await moveCurrentToBackup(
+          paths,
+          current.fingerprint,
+          backupName,
+          !compatibleManaged
+        );
       } catch (error) {
         if (error instanceof MovedBackupError) {
           transaction.backup = error.backup;
@@ -9629,7 +9893,10 @@ async function publishSkillRelease(input) {
     transaction.newCurrent = newCurrent;
     await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
     await paths.publicationMutationHook?.({ phase: "after-current-switch" });
-    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
+    return createPublishedTransaction(
+      transaction,
+      current === null ? "installed" : "updated"
+    );
   } catch (error) {
     try {
       await rollbackPublicationTransaction(transaction);
@@ -9684,7 +9951,10 @@ function createPublishedTransaction(transaction, action) {
       }
       try {
         if (transaction.backup !== null && !transaction.backup.retained) {
-          await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+          await assertLockCapabilityAuthenticated(
+            transaction.paths.lockPath,
+            transaction.lockCapability
+          );
           await removeAuthenticatedBackup(transaction.backup);
           transaction.backup = null;
         }
@@ -9705,7 +9975,12 @@ function validatePublicationInput(paths, extractedRoot, marker, uuid) {
   if (!isSafePathSegment(uuid)) {
     throw installError(PUBLISH_FAILURE_MESSAGE);
   }
-  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
+  const expectedRelease = resolve3(
+    paths.releasesRoot,
+    marker.publisher,
+    marker.skillName,
+    marker.sha256
+  );
   if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
     throw installError(PUBLISH_FAILURE_MESSAGE);
   }
@@ -9776,7 +10051,9 @@ async function inspectManagedCurrent(paths, fingerprint) {
     if (!SHA256_PATTERN.test(sha256)) {
       return null;
     }
-    const marker = await readNoFollowInstallMarker(join2(canonicalReleasePath, INSTALL_MARKER_NAME2));
+    const marker = await readNoFollowInstallMarker(
+      join2(canonicalReleasePath, INSTALL_MARKER_NAME2)
+    );
     if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
       return null;
     }
@@ -9825,14 +10102,20 @@ async function inspectExistingRelease(releasePath, releasesRoot, marker) {
   const canonicalRoot = await realpath2(releasesRoot);
   const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
   const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  const existingMarker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
+  const existingMarker = await readNoFollowInstallMarker(
+    join2(releasePath, INSTALL_MARKER_NAME2)
+  );
   if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
     throw installError(PUBLISH_CONFLICT_MESSAGE);
   }
   return fingerprint;
 }
 async function assertReleaseAuthenticated(paths, marker, expected) {
-  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  const current = await inspectExistingRelease(
+    paths.releasePath,
+    paths.releasesRoot,
+    marker
+  );
   if (current === null || !samePathFingerprint(current, expected)) {
     throw new Error("selected release changed during publication");
   }
@@ -9857,7 +10140,11 @@ async function createImmutableRelease(paths, extractedRoot, marker, lockCapabili
     await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
     await assertPublicationGuardAuthenticated(guard);
     await paths.publicationMutationHook?.({ phase: "before-release-rename" });
-    const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+    const existingRelease = await inspectExistingRelease(
+      paths.releasePath,
+      paths.releasesRoot,
+      marker
+    );
     await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
     await assertPublicationGuardAuthenticated(guard);
     if (existingRelease !== null) {
@@ -9868,7 +10155,9 @@ async function createImmutableRelease(paths, extractedRoot, marker, lockCapabili
     if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
       throw new Error("release changed during publication");
     }
-    const installedMarker = await readNoFollowInstallMarker(join2(paths.releasePath, INSTALL_MARKER_NAME2));
+    const installedMarker = await readNoFollowInstallMarker(
+      join2(paths.releasePath, INSTALL_MARKER_NAME2)
+    );
     if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
       throw new Error("release marker changed during publication");
     }
@@ -9887,7 +10176,10 @@ async function createImmutableRelease(paths, extractedRoot, marker, lockCapabili
   }
 }
 async function acquirePublicationGuard(paths, lockCapability) {
-  const guardPath = join2(dirname3(paths.releasePath), `.${basename(paths.releasePath)}.publishing`);
+  const guardPath = join2(
+    dirname3(paths.releasePath),
+    `.${basename(paths.releasePath)}.publishing`
+  );
   const owner = {
     schemaVersion: 1,
     pid: lockCapability.pid,
@@ -9939,7 +10231,11 @@ async function createPublicationGuard(guardPath, owner) {
   }
 }
 async function writePublicationGuardOwner(guardPath, owner) {
-  const handle = await open3(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME), constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 384);
+  const handle = await open3(
+    join2(guardPath, PUBLICATION_GUARD_OWNER_NAME),
+    constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW,
+    384
+  );
   try {
     await handle.writeFile(JSON.stringify(owner), "utf8");
     await handle.chmod(384);
@@ -10116,7 +10412,11 @@ async function ensureRealDirectory(path3) {
 }
 async function writeInstallMarker(rootPath, marker) {
   const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open3(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
+  const handle = await open3(
+    markerPath,
+    constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW,
+    420
+  );
   try {
     await handle.writeFile(JSON.stringify(marker), "utf8");
     await handle.chmod(420);
@@ -10218,11 +10518,22 @@ async function removeEmptyOwnedContainer(containerPath, expected) {
 async function rollbackPublicationTransaction(transaction) {
   let rollbackFailed = false;
   let currentSafeForReleaseCleanup = true;
-  await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+  await assertLockCapabilityAuthenticated(
+    transaction.paths.lockPath,
+    transaction.lockCapability
+  );
   if (transaction.newCurrent !== null) {
     try {
-      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
-      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
+      await assertLockCapabilityAuthenticated(
+        transaction.paths.lockPath,
+        transaction.lockCapability
+      );
+      await removeExpectedCurrent(
+        transaction.paths.currentPath,
+        transaction.newCurrent,
+        transaction.paths.backupsRoot,
+        `.${transaction.uuid}-new-current`
+      );
       transaction.newCurrent = null;
     } catch {
       rollbackFailed = true;
@@ -10243,10 +10554,16 @@ async function rollbackPublicationTransaction(transaction) {
   }
   if (transaction.backup !== null) {
     try {
-      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+      await assertLockCapabilityAuthenticated(
+        transaction.paths.lockPath,
+        transaction.lockCapability
+      );
       await restoreBackup(transaction.paths.currentPath, transaction.backup);
       if (!transaction.backup.retained) {
-        await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
+        await assertLockCapabilityAuthenticated(
+          transaction.paths.lockPath,
+          transaction.lockCapability
+        );
         await removeAuthenticatedBackup(transaction.backup);
       }
       transaction.backup = transaction.backup.retained ? transaction.backup : null;
@@ -10257,8 +10574,16 @@ async function rollbackPublicationTransaction(transaction) {
   }
   if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
     try {
-      await assertLockCapabilityAuthenticated(transaction.paths.lockPath, transaction.lockCapability);
-      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
+      await assertLockCapabilityAuthenticated(
+        transaction.paths.lockPath,
+        transaction.lockCapability
+      );
+      await removeCreatedRelease(
+        transaction.paths.releasePath,
+        transaction.paths.releasesRoot,
+        transaction.createdRelease,
+        transaction.uuid
+      );
       transaction.createdRelease = null;
     } catch {
       rollbackFailed = true;
@@ -10453,7 +10778,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/store.js
+// src/skills/store.ts
 var INSTALL_LOCK_STALE_MS = 6e5;
 var OWNER_FILE_NAME = "owner.json";
 var LOCK_BUSY_MESSAGE = "another skill installation is in progress";
@@ -10518,7 +10843,11 @@ async function acquireInstallLock(paths, options2) {
     await withMutationGuard(paths.lockPath, "reclaim", mutationContext, async () => {
       let currentSnapshot;
       try {
-        currentSnapshot = await inspectLock(paths.lockPath, currentTime, isProcessAlive2);
+        currentSnapshot = await inspectLock(
+          paths.lockPath,
+          currentTime,
+          isProcessAlive2
+        );
       } catch (error) {
         if (isErrorCode3(error, "ENOENT")) {
           return;
@@ -10592,13 +10921,21 @@ async function createLockDirectory(lockPath, owner, mutationContext) {
       ino: lockStat.ino,
       owner
     };
-    await callMutationHook(mutationContext.mutationHook, "initialize", "after-lock-mkdir");
+    await callMutationHook(
+      mutationContext.mutationHook,
+      "initialize",
+      "after-lock-mkdir"
+    );
     await writeFile3(join3(lockPath, OWNER_FILE_NAME), JSON.stringify(owner), {
       encoding: "utf8",
       flag: "wx",
       mode: 384
     });
-    await callMutationHook(mutationContext.mutationHook, "initialize", "after-owner-write");
+    await callMutationHook(
+      mutationContext.mutationHook,
+      "initialize",
+      "after-owner-write"
+    );
     await validateLockIdentity(lockPath, identity, mutationContext);
   } catch {
     if (identity !== void 0) {
@@ -10700,7 +11037,9 @@ function sameOptionalLockOwner(first, second) {
 }
 async function readLockOwner(lockPath) {
   try {
-    const parsed = JSON.parse(await readFile2(join3(lockPath, OWNER_FILE_NAME), "utf8"));
+    const parsed = JSON.parse(
+      await readFile2(join3(lockPath, OWNER_FILE_NAME), "utf8")
+    );
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return null;
     }
@@ -10759,10 +11098,18 @@ function createLockHandle(lockPath, owner, mutationContext, capability) {
             return;
           }
           const releasePath = `${lockPath}.release-${randomUUID2()}`;
-          await callMutationHook(mutationContext.mutationHook, "release", "before-lock-rename");
+          await callMutationHook(
+            mutationContext.mutationHook,
+            "release",
+            "before-lock-rename"
+          );
           await rename3(lockPath, releasePath);
           ownershipLost = true;
-          await callMutationHook(mutationContext.mutationHook, "release", "after-lock-rename");
+          await callMutationHook(
+            mutationContext.mutationHook,
+            "release",
+            "after-lock-rename"
+          );
           await rm5(releasePath, { recursive: true });
         });
         released = true;
@@ -10790,7 +11137,12 @@ async function withMutationGuard(lockPath, operation, context, action) {
     id: randomUUID2(),
     createdAtMs: readCurrentTime(context.getCurrentTime)
   };
-  const guardSnapshot = await acquireMutationGuard(guardPath, guardOwner, context, operation);
+  const guardSnapshot = await acquireMutationGuard(
+    guardPath,
+    guardOwner,
+    context,
+    operation
+  );
   try {
     await callMutationHook(context.mutationHook, operation, "guard-acquired");
     return await action();
@@ -10874,14 +11226,26 @@ async function cleanupMutationGuardInitialization(guardPath, expectedStat, expec
 }
 async function recoverMutationGuard(guardPath, context, operation) {
   const currentTime = readCurrentTime(context.getCurrentTime);
-  const candidate = await inspectMutationGuard(guardPath, currentTime, context.isProcessAlive);
+  const candidate = await inspectMutationGuard(
+    guardPath,
+    currentTime,
+    context.isProcessAlive
+  );
   if (!candidate.reclaimable) {
     return false;
   }
-  await callMutationHook(context.mutationHook, operation, "before-guard-reclaim-rename");
+  await callMutationHook(
+    context.mutationHook,
+    operation,
+    "before-guard-reclaim-rename"
+  );
   const stalePath = `${guardPath}.stale-${randomUUID2()}`;
   await rename3(guardPath, stalePath);
-  const moved = await inspectMutationGuard(stalePath, currentTime, context.isProcessAlive);
+  const moved = await inspectMutationGuard(
+    stalePath,
+    currentTime,
+    context.isProcessAlive
+  );
   if (!sameMutationGuardSnapshot(candidate, moved) || !moved.reclaimable) {
     await restoreMovedDirectory(stalePath, guardPath);
     return false;
@@ -10902,7 +11266,9 @@ async function inspectMutationGuard(guardPath, currentTime, isProcessAlive2) {
 }
 async function readMutationGuardOwner(guardPath) {
   try {
-    const parsed = JSON.parse(await readFile2(join3(guardPath, OWNER_FILE_NAME), "utf8"));
+    const parsed = JSON.parse(
+      await readFile2(join3(guardPath, OWNER_FILE_NAME), "utf8")
+    );
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return null;
     }
@@ -10980,7 +11346,7 @@ function isErrorCode3(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/install.js
+// src/skills/install.ts
 var PENDING_SHA_SENTINEL = "pending";
 var DEFAULT_DEPENDENCIES2 = {
   getTicket: getSkillDownloadTicket,
@@ -11028,7 +11394,12 @@ async function installSkill(input, overrides = {}) {
     };
   }
   const stagingUuid = dependencies.randomUUID();
-  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
+  const preliminaryPaths = resolveStorePaths(
+    input.homeDir,
+    packageSpec,
+    PENDING_SHA_SENTINEL,
+    stagingUuid
+  );
   let installLock = null;
   const publishedSkills = [];
   const appliedAgents = [];
@@ -11055,8 +11426,18 @@ async function installSkill(input, overrides = {}) {
       })
     });
     dependencies.log("Materializing skill package");
-    const extracted = await dependencies.materializePackage(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
-    const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
+    const extracted = await dependencies.materializePackage(
+      downloaded.path,
+      join4(preliminaryPaths.stagingPath, "extract")
+    );
+    const installUnits = await prepareInstallUnits(
+      input,
+      extracted,
+      downloaded,
+      stagingUuid,
+      dependencies.now(),
+      dependencies
+    );
     dependencies.log("Publishing skill release");
     for (const unit of installUnits) {
       unit.published = await dependencies.publishRelease({
@@ -11092,7 +11473,13 @@ async function installSkill(input, overrides = {}) {
       await published.finalize();
     }
     committed = true;
-    const result = createInstallResult(input, downloaded, extracted.layout, skillsRoot, installUnits);
+    const result = createInstallResult(
+      input,
+      downloaded,
+      extracted.layout,
+      skillsRoot,
+      installUnits
+    );
     finalCleanupStarted = true;
     await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies);
     installLock = null;
@@ -11103,7 +11490,12 @@ async function installSkill(input, overrides = {}) {
       await rollbackInstall(appliedAgents, publishedSkills, error);
     }
     if (!finalCleanupStarted) {
-      await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies, error);
+      await releaseAndCleanup(
+        installLock,
+        preliminaryPaths.stagingPath,
+        dependencies,
+        error
+      );
     }
     throw error;
   }
@@ -11118,7 +11510,12 @@ async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, in
       skillName: root.skillName,
       requestedVersion: input.requestedVersion
     };
-    const paths = resolveStorePaths(input.homeDir, spec, downloaded.sha256, stagingUuid);
+    const paths = resolveStorePaths(
+      input.homeDir,
+      spec,
+      downloaded.sha256,
+      stagingUuid
+    );
     const detected = await dependencies.detectAgentRoots({
       homeDir: input.homeDir,
       env: input.env,
@@ -11129,7 +11526,12 @@ async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, in
       skillName: root.skillName,
       skillRoot: root.skillRoot,
       paths,
-      marker: createInstallMarker(input, downloaded, installedAt, root.skillName),
+      marker: createInstallMarker(
+        input,
+        downloaded,
+        installedAt,
+        root.skillName
+      ),
       detectedAgents: detected,
       agentUuid: dependencies.randomUUID(),
       agentPlans: [],
@@ -11287,7 +11689,7 @@ async function releaseAndCleanup(installLock, stagingPath, dependencies, primary
   }
 }
 
-// dist/skills/tip.js
+// src/skills/tip.ts
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
@@ -11307,17 +11709,29 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
   if (!items) {
     throw apiError("invalid public skills response", 502);
   }
-  const matches = items.filter((item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName) && (requestedVersion === void 0 || stringValue2(item.versionNo).trim() === requestedVersion));
+  const matches = items.filter(
+    (item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName) && (requestedVersion === void 0 || stringValue2(item.versionNo).trim() === requestedVersion)
+  );
   if (matches.length === 0) {
-    throw apiError(requestedVersion ? `skill version not found: ${publisher}/${skillName}@${requestedVersion}` : `skill not found: ${publisher}/${skillName}`, 404);
+    throw apiError(
+      requestedVersion ? `skill version not found: ${publisher}/${skillName}@${requestedVersion}` : `skill not found: ${publisher}/${skillName}`,
+      404
+    );
   }
-  const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`));
+  const uniqueRecipients = new Set(
+    matches.map(
+      (item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`
+    )
+  );
   if (uniqueRecipients.size !== 1) {
     throw apiError(`skill lookup is ambiguous: ${publisher}/${skillName}`, 409);
   }
   return recipientFromItem(matches[0], { publisher, skillName });
 }
 async function executeSkillTip(args, runtime, dependencies) {
+  if (!Number.isFinite(args.amount) || args.amount < 1 || args.amount > 100) {
+    throw validationError("skills tip amount must be between 1 and 100 USD");
+  }
   if (runtime.dryRun) {
     return {
       status: "planned",
@@ -11334,15 +11748,21 @@ async function executeSkillTip(args, runtime, dependencies) {
     target: args.target,
     timeoutMs: runtime.timeoutMs
   });
-  const paymentMethod = selectDefaultTipPaymentMethod(await dependencies.refreshPaymentMethods(), args.amount);
-  const execution = await dependencies.executeCharge({
-    mode: "direct",
-    paymentInstrumentId: paymentMethod.paymentInstrumentId,
-    paymentMethodType: paymentMethod.paymentMethodType,
-    merchantId: recipient.merchantId,
-    amount: args.amount,
-    currency: "USD"
-  }, runtime.chargeRuntime);
+  const paymentMethod = selectDefaultTipPaymentMethod(
+    await dependencies.refreshPaymentMethods(),
+    args.amount
+  );
+  const execution = await dependencies.executeCharge(
+    {
+      mode: "direct",
+      paymentInstrumentId: paymentMethod.paymentInstrumentId,
+      paymentMethodType: paymentMethod.paymentMethodType,
+      merchantId: recipient.merchantId,
+      amount: args.amount,
+      currency: "USD"
+    },
+    runtime.chargeRuntime
+  );
   if (execution.dryRun) {
     throw new Error("charge dry-run is unreachable after tip lookup");
   }
@@ -11411,7 +11831,10 @@ function recipientFromItem(item, errorIdentity) {
   }
   const merchantId = stringValue2(item.merchantId).trim();
   if (!merchantId) {
-    throw apiError(`tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`, 422);
+    throw apiError(
+      `tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`,
+      422
+    );
   }
   const skillId = stringValue2(item.skillId).trim();
   if (!skillId) {
@@ -11444,7 +11867,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// dist/tool.js
+// src/tool.ts
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -11710,23 +12133,27 @@ async function fetchCheckoutHtml(url, timeoutMs = 3e4, fetchPage) {
 }
 async function fetchCheckoutHtmlWithCurl(url, timeoutMs) {
   try {
-    const { stdout } = await execFileAsync("curl", [
-      "-L",
-      "--globoff",
-      "--compressed",
-      "--silent",
-      "--show-error",
-      "--cookie",
-      "",
-      "--max-time",
-      String(Math.max(1, Math.ceil(timeoutMs / 1e3))),
-      "-A",
-      CHECKOUT_USER_AGENT,
-      url
-    ], {
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: timeoutMs + 1e3
-    });
+    const { stdout } = await execFileAsync(
+      "curl",
+      [
+        "-L",
+        "--globoff",
+        "--compressed",
+        "--silent",
+        "--show-error",
+        "--cookie",
+        "",
+        "--max-time",
+        String(Math.max(1, Math.ceil(timeoutMs / 1e3))),
+        "-A",
+        CHECKOUT_USER_AGENT,
+        url
+      ],
+      {
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: timeoutMs + 1e3
+      }
+    );
     return stdout;
   } catch (error) {
     if (isCommandNotFound(error)) {
@@ -11793,7 +12220,9 @@ function storeResponseCookies(headers, url, cookies) {
     if (!cookie) {
       continue;
     }
-    const existingIndex = cookies.findIndex((stored) => stored.name === cookie.name && stored.domain === cookie.domain && stored.path === cookie.path);
+    const existingIndex = cookies.findIndex(
+      (stored) => stored.name === cookie.name && stored.domain === cookie.domain && stored.path === cookie.path
+    );
     if (existingIndex >= 0) {
       cookies.splice(existingIndex, 1, cookie);
     } else {
@@ -12221,7 +12650,7 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// dist/cli.js
+// src/cli.ts
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
@@ -12322,23 +12751,27 @@ async function skillsInstall(context) {
 async function skillsTip(context) {
   const args = parseSkillTipArgs(context.args.positionals.slice(2), context.args.flags);
   const paymentMethodApi = createPaymentMethodApi(context);
-  const result = await executeSkillTip(args, {
-    baseUrl: context.runtimeConfig.baseUrl,
-    dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
-    timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: context.globalOptions.dryRun,
-    chargeRuntime: {
-      runtimeConfig: context.runtimeConfig,
+  const result = await executeSkillTip(
+    args,
+    {
+      baseUrl: context.runtimeConfig.baseUrl,
+      dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: context.globalOptions.dryRun,
-      refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
+      chargeRuntime: {
+        runtimeConfig: context.runtimeConfig,
+        timeoutMs: context.globalOptions.timeoutMs,
+        dryRun: context.globalOptions.dryRun,
+        refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
+      }
+    },
+    {
+      resolveRecipient: resolveSkillTipRecipient,
+      refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
+      executeCharge,
+      reportTip: reportSkillTip
     }
-  }, {
-    resolveRecipient: resolveSkillTipRecipient,
-    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
-    executeCharge,
-    reportTip: reportSkillTip
-  });
+  );
   printSuccess(result, context.globalOptions.format);
   if (result.status === "three_ds_required" && result.redirectUrl) {
     await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication");
@@ -12533,7 +12966,10 @@ async function eventsPoll(context) {
   const type = getStringFlag(flags, "type");
   const ack = !getBooleanFlag(flags, "no-ack");
   if (context.globalOptions.dryRun) {
-    printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
+    printSuccess(
+      { ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true },
+      context.globalOptions.format
+    );
     return EXIT_CODES.OK;
   }
   const result = await collectWebhookEvents({
@@ -12544,13 +12980,16 @@ async function eventsPoll(context) {
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {}
   });
-  printSuccess({
-    ready: result.ready,
-    timedOut: result.timedOut,
-    events: result.events,
-    ackedEventIds: result.ackedEventIds,
-    ...result.timedOut ? { resumeCommand: buildResumeCommand(type, ack, context.globalOptions.format) } : {}
-  }, context.globalOptions.format);
+  printSuccess(
+    {
+      ready: result.ready,
+      timedOut: result.timedOut,
+      events: result.events,
+      ackedEventIds: result.ackedEventIds,
+      ...result.timedOut ? { resumeCommand: buildResumeCommand(type, ack, context.globalOptions.format) } : {}
+    },
+    context.globalOptions.format
+  );
   return EXIT_CODES.OK;
 }
 function parseIntFlag(value, message, min) {
@@ -12633,16 +13072,19 @@ async function walletInit(context) {
   }
   await writeStoredConfig(nextConfig);
   const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
-  printSuccess({
-    customerId: nextConfig.customerId ?? null,
-    email,
-    name,
-    hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
-    paymentMethodsCached: paymentMethodsCache.cached,
-    paymentMethodCount: paymentMethodsCache.count,
-    ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-    configPath: "~/.clink-cli/config.json"
-  }, context.globalOptions.format);
+  printSuccess(
+    {
+      customerId: nextConfig.customerId ?? null,
+      email,
+      name,
+      hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
+      paymentMethodsCached: paymentMethodsCache.cached,
+      paymentMethodCount: paymentMethodsCache.count,
+      ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
+      configPath: "~/.clink-cli/config.json"
+    },
+    context.globalOptions.format
+  );
   return EXIT_CODES.OK;
 }
 async function refreshPaymentMethodsAfterWalletInit(context, config) {
@@ -12688,15 +13130,18 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
   }
 }
 async function walletStatus(context) {
-  printSuccess({
-    baseUrl: context.storedConfig.baseUrl,
-    customerId: context.storedConfig.customerId ?? null,
-    email: context.storedConfig.email ?? null,
-    name: context.storedConfig.name ?? null,
-    hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
-    defaultOpenLinks: context.storedConfig.defaultOpenLinks,
-    configPath: "~/.clink-cli/config.json"
-  }, context.globalOptions.format);
+  printSuccess(
+    {
+      baseUrl: context.storedConfig.baseUrl,
+      customerId: context.storedConfig.customerId ?? null,
+      email: context.storedConfig.email ?? null,
+      name: context.storedConfig.name ?? null,
+      hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
+      defaultOpenLinks: context.storedConfig.defaultOpenLinks,
+      configPath: "~/.clink-cli/config.json"
+    },
+    context.globalOptions.format
+  );
   return EXIT_CODES.OK;
 }
 async function handleCardCommand(subcommand, context) {
@@ -12736,10 +13181,13 @@ async function cardRedirectLink(context, label) {
     return EXIT_CODES.OK;
   }
   maybeOpenBrowser(context.globalOptions.open, prepared.url);
-  printSuccess({
-    url: prepared.url,
-    paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
-  }, context.globalOptions.format);
+  printSuccess(
+    {
+      url: prepared.url,
+      paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
+    },
+    context.globalOptions.format
+  );
   await maybeWatchEvents(context, prepared.url, label);
   return EXIT_CODES.OK;
 }
@@ -12777,8 +13225,14 @@ async function cardList(context) {
   return EXIT_CODES.OK;
 }
 async function cardGet(context) {
-  const paymentInstrumentId = requireStringFlag(context.args.flags, "missing --payment-instrument-id", "payment-instrument-id");
-  const paymentMethod = getStoredPaymentMethods(context).find((item) => typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId === paymentInstrumentId);
+  const paymentInstrumentId = requireStringFlag(
+    context.args.flags,
+    "missing --payment-instrument-id",
+    "payment-instrument-id"
+  );
+  const paymentMethod = getStoredPaymentMethods(context).find(
+    (item) => typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId === paymentInstrumentId
+  );
   if (!paymentMethod) {
     throw validationError(`payment method not found in local config: ${paymentInstrumentId}`);
   }
@@ -12877,7 +13331,13 @@ async function handlePayCommand(context) {
     printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  printSuccess(addPaymentMethodsRefreshWarning(execution.data, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
+  printSuccess(
+    addPaymentMethodsRefreshWarning(
+      execution.data,
+      execution.paymentMethodsRefreshWarning
+    ),
+    context.globalOptions.format
+  );
   if (execution.requires3ds && execution.redirectUrl) {
     await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication");
     return EXIT_CODES.THREE_DS;
@@ -12950,8 +13410,14 @@ async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const currency = requireStringFlag(flags, "missing --currency", "currency");
-  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
-  const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
+  const customerId = asRequiredString(
+    context.storedConfig.customerId,
+    "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`"
+  );
+  const email = asRequiredString(
+    context.storedConfig.email,
+    "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`"
+  );
   const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
   const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
@@ -13025,7 +13491,10 @@ async function ucpCheckoutComplete(context) {
   if (!paymentInstrumentId) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
   }
-  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
+  const customerId = asRequiredString(
+    context.storedConfig.customerId,
+    "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`"
+  );
   const paymentMethodApi = createPaymentMethodApi(context);
   const refreshed = await executePaymentRequestWithRefresh({
     request: () => requestJson({
@@ -13039,7 +13508,11 @@ async function ucpCheckoutComplete(context) {
     refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
     dryRun: context.globalOptions.dryRun
   });
-  return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
+  return finishApiCommand(
+    refreshed.result,
+    context,
+    refreshed.paymentMethodsRefreshWarning
+  );
 }
 function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
   return {
@@ -13105,7 +13578,9 @@ function parseAbsoluteHttpUrl(value, flagName) {
 var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
 var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
 function normalizeExternalCheckoutCreateLineItems(lineItems, currency) {
-  return lineItems.map((lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`));
+  return lineItems.map(
+    (lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`)
+  );
 }
 function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (Array.isArray(value)) {
@@ -13114,13 +13589,15 @@ function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (!isRecord6(value)) {
     return value;
   }
-  return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
-    const fieldPath = `${path3}.${key}`;
-    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
-      return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
-    }
-    return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
-  }));
+  return Object.fromEntries(
+    Object.entries(value).map(([key, fieldValue]) => {
+      const fieldPath = `${path3}.${key}`;
+      if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
+        return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
+      }
+      return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
+    })
+  );
 }
 function isRecord6(value) {
   return typeof value === "object" && value !== null;
@@ -13253,7 +13730,9 @@ function normalizeInstructionMandates(mandates, isRecurring) {
     }
     const normalizedFrequency = frequency.trim().toUpperCase();
     if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
-      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
+      throw validationError(
+        `--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`
+      );
     }
     return {
       ...mandate,
@@ -13272,7 +13751,10 @@ function utcDateTimeFlag(flags, name) {
   return value;
 }
 function requireJsonArrayFlag(flags, name) {
-  const parsed = parseJsonFlag(requireStringFlag(flags, `missing --${name} (JSON array)`, name), `--${name}`);
+  const parsed = parseJsonFlag(
+    requireStringFlag(flags, `missing --${name} (JSON array)`, name),
+    `--${name}`
+  );
   if (!Array.isArray(parsed)) {
     throw validationError(`--${name} must be a JSON array`);
   }
@@ -13301,15 +13783,18 @@ async function instructionCreate(context) {
   const mandateIds = extractMandateIds(data);
   const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
-  printSuccess({
-    ...data,
-    action: "created",
-    instructionId,
-    paymentInstrumentId,
-    ...mandateIds.length > 0 ? { mandateIds } : {},
-    requiresPasskey: true,
-    passkeyUrl
-  }, context.globalOptions.format);
+  printSuccess(
+    {
+      ...data,
+      action: "created",
+      instructionId,
+      paymentInstrumentId,
+      ...mandateIds.length > 0 ? { mandateIds } : {},
+      requiresPasskey: true,
+      passkeyUrl
+    },
+    context.globalOptions.format
+  );
   await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId }
@@ -13317,7 +13802,11 @@ async function instructionCreate(context) {
   return EXIT_CODES.OK;
 }
 async function instructionGet(context) {
-  const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
+  const instructionId = requireStringFlag(
+    context.args.flags,
+    "missing --purchase-instruction-id",
+    "purchase-instruction-id"
+  );
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "GET",
@@ -13332,7 +13821,11 @@ async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
+  const url = buildAgentPasskeyUrl(
+    resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
+    paymentInstrumentId,
+    instructionId
+  );
   maybeOpenBrowser(context.globalOptions.open, url);
   printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
@@ -13539,7 +14032,9 @@ function buildConfigView(config) {
   };
 }
 async function cachePaymentMethods(context, value) {
-  const paymentMethods = Array.isArray(value) ? value.filter((item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0) : [];
+  const paymentMethods = Array.isArray(value) ? value.filter(
+    (item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0
+  ) : [];
   const nextConfig = cloneStoredConfig(context.storedConfig);
   nextConfig.paymentMethods = paymentMethods.map((item) => ({ ...item }));
   await writeStoredConfig(nextConfig);
@@ -13562,7 +14057,10 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(
+    paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data,
+    context.globalOptions.format
+  );
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
@@ -13647,7 +14145,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/index.js
+// src/index.ts
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));
