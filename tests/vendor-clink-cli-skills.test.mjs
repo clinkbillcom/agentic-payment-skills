@@ -10,6 +10,7 @@ const bundlePath = fileURLToPath(
 const vendorPackage = JSON.parse(
   await readFile(new URL('../vendor/clink-cli/package.json', import.meta.url), 'utf8'),
 );
+const bundleSource = await readFile(bundlePath, 'utf8');
 
 const testEnv = {
   ...process.env,
@@ -19,16 +20,20 @@ const testEnv = {
 };
 
 function runBundle(args) {
-  const result = spawnSync(process.execPath, [bundlePath, ...args], {
-    encoding: 'utf8',
-    env: testEnv,
-  });
+  const result = runBundleRaw(args);
   assert.equal(
     result.status,
     0,
     `bundle command failed: ${args.join(' ')}\nstdout=${result.stdout}\nstderr=${result.stderr}`,
   );
   return result.stdout;
+}
+
+function runBundleRaw(args) {
+  return spawnSync(process.execPath, [bundlePath, ...args], {
+    encoding: 'utf8',
+    env: testEnv,
+  });
 }
 
 function runBundleJson(args) {
@@ -40,13 +45,21 @@ test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
   assert.match(runBundle(['skills', 'list', '--help']), /skills list --all/u);
   assert.match(runBundle(['skills', 'list', '--help']), /--tippable/u);
-  assert.match(runBundle(['skills', 'tip', '--help']), /--publisher <publisher>/u);
-  assert.match(runBundle(['skills', 'tip', '--help']), /--number <number>/u);
-  assert.match(runBundle(['skills', 'tip', '--help']), /--expected-skill-id <skillId>/u);
+  const tipHelp = runBundle(['skills', 'tip', '--help']);
+  assert.match(tipHelp, /--publisher <publisher>/u);
+  assert.match(tipHelp, /\[--version <versionNo>\]/u);
+  assert.doesNotMatch(tipHelp, /--number|--expected-skill-id/u);
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.equal(vendorPackage.version, '0.1.5');
+});
+
+test('vendored CLI embeds the .dev sandbox API, agent, and dashboard domains', () => {
+  assert.match(bundleSource, /https:\/\/api\.clinkbill\.dev/u);
+  assert.match(bundleSource, /https:\/\/agent\.clinkbill\.dev/u);
+  assert.match(bundleSource, /https:\/\/dashboard\.clinkbill\.dev/u);
+  assert.match(runBundle(['skills', 'list', '--help']), /https:\/\/dashboard\.clinkbill\.dev/u);
 });
 
 test('vendored instruction sign-url exposes identifiers for correlated activation watches', () => {
@@ -63,11 +76,12 @@ test('vendored instruction sign-url exposes identifiers for correlated activatio
   assert.equal(result.data.paymentInstrumentId, 'pi_contract');
 });
 
-test('vendored CLI identity tip dry-run is side-effect free and normalized', () => {
+test('vendored CLI versioned identity tip dry-run is side-effect free and normalized', () => {
   const result = runBundleJson([
     'skills', 'tip',
     '--publisher', 'clinkpay',
     '--name', 'pollyreach',
+    '--version', 'v1.2.3',
     '--amount', '2',
     '--dry-run',
     '--format', 'json',
@@ -78,29 +92,22 @@ test('vendored CLI identity tip dry-run is side-effect free and normalized', () 
     status: 'planned',
     publisher: 'clinkpay',
     skillName: 'pollyreach',
+    versionNo: 'v1.2.3',
     amount: 2,
     currency: 'USD',
     dryRun: true,
   });
 });
 
-test('vendored CLI Number tip dry-run is side-effect free and normalized', () => {
-  const result = runBundleJson([
+test('vendored CLI rejects Number as a payment target', () => {
+  const result = runBundleRaw([
     'skills', 'tip',
     '--number', '2',
-    '--expected-skill-id', 'skl_expected',
     '--amount', '2',
     '--dry-run',
     '--format', 'json',
   ]);
 
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.data, {
-    status: 'planned',
-    number: 2,
-    expectedSkillId: 'skl_expected',
-    amount: 2,
-    currency: 'USD',
-    dryRun: true,
-  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /unknown option: --number/u);
 });

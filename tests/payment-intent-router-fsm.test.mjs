@@ -46,6 +46,18 @@ test('routes an explicitly authorized identity tip', () => {
   });
 });
 
+test('routes an explicitly versioned identity tip', () => {
+  const result = classifyPaymentIntent({ text: '打赏 clinkpay/pollyreach@v1.2.3 2usd' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.deepEqual(result.tip.target, {
+    kind: 'identity',
+    publisher: 'clinkpay',
+    skillName: 'pollyreach',
+    versionNo: 'v1.2.3',
+  });
+});
+
 test('does not mistake list inside a skill identity for a list query', () => {
   const result = classifyPaymentIntent({ text: 'tip clinkpay/skill-list 2usd' });
 
@@ -80,6 +92,98 @@ test('routes a structured authorized Number tip', () => {
     currency: 'USD',
     explicitlyAuthorized: true,
   });
+});
+
+test('routes a bare confirmation only through the bound pending tip', () => {
+  const pendingTipConfirmation = {
+    pendingId: 'pending_1',
+    status: 'AWAITING_CONFIRMATION',
+    number: 2,
+  };
+  const result = classifyPaymentIntent({
+    text: '确认',
+    pendingTipConfirmation,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_CONFIRMATION_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.equal(result.action, PaymentIntentAction.RESUME_SKILL_TIP_WORKFLOW);
+  assert.equal(result.confirmation, 'CONFIRMED');
+  assert.equal(result.pendingTipConfirmation, pendingTipConfirmation);
+});
+
+test('routes cancellation through the bound pending tip without payment', () => {
+  const pendingTipConfirmation = {
+    pendingId: 'pending_1',
+    status: 'AWAITING_CONFIRMATION',
+    number: 2,
+  };
+  const result = classifyPaymentIntent({
+    text: '取消',
+    pendingTipConfirmation,
+  });
+
+  assert.equal(result.state, PaymentIntentState.SKILL_TIP_CONFIRMATION_REJECTED);
+  assert.equal(result.route, PaymentIntentRoute.SKILL_TIP);
+  assert.equal(result.action, PaymentIntentAction.CANCEL_PENDING_SKILL_TIP);
+  assert.equal(result.confirmation, 'CANCELLED');
+});
+
+for (const text of ['确认', '取消']) {
+  test(`bare ${text} without an awaiting pending is not a Skill Tip action`, () => {
+    const result = classifyPaymentIntent({ text });
+
+    assert.notEqual(result.action, PaymentIntentAction.RESUME_SKILL_TIP_WORKFLOW);
+    assert.notEqual(result.action, PaymentIntentAction.CANCEL_PENDING_SKILL_TIP);
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  });
+}
+
+for (const text of ['确认吗？', '可以吗？']) {
+  test(`confirmation question does not resume an awaiting tip: ${text}`, () => {
+    const result = classifyPaymentIntent({
+      text,
+      pendingTipConfirmation: {
+        pendingId: 'pending_1',
+        status: 'AWAITING_CONFIRMATION',
+      },
+    });
+
+    assert.notEqual(result.action, PaymentIntentAction.RESUME_SKILL_TIP_WORKFLOW);
+    assert.notEqual(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  });
+}
+
+test('a new target does not consume an existing pending confirmation', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏序号 3 的 skill 2 USD',
+    pendingTipConfirmation: {
+      pendingId: 'pending_1',
+      status: 'AWAITING_CONFIRMATION',
+      number: 2,
+      amount: '2',
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  assert.deepEqual(result.tip.target, { kind: 'number', number: 3 });
+  assert.equal(result.confirmation, undefined);
+});
+
+test('a new amount does not consume an existing pending confirmation', () => {
+  const result = classifyPaymentIntent({
+    text: '打赏序号 2 的 skill 3 USD',
+    pendingTipConfirmation: {
+      pendingId: 'pending_1',
+      status: 'AWAITING_CONFIRMATION',
+      number: 2,
+      amount: '2',
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_TIP_WORKFLOW);
+  assert.equal(result.tip.amount, '3');
+  assert.equal(result.confirmation, undefined);
 });
 
 test('asks for a missing tip amount without executing', () => {
@@ -200,6 +304,38 @@ test('rejects conflicting structured and textual tip fields', () => {
     currency: 'USD',
     tipAuthorized: true,
     text: '打赏 clinkpay/b 3 USD',
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_structured_text_conflict');
+  assert.deepEqual(result.missing, ['consistent_authorization']);
+});
+
+test('rejects a structured versus text target conflict with the same amount', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip',
+    publisher: 'clinkpay',
+    skillName: 'a',
+    amount: 2,
+    currency: 'USD',
+    tipAuthorized: true,
+    text: '打赏 clinkpay/b 2 USD',
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);
+  assert.equal(result.reason, 'skill_tip_structured_text_conflict');
+  assert.deepEqual(result.missing, ['consistent_authorization']);
+});
+
+test('rejects a structured versus text amount conflict with the same target', () => {
+  const result = classifyPaymentIntent({
+    intent: 'skill_tip',
+    publisher: 'clinkpay',
+    skillName: 'a',
+    amount: 2,
+    currency: 'USD',
+    tipAuthorized: true,
+    text: '打赏 clinkpay/a 3 USD',
   });
 
   assert.equal(result.action, PaymentIntentAction.ASK_FOR_SKILL_TIP_INPUT);

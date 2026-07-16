@@ -13,11 +13,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -4218,8 +4214,8 @@ var require_yauzl = __commonJS({
             var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
             entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
             entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
-            var errorMessage = validateFileName(entry.fileName);
-            if (errorMessage != null) return emitErrorAndAutoClose(self, new Error(errorMessage));
+            var errorMessage2 = validateFileName(entry.fileName);
+            if (errorMessage2 != null) return emitErrorAndAutoClose(self, new Error(errorMessage2));
           } else {
             entry.fileComment = entry.fileCommentRaw;
             entry.fileName = entry.fileNameRaw;
@@ -4886,8 +4882,7 @@ var OPTION_DEFINITIONS = [
   { name: "otp", flags: "--otp <email_otp>" },
   { name: "name", flags: "--name <name>" },
   { name: "publisher", flags: "--publisher <publisher>" },
-  { name: "number", flags: "--number <number>" },
-  { name: "expected-skill-id", flags: "--expected-skill-id <skillId>" },
+  { name: "version", flags: "--version <versionNo>" },
   { name: "source", flags: "--source <value>" },
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
@@ -5006,18 +5001,18 @@ import path from "node:path";
 
 // dist/domains.js
 var API_BASE_URLS = {
-  sandbox: "https://uat-api.clinkbill.com",
-  //sandbox: "https://api.clinkbill.dev",
+  //sandbox: "https://uat-api.clinkbill.com",
+  sandbox: "https://api.clinkbill.dev",
   production: "https://api.clinkbill.com"
 };
 var AGENT_BASE_URLS = {
-  sandbox: "https://uat-agent.clinkbill.com",
-  //sandbox: "https://agent.clinkbill.dev",
+  // sandbox: "https://uat-agent.clinkbill.com",
+  sandbox: "https://agent.clinkbill.dev",
   production: "https://agent.clinkbill.com"
 };
 var DASHBOARD_BASE_URLS = {
-  sandbox: "https://uat-dashboard.clinkbill.com",
-  //sandbox: "https://dashboard.clinkbill.dev",
+  //sandbox: "https://uat-dashboard.clinkbill.com",
+  sandbox: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
@@ -6033,7 +6028,7 @@ Examples:
   clink-cli card setup-link --open
   clink-cli skills list --all --format pretty
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --number 2 --expected-skill-id skl_xxx --amount 2
+  clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink-cli ucp-checkout get --checkout-id chk_xxx
   clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
@@ -6057,14 +6052,14 @@ Usage:
 Actions:
   list              List all public skills in reversed NEW order with one-based Number fields
   install           Download and install a skill package into local agent skill directories
-  tip               Tip a skill publisher using the refreshed default payment method
+  tip               Tip a skill publisher using a sufficient default USD Credit balance
 
 Examples:
   clink-cli skills list --all --format pretty
   clink-cli skills install clinkpay/PollyReach@v1.0.0
   clink-cli skills install clinkpay/PollyReach --force
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli skills tip --number 2 --expected-skill-id skl_xxx --amount 2
+  clink-cli skills tip --publisher clinkpay --name PollyReach --version v1.2.3 --amount 2
 `;
 var SKILLS_LIST_HELP = `clink-cli skills list
 
@@ -6077,7 +6072,7 @@ Required Arguments:
 Options:
   --tippable                  Keep only rows with valid publisher, name, skillId, and merchantId
   --base-url <url>             Derive the dashboard environment from this API base URL
-  --sandbox                    Use the UAT dashboard environment unless the API base is overridden
+  --sandbox                    Use https://dashboard.clinkbill.dev unless the API base is overridden
   --timeout <ms>               Request timeout in milliseconds
 ${OUTPUT_OPTIONS}
 
@@ -6135,29 +6130,28 @@ Examples:
 var SKILLS_TIP_HELP = `clink-cli skills tip
 
 Usage:
-  clink-cli skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
-  clink-cli skills tip --number <number> --expected-skill-id <skillId> --amount <amount> [options]
+  clink-cli skills tip --publisher <publisher> --name <skillName> [--version <versionNo>] --amount <amount> [options]
 
-Target (choose one):
+Target:
   --publisher <publisher>      Exact publisher; requires --name
   --name <skillName>           Exact skill name; requires --publisher
-  --number <number>            Positive Number from 'skills list --all --tippable'
-  --expected-skill-id <skillId>
-                               Immutable skill ID displayed for the selected Number
+  --version <versionNo>        Optional exact Marketplace version
 
 Required Argument:
   --amount <amount>            Any positive finite USD amount
 
 Options:
-  --open                       Open a newly-created Visa authorization link
-  --no-watch                   Return after creating authorization instead of waiting
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
-  Tips use USD and the refreshed default payment method.
-  Number targets resolve against a fresh tippable list and must still match --expected-skill-id.
-  Registered Visa cards use VIC instruction/mandate authorization.
-  Other cards are charged without instruction_id or mandate_id.
+  Omit --version to select the latest Marketplace version.
+  An explicit version is verified against the Marketplace response before Credit refresh.
+  Missing or mismatched versions fail with 404 and never create a charge.
+  Successful results include the resolved versionNo when the Marketplace supplies it.
+  Tips use only a refreshed, explicitly default USD Credit balance.
+  The default Credit must be enabled and its finite availableBalance must cover the full amount.
+  Cards and mixed Credit/card payments are not used.
+  Otherwise the command fails with: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
 `;
 var TOOL_HELP = `clink-cli tool
 
@@ -6553,8 +6547,8 @@ ${CUSTOMER_API_KEY_LINK_OPTIONS}
 
 Notes:
   Prints the agent risk-rule setup page at /risk-rules-setup. The agent domain mirrors the
-  resolved API environment: production https://agent.clinkbill.com, --sandbox
-  https://uat-agent.clinkbill.com, a UAT base (CLINK_BASE_URL/--base-url) https://uat-agent.clinkbill.com.
+  resolved API environment: production https://agent.clinkbill.com, --sandbox https://agent.clinkbill.dev,
+  or the agent environment derived from an explicit CLINK_BASE_URL/--base-url.
   No network request.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
@@ -6949,7 +6943,7 @@ Notes:
   backend sign/update/cancel APIs itself \u2014 those require a Passkey authResult produced in the
   browser, so sign-url/update/cancel only print the agent page URL for the user to complete there.
   Agent page URL environment mirrors the resolved API base: production https://agent.clinkbill.com,
-  --sandbox https://uat-agent.clinkbill.com, UAT https://uat-agent.clinkbill.com.
+  --sandbox https://agent.clinkbill.dev, or the environment derived from an explicit API base.
   Only valid for Visa cards whose card data has visaRegistrationSucceeded = true.
   Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
   When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
@@ -7426,28 +7420,30 @@ function createTipAuthorizationApi(input, overrides = {}) {
     collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
     ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
   };
+  const refreshPaymentMethods = async () => {
+    const binding = await dependencies.requestJson({
+      baseUrl: input.runtimeConfig.baseUrl,
+      method: "POST",
+      path: "/agent/cwallet/card/bindingLink",
+      headers: buildCustomerHeaders(input.runtimeConfig),
+      body: {
+        customerId: input.runtimeConfig.customerId,
+        hasCustomerApiKey: Boolean(input.runtimeConfig.customerApiKey)
+      },
+      timeoutMs: input.timeoutMs,
+      dryRun: false
+    });
+    const data = unwrapResponse(binding, "invalid card binding response");
+    const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
+    const nextConfig = cloneStoredConfig(input.storedConfig);
+    nextConfig.paymentMethods = paymentMethods.map((method) => ({ ...method }));
+    await dependencies.writeStoredConfig(nextConfig);
+    input.storedConfig.paymentMethods = nextConfig.paymentMethods.map((method) => ({ ...method }));
+    return paymentMethods;
+  };
   return {
-    refreshDefaultPaymentMethod: async () => {
-      const binding = await dependencies.requestJson({
-        baseUrl: input.runtimeConfig.baseUrl,
-        method: "POST",
-        path: "/agent/cwallet/card/bindingLink",
-        headers: buildCustomerHeaders(input.runtimeConfig),
-        body: {
-          customerId: input.runtimeConfig.customerId,
-          hasCustomerApiKey: Boolean(input.runtimeConfig.customerApiKey)
-        },
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      });
-      const data = unwrapResponse(binding, "invalid card binding response");
-      const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
-      const nextConfig = cloneStoredConfig(input.storedConfig);
-      nextConfig.paymentMethods = paymentMethods.map((method) => ({ ...method }));
-      await dependencies.writeStoredConfig(nextConfig);
-      input.storedConfig.paymentMethods = nextConfig.paymentMethods.map((method) => ({ ...method }));
-      return pickDefaultPaymentMethod(input.storedConfig.paymentMethods);
-    },
+    refreshPaymentMethods,
+    refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
     listInstructions: async (paymentInstrumentId) => {
       const result = await dependencies.requestJson({
         baseUrl: input.runtimeConfig.baseUrl,
@@ -7535,194 +7531,41 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/payment/authorization.js
-var TIP_SHIPPING_ADDRESS = {
-  name: "Clink User",
-  line1: "One Apple Park Way",
-  city: "Cupertino",
-  state: "CA",
-  zip: "95014",
-  countryCode: "US",
-  deliveryContactDetails: {}
-};
-var TIP_PAY_SHIPPING_ADDRESS = {
-  street_address: "One Apple Park Way",
-  address_locality: "Cupertino",
-  address_region: "CA",
-  address_country: "US",
-  postal_code: "95014",
-  first_name: "Clink",
-  last_name: "User",
-  phone_number: "+14089961010"
-};
-function tipAuthorizationTitle(intent) {
-  return `Tip ${intent.publisher}/${intent.skillName}`;
-}
-function isVisaVicReady(method) {
-  const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
-  return typeof brand === "string" && brand.trim().toUpperCase() === "VISA" && method.visaRegistrationSucceeded === true;
-}
-function buildTipInstructionDraft(intent, paymentInstrumentId, nowMs) {
-  const effectiveUntilTime = formatUtcDateTime(nowMs + 30 * 6e4);
-  const title = tipAuthorizationTitle(intent);
+// dist/payment/post-payment-refresh.js
+var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
+async function executePaymentRequestWithRefresh(input) {
+  if (input.dryRun) {
+    return { result: await input.request() };
+  }
+  let result;
+  try {
+    result = await input.request();
+  } catch (error) {
+    await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+    throw error;
+  }
+  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
   return {
-    paymentInstrumentId,
-    title,
-    description: title,
-    effectiveUntilTime,
-    shippingAddress: { ...TIP_SHIPPING_ADDRESS },
-    mandates: [{
-      title,
-      description: title,
-      amountLimit: intent.amount,
-      currencyCode: "USD",
-      merchantCategoryCode: "5999",
-      effectiveUntilTime
-    }]
+    result,
+    ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
   };
 }
-function selectTipAuthorization(payload, scope) {
-  const expectedTitle = tipAuthorizationTitle(scope).trim().toLowerCase();
-  const candidates = [];
-  for (const instruction of instructionArray(payload)) {
-    if (normalized(instruction.status) !== "ACTIVE") {
-      continue;
-    }
-    const paymentInstrumentId = optionalString2(instruction.paymentInstrumentId);
-    if (paymentInstrumentId && paymentInstrumentId !== scope.paymentInstrumentId) {
-      continue;
-    }
-    if (expired(instruction.effectiveUntilTime, scope.nowMs)) {
-      continue;
-    }
-    for (const mandate of mandateArray(instruction)) {
-      if (isOneTime(instruction) && !zeroLike(mandate.reserveStatus)) {
-        continue;
-      }
-      if (expired(mandate.effectiveUntilTime, scope.nowMs)) {
-        continue;
-      }
-      if (normalized(mandate.currencyCode ?? mandate.currency) !== scope.currency) {
-        continue;
-      }
-      const amountLimit = Number(mandate.amountLimit);
-      if (!Number.isFinite(amountLimit) || amountLimit < scope.amount) {
-        continue;
-      }
-      const titleMatches = [mandate.title, instruction.title].map(optionalString2).some((title) => title?.toLowerCase() === expectedTitle);
-      if (!titleMatches) {
-        continue;
-      }
-      const exposedMerchantId = optionalString2(mandate.merchantId) ?? optionalString2(instruction.merchantId);
-      if (exposedMerchantId && exposedMerchantId !== scope.merchantId) {
-        continue;
-      }
-      const instructionId = optionalString2(instruction.instructionId) ?? optionalString2(instruction.purchaseInstructionId);
-      const mandateId = optionalString2(mandate.mandateId) ?? optionalString2(mandate.mandateNo) ?? optionalString2(mandate.mandate_id) ?? optionalString2(mandate.id);
-      if (instructionId && mandateId) {
-        candidates.push({ instructionId, mandateId, amountLimit });
-      }
-    }
-  }
-  candidates.sort((left, right) => Number(right.amountLimit === scope.amount) - Number(left.amountLimit === scope.amount) || left.amountLimit - right.amountLimit || left.instructionId.localeCompare(right.instructionId) || left.mandateId.localeCompare(right.mandateId));
-  const selected = candidates[0];
-  return selected ? { instructionId: selected.instructionId, mandateId: selected.mandateId } : void 0;
+function addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) {
+  return paymentMethodsRefreshWarning ? { ...data, paymentMethodsRefreshWarning } : data;
 }
-async function resolveTipAuthorization(intent, dependencies) {
-  const paymentMethod = await dependencies.refreshDefaultPaymentMethod();
-  if (!isVisaVicReady(paymentMethod)) {
-    return { kind: "bypassed", paymentMethod };
+async function refreshPaymentMethodsBestEffort(refreshPaymentMethods) {
+  try {
+    await refreshPaymentMethods();
+    return void 0;
+  } catch (error) {
+    return `${PAYMENT_METHODS_REFRESH_WARNING_PREFIX}: ${errorMessage(error)}`;
   }
-  const scope = {
-    ...intent,
-    paymentInstrumentId: paymentMethod.paymentInstrumentId,
-    nowMs: dependencies.now()
-  };
-  let match = selectTipAuthorization(await dependencies.listInstructions(paymentMethod.paymentInstrumentId), scope);
-  if (match) {
-    return { kind: "matched", paymentMethod, ...match };
-  }
-  const created = await dependencies.createInstruction(buildTipInstructionDraft(intent, paymentMethod.paymentInstrumentId, scope.nowMs));
-  dependencies.onPasskeyUrl(created.passkeyUrl);
-  const pending = () => ({
-    kind: "pending",
-    paymentMethod,
-    instructionId: created.instructionId,
-    passkeyUrl: created.passkeyUrl
-  });
-  if (!dependencies.watch) {
-    return pending();
-  }
-  const activation = await dependencies.waitForActivation(created.instructionId);
-  if (!activation.activated) {
-    return pending();
-  }
-  const verified = await dependencies.getInstruction(created.instructionId);
-  if (!isVerifiedActiveInstruction(verified, created.instructionId)) {
-    return pending();
-  }
-  match = selectTipAuthorization(await dependencies.listInstructions(paymentMethod.paymentInstrumentId), { ...scope, nowMs: dependencies.now() });
-  if (!match) {
-    throw apiError("activated tip authorization could not be verified", 409);
-  }
-  return { kind: "matched", paymentMethod, ...match };
 }
-function isVerifiedActiveInstruction(value, instructionId) {
-  if (!isRecord2(value)) {
-    return false;
+function errorMessage(error) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
   }
-  const data = isRecord2(value.data) ? value.data : value;
-  const id = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
-  return id === instructionId && normalized(data.status) === "ACTIVE";
-}
-function formatUtcDateTime(value) {
-  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
-}
-function instructionArray(payload) {
-  if (Array.isArray(payload)) {
-    return payload.filter(isRecord2);
-  }
-  if (!isRecord2(payload)) {
-    return [];
-  }
-  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
-    if (Array.isArray(payload[key])) {
-      return payload[key].filter(isRecord2);
-    }
-  }
-  return [];
-}
-function mandateArray(instruction) {
-  for (const key of ["mandates", "mandateList", "mandateVoList"]) {
-    if (Array.isArray(instruction[key])) {
-      return instruction[key].filter(isRecord2);
-    }
-  }
-  return [];
-}
-function isOneTime(instruction) {
-  return zeroLike(instruction.isRecurring);
-}
-function zeroLike(value) {
-  return value === 0 || value === "0" || value === false;
-}
-function optionalString2(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function normalized(value) {
-  return optionalString2(value)?.toUpperCase() ?? "";
-}
-function expired(value, nowMs) {
-  const text = optionalString2(value);
-  if (!text) {
-    return false;
-  }
-  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
-  const parsed = Date.parse(iso);
-  return Number.isFinite(parsed) && parsed < nowMs;
-}
-function isRecord2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return String(error);
 }
 
 // dist/payment/charge.js
@@ -7747,13 +7590,14 @@ function buildChargeBody(input) {
   return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
     ...shared,
     merchantId: input.merchantId,
+    ...input.customerPointsAmount === void 0 ? {} : { customerPointsAmount: input.customerPointsAmount },
     customAmount: input.amount,
     paymentCurrency: input.currency
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord3(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord3(channel.action) ? channel.action : {};
+  const channel = isRecord2(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord2(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber(channel.status);
   return {
@@ -7763,15 +7607,20 @@ function classifyChargeData(data) {
   };
 }
 async function executeCharge(input, runtime) {
-  const result = await requestJson({
-    baseUrl: runtime.runtimeConfig.baseUrl,
-    method: "POST",
-    path: "/agent/order/charge",
-    headers: buildCustomerHeaders(runtime.runtimeConfig),
-    body: buildChargeBody(input),
-    timeoutMs: runtime.timeoutMs,
+  const refreshed = await executePaymentRequestWithRefresh({
+    request: () => requestJson({
+      baseUrl: runtime.runtimeConfig.baseUrl,
+      method: "POST",
+      path: "/agent/order/charge",
+      headers: buildCustomerHeaders(runtime.runtimeConfig),
+      body: buildChargeBody(input),
+      timeoutMs: runtime.timeoutMs,
+      dryRun: runtime.dryRun
+    }),
+    refreshPaymentMethods: runtime.refreshPaymentMethods,
     dryRun: runtime.dryRun
   });
+  const result = refreshed.result;
   if ("dryRun" in result) {
     return { dryRun: true, request: result };
   }
@@ -7780,10 +7629,11 @@ async function executeCharge(input, runtime) {
   return {
     dryRun: false,
     data,
-    ...classifyChargeData(data)
+    ...classifyChargeData(data),
+    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord3(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber(value) {
@@ -8616,50 +8466,35 @@ function parseSkillInstallArgs(operands, flags) {
 }
 function parseSkillTipArgs(operands, flags) {
   if (operands.length !== 0) {
-    throw validationError("skills tip does not accept positional arguments; use --publisher with --name, or --number");
+    throw validationError("skills tip does not accept positional arguments; use --publisher with --name");
   }
   for (const name of FORBIDDEN_TIP_FLAGS) {
     if (flags[name] !== void 0) {
-      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default payment method" : `--${name} is not supported by skills tip`);
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the default USD Credit balance" : `--${name} is not supported by skills tip`);
     }
   }
   const publisher = getStringFlag(flags, "publisher");
   const skillName = getStringFlag(flags, "name");
-  const numberText = getStringFlag(flags, "number");
-  const expectedSkillId = getStringFlag(flags, "expected-skill-id");
   const hasPublisher = flags.publisher !== void 0;
   const hasSkillName = flags.name !== void 0;
-  const hasNumber = flags.number !== void 0;
-  const hasExpectedSkillId = flags["expected-skill-id"] !== void 0;
-  if (hasNumber && (hasPublisher || hasSkillName)) {
-    throw validationError("--number cannot be combined with --publisher or --name");
+  if (!hasPublisher && !hasSkillName) {
+    throw validationError("skills tip requires --publisher with --name");
   }
   if (hasPublisher !== hasSkillName) {
     throw validationError("skills tip requires both --publisher and --name");
   }
-  if (!hasNumber && hasExpectedSkillId) {
-    throw validationError("--expected-skill-id requires --number");
+  if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
+    throw invalidTipIdentity();
   }
-  let target;
-  if (hasNumber) {
-    if (numberText === void 0 || !/^[1-9]\d*$/.test(numberText) || !Number.isSafeInteger(Number(numberText))) {
-      throw validationError("--number must be a positive integer");
-    }
-    if (!hasExpectedSkillId) {
-      throw validationError("skills tip --number requires --expected-skill-id");
-    }
-    if (expectedSkillId === void 0 || expectedSkillId.length === 0 || expectedSkillId.length > 256 || expectedSkillId.trim() !== expectedSkillId || /[\u0000-\u001F\u007F]/.test(expectedSkillId)) {
-      throw validationError("--expected-skill-id must be a valid nonempty skill ID");
-    }
-    target = { kind: "number", number: Number(numberText), expectedSkillId };
-  } else if (hasPublisher && hasSkillName) {
-    if (publisher === void 0 || skillName === void 0 || !isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName)) {
-      throw invalidTipIdentity();
-    }
-    target = { kind: "identity", publisher, skillName };
-  } else {
-    throw validationError("skills tip requires either --publisher with --name, or --number");
+  const version = getStringFlag(flags, "version");
+  if (flags.version !== void 0 && (version === void 0 || !isValidSkillVersion(version))) {
+    throw validationError("invalid --version");
   }
+  const target = {
+    publisher,
+    skillName,
+    ...version ? { requestedVersion: version } : {}
+  };
   const currency = getStringFlag(flags, "currency");
   if (currency !== void 0 && currency.toUpperCase() !== "USD") {
     throw validationError("skills tip only supports USD");
@@ -8672,6 +8507,9 @@ function parseSkillTipArgs(operands, flags) {
 }
 function isValidSkillIdentitySegment(value) {
   return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
+}
+function isValidSkillVersion(value) {
+  return isValidSegment(value, VERSION_PATTERN);
 }
 function isValidSegment(value, pattern) {
   return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
@@ -9471,22 +9309,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord4)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord3)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord4(body) && Array.isArray(body.items)) {
+  if (isRecord3(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord4(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord3(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord4(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -10609,7 +10447,7 @@ function registerHeldInstallLockCapability(input) {
   const capability = Object.freeze({
     ...input,
     lockPath: resolve4(input.lockPath),
-    token: /* @__PURE__ */ Symbol("skill-install-lock")
+    token: Symbol("skill-install-lock")
   });
   heldInstallLocks.set(capability.lockPath, capability);
   return capability;
@@ -11328,35 +11166,14 @@ async function releaseAndCleanup(installLock, stagingPath, dependencies, primary
 // dist/skills/tip.js
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
-  if (input.target.kind === "number") {
-    const number = input.target.number;
-    const rows = await listAllPublicSkills({
-      dashboardBaseUrl: input.dashboardBaseUrl,
-      timeoutMs: input.timeoutMs,
-      tippableOnly: true
-    }, request);
-    const selected = rows.find((row) => row.Number === number);
-    if (!selected) {
-      throw apiError(`skill number not found: ${number}; run 'clink-cli skills list --all --tippable' to refresh numbers`, 404);
-    }
-    const skillId = stringValue2(selected.skillId).trim();
-    if (skillId !== input.target.expectedSkillId) {
-      throw apiError(`skill number ${number} changed; refresh the tippable skill list and authorize again`, 409);
-    }
-    const publisher2 = stringValue2(selected.publisher).trim();
-    const skillName2 = stringValue2(selected.name).trim();
-    if (!publisher2 || !skillName2) {
-      throw apiError("invalid public skills response", 502);
-    }
-    return recipientFromItem(selected, { publisher: publisher2, skillName: skillName2 });
-  }
-  const { publisher, skillName } = input.target;
+  const { publisher, skillName, requestedVersion } = input.target;
   const body = await request({
     baseUrl: input.dashboardBaseUrl,
     path: PUBLIC_SKILLS_MARKETPLACE_PATH,
     query: {
       publisher,
       q: skillName,
+      ...requestedVersion ? { versionNo: requestedVersion } : {},
       pageSize: 1,
       sort: "NEW"
     },
@@ -11366,9 +11183,9 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
   if (!items) {
     throw apiError("invalid public skills response", 502);
   }
-  const matches = items.filter((item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName));
+  const matches = items.filter((item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName) && (requestedVersion === void 0 || stringValue2(item.versionNo).trim() === requestedVersion));
   if (matches.length === 0) {
-    throw apiError(`skill not found: ${publisher}/${skillName}`, 404);
+    throw apiError(requestedVersion ? `skill version not found: ${publisher}/${skillName}@${requestedVersion}` : `skill not found: ${publisher}/${skillName}`, 404);
   }
   const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`));
   if (uniqueRecipients.size !== 1) {
@@ -11378,20 +11195,14 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
 }
 async function executeSkillTip(args, runtime, dependencies) {
   if (runtime.dryRun) {
-    const plan = {
+    return {
       status: "planned",
+      publisher: args.target.publisher,
+      skillName: args.target.skillName,
+      ...args.target.requestedVersion ? { versionNo: args.target.requestedVersion } : {},
       amount: args.amount,
       currency: "USD",
       dryRun: true
-    };
-    return args.target.kind === "identity" ? {
-      ...plan,
-      publisher: args.target.publisher,
-      skillName: args.target.skillName
-    } : {
-      ...plan,
-      number: args.target.number,
-      expectedSkillId: args.target.expectedSkillId
     };
   }
   const recipient = await dependencies.resolveRecipient({
@@ -11399,41 +11210,15 @@ async function executeSkillTip(args, runtime, dependencies) {
     target: args.target,
     timeoutMs: runtime.timeoutMs
   });
-  const authorization = await dependencies.resolveAuthorization({
-    publisher: recipient.publisher,
-    skillName: recipient.skillName,
-    merchantId: recipient.merchantId,
-    amount: args.amount,
-    currency: "USD"
-  });
-  if (authorization.kind === "pending") {
-    return {
-      status: "authorization_pending",
-      publisher: recipient.publisher,
-      skillName: recipient.skillName,
-      skillId: recipient.skillId,
-      amount: args.amount,
-      currency: "USD",
-      paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
-      instructionId: authorization.instructionId,
-      passkeyUrl: authorization.passkeyUrl,
-      resumeCommand: `clink-cli skills tip --publisher ${serializeShellArgument(recipient.publisher)} --name ${serializeShellArgument(recipient.skillName)} --amount ${serializeShellArgument(String(args.amount))} --format json`
-    };
-  }
+  const credit = requireSufficientDefaultUsdCredit(await dependencies.refreshPaymentMethods(), args.amount);
   const execution = await dependencies.executeCharge({
     mode: "direct",
-    paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
-    paymentMethodType: "CARD",
+    paymentInstrumentId: credit.paymentInstrumentId,
+    paymentMethodType: "BALANCE",
     merchantId: recipient.merchantId,
     amount: args.amount,
     currency: "USD",
-    shippingAddress: { ...TIP_PAY_SHIPPING_ADDRESS },
-    ...authorization.kind === "matched" ? {
-      authorization: {
-        instructionId: authorization.instructionId,
-        mandateId: authorization.mandateId
-      }
-    } : {}
+    customerPointsAmount: args.amount
   }, runtime.chargeRuntime);
   if (execution.dryRun) {
     throw new Error("charge dry-run is unreachable after tip lookup");
@@ -11459,15 +11244,25 @@ async function executeSkillTip(args, runtime, dependencies) {
     publisher: recipient.publisher,
     skillName: recipient.skillName,
     skillId: recipient.skillId,
+    ...recipient.versionNo ? { versionNo: recipient.versionNo } : {},
     merchantId: recipient.merchantId,
     amount: args.amount,
     currency: "USD",
-    paymentInstrumentId: authorization.paymentMethod.paymentInstrumentId,
-    authorization: authorization.kind,
+    paymentInstrumentId: credit.paymentInstrumentId,
+    authorization: "bypassed",
     payment: execution.data,
+    ...execution.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: execution.paymentMethodsRefreshWarning } : {},
     ...execution.requires3ds ? { requires3ds: true } : {},
     ...execution.redirectUrl ? { redirectUrl: execution.redirectUrl } : {}
   };
+}
+function requireSufficientDefaultUsdCredit(paymentMethods, amount) {
+  const paymentMethod = paymentMethods.find((method) => method.isDefault === true);
+  const availableBalance = paymentMethod?.availableBalance;
+  if (paymentMethod === void 0 || normalizedUppercase(paymentMethod.paymentMethodType) !== "BALANCE" || normalizedUppercase(paymentMethod.currency) !== "USD" || paymentMethod.isDisabled === true || typeof availableBalance !== "number" || !Number.isFinite(availableBalance) || availableBalance < amount) {
+    throw apiError("Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361", 422);
+  }
+  return paymentMethod;
 }
 function recipientFromItem(item, errorIdentity) {
   const publisher = stringValue2(item.publisher).trim();
@@ -11493,20 +11288,17 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord5(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord4(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
-}
-function serializeShellArgument(value) {
-  if (/^[A-Za-z0-9._+-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 function stringValue2(value) {
   return typeof value === "string" ? value : "";
 }
-function isRecord5(value) {
+function normalizedUppercase(value) {
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
+}
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -11742,14 +11534,14 @@ function hasShopifyPoweredByHeader(headers) {
   return false;
 }
 async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ new Set()) {
-  const normalized2 = normalizeHostname(hostname);
-  if (seen.has(normalized2) || seen.size >= 8) {
+  const normalized = normalizeHostname(hostname);
+  if (seen.has(normalized) || seen.size >= 8) {
     return false;
   }
-  seen.add(normalized2);
+  seen.add(normalized);
   let cnames;
   try {
-    cnames = await resolveCname(normalized2);
+    cnames = await resolveCname(normalized);
   } catch {
     return false;
   }
@@ -12090,11 +11882,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord6(value)) {
+  if (!isRecord5(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord6(result)) {
+  if (isRecord5(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -12110,7 +11902,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord6(runningTotal)) {
+  if (!isRecord5(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -12135,7 +11927,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord6(productJson)) {
+  if (!isRecord5(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -12157,7 +11949,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord6(variant)) {
+  if (!isRecord5(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -12193,7 +11985,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord6(option)) {
+    if (!isRecord5(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -12211,7 +12003,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord6(value)) {
+  if (!isRecord5(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -12269,19 +12061,19 @@ function asTrimmedString(value) {
 function readPath(value, path3) {
   let current = value;
   for (const key of path3) {
-    if (!isRecord6(current)) {
+    if (!isRecord5(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord6(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
-  const normalized2 = normalizeHostname(hostname);
-  if (normalized2 === "clinkbill.com" || normalized2.endsWith(".clinkbill.com")) {
+  const normalized = normalizeHostname(hostname);
+  if (normalized === "clinkbill.com" || normalized.endsWith(".clinkbill.com")) {
     return "clinkbill";
   }
   return void 0;
@@ -12390,19 +12182,7 @@ async function skillsInstall(context) {
 }
 async function skillsTip(context) {
   const args = parseSkillTipArgs(context.args.positionals.slice(2), context.args.flags);
-  const authorizationApi = createTipAuthorizationApi({
-    runtimeConfig: context.runtimeConfig,
-    storedConfig: context.storedConfig,
-    timeoutMs: context.globalOptions.timeoutMs,
-    watch: context.globalOptions.watch,
-    now: Date.now,
-    onPasskeyUrl: (url) => {
-      process.stderr.write(`Open this link to authorize the tip:
-${url}
-`);
-      maybeOpenBrowser(context.globalOptions.open, url);
-    }
-  });
+  const paymentMethodApi = createPaymentMethodApi(context);
   const result = await executeSkillTip(args, {
     baseUrl: context.runtimeConfig.baseUrl,
     dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
@@ -12411,11 +12191,12 @@ ${url}
     chargeRuntime: {
       runtimeConfig: context.runtimeConfig,
       timeoutMs: context.globalOptions.timeoutMs,
-      dryRun: context.globalOptions.dryRun
+      dryRun: context.globalOptions.dryRun,
+      refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
     }
   }, {
     resolveRecipient: resolveSkillTipRecipient,
-    resolveAuthorization: (intent) => resolveTipAuthorization(intent, authorizationApi),
+    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
     executeCharge,
     reportTip: reportSkillTip
   });
@@ -12946,16 +12727,18 @@ async function handlePayCommand(context) {
     ...shippingAddress ? { shippingAddress } : {},
     ...products ? { products } : {}
   };
+  const paymentMethodApi = createPaymentMethodApi(context);
   const execution = await executeCharge(chargeInput, {
     runtimeConfig: context.runtimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: context.globalOptions.dryRun
+    dryRun: context.globalOptions.dryRun,
+    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
   });
   if (execution.dryRun) {
     printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  printSuccess(execution.data, context.globalOptions.format);
+  printSuccess(addPaymentMethodsRefreshWarning(execution.data, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
   if (execution.requires3ds && execution.redirectUrl) {
     await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication");
     return EXIT_CODES.THREE_DS;
@@ -13104,15 +12887,20 @@ async function ucpCheckoutComplete(context) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
   }
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
-  const result = await requestJson({
-    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`),
-    method: "POST",
-    headers: buildUcpCheckoutHeaders(context),
-    body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId),
-    timeoutMs: context.globalOptions.timeoutMs,
+  const paymentMethodApi = createPaymentMethodApi(context);
+  const refreshed = await executePaymentRequestWithRefresh({
+    request: () => requestJson({
+      ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`),
+      method: "POST",
+      headers: buildUcpCheckoutHeaders(context),
+      body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId),
+      timeoutMs: context.globalOptions.timeoutMs,
+      dryRun: context.globalOptions.dryRun
+    }),
+    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
     dryRun: context.globalOptions.dryRun
   });
-  return finishApiCommand(result, context);
+  return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
 }
 function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
   return {
@@ -13184,7 +12972,7 @@ function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeExternalCheckoutMoneyFields(item, currency, `${path3}[${index}]`));
   }
-  if (!isRecord7(value)) {
+  if (!isRecord6(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -13195,7 +12983,7 @@ function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
     return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
   }));
 }
-function isRecord7(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null;
 }
 function isDecimalInput(value) {
@@ -13445,7 +13233,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord7(data)) {
+  if (!isRecord6(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -13458,7 +13246,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord7(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord6(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -13483,7 +13271,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord7(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord6(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -13628,14 +13416,26 @@ function stringifyRefreshError(error) {
   }
   return String(error);
 }
-async function finishApiCommand(result, context) {
+async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   if (isDryRun(result)) {
     printSuccess(result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   assertApiSuccess(result.status, result.body);
-  printSuccess(unwrapApiData(result.body), context.globalOptions.format);
+  const data = unwrapApiData(result.body);
+  printSuccess(paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+function createPaymentMethodApi(context) {
+  return createTipAuthorizationApi({
+    runtimeConfig: context.runtimeConfig,
+    storedConfig: context.storedConfig,
+    timeoutMs: context.globalOptions.timeoutMs,
+    watch: false,
+    now: Date.now,
+    onPasskeyUrl: () => {
+    }
+  });
 }
 function isDryRun(value) {
   return "dryRun" in value;
@@ -13696,7 +13496,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord7(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord6(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {

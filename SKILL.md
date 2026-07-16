@@ -1,7 +1,7 @@
 ---
 name: clink-payment-skill
-description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), or explicitly tipping a skill by publisher/name or Number."
-version: "1.4.1"
+description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), or tipping a skill by publisher/name with optional version or a Number from recent context."
+version: "1.5.0"
 requires:
   node: ">=20"
   bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -45,8 +45,8 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - order a discovered product or product URL/product link through the UCP checkout control flow: resolve or explore to a product detail URL, use `clink-cli tool parse-item --url <item_url>` for product-page facts, select one available item, classify `fulfillmentType`, require a standard complete shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate only when Visa + VIC is ready, start the instruction workflow when no match exists, resolve internal vs external checkout route through `clink-cli tool internal-ucp get-endpoint`, then create and complete checkout only after all guards pass
 - create a full refund or poll refund status
 - wait for async completion events from the Clink event hub
-- list public skills that support tipping and present Number, publisher, skill name, and skill ID
-- tip one skill in USD by exact publisher/name or by a verified Number from the previously displayed list
+- list public skills that support tipping and present Number, publisher, skill name, and skill ID while retaining optional version in context
+- tip one skill in USD by exact publisher/name with optional version, or resolve a Number from a list displayed in the same context within two hours
 - inspect or update local Clink CLI configuration
 
 ## Do Not Use
@@ -104,10 +104,12 @@ FSM action contract:
 | `POLL_PAYMENT_SUCCESS_EVENT` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json` after UCP checkout complete returns `completed`; wait for the matching payment success event. |
 | `RETURN_PAYMENT_SUCCESS_EVENT` | Surface the matched `agent_order.succeeded` event/message to the caller; do not claim merchant fulfillment. |
 | `RETURN_SKILL_TABLE` | Run `clink-cli skills list --all --tippable --format json`, preserve CLI Number values, and return the required four-column table. |
-| `REFRESH_SKILL_LIST` | Refresh the list immediately before a Number tip and compare Number, publisher, skill name, and skill ID with the displayed snapshot. |
-| `ASK_FOR_REAUTHORIZATION` | Stop before payment when a Number row is missing or changed; show the refreshed target and require fresh authorization. |
-| `RUN_SKILL_TIP` | Execute the exact authorized identity or Number tip command without adding currency or payment-instrument flags. |
-| `SEND_PASSKEY_AND_WAIT` | Surface the tip Passkey URL and preserve the CLI resume command; no tip payment has occurred yet. |
+| `RUN_SKILL_TIP_LIST_WORKFLOW` | When no same-context two-hour snapshot resolves a Number, preserve the returned `tipDraft.confirmationRequired=true`, list tippable Skills, and display the table before creating a confirmation pending object. |
+| `ASK_FOR_TIP_CONFIRMATION` | Show the frozen Number, publisher/name, optional version, amount, and USD; do not execute payment. |
+| `CLAIM_PENDING_TIP` | Atomically change the same pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
+| `CANCEL_PENDING_TIP` | Atomically change `AWAITING_CONFIRMATION` to `CANCELLED`; never execute payment. |
+| `RUN_SKILL_TIP` | Execute only the exact authorized publisher/name command with optional `--version <versionNo>`; never pass Number to the CLI. Preserve the returned complete `expectedTip` binding for result classification. |
+| `SEND_PASSKEY_AND_WAIT` | Handle a legacy tip authorization continuation defensively; it is not the latest Credit-only normal path and no tip payment has occurred yet. |
 | `START_OPTIONAL_ACCOUNT_EVENT_WATCH` | After synchronous tip payment success, immediately start bounded `account-created` and `account-reloaded` polls in parallel. |
 | `WAIT_OPTIONAL_ACCOUNT_EVENT` | Keep `PAID` and wait when only one of the two optional account polls has settled; do not report absence until both settle. |
 | `RETURN_TIP_SUCCESS` | Return `PAID` plus one correlated optional account event. |
@@ -120,8 +122,9 @@ FSM action contract:
 | Observation | Action |
 | --- | --- |
 | User asks which skills support tipping | Run `clink-cli skills list --all --tippable --format json`, classify with `classifySkillListObservation`, and return Number, publisher, skill name, and skill ID. |
-| User explicitly authorizes an identity tip | Require exact publisher/name, a positive amount, and USD; run `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json`. |
-| User explicitly authorizes a Number tip | Require a displayed Number snapshot, refresh and compare the row, then run `clink-cli skills tip --number <number> --expected-skill-id <skill_id> --amount <amount> --format json` only when unchanged. |
+| User explicitly authorizes an identity tip | Require exact publisher/name, optional exact version, a positive amount, and USD; run `clink-cli skills tip --publisher <publisher> --name <skill_name> [--version <versionNo>] --amount <amount> --format json`. |
+| User explicitly authorizes a Number tip with a same-context list displayed within two hours | Resolve Number to the frozen publisher/name/version and run the identity command without refreshing the list. |
+| Number tip has no valid two-hour context snapshot | List and display tippable Skills, freeze the selected row, then require confirmation before atomically claiming and executing the identity command. |
 | Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the two optional account-event polls. |
 | Optional skill-tip account polls time out or fail | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
 | Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
@@ -143,9 +146,12 @@ FSM action contract:
 ## Hard Rules
 
 - Never run `clink-cli skills tip` unless the current request affirmatively authorizes one exact skill target and one positive USD amount. Negated, cancelled, questioned, historical, conditional, counterfactual, advice, multi-target, and multi-amount requests are not payment authorization.
-- Number-based tips require the Number snapshot previously displayed in the current workflow. Refresh `skills list --all --tippable` immediately before payment; if Number, publisher, skill name, or skill ID changed, stop and require fresh authorization. Pass the unchanged `skillId` through `--expected-skill-id` so the CLI can reject a final lookup race before card or charge calls.
+- Number is a context index, never a `skills tip` CLI target. Use only the newest structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Resolve Number to frozen publisher/name/optional version; never scrape history or refresh the list when that snapshot is valid.
+- Without a valid Number snapshot, run `skills list --all --tippable`, display it, freeze publisher/name/version/skillId, and require confirmation. Confirmation first returns `CLAIM_PENDING_TIP`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce the payment command. Consumed, cancelled, expired, or already-executing pending objects never execute again.
+- The latest Skill Tip command uses only a sufficient explicitly default USD Credit balance. Do not add card, VIC instruction, mandate, mixed-payment, currency, or payment-instrument flags.
 - Treat a `payment_unknown` payload or exit code 6 as unknown even when the charge request returned an HTTP response. Never retry until an order/idempotency status path proves retry safety.
 - For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
+- A paid Skill Tip result requires the execution-ready `expectedTip` binding and must match its publisher, skill name, optional skill ID/version, amount, and USD currency. Missing or mismatched binding is `UNKNOWN`, never an unbound success.
 - `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.
 - Treat skill-tip exit code 6 or client timeout as an unknown payment state. Never retry the tip automatically.
 - Never run `clink-cli pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
@@ -180,8 +186,8 @@ FSM action contract:
 | Need | Command |
 | --- | --- |
 | List tippable public skills | `clink-cli skills list --all --tippable --format json` |
-| Tip by publisher/name | `clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json` |
-| Tip by displayed Number | `clink-cli skills tip --number <number> --expected-skill-id <skill_id> --amount <amount> --format json` |
+| Tip by publisher/name | `clink-cli skills tip --publisher <publisher> --name <skill_name> [--version <versionNo>] --amount <amount> --format json` |
+| Tip by displayed Number | Resolve the recent-context Number to publisher/name/version, then use the identity command above. |
 | Wait for optional new-account evidence | `clink-cli events poll --type account-created --max-wait 60 --format json` |
 | Wait for optional reload evidence | `clink-cli events poll --type account-reloaded --max-wait 60 --format json` |
 | Initialize wallet | `clink-cli wallet init --email <email> --name <name> [--otp <email_otp>] --format json` (use credentials matching the prefix's environment) |
@@ -252,7 +258,8 @@ For a UCP checkout product order, the merchant/product skill owns product discov
 ## Common Mistakes
 
 - Treating a skill-list query as authorization to tip.
-- Treating a bare amount as a skill Number, or using a stale Number without comparing the refreshed row.
+- Treating a bare amount as a Skill Number, scanning Markdown history, using a snapshot older than two hours, or passing `--number` to `skills tip`.
+- Executing immediately after a confirmation without first atomically claiming its pending object.
 - Waiting for `account-created` / `account-reloaded` before recognizing synchronous tip payment success.
 - Downgrading a paid tip because the merchant emitted no optional account event.
 - Calling `pay` before wallet/card pre-checks.
