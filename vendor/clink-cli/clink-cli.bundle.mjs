@@ -6157,7 +6157,7 @@ Notes:
   A default BALANCE must have enough finite availableBalance to cover the full amount.
   No explicit default fails with: No default payment method
   An unsupported explicit default fails with: Unsupported default payment method
-  Insufficient or invalid default Credit fails with: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
+  Insufficient or invalid default Credit fails with 402: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
   The backend calculates Credit allocation.
 `;
 var TOOL_HELP = `clink-cli tool
@@ -10606,7 +10606,7 @@ function selectDefaultTipPaymentMethod(paymentMethods, amount) {
   }
   const availableBalance = paymentMethod.availableBalance;
   if (typeof availableBalance !== "number" || !Number.isFinite(availableBalance) || availableBalance < amount) {
-    throw apiError("Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361", 422);
+    throw apiError("Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361", 402);
   }
   return {
     paymentInstrumentId: paymentMethod.paymentInstrumentId,
