@@ -6110,13 +6110,13 @@ Options:
 ${OUTPUT_OPTIONS}
 
 Install Location:
-  A single-skill download may be a raw UTF-8 SKILL.md file or a ZIP containing SKILL.md at its
-  root or in one wrapper directory. It is exposed through ~/.agents/skills/<skillName>.
-  A multi-skill archive contains two or more directories with their own direct SKILL.md files.
-  At the archive root, ordinary root files may accompany the Skill directories, but extra non-Skill
-  root directories are rejected.
-  Inside a common wrapper directory, non-Skill files and directories are ignored. Those skills are
-  exposed as sibling entries under ~/.agents/skills using the Skill directory names.
+  A single-skill download may be a raw UTF-8 SKILL.md file or a ZIP containing SKILL.md at its root.
+  Otherwise, archive-root directories with their own direct SKILL.md files are selected. One uses
+  the requested Skill name; two or more form a multi-skill archive and use their directory names as
+  sibling entries.
+  Ordinary files and other directories are ignored. When no root Skill directory exists and there
+  is exactly one top-level directory, the same selection applies inside that common wrapper directory.
+  Selected Skills are exposed under ~/.agents/skills.
   Multi-skill releases and Agent updates are committed or rolled back together.
 
 Agent Integration:
@@ -8879,7 +8879,6 @@ async function selectSkillLayout(rawRoot) {
     }
   }
   const skillRoots = [];
-  const nonSkillDirectories = [];
   const topLevelDirectories = [];
   for (const name of topLevelNames) {
     const candidateRoot = resolve2(rawRoot, name);
@@ -8891,7 +8890,6 @@ async function selectSkillLayout(rawRoot) {
     topLevelDirectories.push({ name, root: candidateRoot });
     const candidateNames = await readdir(candidateRoot);
     if (!candidateNames.includes("SKILL.md")) {
-      nonSkillDirectories.push(name);
       continue;
     }
     const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
@@ -8900,15 +8898,18 @@ async function selectSkillLayout(rawRoot) {
     }
     skillRoots.push({ skillName: name, skillRoot: candidateRoot });
   }
-  if (skillRoots.length === 1 && nonSkillDirectories.length === 0) {
+  if (skillRoots.length === 1) {
     return { layout: "single", skillRoot: skillRoots[0].skillRoot };
   }
-  if (skillRoots.length >= 2 && nonSkillDirectories.length === 0) {
+  if (skillRoots.length >= 2) {
     assertValidMultiSkillRoots(skillRoots);
     return { layout: "multi", skillRoots };
   }
   if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
     const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
+    if (wrappedSkillRoots.length === 1) {
+      return { layout: "single", skillRoot: wrappedSkillRoots[0].skillRoot };
+    }
     if (wrappedSkillRoots.length >= 2) {
       assertValidMultiSkillRoots(wrappedSkillRoots);
       return { layout: "multi", skillRoots: wrappedSkillRoots };
