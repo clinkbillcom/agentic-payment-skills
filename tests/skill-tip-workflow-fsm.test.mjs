@@ -905,6 +905,48 @@ test('payment failure payload remains terminal when CLI returns exit code 5', ()
   assert.equal(result.paymentStatus, 'FAILED');
 });
 
+test('402 card-binding-required error only surfaces the message and stops the tip', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 5,
+    stderr: JSON.stringify({
+      ok: false,
+      error: {
+        type: 'api_error',
+        code: 402,
+        message: 'Credit 余额不足，请先绑定银行卡',
+      },
+    }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_CARD_BINDING_REQUIRED);
+  assert.equal(result.action, SkillTipAction.SURFACE_ERROR);
+  assert.equal(result.paymentStatus, 'NOT_PAID');
+  assert.equal(result.userMessage, 'Credit 余额不足，请先绑定银行卡');
+  assert.equal(result.terminal, true);
+  assert.equal(result.command, undefined);
+  assert.equal(result.retryCurrentTipAfterBinding, undefined);
+  assert.equal(result.pollCommands, undefined);
+});
+
+test('the card-binding message without code 402 remains a generic terminal error', () => {
+  const result = classifySkillTipObservation({
+    exitCode: 5,
+    stderr: JSON.stringify({
+      ok: false,
+      error: {
+        code: 500,
+        message: 'Credit 余额不足，请先绑定银行卡',
+      },
+    }),
+  });
+
+  assert.equal(result.state, SkillTipState.TIP_ERROR);
+  assert.equal(result.action, SkillTipAction.SURFACE_ERROR);
+  assert.equal(result.terminal, true);
+  assert.equal(result.command, undefined);
+  assert.equal(result.pollCommands, undefined);
+});
+
 test('paid result that conflicts with the authorization binding is unknown', () => {
   const result = classifySkillTipObservation({
     exitCode: 0,

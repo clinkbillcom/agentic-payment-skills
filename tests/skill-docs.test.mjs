@@ -139,6 +139,8 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /account-created.*account-reloaded/isu);
   assert.match(skillTip, /optional/iu);
   assert.match(skillTip, /Never retry exit code 6/iu);
+  assert.match(skillTip, /code `402`.*Credit 余额不足，请先绑定银行卡/isu);
+  assert.match(skillTip, /Do not run `card binding-link`.*binding\/payment listener.*retry the Tip/isu);
   assert.match(skillTip, /clink-cli events poll --type account-created --max-wait 60 --format json/u);
   assert.match(skillTip, /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u);
 });

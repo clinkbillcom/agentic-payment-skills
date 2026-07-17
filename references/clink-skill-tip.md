@@ -229,13 +229,7 @@ Every `RUN_SKILL_TIP` result also returns an `expectedTip` binding. This binding
 
 The latest CLI refreshes and uses the explicit default payment method. A default `CARD` is charged directly without a Credit-balance check. A default `BALANCE` must have enough finite `availableBalance` to cover the complete tip. It does not use mixed Credit/card payment, VIC instructions, or mandates for normal Skill Tip execution. The FSM may continue classifying legacy `authorization_pending` and 3DS payloads defensively, but they are not the current normal path.
 
-If the explicit default is `BALANCE` and its balance is insufficient or invalid, the CLI stops before payment and returns the exact error `Credit 余额不足，请先绑定银行卡`. Classify this as `TIP_CARD_BINDING_REQUIRED / START_CARD_BINDING`, return exactly that stable user message, then run:
-
-~~~bash
-clink-cli card binding-link --format json
-~~~
-
-Send the returned binding URL and keep the built-in binding watch active. This branch means the user must bind a bank card; never tell the user to recharge, top up, reload, or add funds to Credit/Balance. After binding completes and the card is the explicit default payment method, retry only the same frozen tip intent.
+If the explicit default is `BALANCE` and its balance is insufficient or invalid, the CLI stops before payment and returns code `402` with the exact error `Credit 余额不足，请先绑定银行卡`. Classify this as terminal `TIP_CARD_BINDING_REQUIRED / SURFACE_ERROR`, return exactly that stable user message, and stop the current Tip. Do not run `card binding-link`, start a binding/payment listener, or retry the Tip. Start card binding only after a separate explicit user request. This branch means the user must bind a bank card; never tell the user to recharge, top up, reload, or add funds to Credit/Balance.
 
 ## Classify the Result
 
@@ -245,7 +239,7 @@ Use the CLI exit code first, then the first JSON result envelope.
 | --- | --- | --- |
 | `status=paid` and agent pay `status=1` | `PAID` | Start optional account-event monitoring |
 | legacy `authorization_pending` | `NOT_PAID` | Preserve its continuation without claiming payment |
-| exact error `Credit 余额不足，请先绑定银行卡` | `NOT_PAID` | Return the same message and start the card-binding workflow; never suggest recharge/top-up |
+| code `402` with exact error `Credit 余额不足，请先绑定银行卡` | `NOT_PAID` | Return the same message and stop; do not bind, listen, or retry |
 | exit 5 with `payment_failed` | `FAILED` | Stop |
 | exit 6 or `payment_unknown` | `UNKNOWN` | Verify safely; never retry automatically |
 | exit 7 / `three_ds_required` | `PENDING_3DS` | Use the correlated order-event flow |
