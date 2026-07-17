@@ -167,6 +167,22 @@ test('vendored CLI preserves a Skill install name containing spaces', () => {
   assert.equal(result.data.dryRun, true);
 });
 
+test('vendored CLI preserves Chinese publisher and Skill names', () => {
+  const result = runBundleJson([
+    'skills', 'install',
+    '艺术家/跨境数据分析套件@v1.0.0',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.publisher, '艺术家');
+  assert.equal(result.data.skillName, '跨境数据分析套件');
+  assert.equal(result.data.requestedVersion, 'v1.0.0');
+  assert.equal(result.data.action, 'planned');
+  assert.equal(result.data.dryRun, true);
+});
+
 test('vendored CLI rejects a separate Skill install version flag', () => {
   const result = runBundleRaw([
     'skills', 'install',

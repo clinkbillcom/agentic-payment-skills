@@ -76,6 +76,19 @@ test('routes an exact-version Skill install whose name contains spaces', () => {
   });
 });
 
+test('routes an exact-version Skill install with Chinese publisher and name', () => {
+  const result = classifyPaymentIntent({ text: '安装 艺术家/跨境数据分析套件@v1.0.0' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  assert.deepEqual(result.install.target, {
+    kind: 'identity',
+    publisher: '艺术家',
+    skillName: '跨境数据分析套件',
+    versionNo: 'v1.0.0',
+  });
+});
+
 test('routes an explicitly authorized Skill install by displayed Number', () => {
   const result = classifyPaymentIntent({ text: '安装第 2 个 skill' });
 

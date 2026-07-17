@@ -8427,8 +8427,8 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 // dist/skills/spec.js
-var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
-var SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*$/;
+var PACKAGE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
+var SKILL_NAME_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
 var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;

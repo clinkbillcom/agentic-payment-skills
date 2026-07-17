@@ -130,6 +130,29 @@ test('identity install quotes a human-readable Skill name containing spaces', ()
   });
 });
 
+test('identity install supports Chinese publisher and Skill names', () => {
+  const result = classifySkillInstallPrerequisites({
+    install: authorizedInstall({
+      kind: 'identity',
+      publisher: '艺术家',
+      skillName: '跨境数据分析套件',
+      versionNo: 'v1.0.0',
+    }),
+  });
+
+  assert.equal(result.state, SkillInstallState.INSTALL_EXECUTION_READY);
+  assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
+  assert.equal(
+    result.command,
+    'clink-cli skills install "艺术家/跨境数据分析套件@v1.0.0" --format json',
+  );
+  assert.deepEqual(result.expectedInstall, {
+    publisher: '艺术家',
+    skillName: '跨境数据分析套件',
+    requestedVersion: 'v1.0.0',
+  });
+});
+
 test('identity install protects a leading-hyphen publisher from CLI option parsing', () => {
   const result = classifySkillInstallPrerequisites({
     install: authorizedInstall({
