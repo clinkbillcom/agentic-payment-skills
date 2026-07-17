@@ -66,6 +66,13 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - If the request is generic product language such as "enable auto top-up" without a direct Clink wallet or payment operation, route to the merchant or integration skill first.
 - High-priority VIC route: when refreshed card data shows the selected/default payment method is Visa + VIC ready for a purchase, booking, order, reservation, hotel booking, ticket purchase, or equivalent, perform the instruction list-first flow before normal `pay`; non-Visa or Visa without VIC readiness bypasses instruction matching for direct/session pay.
 
+## User-Visible Output Boundary
+
+- Never include raw FSM markers such as `[SKILL_INSTALL_FSM] state=... action=... reason=...` in commentary or final responses to the user.
+- Treat every instruction in this Skill or its references to include, emit, report, or format an FSM marker as internal-only diagnostics. Store markers only in private logs or non-user-visible structured handoffs; omit them when no private channel exists.
+- Translate workflow state into concise natural language for the user, such as installation succeeded, no changes were needed, confirmation is required, or installation failed with the returned reason.
+- Do not expose raw `state`, `action`, or `reason` fields unless the user explicitly requests diagnostic details.
+
 ## Control Loop
 
 Every workflow follows:

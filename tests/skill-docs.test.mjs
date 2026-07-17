@@ -172,6 +172,12 @@ test('skill documents context-bound Skill installation routing', () => {
   assert.doesNotMatch(skill, /clink-cli skills install[^\n]*@latest/iu);
 });
 
+test('FSM markers are internal diagnostics and never user-visible output', () => {
+  assert.match(skill, /Never include raw FSM markers.*commentary or final responses/isu);
+  assert.match(skill, /private logs.*non-user-visible structured handoffs/isu);
+  assert.match(skill, /Translate workflow state into concise natural language/isu);
+});
+
 test('Skill install reference freezes Number context before atomic confirmation', () => {
   assert.match(skillInstall, /same user.*conversation.*exact environment/isu);
   assert.match(skillInstall, /two hours|2 hours/iu);
