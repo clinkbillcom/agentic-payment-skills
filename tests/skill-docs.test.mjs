@@ -178,6 +178,12 @@ test('FSM markers are internal diagnostics and never user-visible output', () =>
   assert.match(skill, /Translate workflow state into concise natural language/isu);
 });
 
+test('ordinary Skill installation does not run project tests', () => {
+  assert.match(skill, /ordinary public Skill installation or reinstallation.*do not run.*test suite/isu);
+  assert.match(skill, /npm test.*node --test/isu);
+  assert.match(skill, /Verify only the CLI exit code.*JSON result binding.*install path.*agent publication result/isu);
+});
+
 test('Skill install reference freezes Number context before atomic confirmation', () => {
   assert.match(skillInstall, /same user.*conversation.*exact environment/isu);
   assert.match(skillInstall, /two hours|2 hours/iu);

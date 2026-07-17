@@ -19,6 +19,8 @@ Agent owns command execution. When this skill is triggered and required inputs/a
 
 If the runtime cannot execute local commands, report that limitation and stop. Provide a manual command only when the user explicitly asks for a command preview or manual fallback.
 
+For an ordinary public Skill installation or reinstallation, do not run the installed Skill's test suite or invoke commands such as `npm test` or `node --test`. Verify only the CLI exit code, JSON result binding, install path, and agent publication result. Run tests only when the user explicitly requests them or the current task also changes Skill or CLI source code.
+
 ## Before Running Commands
 
 CRITICAL - before executing a matching operation, read the listed reference file. Do not rely on memory or infer hidden fields.
