@@ -6099,7 +6099,8 @@ Usage:
 Arguments:
   <publisher>/<skillName>[@<version>]
                               Skill package identity. When @<version> is omitted, the marketplace
-                              returns the latest downloadable version.
+                              returns the latest downloadable version. Publisher and skill names
+                              may contain Unicode and internal spaces; quote the full identity.
 
 Options:
   --force                     Replace an existing installation and agent link/copy backups
@@ -8427,8 +8428,7 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 // dist/skills/spec.js
-var PACKAGE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
-var SKILL_NAME_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
+var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
 var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -8518,10 +8518,10 @@ function parseSkillTipArgs(operands, flags) {
   };
 }
 function isValidSkillIdentitySegment(value) {
-  return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
 }
 function isValidSkillName(value) {
-  return isValidSegment(value, SKILL_NAME_PATTERN);
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
 }
 function isValidSkillTipIdentitySegment(value) {
   return isValidSegment(value, TIP_IDENTITY_SEGMENT_PATTERN);
