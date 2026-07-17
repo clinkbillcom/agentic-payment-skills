@@ -34,7 +34,7 @@ clink-cli skills install <publisher>/<skillName>[@<version>] --format json
 
 For `publisher/name` without a version, omit the version entirely so Marketplace selects latest. Never write a literal latest version. For an exact version request, append it to the single package operand with `@`.
 
-Publisher and Skill name use 1–128 letters, digits, `.`, `_`, or `-`. Version additionally allows `+`. Preserve spelling and case. Reject dangling `@`, extra path segments, URLs, partial-token matches, and noncanonical version syntax instead of silently falling back to latest.
+Publisher uses 1–128 letters, digits, `.`, `_`, or `-`. Skill name uses the same characters and may also contain internal ASCII spaces; quote the complete package operand when spaces are present. Version additionally allows `+`. Preserve spelling, spaces, and case. Reject leading/trailing spaces, dangling `@`, extra path segments, URLs, partial-token matches, and noncanonical version syntax instead of silently falling back to latest.
 
 An explicitly authorized identity request runs directly. Preserve this binding for result classification:
 

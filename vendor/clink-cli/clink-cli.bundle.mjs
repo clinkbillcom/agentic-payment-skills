@@ -3975,34 +3975,34 @@ var require_yauzl = __commonJS({
     exports.LocalFileHeader = LocalFileHeader;
     exports.RandomAccessReader = RandomAccessReader;
     function openPromise2(path3, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         open4(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
-          resolve5(zipfile);
+          resolve4(zipfile);
         });
       });
     }
     function fromFdPromise(fd, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         fromFd(fd, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
-          resolve5(zipfile);
+          resolve4(zipfile);
         });
       });
     }
     function fromBufferPromise(buffer, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         fromBuffer(buffer, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
-          resolve5(zipfile);
+          resolve4(zipfile);
         });
       });
     }
     function fromRandomAccessReaderPromise(reader, totalSize, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         fromRandomAccessReader(reader, totalSize, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
-          resolve5(zipfile);
+          resolve4(zipfile);
         });
       });
     }
@@ -4286,15 +4286,15 @@ var require_yauzl = __commonJS({
         if (self.autoClose) self.close();
       }
       function onEntry(entry) {
-        let { resolve: resolve5 } = pendingResolveReject;
+        let { resolve: resolve4 } = pendingResolveReject;
         pendingResolveReject = null;
-        resolve5({ value: entry });
+        resolve4({ value: entry });
       }
       function onEnd() {
-        let { resolve: resolve5 } = pendingResolveReject;
+        let { resolve: resolve4 } = pendingResolveReject;
         pendingResolveReject = null;
         cleanup();
-        resolve5({ done: true });
+        resolve4({ done: true });
       }
       function onError(err) {
         let { reject } = pendingResolveReject;
@@ -4307,9 +4307,9 @@ var require_yauzl = __commonJS({
           return this;
         },
         next() {
-          const promise = new Promise((resolve5, reject) => {
+          const promise = new Promise((resolve4, reject) => {
             if (pendingResolveReject != null) throw new Error("next() called before previous Promise was resolved.");
-            pendingResolveReject = { resolve: resolve5, reject };
+            pendingResolveReject = { resolve: resolve4, reject };
           });
           self.readEntry();
           return promise;
@@ -4498,26 +4498,26 @@ var require_yauzl = __commonJS({
       });
     };
     ZipFile.prototype.openReadStreamPromise = function(entry, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         this.openReadStream(entry, options2, function(err, readStream) {
           if (err) return reject(err);
-          resolve5(readStream);
+          resolve4(readStream);
         });
       });
     };
     ZipFile.prototype.openReadStreamLowLevelPromise = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         this.openReadStream(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, function(err, readStream) {
           if (err) return reject(err);
-          resolve5(readStream);
+          resolve4(readStream);
         });
       });
     };
     ZipFile.prototype.readLocalFileHeaderPromise = function(entry, options2) {
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve4, reject) => {
         this.readLocalFileHeader(entry, options2, function(err, localFileHeader) {
           if (err) return reject(err);
-          resolve5(localFileHeader);
+          resolve4(localFileHeader);
         });
       });
     };
@@ -4805,8 +4805,8 @@ var require_yauzl = __commonJS({
   }
 });
 
-// src/cli.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
+// dist/cli.js
+import { randomUUID as randomUUID2 } from "node:crypto";
 import { homedir } from "node:os";
 
 // node_modules/commander/esm.mjs
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// src/errors.ts
+// dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// src/args.ts
+// dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4998,12 +4998,12 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// src/config.ts
+// dist/config.js
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// src/domains.ts
+// dist/domains.js
 var API_BASE_URLS = {
   sandbox: "https://uat-api.clinkbill.com",
   // sandbox: "https://api.clinkbill.dev",
@@ -5021,7 +5021,7 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// src/config.ts
+// dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 function defaultConfig() {
@@ -5211,7 +5211,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// src/http.ts
+// dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5273,11 +5273,7 @@ function ensureTrailingSlash(value) {
 }
 var SENSITIVE_HEADERS = /* @__PURE__ */ new Set(["x-customer-api-key", "authorization"]);
 function redactSensitiveHeaders(headers) {
-  return Object.fromEntries(
-    Object.entries(headers).map(
-      ([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]
-    )
-  );
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]));
 }
 function parseBody(rawText) {
   if (!rawText) {
@@ -5290,18 +5286,14 @@ function parseBody(rawText) {
   }
 }
 
-// src/utils.ts
+// dist/utils.js
 import { spawn } from "node:child_process";
 function buildCustomerHeaders(config) {
   if (!config.customerId) {
-    throw configError(
-      "missing customerId; run `clink-cli wallet init` or pass --customer-id"
-    );
+    throw configError("missing customerId; run `clink-cli wallet init` or pass --customer-id");
   }
   if (!config.customerApiKey) {
-    throw configError(
-      "missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key"
-    );
+    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
   }
   return {
     "X-Customer-ID": config.customerId,
@@ -5311,9 +5303,7 @@ function buildCustomerHeaders(config) {
 }
 function buildCustomerApiKeyHeaders(config) {
   if (!config.customerApiKey) {
-    throw configError(
-      "missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key"
-    );
+    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
   }
   return {
     "X-Customer-API-Key": config.customerApiKey,
@@ -5505,7 +5495,7 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// src/events.ts
+// dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -5543,7 +5533,7 @@ function eventMatchesInstruction(event, instructionId) {
   const candidate = event.data.instructionId ?? event.data.purchaseInstructionId ?? event.resourceId;
   return event.eventType === "purchase_instruction.activated" && candidate === instructionId;
 }
-var realSleep = (ms) => new Promise((resolve5) => setTimeout(resolve5, ms));
+var realSleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 var stderrLog = (message) => {
   process.stderr.write(`\u2022 ${message}
 `);
@@ -5596,11 +5586,7 @@ async function watchEvents(options2) {
   const startedAtMs = now();
   log(`Open this link in your browser to complete the ${options2.label}:`);
   log(`  ${options2.url}`);
-  log(
-    `Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(
-      maxDurationMs / 6e4
-    )} min). This will continue automatically once an event arrives.`
-  );
+  log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
   const deadline = startedAtMs + maxDurationMs;
   for (; ; ) {
     let records;
@@ -5644,13 +5630,8 @@ async function watchEvents(options2) {
       const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
       if (watchTargetEnabled && matchedEvents.length === 0) {
         const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents(
-          { runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs },
-          ignoredEventIds
-        );
-        log(
-          `No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`
-        );
+        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ignoredEventIds);
+        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
         if (now() + pollIntervalMs >= deadline) {
           break;
         }
@@ -5675,9 +5656,7 @@ function isStaleForWatch(record, startedAtMs) {
   return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
 }
 function hasWatchTarget(options2) {
-  return Boolean(
-    options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0)
-  );
+  return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
 }
 function eventMatchesWatchTarget(event, options2) {
   if (options2.eventType && event.eventType !== options2.eventType) {
@@ -5740,15 +5719,7 @@ function parseEventTimeMs(value) {
   const utcDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(trimmed);
   if (utcDateTime) {
     const [, year, month, day, hour, minute, second, millisecond = "0"] = utcDateTime;
-    return Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      Number(second),
-      Number(millisecond.padEnd(3, "0"))
-    );
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond.padEnd(3, "0")));
   }
   const parsed = Date.parse(trimmed);
   return Number.isFinite(parsed) ? parsed : void 0;
@@ -5898,11 +5869,7 @@ function summarizeEvent(record, data) {
     case "payment_method.deleted":
       return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} deleted${cardSuffix(data)}`;
     case "payment_method.default_change":
-      return `default payment method changed to ${str(
-        data,
-        "defaultPaymentMethodId",
-        str(data, "paymentInstrumentId", record.resourceId)
-      )}`;
+      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record.resourceId))}`;
     case "risk_rule.updated":
       return `risk rules updated for ${str(data, "customerId", record.customerId)}`;
     case "vic_device.binding_succeeded":
@@ -5984,7 +5951,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// src/help.ts
+// dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -7324,7 +7291,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// src/internal-ucp.production.json
+// dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7336,7 +7303,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// src/internal-ucp.sandbox.json
+// dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7344,7 +7311,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// src/internal-ucp.ts
+// dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7367,14 +7334,8 @@ function validateInternalUcpMerchants(value, source) {
   });
   return merchants;
 }
-var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(
-  internal_ucp_production_default,
-  "internal-ucp.production.json"
-);
-var SANDBOX_MERCHANTS = validateInternalUcpMerchants(
-  internal_ucp_sandbox_default,
-  "internal-ucp.sandbox.json"
-);
+var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(internal_ucp_production_default, "internal-ucp.production.json");
+var SANDBOX_MERCHANTS = validateInternalUcpMerchants(internal_ucp_sandbox_default, "internal-ucp.sandbox.json");
 function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl;
   try {
@@ -7403,7 +7364,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// src/output.ts
+// dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -7448,7 +7409,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// src/payment/amount.ts
+// dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -7457,7 +7418,7 @@ function parseAmount(value) {
   return amount;
 }
 
-// src/payment/authorization-api.ts
+// dist/payment/authorization-api.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
@@ -7519,11 +7480,7 @@ function createTipAuthorizationApi(input, overrides = {}) {
       }
       return {
         instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(
-          resolveAgentBaseUrl(input.runtimeConfig.baseUrl),
-          draft.paymentInstrumentId,
-          instructionId
-        )
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(input.runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId)
       };
     },
     waitForActivation: async (instructionId) => {
@@ -7533,17 +7490,12 @@ function createTipAuthorizationApi(input, overrides = {}) {
         type: "purchase_instruction.activated",
         ack: false
       });
-      const matches = collected.events.filter(
-        (event) => eventMatchesInstruction(event, instructionId)
-      );
+      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
       if (matches.length === 0) {
         return { activated: false };
       }
       const eventIds = matches.map((event) => event.eventId).filter(Boolean);
-      await dependencies.ackWebhookEvents(
-        { runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs },
-        eventIds
-      );
+      await dependencies.ackWebhookEvents({ runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs }, eventIds);
       return { activated: true };
     },
     getInstruction: async (instructionId) => {
@@ -7577,9 +7529,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.filter(
-    (item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0
-  ).map((item) => ({ ...item }));
+  return value.filter((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0).map((item) => ({ ...item }));
 }
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
@@ -7588,7 +7538,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/payment/post-payment-refresh.ts
+// dist/payment/post-payment-refresh.js
 var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
 async function executePaymentRequestWithRefresh(input) {
   if (input.dryRun) {
@@ -7601,9 +7551,7 @@ async function executePaymentRequestWithRefresh(input) {
     await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
     throw error;
   }
-  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(
-    input.refreshPaymentMethods
-  );
+  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
   return {
     result,
     ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
@@ -7627,7 +7575,7 @@ function errorMessage(error) {
   return String(error);
 }
 
-// src/payment/charge.ts
+// dist/payment/charge.js
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -7709,26 +7657,14 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// src/skills/install.ts
+// dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
-import { mkdir as mkdir6, rm as rm6 } from "node:fs/promises";
+import { mkdir as mkdir5, rm as rm5 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// src/skills/agents.ts
+// dist/skills/agents.js
 import { constants } from "node:fs";
-import {
-  cp,
-  copyFile,
-  lstat,
-  mkdir as mkdir2,
-  open,
-  readlink,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-  symlink
-} from "node:fs/promises";
+import { cp, copyFile, lstat, mkdir as mkdir2, open, readlink, realpath, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 var MARKER_FILE_NAME = ".clink-install.json";
 var DETECTION_FAILURE = "failed to detect installed agents";
@@ -7744,57 +7680,15 @@ async function detectAgents(input) {
   const sharedTarget = join(skillsRoot, input.skillName);
   const detected = [];
   try {
-    await appendDetected(
-      detected,
-      "cursor",
-      "link",
-      join(homeDir, ".cursor"),
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
-    await appendDetected(
-      detected,
-      "claude-code",
-      "link",
-      join(homeDir, ".claude"),
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
+    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
     const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
-    await appendDetected(
-      detected,
-      "codex",
-      "link",
-      codexRoot,
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
-    await appendDetected(
-      detected,
-      "codebuddy",
-      "link",
-      join(homeDir, ".codebuddy"),
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
-    await appendDetected(
-      detected,
-      "openclaw",
-      "shared",
-      join(homeDir, ".openclaw"),
-      () => sharedTarget
-    );
+    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
     const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
-    await appendDetected(
-      detected,
-      "hermes",
-      "copy",
-      hermesRoot,
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
-    await appendDetected(
-      detected,
-      "trae",
-      "link",
-      join(homeDir, ".trae"),
-      (rootPath) => join(rootPath, "skills", input.skillName)
-    );
+    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
     const opencodeRoot = await firstExistingRoot(uniquePaths([
       resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
       join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
@@ -7808,10 +7702,7 @@ async function detectAgents(input) {
         targetPath: sharedTarget
       });
     }
-    const copilotCliRoot = resolveEnvironmentRoot(
-      input.env.COPILOT_HOME,
-      join(homeDir, ".copilot")
-    );
+    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
     const copilotRoot = await firstExistingRoot(uniquePaths([
       copilotCliRoot,
       join(homeDir, ".config", "github-copilot")
@@ -7835,20 +7726,8 @@ async function detectAgents(input) {
         targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
       });
     }
-    await appendDetected(
-      detected,
-      "codework",
-      "unsupported",
-      join(homeDir, ".codework"),
-      () => null
-    );
-    await appendDetected(
-      detected,
-      "chatgpt",
-      "unsupported",
-      join(homeDir, ".chatgpt"),
-      () => null
-    );
+    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
+    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -7962,14 +7841,7 @@ function createNoWritePlan(detected, mode) {
   };
 }
 function createWritePlan(preflight, input) {
-  const {
-    detected,
-    snapshot,
-    boundary,
-    copyTempPath,
-    backupPath,
-    keepBackup
-  } = preflight;
+  const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
   const targetPath = detected.targetPath;
   const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
   let appliedResult = null;
@@ -8063,11 +7935,7 @@ function createWritePlan(preflight, input) {
     }
     await mkdir2(boundary.parentPath);
     parentCreated = true;
-    ownedParent = await inspectExistingDirectoryBoundary(
-      boundary.parentPath,
-      boundary.canonicalRoot,
-      false
-    );
+    ownedParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
     await assertWritableBoundary(boundary, ownedParent);
   }
   async function moveExistingTarget() {
@@ -8101,10 +7969,7 @@ function createWritePlan(preflight, input) {
     if (placedFingerprint !== null) {
       const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
       if (currentFingerprint !== null) {
-        if (!sameEntryIdentity(
-          entryIdentityFromFingerprint(currentFingerprint),
-          entryIdentityFromFingerprint(placedFingerprint)
-        )) {
+        if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
           throw new Error("installed target changed before rollback");
         }
         await rm(targetPath, { recursive: true, force: true });
@@ -8116,12 +7981,7 @@ function createWritePlan(preflight, input) {
         throw new Error("missing backup path");
       }
       await assertWritableBoundary(boundary, ownedParent);
-      await restoreBackupExclusively(
-        backupObjectPath,
-        targetPath,
-        movedBackupFingerprint,
-        detected.mode
-      );
+      await restoreBackupExclusively(backupObjectPath, targetPath, movedBackupFingerprint, detected.mode);
       backupMoved = false;
       backupVerified = false;
       movedBackupFingerprint = null;
@@ -8181,10 +8041,7 @@ function createWritePlan(preflight, input) {
             return;
           }
           await assertPathNamesEntry(backupPath, backupContainerEntry);
-          const currentBackup = await fingerprintPathIfExists(
-            backupObjectPath,
-            detected.mode
-          );
+          const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
           if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
             await rm(backupPath, { recursive: true, force: true });
             backupMoved = false;
@@ -8246,10 +8103,7 @@ async function assertWritableBoundary(boundary, ownedParent) {
   const rootStat = await lstat(boundary.rootPath);
   const canonicalRoot = await realpath(boundary.rootPath);
   const canonicalRootStat = await lstat(canonicalRoot);
-  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(
-    createEntryIdentity(canonicalRootStat),
-    boundary.canonicalRootEntry
-  )) {
+  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(createEntryIdentity(canonicalRootStat), boundary.canonicalRootEntry)) {
     throw installError(TARGET_CHANGED);
   }
   const expectedParent = ownedParent ?? boundary.parent;
@@ -8259,11 +8113,7 @@ async function assertWritableBoundary(boundary, ownedParent) {
     }
     return;
   }
-  const actualParent = await inspectExistingDirectoryBoundary(
-    boundary.parentPath,
-    boundary.canonicalRoot,
-    true
-  );
+  const actualParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, true);
   if (!sameEntryIdentity(actualParent.entry, expectedParent.entry) || actualParent.canonicalPath !== expectedParent.canonicalPath || !sameEntryIdentity(actualParent.canonicalEntry, expectedParent.canonicalEntry)) {
     throw installError(TARGET_CHANGED);
   }
@@ -8273,11 +8123,7 @@ async function removeOwnedParent(boundary, ownedParent) {
     return;
   }
   try {
-    const actual = await inspectExistingDirectoryBoundary(
-      boundary.parentPath,
-      boundary.canonicalRoot,
-      false
-    );
+    const actual = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
     if (!sameEntryIdentity(actual.entry, ownedParent.entry) || actual.canonicalPath !== ownedParent.canonicalPath || !sameEntryIdentity(actual.canonicalEntry, ownedParent.canonicalEntry)) {
       return;
     }
@@ -8405,11 +8251,7 @@ async function inspectTarget(detected, input) {
   }
   if (detected.mode === "copy" && targetStat.isDirectory()) {
     const markerRecord = await readMarkerRecord(detected.targetPath);
-    const fingerprint = createFingerprint(
-      targetStat,
-      null,
-      markerRecord?.raw ?? null
-    );
+    const fingerprint = createFingerprint(targetStat, null, markerRecord?.raw ?? null);
     if (markerRecord !== null && markerRecord.marker.publisher === input.publisher && markerRecord.marker.skillName === input.skillName) {
       return { kind: "managed-copy", fingerprint, marker: markerRecord.marker };
     }
@@ -8478,20 +8320,14 @@ function sameFingerprint(first, second) {
   return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.size === second.size && first.mtimeMs === second.mtimeMs && first.ctimeMs === second.ctimeMs && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 function sameMovedObject(first, second) {
-  return sameEntryIdentity(
-    entryIdentityFromFingerprint(first),
-    entryIdentityFromFingerprint(second)
-  ) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+  return sameEntryIdentity(entryIdentityFromFingerprint(first), entryIdentityFromFingerprint(second)) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 function sameCopiedObject(first, second) {
   return first.type === second.type && first.mode === second.mode && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
 }
 async function removeOwnedPath(filePath, expected, mode) {
   const actual = await fingerprintPathIfExists(filePath, mode);
-  if (actual === null || !sameEntryIdentity(
-    entryIdentityFromFingerprint(actual),
-    entryIdentityFromFingerprint(expected)
-  )) {
+  if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
     return;
   }
   await rm(filePath, { recursive: true, force: true });
@@ -8582,7 +8418,7 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// src/skills/archive.ts
+// dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
 import { chmod, lstat as lstat2, mkdir as mkdir3, open as open2, readdir, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
@@ -8590,8 +8426,9 @@ import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, 
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// src/skills/spec.ts
+// dist/skills/spec.js
 var PACKAGE_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+var SKILL_NAME_PATTERN = /^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*$/;
 var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -8620,7 +8457,7 @@ function parseSkillPackageSpec(value) {
   const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
   const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
   const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
-  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillIdentitySegment(skillName) || requestedVersion !== null && (requestedVersion.toLowerCase() === "latest" || !isValidSegment(requestedVersion, VERSION_PATTERN))) {
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillName(skillName) || requestedVersion !== null && (requestedVersion.toLowerCase() === "latest" || !isValidSegment(requestedVersion, VERSION_PATTERN))) {
     throw invalidPackageSpec();
   }
   return { publisher, skillName, requestedVersion };
@@ -8633,9 +8470,7 @@ function parseSkillInstallArgs(operands, flags) {
     throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
   }
   if (flags.version !== void 0) {
-    throw validationError(
-      "--version is not supported by skills install; use publisher/skillName@version"
-    );
+    throw validationError("--version is not supported by skills install; use publisher/skillName@version");
   }
   return {
     ...parseSkillPackageSpec(operands[0]),
@@ -8644,15 +8479,11 @@ function parseSkillInstallArgs(operands, flags) {
 }
 function parseSkillTipArgs(operands, flags) {
   if (operands.length !== 0) {
-    throw validationError(
-      "skills tip does not accept positional arguments; use --publisher with --name"
-    );
+    throw validationError("skills tip does not accept positional arguments; use --publisher with --name");
   }
   for (const name of FORBIDDEN_TIP_FLAGS) {
     if (flags[name] !== void 0) {
-      throw validationError(
-        name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`
-      );
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`);
     }
   }
   const publisher = getStringFlag(flags, "publisher");
@@ -8689,6 +8520,9 @@ function parseSkillTipArgs(operands, flags) {
 function isValidSkillIdentitySegment(value) {
   return isValidSegment(value, PACKAGE_SEGMENT_PATTERN);
 }
+function isValidSkillName(value) {
+  return isValidSegment(value, SKILL_NAME_PATTERN);
+}
 function isValidSkillTipIdentitySegment(value) {
   return isValidSegment(value, TIP_IDENTITY_SEGMENT_PATTERN);
 }
@@ -8702,7 +8536,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// src/skills/archive.ts
+// dist/skills/archive.js
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -8833,11 +8667,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       const outputPath = resolve2(rawRoot, normalizedPath);
       assertPathContained(rawRoot, outputPath);
       validateDeclaredEntry(entry, limits);
-      declaredTotalBytes = addBoundedSize(
-        declaredTotalBytes,
-        entry.uncompressedSize,
-        limits.maxTotalBytes
-      );
+      declaredTotalBytes = addBoundedSize(declaredTotalBytes, entry.uncompressedSize, limits.maxTotalBytes);
       if (classified.kind === "directory") {
         if (entry.uncompressedSize !== 0) {
           throw new Error("archive directory contains data");
@@ -8849,11 +8679,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       const source = await zipFile.openReadStreamPromise(entry);
       const meter = new ArchiveByteCounter(limits, byteCount);
       const mode = classified.executable ? 493 : 420;
-      await pipeline(
-        source,
-        meter,
-        createWriteStream(outputPath, { flags: "wx", mode })
-      );
+      await pipeline(source, meter, createWriteStream(outputPath, { flags: "wx", mode }));
       if (meter.fileBytes !== entry.uncompressedSize) {
         throw new Error("archive entry size mismatch");
       }
@@ -9045,9 +8871,7 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
   }
 }
 async function selectSkillLayout(rawRoot) {
-  const topLevelNames = (await readdir(rawRoot)).sort(
-    (left, right) => left.localeCompare(right, "en")
-  );
+  const topLevelNames = (await readdir(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
   if (topLevelNames.includes("SKILL.md")) {
     const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
     if (rootSkill.isFile()) {
@@ -9084,9 +8908,7 @@ async function selectSkillLayout(rawRoot) {
     return { layout: "multi", skillRoots };
   }
   if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
-    const wrappedSkillRoots = await findDirectSkillRoots(
-      topLevelDirectories[0].root
-    );
+    const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
     if (wrappedSkillRoots.length >= 2) {
       assertValidMultiSkillRoots(wrappedSkillRoots);
       return { layout: "multi", skillRoots: wrappedSkillRoots };
@@ -9095,9 +8917,7 @@ async function selectSkillLayout(rawRoot) {
   throw new Error("archive must contain one skill root or multiple one-level skill roots");
 }
 async function findDirectSkillRoots(parentRoot) {
-  const names = (await readdir(parentRoot)).sort(
-    (left, right) => left.localeCompare(right, "en")
-  );
+  const names = (await readdir(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
   const skillRoots = [];
   for (const name of names) {
     const candidateRoot = resolve2(parentRoot, name);
@@ -9120,7 +8940,7 @@ async function findDirectSkillRoots(parentRoot) {
 }
 function assertValidMultiSkillRoots(skillRoots) {
   for (const skill of skillRoots) {
-    if (!isValidSkillIdentitySegment(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
+    if (!isValidSkillName(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
       throw new Error("archive contains an invalid multi-skill name");
     }
   }
@@ -9134,7 +8954,7 @@ function closeZip(zipFile) {
   }
 }
 
-// src/skills/download.ts
+// dist/skills/download.js
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm3 } from "node:fs/promises";
@@ -9142,7 +8962,7 @@ import { Readable, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 var DEFAULT_DEPENDENCIES = {
   fetch: (...args) => globalThis.fetch(...args),
-  sleep: async (ms) => new Promise((resolve5) => setTimeout(resolve5, ms)),
+  sleep: async (ms) => new Promise((resolve4) => setTimeout(resolve4, ms)),
   createWriteStream: (destinationPath) => createFileWriteStream(destinationPath, { flags: "wx", mode: 384 })
 };
 var RETRYABLE = [408, 429, 500, 502, 503, 504];
@@ -9178,13 +8998,7 @@ async function downloadSkillPackage(input, overrides) {
   try {
     while (true) {
       try {
-        return await downloadWithRetries(
-          ticket,
-          input.destinationPath,
-          input.timeoutMs,
-          dependencies,
-          state
-        );
+        return await downloadWithRetries(ticket, input.destinationPath, input.timeoutMs, dependencies, state);
       } catch (error) {
         if (!(error instanceof RefreshTicketError) || refreshed) {
           throw error;
@@ -9213,13 +9027,7 @@ async function downloadSkillPackage(input, overrides) {
 async function downloadWithRetries(ticket, destinationPath, timeoutMs, dependencies, state) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     try {
-      return await downloadTimedAttempt(
-        ticket,
-        destinationPath,
-        timeoutMs,
-        dependencies,
-        state
-      );
+      return await downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependencies, state);
     } catch (error) {
       if (!(error instanceof RetryableDownloadError)) {
         throw error;
@@ -9237,13 +9045,7 @@ async function downloadTimedAttempt(ticket, destinationPath, timeoutMs, dependen
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await downloadAttempt(
-      ticket,
-      destinationPath,
-      dependencies,
-      state,
-      controller.signal
-    );
+    return await downloadAttempt(ticket, destinationPath, dependencies, state, controller.signal);
   } finally {
     clearTimeout(timeout);
   }
@@ -9318,10 +9120,10 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
     });
     const destination = dependencies.createWriteStream(destinationPath);
     try {
-      await new Promise((resolve5, reject) => {
+      await new Promise((resolve4, reject) => {
         const onOpen = () => {
           destination.off("error", onError);
-          resolve5();
+          resolve4();
         };
         const onError = (error) => {
           destination.off("open", onOpen);
@@ -9345,12 +9147,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
     destination.once("error", () => {
       firstFailureOrigin ??= "destination";
     });
-    await pipeline2(
-      source,
-      meter,
-      destination,
-      { signal }
-    );
+    await pipeline2(source, meter, destination, { signal });
     if (actualBytes !== ticket.sizeBytes) {
       throw new RetryableDownloadError();
     }
@@ -9416,31 +9213,21 @@ async function cancelResponseBody(response) {
   }
 }
 
-// src/skills/metrics.ts
+// dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
 async function reportSkillPublicDownload(input, overrides = {}) {
-  await reportSkillMetric(
-    input,
-    "public-download",
-    { source: PUBLIC_DOWNLOAD_METRIC_SOURCE },
-    overrides
-  );
+  await reportSkillMetric(input, "public-download", { source: PUBLIC_DOWNLOAD_METRIC_SOURCE }, overrides);
 }
 async function reportSkillTip(input, overrides = {}) {
-  await reportSkillMetric(
-    input,
-    "tip",
-    compact2({
-      orderId: input.orderId,
-      versionNo: input.versionNo,
-      amount: input.amount,
-      currency: input.currency,
-      source: TIP_METRIC_SOURCE
-    }),
-    overrides
-  );
+  await reportSkillMetric(input, "tip", compact2({
+    orderId: input.orderId,
+    versionNo: input.versionNo,
+    amount: input.amount,
+    currency: input.currency,
+    source: TIP_METRIC_SOURCE
+  }), overrides);
 }
 function compact2(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
@@ -9449,10 +9236,7 @@ async function reportSkillMetric(input, metric, body, overrides) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch
   };
-  const url = new URL(
-    `${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/${metric}`,
-    ensureTrailingSlash2(input.dashboardBaseUrl)
-  );
+  const url = new URL(`${PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX}/${encodeURIComponent(input.skillId)}/metrics/${metric}`, ensureTrailingSlash2(input.dashboardBaseUrl));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
   try {
@@ -9476,10 +9260,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// src/skills/registry.ts
+// dist/skills/registry.js
 import path2 from "node:path";
 
-// src/skills/public-api.ts
+// dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -9490,7 +9274,7 @@ var INVALID_BASE_URL_MESSAGE = "invalid skill registry base URL";
 async function requestPublicSkillsJson(input, overrides = {}) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch,
-    sleep: overrides.sleep ?? (async (ms) => new Promise((resolve5) => setTimeout(resolve5, ms))),
+    sleep: overrides.sleep ?? (async (ms) => new Promise((resolve4) => setTimeout(resolve4, ms))),
     random: overrides.random ?? Math.random
   };
   const invalidResponseMessage = input.invalidResponseMessage ?? INVALID_RESPONSE_MESSAGE;
@@ -9524,12 +9308,7 @@ async function requestPublicSkillsJson(input, overrides = {}) {
         await cancelResponseBody2(response);
         assertApiSuccess(response.status, void 0);
       }
-      return await readLimitedJsonBody(
-        response,
-        invalidResponseMessage,
-        invalidResponseCode,
-        maxResponseBodyBytes
-      );
+      return await readLimitedJsonBody(response, invalidResponseMessage, invalidResponseCode, maxResponseBodyBytes);
     } catch (error) {
       if (error instanceof CliError) {
         throw error;
@@ -9610,7 +9389,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// src/skills/marketplace.ts
+// dist/skills/marketplace.js
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -9677,29 +9456,26 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/skills/registry.ts
+// dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
 var SKILL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 var MAX_SKILL_ID_LENGTH = 128;
 async function getSkillDownloadTicket(input, overrides) {
-  const body = await requestPublicSkillsJson(
-    {
-      baseUrl: input.baseUrl,
-      path: `${PUBLIC_SKILLS_MARKETPLACE_PATH}/download-url`,
-      query: {
-        publisher: input.packageSpec.publisher,
-        skillName: input.packageSpec.skillName,
-        versionNo: input.packageSpec.requestedVersion ?? void 0
-      },
-      timeoutMs: input.timeoutMs,
-      invalidResponseMessage: INVALID_RESPONSE_MESSAGE2,
-      invalidResponseCode: 400,
-      networkErrorMessage: NETWORK_ERROR_MESSAGE3
+  const body = await requestPublicSkillsJson({
+    baseUrl: input.baseUrl,
+    path: `${PUBLIC_SKILLS_MARKETPLACE_PATH}/download-url`,
+    query: {
+      publisher: input.packageSpec.publisher,
+      skillName: input.packageSpec.skillName,
+      versionNo: input.packageSpec.requestedVersion ?? void 0
     },
-    overrides
-  );
+    timeoutMs: input.timeoutMs,
+    invalidResponseMessage: INVALID_RESPONSE_MESSAGE2,
+    invalidResponseCode: 400,
+    networkErrorMessage: NETWORK_ERROR_MESSAGE3
+  }, overrides);
   return parseDownloadTicket(unwrapApiData(body));
 }
 function parseDownloadTicket(body) {
@@ -9751,54 +9527,33 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// src/skills/store.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, readFile as readFile2, rename as rename3, rm as rm5, stat, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join3, resolve as resolve4 } from "node:path";
+// dist/skills/store.js
+import { join as join3 } from "node:path";
 
-// src/skills/store-publication.ts
+// dist/skills/store-publication.js
 import { randomUUID } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import {
-  chmod as chmod2,
-  cp as cp2,
-  copyFile as copyFile2,
-  link,
-  lstat as lstat4,
-  mkdir as mkdir4,
-  open as open3,
-  readdir as readdir2,
-  readlink as readlink2,
-  realpath as realpath2,
-  rename as rename2,
-  rm as rm4,
-  symlink as symlink2,
-  utimes
-} from "node:fs/promises";
+import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open3, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
 import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
 var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
 var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
 var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
 var PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
 var INSTALL_MARKER_NAME2 = ".clink-install.json";
-var PUBLICATION_GUARD_OWNER_NAME = "owner.json";
-var PUBLICATION_GUARD_STALE_MS = 6e5;
 var SHA256_PATTERN = /^[a-f0-9]{64}$/;
 var MovedBackupError = class extends Error {
+  backup;
   constructor(backup) {
     super("current changed while being backed up");
     this.backup = backup;
   }
-  backup;
 };
 async function publishSkillRelease(input) {
   const paths = input.paths;
   validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
   let current;
   let existingRelease;
-  let lockCapability;
   try {
-    lockCapability = await requireAuthenticatedLockCapability(paths.lockPath);
     current = await inspectCurrent(paths);
     if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
       if (!input.force) {
@@ -9806,10 +9561,7 @@ async function publishSkillRelease(input) {
       }
     }
     if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
-      const expectedRelease = await canonicalExistingReleasePath(
-        paths.releasePath,
-        paths.releasesRoot
-      );
+      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
       if (expectedRelease !== current.managed.canonicalReleasePath) {
         throw installError(PUBLISH_CONFLICT_MESSAGE);
       }
@@ -9819,11 +9571,7 @@ async function publishSkillRelease(input) {
       }
       return createUnchangedPublication(paths);
     }
-    existingRelease = await inspectExistingRelease(
-      paths.releasePath,
-      paths.releasesRoot,
-      input.marker
-    );
+    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -9832,7 +9580,6 @@ async function publishSkillRelease(input) {
   }
   const transaction = {
     paths,
-    lockCapability,
     marker: input.marker,
     uuid: input.uuid,
     oldCurrent: current,
@@ -9842,20 +9589,11 @@ async function publishSkillRelease(input) {
   };
   try {
     if (existingRelease === null) {
-      transaction.createdRelease = await createImmutableRelease(
-        paths,
-        input.extractedRoot,
-        input.marker,
-        lockCapability
-      );
+      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker);
     }
     const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
     if (selectedRelease === null) {
-      existingRelease = await inspectExistingRelease(
-        paths.releasePath,
-        paths.releasesRoot,
-        input.marker
-      );
+      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
     }
     const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
     if (expectedRelease === null) {
@@ -9867,13 +9605,7 @@ async function publishSkillRelease(input) {
       const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
       try {
         await paths.publicationMutationHook?.({ phase: "before-current-backup" });
-        await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-        transaction.backup = await moveCurrentToBackup(
-          paths,
-          current.fingerprint,
-          backupName,
-          !compatibleManaged
-        );
+        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
       } catch (error) {
         if (error instanceof MovedBackupError) {
           transaction.backup = error.backup;
@@ -9883,7 +9615,6 @@ async function publishSkillRelease(input) {
       await paths.publicationMutationHook?.({ phase: "after-backup" });
       await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
     }
-    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
     const target = relative3(dirname3(paths.currentPath), paths.releasePath);
     await symlink2(target, paths.currentPath, "dir");
     const newCurrent = await fingerprintPath2(paths.currentPath);
@@ -9893,10 +9624,7 @@ async function publishSkillRelease(input) {
     transaction.newCurrent = newCurrent;
     await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
     await paths.publicationMutationHook?.({ phase: "after-current-switch" });
-    return createPublishedTransaction(
-      transaction,
-      current === null ? "installed" : "updated"
-    );
+    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
   } catch (error) {
     try {
       await rollbackPublicationTransaction(transaction);
@@ -9951,10 +9679,6 @@ function createPublishedTransaction(transaction, action) {
       }
       try {
         if (transaction.backup !== null && !transaction.backup.retained) {
-          await assertLockCapabilityAuthenticated(
-            transaction.paths.lockPath,
-            transaction.lockCapability
-          );
           await removeAuthenticatedBackup(transaction.backup);
           transaction.backup = null;
         }
@@ -9975,45 +9699,13 @@ function validatePublicationInput(paths, extractedRoot, marker, uuid) {
   if (!isSafePathSegment(uuid)) {
     throw installError(PUBLISH_FAILURE_MESSAGE);
   }
-  const expectedRelease = resolve3(
-    paths.releasesRoot,
-    marker.publisher,
-    marker.skillName,
-    marker.sha256
-  );
+  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
   if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
     throw installError(PUBLISH_FAILURE_MESSAGE);
   }
 }
 function isSafePathSegment(value) {
   return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
-}
-async function requireAuthenticatedLockCapability(lockPath) {
-  const capability = getHeldInstallLockCapability(lockPath);
-  if (capability === null) {
-    throw new Error("skill install lock capability is unavailable");
-  }
-  await assertLockCapabilityAuthenticated(lockPath, capability);
-  return capability;
-}
-async function assertLockCapabilityAuthenticated(lockPath, expected) {
-  const registered = getHeldInstallLockCapability(lockPath);
-  const fingerprint = await fingerprintPath2(lockPath);
-  const owner = await readNoFollowLockOwner(join2(lockPath, "owner.json"));
-  if (registered?.token !== expected.token || fingerprint.kind !== "directory" || fingerprint.dev !== expected.dev || fingerprint.ino !== expected.ino || owner === null || owner.pid !== expected.pid || owner.id !== expected.id) {
-    throw new Error("skill install lock capability changed");
-  }
-}
-async function readNoFollowLockOwner(path3) {
-  const parsed = await readNoFollowJson(path3);
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return null;
-  }
-  const owner = parsed;
-  if (typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.id !== "string" || owner.id.length === 0) {
-    return null;
-  }
-  return { pid: owner.pid, id: owner.id };
 }
 async function inspectCurrent(paths) {
   let fingerprint;
@@ -10051,9 +9743,7 @@ async function inspectManagedCurrent(paths, fingerprint) {
     if (!SHA256_PATTERN.test(sha256)) {
       return null;
     }
-    const marker = await readNoFollowInstallMarker(
-      join2(canonicalReleasePath, INSTALL_MARKER_NAME2)
-    );
+    const marker = await readNoFollowInstallMarker(join2(canonicalReleasePath, INSTALL_MARKER_NAME2));
     if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
       return null;
     }
@@ -10102,20 +9792,14 @@ async function inspectExistingRelease(releasePath, releasesRoot, marker) {
   const canonicalRoot = await realpath2(releasesRoot);
   const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
   const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  const existingMarker = await readNoFollowInstallMarker(
-    join2(releasePath, INSTALL_MARKER_NAME2)
-  );
+  const existingMarker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
   if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
     throw installError(PUBLISH_CONFLICT_MESSAGE);
   }
   return fingerprint;
 }
 async function assertReleaseAuthenticated(paths, marker, expected) {
-  const current = await inspectExistingRelease(
-    paths.releasePath,
-    paths.releasesRoot,
-    marker
-  );
+  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
   if (current === null || !samePathFingerprint(current, expected)) {
     throw new Error("selected release changed during publication");
   }
@@ -10127,275 +9811,28 @@ function pathPartsBelow(rootPath, candidatePath) {
   }
   return childPath.split(sep2);
 }
-async function createImmutableRelease(paths, extractedRoot, marker, lockCapability) {
+async function createImmutableRelease(paths, extractedRoot, marker) {
   const extracted = await fingerprintPath2(extractedRoot);
   if (extracted.kind !== "directory") {
     throw new Error("extracted skill root is not a real directory");
   }
   await ensureReleaseParent(paths, marker);
-  const guard = await acquirePublicationGuard(paths, lockCapability);
-  let hasPrimaryError = false;
-  try {
-    await writeInstallMarker(extractedRoot, marker);
-    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-    await assertPublicationGuardAuthenticated(guard);
-    await paths.publicationMutationHook?.({ phase: "before-release-rename" });
-    const existingRelease = await inspectExistingRelease(
-      paths.releasePath,
-      paths.releasesRoot,
-      marker
-    );
-    await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-    await assertPublicationGuardAuthenticated(guard);
-    if (existingRelease !== null) {
-      return null;
-    }
-    await rename2(extractedRoot, paths.releasePath);
-    const releaseFingerprint = await fingerprintPath2(paths.releasePath);
-    if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
-      throw new Error("release changed during publication");
-    }
-    const installedMarker = await readNoFollowInstallMarker(
-      join2(paths.releasePath, INSTALL_MARKER_NAME2)
-    );
-    if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
-      throw new Error("release marker changed during publication");
-    }
-    return { fingerprint: releaseFingerprint, marker };
-  } catch (error) {
-    hasPrimaryError = true;
-    throw error;
-  } finally {
-    try {
-      await removeOwnedPublicationGuard(guard, paths.publicationMutationHook);
-    } catch (cleanupError) {
-      if (!hasPrimaryError) {
-        throw cleanupError;
-      }
-    }
-  }
-}
-async function acquirePublicationGuard(paths, lockCapability) {
-  const guardPath = join2(
-    dirname3(paths.releasePath),
-    `.${basename(paths.releasePath)}.publishing`
-  );
-  const owner = {
-    schemaVersion: 1,
-    pid: lockCapability.pid,
-    lockId: lockCapability.id,
-    guardId: randomUUID(),
-    createdAtMs: Date.now()
-  };
-  await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-  try {
-    return await createPublicationGuard(guardPath, owner);
-  } catch (error) {
-    if (!isErrorCode2(error, "EEXIST")) {
-      throw error;
-    }
-  }
-  if (!await recoverStalePublicationGuard(guardPath, paths.lockPath, lockCapability)) {
-    throw new Error("release publication guard is busy");
-  }
-  await assertLockCapabilityAuthenticated(paths.lockPath, lockCapability);
-  try {
-    return await createPublicationGuard(guardPath, owner);
-  } catch (error) {
-    if (isErrorCode2(error, "EEXIST")) {
-      throw new Error("release publication guard is busy");
-    }
-    throw error;
-  }
-}
-async function createPublicationGuard(guardPath, owner) {
-  await mkdir4(guardPath, { mode: 448 });
-  let created = null;
-  try {
-    created = await fingerprintPath2(guardPath);
-    if (created.kind !== "directory") {
-      throw new Error("release publication guard is not a real directory");
-    }
-    await writePublicationGuardOwner(guardPath, owner);
-    const guard = { path: guardPath, fingerprint: created, owner };
-    await assertPublicationGuardAuthenticated(guard);
-    return guard;
-  } catch (error) {
-    if (created !== null) {
-      try {
-        await cleanupPublicationGuardInitialization(guardPath, created, owner);
-      } catch {
-      }
-    }
-    throw error;
-  }
-}
-async function writePublicationGuardOwner(guardPath, owner) {
-  const handle = await open3(
-    join2(guardPath, PUBLICATION_GUARD_OWNER_NAME),
-    constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW,
-    384
-  );
-  try {
-    await handle.writeFile(JSON.stringify(owner), "utf8");
-    await handle.chmod(384);
-  } finally {
-    await handle.close();
-  }
-}
-async function cleanupPublicationGuardInitialization(guardPath, expectedFingerprint, expectedOwner) {
-  let current;
-  try {
-    current = await fingerprintPath2(guardPath);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  if (!samePathFingerprint(current, expectedFingerprint) || current.kind !== "directory") {
-    return;
-  }
-  const entries = await readdir2(guardPath);
-  const owner = await readPublicationGuardOwner(guardPath);
-  const isEmptyIncompleteGuard = entries.length === 0 && owner === null;
-  const isOwnedGuard = entries.length === 1 && entries[0] === PUBLICATION_GUARD_OWNER_NAME && owner !== null && samePublicationGuardOwner(owner, expectedOwner);
-  if (!isEmptyIncompleteGuard && !isOwnedGuard) {
-    return;
-  }
-  const cleanupPath = `${guardPath}.incomplete-${randomUUID()}`;
-  await rename2(guardPath, cleanupPath);
-  const movedFingerprint = await fingerprintPath2(cleanupPath);
-  const movedEntries = await readdir2(cleanupPath);
-  const movedOwner = await readPublicationGuardOwner(cleanupPath);
-  const movedIsEmpty = movedEntries.length === 0 && movedOwner === null;
-  const movedIsOwned = movedEntries.length === 1 && movedEntries[0] === PUBLICATION_GUARD_OWNER_NAME && movedOwner !== null && samePublicationGuardOwner(movedOwner, expectedOwner);
-  if (!samePathFingerprint(movedFingerprint, expectedFingerprint) || !movedIsEmpty && !movedIsOwned) {
-    throw new Error("release publication guard changed during initialization cleanup");
-  }
-  await rm4(cleanupPath, { recursive: true });
-}
-async function recoverStalePublicationGuard(guardPath, lockPath, lockCapability) {
-  const currentTime = Date.now();
-  const candidate = await inspectPublicationGuard(guardPath);
-  if (candidate === null || !isStaleDeadPublicationGuard(candidate, currentTime)) {
-    return false;
-  }
-  await assertLockCapabilityAuthenticated(lockPath, lockCapability);
-  const stalePath = `${guardPath}.stale-${randomUUID()}`;
-  await rename2(guardPath, stalePath);
-  const moved = await inspectPublicationGuard(stalePath);
-  if (moved === null || !samePublicationGuard(candidate, moved) || !isStaleDeadPublicationGuard(moved, currentTime)) {
-    throw new Error("release publication guard changed during stale recovery");
-  }
-  await assertLockCapabilityAuthenticated(lockPath, lockCapability);
-  await rm4(stalePath, { recursive: true });
-  return true;
-}
-function isStaleDeadPublicationGuard(guard, currentTime) {
-  return currentTime - guard.fingerprint.mtimeMs > PUBLICATION_GUARD_STALE_MS && currentTime - guard.owner.createdAtMs > PUBLICATION_GUARD_STALE_MS && !isProcessAlive(guard.owner.pid);
-}
-function isProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return !isErrorCode2(error, "ESRCH");
-  }
-}
-async function inspectPublicationGuard(guardPath) {
-  const fingerprint = await fingerprintPath2(guardPath);
-  if (fingerprint.kind !== "directory") {
+  await writeInstallMarker(extractedRoot, marker);
+  await paths.publicationMutationHook?.({ phase: "before-release-rename" });
+  const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (existingRelease !== null) {
     return null;
   }
-  const entries = await readdir2(guardPath);
-  if (entries.length !== 1 || entries[0] !== PUBLICATION_GUARD_OWNER_NAME) {
-    return null;
+  await rename2(extractedRoot, paths.releasePath);
+  const releaseFingerprint = await fingerprintPath2(paths.releasePath);
+  if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
+    throw new Error("release changed during publication");
   }
-  const owner = await readPublicationGuardOwner(guardPath);
-  return owner === null ? null : { path: guardPath, fingerprint, owner };
-}
-async function readPublicationGuardOwner(guardPath) {
-  const parsed = await readNoFollowJson(join2(guardPath, PUBLICATION_GUARD_OWNER_NAME));
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return null;
+  const installedMarker = await readNoFollowInstallMarker(join2(paths.releasePath, INSTALL_MARKER_NAME2));
+  if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
+    throw new Error("release marker changed during publication");
   }
-  const owner = parsed;
-  const keys = Object.keys(owner).sort();
-  const expectedKeys = ["createdAtMs", "guardId", "lockId", "pid", "schemaVersion"];
-  if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index]) || owner.schemaVersion !== 1 || typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.lockId !== "string" || owner.lockId.length === 0 || typeof owner.guardId !== "string" || owner.guardId.length === 0 || typeof owner.createdAtMs !== "number" || !Number.isFinite(owner.createdAtMs)) {
-    return null;
-  }
-  return {
-    schemaVersion: 1,
-    pid: owner.pid,
-    lockId: owner.lockId,
-    guardId: owner.guardId,
-    createdAtMs: owner.createdAtMs
-  };
-}
-async function assertPublicationGuardAuthenticated(expected) {
-  const current = await inspectPublicationGuard(expected.path);
-  if (current === null || !samePublicationGuard(current, expected)) {
-    throw new Error("release publication guard changed");
-  }
-}
-function samePublicationGuard(first, second) {
-  return samePathFingerprint(first.fingerprint, second.fingerprint) && samePublicationGuardOwner(first.owner, second.owner);
-}
-function samePublicationGuardOwner(first, second) {
-  return first.schemaVersion === second.schemaVersion && first.pid === second.pid && first.lockId === second.lockId && first.guardId === second.guardId && first.createdAtMs === second.createdAtMs;
-}
-async function removeOwnedPublicationGuard(expected, mutationHook) {
-  const current = await inspectPublicationGuard(expected.path);
-  if (current === null || !samePublicationGuard(current, expected)) {
-    throw new Error("release publication guard changed before cleanup");
-  }
-  const cleanupPath = `${expected.path}.release-${randomUUID()}`;
-  await mutationHook?.({ phase: "before-publication-guard-cleanup-rename" });
-  try {
-    await rename2(expected.path, cleanupPath);
-  } catch (error) {
-    await ensurePublicationGuardFailureState(expected.path);
-    throw error;
-  }
-  await mutationHook?.({ phase: "after-publication-guard-cleanup-rename" });
-  const moved = await inspectPublicationGuard(cleanupPath);
-  if (moved === null || !samePublicationGuard(moved, expected)) {
-    await restoreMovedPublicationGuardReplacement(cleanupPath, expected.path, moved);
-    throw new Error("release publication guard changed during cleanup");
-  }
-  await rm4(cleanupPath, { recursive: true });
-}
-async function restoreMovedPublicationGuardReplacement(cleanupPath, canonicalPath, moved) {
-  if (moved !== null && await isPathVacant(canonicalPath)) {
-    try {
-      await rename2(cleanupPath, canonicalPath);
-      const restored = await inspectPublicationGuard(canonicalPath);
-      if (restored !== null && samePublicationGuard(restored, moved)) {
-        return;
-      }
-    } catch {
-    }
-  }
-  await ensurePublicationGuardFailureState(canonicalPath);
-}
-async function isPathVacant(path3) {
-  try {
-    await lstat4(path3);
-    return false;
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return true;
-    }
-    return false;
-  }
-}
-async function ensurePublicationGuardFailureState(path3) {
-  try {
-    await mkdir4(path3, { mode: 448 });
-  } catch {
-  }
+  return { fingerprint: releaseFingerprint, marker };
 }
 async function ensureReleaseParent(paths, marker) {
   await ensureRealDirectory(paths.releasesRoot);
@@ -10412,11 +9849,7 @@ async function ensureRealDirectory(path3) {
 }
 async function writeInstallMarker(rootPath, marker) {
   const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open3(
-    markerPath,
-    constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW,
-    420
-  );
+  const handle = await open3(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
   try {
     await handle.writeFile(JSON.stringify(marker), "utf8");
     await handle.chmod(420);
@@ -10518,22 +9951,9 @@ async function removeEmptyOwnedContainer(containerPath, expected) {
 async function rollbackPublicationTransaction(transaction) {
   let rollbackFailed = false;
   let currentSafeForReleaseCleanup = true;
-  await assertLockCapabilityAuthenticated(
-    transaction.paths.lockPath,
-    transaction.lockCapability
-  );
   if (transaction.newCurrent !== null) {
     try {
-      await assertLockCapabilityAuthenticated(
-        transaction.paths.lockPath,
-        transaction.lockCapability
-      );
-      await removeExpectedCurrent(
-        transaction.paths.currentPath,
-        transaction.newCurrent,
-        transaction.paths.backupsRoot,
-        `.${transaction.uuid}-new-current`
-      );
+      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
       transaction.newCurrent = null;
     } catch {
       rollbackFailed = true;
@@ -10554,16 +9974,8 @@ async function rollbackPublicationTransaction(transaction) {
   }
   if (transaction.backup !== null) {
     try {
-      await assertLockCapabilityAuthenticated(
-        transaction.paths.lockPath,
-        transaction.lockCapability
-      );
       await restoreBackup(transaction.paths.currentPath, transaction.backup);
       if (!transaction.backup.retained) {
-        await assertLockCapabilityAuthenticated(
-          transaction.paths.lockPath,
-          transaction.lockCapability
-        );
         await removeAuthenticatedBackup(transaction.backup);
       }
       transaction.backup = transaction.backup.retained ? transaction.backup : null;
@@ -10574,16 +9986,7 @@ async function rollbackPublicationTransaction(transaction) {
   }
   if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
     try {
-      await assertLockCapabilityAuthenticated(
-        transaction.paths.lockPath,
-        transaction.lockCapability
-      );
-      await removeCreatedRelease(
-        transaction.paths.releasePath,
-        transaction.paths.releasesRoot,
-        transaction.createdRelease,
-        transaction.uuid
-      );
+      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
       transaction.createdRelease = null;
     } catch {
       rollbackFailed = true;
@@ -10778,17 +10181,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// src/skills/store.ts
-var INSTALL_LOCK_STALE_MS = 6e5;
-var OWNER_FILE_NAME = "owner.json";
-var LOCK_BUSY_MESSAGE = "another skill installation is in progress";
-var LOCK_ACQUIRE_MESSAGE = "failed to acquire skill install lock";
-var LOCK_RELEASE_MESSAGE = "failed to release skill install lock";
-var heldInstallLocks = /* @__PURE__ */ new Map();
-var LockInitializationError = class extends Error {
-};
-var MutationGuardBusyError = class extends Error {
-};
+// dist/skills/store.js
 function resolveStorePaths(homeDir, spec, sha256, uuid) {
   const skillsRoot = join3(homeDir, ".agents", "skills");
   const clinkRoot = join3(skillsRoot, ".clink");
@@ -10796,7 +10189,6 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
   return {
     skillsRoot,
     clinkRoot,
-    lockPath: join3(clinkRoot, "install.lock"),
     stagingPath: join3(clinkRoot, "staging", uuid),
     releasesRoot,
     releasePath: join3(releasesRoot, spec.publisher, spec.skillName, sha256),
@@ -10804,562 +10196,20 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
     currentPath: join3(skillsRoot, spec.skillName)
   };
 }
-async function acquireInstallLock(paths, options2) {
-  const pid = options2?.pid ?? process.pid;
-  const getCurrentTime = options2?.now ?? Date.now;
-  const isProcessAlive2 = options2?.isProcessAlive ?? defaultIsProcessAlive;
-  const mutationHook = options2?.mutationHook;
-  const mutationContext = {
-    pid,
-    getCurrentTime,
-    isProcessAlive: isProcessAlive2,
-    mutationHook
-  };
-  let currentTime;
-  let owner;
-  try {
-    if (!Number.isSafeInteger(pid) || pid <= 0) {
-      throw new Error("invalid lock owner PID");
-    }
-    currentTime = getCurrentTime();
-    if (!Number.isFinite(currentTime)) {
-      throw new Error("invalid lock time");
-    }
-    owner = { pid, id: randomUUID2() };
-    await mkdir5(paths.clinkRoot, { recursive: true, mode: 448 });
-  } catch {
-    throw installError(LOCK_ACQUIRE_MESSAGE);
-  }
-  try {
-    await createLockDirectory(paths.lockPath, owner, mutationContext);
-    return await createOwnedLockHandle(paths.lockPath, owner, mutationContext);
-  } catch (error) {
-    if (!isErrorCode3(error, "EEXIST")) {
-      throw installError(LOCK_ACQUIRE_MESSAGE);
-    }
-  }
-  try {
-    await callMutationHook(mutationHook, "reclaim", "before-guard-acquire");
-    await withMutationGuard(paths.lockPath, "reclaim", mutationContext, async () => {
-      let currentSnapshot;
-      try {
-        currentSnapshot = await inspectLock(
-          paths.lockPath,
-          currentTime,
-          isProcessAlive2
-        );
-      } catch (error) {
-        if (isErrorCode3(error, "ENOENT")) {
-          return;
-        }
-        throw error;
-      }
-      if (!currentSnapshot.reclaimable) {
-        throw installError(LOCK_BUSY_MESSAGE);
-      }
-      const stalePath = `${paths.lockPath}.stale-${randomUUID2()}`;
-      await callMutationHook(mutationHook, "reclaim", "before-lock-rename");
-      await rename3(paths.lockPath, stalePath);
-      await callMutationHook(mutationHook, "reclaim", "after-lock-rename");
-      let movedSnapshot;
-      try {
-        movedSnapshot = await inspectLock(stalePath, currentTime, isProcessAlive2);
-      } catch (error) {
-        await restoreMovedDirectory(stalePath, paths.lockPath);
-        throw error;
-      }
-      if (!sameLockSnapshot(currentSnapshot, movedSnapshot) || !movedSnapshot.reclaimable) {
-        await restoreMovedDirectory(stalePath, paths.lockPath);
-        throw installError(LOCK_BUSY_MESSAGE);
-      }
-      await rm5(stalePath, { recursive: true });
-    });
-  } catch (error) {
-    if (error instanceof MutationGuardBusyError) {
-      throw installError(LOCK_BUSY_MESSAGE);
-    }
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(LOCK_ACQUIRE_MESSAGE);
-  }
-  try {
-    await createLockDirectory(paths.lockPath, owner, mutationContext);
-    return await createOwnedLockHandle(paths.lockPath, owner, mutationContext);
-  } catch (error) {
-    if (isErrorCode3(error, "EEXIST")) {
-      throw installError(LOCK_BUSY_MESSAGE);
-    }
-    throw installError(LOCK_ACQUIRE_MESSAGE);
-  }
-}
-function getHeldInstallLockCapability(lockPath) {
-  return heldInstallLocks.get(resolve4(lockPath)) ?? null;
-}
-function registerHeldInstallLockCapability(input) {
-  const capability = Object.freeze({
-    ...input,
-    lockPath: resolve4(input.lockPath),
-    token: /* @__PURE__ */ Symbol("skill-install-lock")
-  });
-  heldInstallLocks.set(capability.lockPath, capability);
-  return capability;
-}
-function clearHeldInstallLockCapability(capability) {
-  const current = heldInstallLocks.get(capability.lockPath);
-  if (current?.token === capability.token) {
-    heldInstallLocks.delete(capability.lockPath);
-  }
-}
-async function createLockDirectory(lockPath, owner, mutationContext) {
-  await mkdir5(lockPath, { mode: 448 });
-  let identity;
-  try {
-    const lockStat = await stat(lockPath);
-    identity = {
-      dev: lockStat.dev,
-      ino: lockStat.ino,
-      owner
-    };
-    await callMutationHook(
-      mutationContext.mutationHook,
-      "initialize",
-      "after-lock-mkdir"
-    );
-    await writeFile3(join3(lockPath, OWNER_FILE_NAME), JSON.stringify(owner), {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 384
-    });
-    await callMutationHook(
-      mutationContext.mutationHook,
-      "initialize",
-      "after-owner-write"
-    );
-    await validateLockIdentity(lockPath, identity, mutationContext);
-  } catch {
-    if (identity !== void 0) {
-      try {
-        await cleanupLockIdentity(lockPath, identity, mutationContext);
-      } catch {
-      }
-    }
-    throw new LockInitializationError();
-  }
-}
-async function validateLockIdentity(lockPath, expected, mutationContext) {
-  try {
-    await withMutationGuard(lockPath, "initialize", mutationContext, async () => {
-      const current = await readLockIdentity(lockPath);
-      if (!sameLockIdentity(current, expected)) {
-        throw new LockInitializationError();
-      }
-    });
-  } catch (error) {
-    if (error instanceof MutationGuardBusyError) {
-      const current = await readLockIdentity(lockPath);
-      if (sameLockIdentity(current, expected)) {
-        return;
-      }
-    }
-    throw error;
-  }
-}
-async function cleanupLockIdentity(lockPath, expected, mutationContext) {
-  await withMutationGuard(lockPath, "initialize", mutationContext, async () => {
-    let currentStat;
-    try {
-      currentStat = await stat(lockPath);
-    } catch (error) {
-      if (isErrorCode3(error, "ENOENT")) {
-        return;
-      }
-      throw error;
-    }
-    if (currentStat.dev !== expected.dev || currentStat.ino !== expected.ino) {
-      return;
-    }
-    const recordedOwner = await readLockOwner(lockPath);
-    if (recordedOwner !== null && !sameLockOwner(recordedOwner, expected.owner)) {
-      return;
-    }
-    const cleanupPath = `${lockPath}.incomplete-${randomUUID2()}`;
-    await rename3(lockPath, cleanupPath);
-    const movedStat = await stat(cleanupPath);
-    const movedOwner = await readLockOwner(cleanupPath);
-    if (movedStat.dev !== expected.dev || movedStat.ino !== expected.ino || movedOwner !== null && !sameLockOwner(movedOwner, expected.owner)) {
-      return;
-    }
-    await rm5(cleanupPath, { recursive: true });
-  });
-}
-async function readLockIdentity(lockPath) {
-  try {
-    const lockStat = await stat(lockPath);
-    const owner = await readLockOwner(lockPath);
-    if (owner?.id === void 0) {
-      return null;
-    }
-    return {
-      dev: lockStat.dev,
-      ino: lockStat.ino,
-      owner: { pid: owner.pid, id: owner.id }
-    };
-  } catch {
-    return null;
-  }
-}
-function sameLockIdentity(first, second) {
-  return first !== null && first.dev === second.dev && first.ino === second.ino && sameLockOwner(first.owner, second.owner);
-}
-function sameLockOwner(first, second) {
-  return first.pid === second.pid && first.id === second.id;
-}
-async function inspectLock(lockPath, currentTime, isProcessAlive2) {
-  const lockStat = await stat(lockPath);
-  const owner = await readLockOwner(lockPath);
-  const ownerAlive = owner === null ? false : safelyCheckProcess(owner.pid, isProcessAlive2);
-  return {
-    dev: lockStat.dev,
-    ino: lockStat.ino,
-    owner,
-    reclaimable: currentTime - lockStat.mtimeMs > INSTALL_LOCK_STALE_MS && !ownerAlive
-  };
-}
-function sameLockSnapshot(first, second) {
-  return first.dev === second.dev && first.ino === second.ino && sameOptionalLockOwner(first.owner, second.owner);
-}
-function sameOptionalLockOwner(first, second) {
-  if (first === null || second === null) {
-    return first === second;
-  }
-  return sameLockOwner(first, second);
-}
-async function readLockOwner(lockPath) {
-  try {
-    const parsed = JSON.parse(
-      await readFile2(join3(lockPath, OWNER_FILE_NAME), "utf8")
-    );
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    const pid = parsed.pid;
-    if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) {
-      return null;
-    }
-    const id = parsed.id;
-    return typeof id === "string" ? { pid, id } : { pid };
-  } catch {
-    return null;
-  }
-}
-function safelyCheckProcess(pid, isProcessAlive2) {
-  try {
-    return isProcessAlive2(pid);
-  } catch {
-    return true;
-  }
-}
-function defaultIsProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return !isErrorCode3(error, "ESRCH");
-  }
-}
-async function createOwnedLockHandle(lockPath, owner, mutationContext) {
-  const identity = await readLockIdentity(lockPath);
-  if (identity === null || !sameLockOwner(identity.owner, owner)) {
-    throw new LockInitializationError();
-  }
-  const capability = registerHeldInstallLockCapability({
-    lockPath,
-    dev: identity.dev,
-    ino: identity.ino,
-    pid: owner.pid,
-    id: owner.id
-  });
-  return createLockHandle(lockPath, owner, mutationContext, capability);
-}
-function createLockHandle(lockPath, owner, mutationContext, capability) {
-  let released = false;
-  return {
-    async release() {
-      if (released) {
-        return;
-      }
-      let ownershipLost = false;
-      try {
-        await withMutationGuard(lockPath, "release", mutationContext, async () => {
-          const recordedOwner = await readLockOwner(lockPath);
-          if (recordedOwner?.pid !== owner.pid || recordedOwner.id !== owner.id) {
-            ownershipLost = true;
-            return;
-          }
-          const releasePath = `${lockPath}.release-${randomUUID2()}`;
-          await callMutationHook(
-            mutationContext.mutationHook,
-            "release",
-            "before-lock-rename"
-          );
-          await rename3(lockPath, releasePath);
-          ownershipLost = true;
-          await callMutationHook(
-            mutationContext.mutationHook,
-            "release",
-            "after-lock-rename"
-          );
-          await rm5(releasePath, { recursive: true });
-        });
-        released = true;
-      } catch {
-        if (ownershipLost || !await lockPathStillNamesCapability(lockPath, capability)) {
-          clearHeldInstallLockCapability(capability);
-        }
-        throw installError(LOCK_RELEASE_MESSAGE);
-      }
-      clearHeldInstallLockCapability(capability);
-    }
-  };
-}
-async function lockPathStillNamesCapability(lockPath, capability) {
-  const identity = await readLockIdentity(lockPath);
-  return identity !== null && identity.dev === capability.dev && identity.ino === capability.ino && identity.owner.pid === capability.pid && identity.owner.id === capability.id;
-}
-async function callMutationHook(hook, operation, phase) {
-  await hook?.({ operation, phase });
-}
-async function withMutationGuard(lockPath, operation, context, action) {
-  const guardPath = `${lockPath}.mutation`;
-  const guardOwner = {
-    pid: context.pid,
-    id: randomUUID2(),
-    createdAtMs: readCurrentTime(context.getCurrentTime)
-  };
-  const guardSnapshot = await acquireMutationGuard(
-    guardPath,
-    guardOwner,
-    context,
-    operation
-  );
-  try {
-    await callMutationHook(context.mutationHook, operation, "guard-acquired");
-    return await action();
-  } finally {
-    await removeOwnedMutationGuard(guardPath, guardSnapshot);
-  }
-}
-async function acquireMutationGuard(guardPath, owner, context, operation) {
-  try {
-    return await createMutationGuard(guardPath, owner, context, operation);
-  } catch (error) {
-    if (!isErrorCode3(error, "EEXIST")) {
-      throw error;
-    }
-  }
-  const recovered = await recoverMutationGuard(guardPath, context, operation);
-  if (!recovered) {
-    throw new MutationGuardBusyError();
-  }
-  try {
-    return await createMutationGuard(guardPath, owner, context, operation);
-  } catch (error) {
-    if (isErrorCode3(error, "EEXIST")) {
-      throw new MutationGuardBusyError();
-    }
-    throw error;
-  }
-}
-async function createMutationGuard(guardPath, owner, context, operation) {
-  await mkdir5(guardPath, { mode: 448 });
-  let createdStat;
-  try {
-    createdStat = await stat(guardPath);
-    await callMutationHook(context.mutationHook, operation, "after-guard-mkdir");
-    await writeFile3(join3(guardPath, OWNER_FILE_NAME), JSON.stringify(owner), {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 384
-    });
-    const snapshot = await inspectMutationGuard(guardPath, owner.createdAtMs, () => true);
-    if (snapshot.dev !== createdStat.dev || snapshot.ino !== createdStat.ino || !sameMutationGuardOwner(snapshot.owner, owner)) {
-      throw new Error("mutation guard owner changed during initialization");
-    }
-    return snapshot;
-  } catch (error) {
-    if (createdStat !== void 0) {
-      try {
-        await cleanupMutationGuardInitialization(guardPath, createdStat, owner);
-      } catch {
-      }
-    }
-    throw error;
-  }
-}
-async function cleanupMutationGuardInitialization(guardPath, expectedStat, expectedOwner) {
-  let currentStat;
-  try {
-    currentStat = await stat(guardPath);
-  } catch (error) {
-    if (isErrorCode3(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  if (currentStat.dev !== expectedStat.dev || currentStat.ino !== expectedStat.ino) {
-    return;
-  }
-  const currentOwner = await readMutationGuardOwner(guardPath);
-  if (currentOwner !== null && !sameMutationGuardOwner(currentOwner, expectedOwner)) {
-    return;
-  }
-  const cleanupPath = `${guardPath}.incomplete-${randomUUID2()}`;
-  await rename3(guardPath, cleanupPath);
-  const movedStat = await stat(cleanupPath);
-  const movedOwner = await readMutationGuardOwner(cleanupPath);
-  if (movedStat.dev !== expectedStat.dev || movedStat.ino !== expectedStat.ino || movedOwner !== null && !sameMutationGuardOwner(movedOwner, expectedOwner)) {
-    await restoreMovedDirectory(cleanupPath, guardPath);
-    return;
-  }
-  await rm5(cleanupPath, { recursive: true });
-}
-async function recoverMutationGuard(guardPath, context, operation) {
-  const currentTime = readCurrentTime(context.getCurrentTime);
-  const candidate = await inspectMutationGuard(
-    guardPath,
-    currentTime,
-    context.isProcessAlive
-  );
-  if (!candidate.reclaimable) {
-    return false;
-  }
-  await callMutationHook(
-    context.mutationHook,
-    operation,
-    "before-guard-reclaim-rename"
-  );
-  const stalePath = `${guardPath}.stale-${randomUUID2()}`;
-  await rename3(guardPath, stalePath);
-  const moved = await inspectMutationGuard(
-    stalePath,
-    currentTime,
-    context.isProcessAlive
-  );
-  if (!sameMutationGuardSnapshot(candidate, moved) || !moved.reclaimable) {
-    await restoreMovedDirectory(stalePath, guardPath);
-    return false;
-  }
-  await rm5(stalePath, { recursive: true });
-  return true;
-}
-async function inspectMutationGuard(guardPath, currentTime, isProcessAlive2) {
-  const guardStat = await stat(guardPath);
-  const owner = await readMutationGuardOwner(guardPath);
-  const ownerAlive = owner === null ? false : safelyCheckProcess(owner.pid, isProcessAlive2);
-  return {
-    dev: guardStat.dev,
-    ino: guardStat.ino,
-    owner,
-    reclaimable: currentTime - guardStat.mtimeMs > INSTALL_LOCK_STALE_MS && !ownerAlive
-  };
-}
-async function readMutationGuardOwner(guardPath) {
-  try {
-    const parsed = JSON.parse(
-      await readFile2(join3(guardPath, OWNER_FILE_NAME), "utf8")
-    );
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    const owner = parsed;
-    if (typeof owner.pid !== "number" || !Number.isSafeInteger(owner.pid) || owner.pid <= 0 || typeof owner.id !== "string" || owner.id.length === 0 || typeof owner.createdAtMs !== "number" || !Number.isFinite(owner.createdAtMs)) {
-      return null;
-    }
-    return {
-      pid: owner.pid,
-      id: owner.id,
-      createdAtMs: owner.createdAtMs
-    };
-  } catch {
-    return null;
-  }
-}
-async function removeOwnedMutationGuard(guardPath, expected) {
-  let current;
-  try {
-    current = await inspectMutationGuard(guardPath, 0, () => true);
-  } catch (error) {
-    if (isErrorCode3(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  if (!sameMutationGuardSnapshot(expected, current)) {
-    return;
-  }
-  const releasePath = `${guardPath}.release-${randomUUID2()}`;
-  await rename3(guardPath, releasePath);
-  const moved = await inspectMutationGuard(releasePath, 0, () => true);
-  if (!sameMutationGuardSnapshot(expected, moved)) {
-    await restoreMovedDirectory(releasePath, guardPath);
-    return;
-  }
-  await rm5(releasePath, { recursive: true });
-}
-async function restoreMovedDirectory(movedPath, destinationPath) {
-  try {
-    await mkdir5(destinationPath, { mode: 448 });
-  } catch (error) {
-    if (isErrorCode3(error, "EEXIST")) {
-      return;
-    }
-    throw error;
-  }
-  try {
-    await rename3(movedPath, destinationPath);
-  } catch (error) {
-    try {
-      await rm5(destinationPath, { recursive: true, force: true });
-    } catch {
-    }
-    throw error;
-  }
-}
-function sameMutationGuardSnapshot(first, second) {
-  return first.dev === second.dev && first.ino === second.ino && sameMutationGuardOwner(first.owner, second.owner);
-}
-function sameMutationGuardOwner(first, second) {
-  if (first === null || second === null) {
-    return first === second;
-  }
-  return first.pid === second.pid && first.id === second.id && first.createdAtMs === second.createdAtMs;
-}
-function readCurrentTime(getCurrentTime) {
-  const currentTime = getCurrentTime();
-  if (!Number.isFinite(currentTime)) {
-    throw new Error("invalid lock time");
-  }
-  return currentTime;
-}
-function isErrorCode3(error, code) {
-  return error?.code === code;
-}
 
-// src/skills/install.ts
+// dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
 var DEFAULT_DEPENDENCIES2 = {
   getTicket: getSkillDownloadTicket,
   downloadPackage: downloadSkillPackage,
   materializePackage: extractSkillPackage,
   reportPublicDownload: reportSkillPublicDownload,
-  acquireLock: acquireInstallLock,
   publishRelease: publishSkillRelease,
   detectAgentRoots: detectAgents,
   prepareAgents: prepareAgentPlans,
   randomUUID: createRandomUUID,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path3) => rm6(path3, { recursive: true, force: true }),
+  remove: async (path3) => rm5(path3, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -11394,20 +10244,13 @@ async function installSkill(input, overrides = {}) {
     };
   }
   const stagingUuid = dependencies.randomUUID();
-  const preliminaryPaths = resolveStorePaths(
-    input.homeDir,
-    packageSpec,
-    PENDING_SHA_SENTINEL,
-    stagingUuid
-  );
-  let installLock = null;
+  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
   const publishedSkills = [];
   const appliedAgents = [];
   let committed = false;
   let finalCleanupStarted = false;
   try {
-    installLock = await dependencies.acquireLock(preliminaryPaths);
-    await mkdir6(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
+    await mkdir5(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
     dependencies.log("Resolving skill download URL");
     const ticket = await dependencies.getTicket({
       baseUrl: input.dashboardBaseUrl,
@@ -11426,18 +10269,8 @@ async function installSkill(input, overrides = {}) {
       })
     });
     dependencies.log("Materializing skill package");
-    const extracted = await dependencies.materializePackage(
-      downloaded.path,
-      join4(preliminaryPaths.stagingPath, "extract")
-    );
-    const installUnits = await prepareInstallUnits(
-      input,
-      extracted,
-      downloaded,
-      stagingUuid,
-      dependencies.now(),
-      dependencies
-    );
+    const extracted = await dependencies.materializePackage(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
+    const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
     dependencies.log("Publishing skill release");
     for (const unit of installUnits) {
       unit.published = await dependencies.publishRelease({
@@ -11473,16 +10306,9 @@ async function installSkill(input, overrides = {}) {
       await published.finalize();
     }
     committed = true;
-    const result = createInstallResult(
-      input,
-      downloaded,
-      extracted.layout,
-      skillsRoot,
-      installUnits
-    );
+    const result = createInstallResult(input, downloaded, extracted.layout, skillsRoot, installUnits);
     finalCleanupStarted = true;
-    await releaseAndCleanup(installLock, preliminaryPaths.stagingPath, dependencies);
-    installLock = null;
+    await cleanupStaging(preliminaryPaths.stagingPath, dependencies);
     await reportPublicDownloadIfAvailable(input, ticket, dependencies);
     return result;
   } catch (error) {
@@ -11490,12 +10316,7 @@ async function installSkill(input, overrides = {}) {
       await rollbackInstall(appliedAgents, publishedSkills, error);
     }
     if (!finalCleanupStarted) {
-      await releaseAndCleanup(
-        installLock,
-        preliminaryPaths.stagingPath,
-        dependencies,
-        error
-      );
+      await cleanupStaging(preliminaryPaths.stagingPath, dependencies, error);
     }
     throw error;
   }
@@ -11510,12 +10331,7 @@ async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, in
       skillName: root.skillName,
       requestedVersion: input.requestedVersion
     };
-    const paths = resolveStorePaths(
-      input.homeDir,
-      spec,
-      downloaded.sha256,
-      stagingUuid
-    );
+    const paths = resolveStorePaths(input.homeDir, spec, downloaded.sha256, stagingUuid);
     const detected = await dependencies.detectAgentRoots({
       homeDir: input.homeDir,
       env: input.env,
@@ -11526,12 +10342,7 @@ async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, in
       skillName: root.skillName,
       skillRoot: root.skillRoot,
       paths,
-      marker: createInstallMarker(
-        input,
-        downloaded,
-        installedAt,
-        root.skillName
-      ),
+      marker: createInstallMarker(input, downloaded, installedAt, root.skillName),
       detectedAgents: detected,
       agentUuid: dependencies.randomUUID(),
       agentPlans: [],
@@ -11670,15 +10481,8 @@ async function rollbackInstall(appliedAgents, publishedSkills, primaryError) {
     throw rollbackError;
   }
 }
-async function releaseAndCleanup(installLock, stagingPath, dependencies, primaryError) {
+async function cleanupStaging(stagingPath, dependencies, primaryError) {
   let retainedError = primaryError;
-  if (installLock !== null) {
-    try {
-      await installLock.release();
-    } catch (error) {
-      retainedError ??= error;
-    }
-  }
   try {
     await dependencies.remove(stagingPath);
   } catch (error) {
@@ -11689,7 +10493,7 @@ async function releaseAndCleanup(installLock, stagingPath, dependencies, primary
   }
 }
 
-// src/skills/tip.ts
+// dist/skills/tip.js
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
@@ -11709,20 +10513,11 @@ async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson
   if (!items) {
     throw apiError("invalid public skills response", 502);
   }
-  const matches = items.filter(
-    (item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName) && (requestedVersion === void 0 || stringValue2(item.versionNo).trim() === requestedVersion)
-  );
+  const matches = items.filter((item) => equalIdentity(item.publisher, publisher) && equalIdentity(item.name, skillName) && (requestedVersion === void 0 || stringValue2(item.versionNo).trim() === requestedVersion));
   if (matches.length === 0) {
-    throw apiError(
-      requestedVersion ? `skill version not found: ${publisher}/${skillName}@${requestedVersion}` : `skill not found: ${publisher}/${skillName}`,
-      404
-    );
+    throw apiError(requestedVersion ? `skill version not found: ${publisher}/${skillName}@${requestedVersion}` : `skill not found: ${publisher}/${skillName}`, 404);
   }
-  const uniqueRecipients = new Set(
-    matches.map(
-      (item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`
-    )
-  );
+  const uniqueRecipients = new Set(matches.map((item) => `${stringValue2(item.skillId)}\0${stringValue2(item.versionNo).trim()}\0${stringValue2(item.merchantId).trim()}`));
   if (uniqueRecipients.size !== 1) {
     throw apiError(`skill lookup is ambiguous: ${publisher}/${skillName}`, 409);
   }
@@ -11748,21 +10543,15 @@ async function executeSkillTip(args, runtime, dependencies) {
     target: args.target,
     timeoutMs: runtime.timeoutMs
   });
-  const paymentMethod = selectDefaultTipPaymentMethod(
-    await dependencies.refreshPaymentMethods(),
-    args.amount
-  );
-  const execution = await dependencies.executeCharge(
-    {
-      mode: "direct",
-      paymentInstrumentId: paymentMethod.paymentInstrumentId,
-      paymentMethodType: paymentMethod.paymentMethodType,
-      merchantId: recipient.merchantId,
-      amount: args.amount,
-      currency: "USD"
-    },
-    runtime.chargeRuntime
-  );
+  const paymentMethod = selectDefaultTipPaymentMethod(await dependencies.refreshPaymentMethods(), args.amount);
+  const execution = await dependencies.executeCharge({
+    mode: "direct",
+    paymentInstrumentId: paymentMethod.paymentInstrumentId,
+    paymentMethodType: paymentMethod.paymentMethodType,
+    merchantId: recipient.merchantId,
+    amount: args.amount,
+    currency: "USD"
+  }, runtime.chargeRuntime);
   if (execution.dryRun) {
     throw new Error("charge dry-run is unreachable after tip lookup");
   }
@@ -11831,10 +10620,7 @@ function recipientFromItem(item, errorIdentity) {
   }
   const merchantId = stringValue2(item.merchantId).trim();
   if (!merchantId) {
-    throw apiError(
-      `tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`,
-      422
-    );
+    throw apiError(`tips are unavailable because ${errorIdentity.publisher}/${errorIdentity.skillName} has no valid merchant ID`, 422);
   }
   const skillId = stringValue2(item.skillId).trim();
   if (!skillId) {
@@ -11867,7 +10653,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// src/tool.ts
+// dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -12133,27 +10919,23 @@ async function fetchCheckoutHtml(url, timeoutMs = 3e4, fetchPage) {
 }
 async function fetchCheckoutHtmlWithCurl(url, timeoutMs) {
   try {
-    const { stdout } = await execFileAsync(
-      "curl",
-      [
-        "-L",
-        "--globoff",
-        "--compressed",
-        "--silent",
-        "--show-error",
-        "--cookie",
-        "",
-        "--max-time",
-        String(Math.max(1, Math.ceil(timeoutMs / 1e3))),
-        "-A",
-        CHECKOUT_USER_AGENT,
-        url
-      ],
-      {
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: timeoutMs + 1e3
-      }
-    );
+    const { stdout } = await execFileAsync("curl", [
+      "-L",
+      "--globoff",
+      "--compressed",
+      "--silent",
+      "--show-error",
+      "--cookie",
+      "",
+      "--max-time",
+      String(Math.max(1, Math.ceil(timeoutMs / 1e3))),
+      "-A",
+      CHECKOUT_USER_AGENT,
+      url
+    ], {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: timeoutMs + 1e3
+    });
     return stdout;
   } catch (error) {
     if (isCommandNotFound(error)) {
@@ -12220,9 +11002,7 @@ function storeResponseCookies(headers, url, cookies) {
     if (!cookie) {
       continue;
     }
-    const existingIndex = cookies.findIndex(
-      (stored) => stored.name === cookie.name && stored.domain === cookie.domain && stored.path === cookie.path
-    );
+    const existingIndex = cookies.findIndex((stored) => stored.name === cookie.name && stored.domain === cookie.domain && stored.path === cookie.path);
     if (existingIndex >= 0) {
       cookies.splice(existingIndex, 1, cookie);
     } else {
@@ -12650,7 +11430,7 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// src/cli.ts
+// dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
@@ -12751,27 +11531,23 @@ async function skillsInstall(context) {
 async function skillsTip(context) {
   const args = parseSkillTipArgs(context.args.positionals.slice(2), context.args.flags);
   const paymentMethodApi = createPaymentMethodApi(context);
-  const result = await executeSkillTip(
-    args,
-    {
-      baseUrl: context.runtimeConfig.baseUrl,
-      dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
+  const result = await executeSkillTip(args, {
+    baseUrl: context.runtimeConfig.baseUrl,
+    dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    chargeRuntime: {
+      runtimeConfig: context.runtimeConfig,
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: context.globalOptions.dryRun,
-      chargeRuntime: {
-        runtimeConfig: context.runtimeConfig,
-        timeoutMs: context.globalOptions.timeoutMs,
-        dryRun: context.globalOptions.dryRun,
-        refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
-      }
-    },
-    {
-      resolveRecipient: resolveSkillTipRecipient,
-      refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
-      executeCharge,
-      reportTip: reportSkillTip
+      refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
     }
-  );
+  }, {
+    resolveRecipient: resolveSkillTipRecipient,
+    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
+    executeCharge,
+    reportTip: reportSkillTip
+  });
   printSuccess(result, context.globalOptions.format);
   if (result.status === "three_ds_required" && result.redirectUrl) {
     await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication");
@@ -12966,10 +11742,7 @@ async function eventsPoll(context) {
   const type = getStringFlag(flags, "type");
   const ack = !getBooleanFlag(flags, "no-ack");
   if (context.globalOptions.dryRun) {
-    printSuccess(
-      { ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true },
-      context.globalOptions.format
-    );
+    printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   const result = await collectWebhookEvents({
@@ -12980,16 +11753,13 @@ async function eventsPoll(context) {
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {}
   });
-  printSuccess(
-    {
-      ready: result.ready,
-      timedOut: result.timedOut,
-      events: result.events,
-      ackedEventIds: result.ackedEventIds,
-      ...result.timedOut ? { resumeCommand: buildResumeCommand(type, ack, context.globalOptions.format) } : {}
-    },
-    context.globalOptions.format
-  );
+  printSuccess({
+    ready: result.ready,
+    timedOut: result.timedOut,
+    events: result.events,
+    ackedEventIds: result.ackedEventIds,
+    ...result.timedOut ? { resumeCommand: buildResumeCommand(type, ack, context.globalOptions.format) } : {}
+  }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function parseIntFlag(value, message, min) {
@@ -13072,19 +11842,16 @@ async function walletInit(context) {
   }
   await writeStoredConfig(nextConfig);
   const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
-  printSuccess(
-    {
-      customerId: nextConfig.customerId ?? null,
-      email,
-      name,
-      hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
-      paymentMethodsCached: paymentMethodsCache.cached,
-      paymentMethodCount: paymentMethodsCache.count,
-      ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-      configPath: "~/.clink-cli/config.json"
-    },
-    context.globalOptions.format
-  );
+  printSuccess({
+    customerId: nextConfig.customerId ?? null,
+    email,
+    name,
+    hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
+    paymentMethodsCached: paymentMethodsCache.cached,
+    paymentMethodCount: paymentMethodsCache.count,
+    ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
+    configPath: "~/.clink-cli/config.json"
+  }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function refreshPaymentMethodsAfterWalletInit(context, config) {
@@ -13130,18 +11897,15 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
   }
 }
 async function walletStatus(context) {
-  printSuccess(
-    {
-      baseUrl: context.storedConfig.baseUrl,
-      customerId: context.storedConfig.customerId ?? null,
-      email: context.storedConfig.email ?? null,
-      name: context.storedConfig.name ?? null,
-      hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
-      defaultOpenLinks: context.storedConfig.defaultOpenLinks,
-      configPath: "~/.clink-cli/config.json"
-    },
-    context.globalOptions.format
-  );
+  printSuccess({
+    baseUrl: context.storedConfig.baseUrl,
+    customerId: context.storedConfig.customerId ?? null,
+    email: context.storedConfig.email ?? null,
+    name: context.storedConfig.name ?? null,
+    hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
+    defaultOpenLinks: context.storedConfig.defaultOpenLinks,
+    configPath: "~/.clink-cli/config.json"
+  }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function handleCardCommand(subcommand, context) {
@@ -13181,13 +11945,10 @@ async function cardRedirectLink(context, label) {
     return EXIT_CODES.OK;
   }
   maybeOpenBrowser(context.globalOptions.open, prepared.url);
-  printSuccess(
-    {
-      url: prepared.url,
-      paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
-    },
-    context.globalOptions.format
-  );
+  printSuccess({
+    url: prepared.url,
+    paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
+  }, context.globalOptions.format);
   await maybeWatchEvents(context, prepared.url, label);
   return EXIT_CODES.OK;
 }
@@ -13225,14 +11986,8 @@ async function cardList(context) {
   return EXIT_CODES.OK;
 }
 async function cardGet(context) {
-  const paymentInstrumentId = requireStringFlag(
-    context.args.flags,
-    "missing --payment-instrument-id",
-    "payment-instrument-id"
-  );
-  const paymentMethod = getStoredPaymentMethods(context).find(
-    (item) => typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId === paymentInstrumentId
-  );
+  const paymentInstrumentId = requireStringFlag(context.args.flags, "missing --payment-instrument-id", "payment-instrument-id");
+  const paymentMethod = getStoredPaymentMethods(context).find((item) => typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId === paymentInstrumentId);
   if (!paymentMethod) {
     throw validationError(`payment method not found in local config: ${paymentInstrumentId}`);
   }
@@ -13331,13 +12086,7 @@ async function handlePayCommand(context) {
     printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  printSuccess(
-    addPaymentMethodsRefreshWarning(
-      execution.data,
-      execution.paymentMethodsRefreshWarning
-    ),
-    context.globalOptions.format
-  );
+  printSuccess(addPaymentMethodsRefreshWarning(execution.data, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
   if (execution.requires3ds && execution.redirectUrl) {
     await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication");
     return EXIT_CODES.THREE_DS;
@@ -13410,14 +12159,8 @@ async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const currency = requireStringFlag(flags, "missing --currency", "currency");
-  const customerId = asRequiredString(
-    context.storedConfig.customerId,
-    "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`"
-  );
-  const email = asRequiredString(
-    context.storedConfig.email,
-    "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`"
-  );
+  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
+  const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
   const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
   const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
@@ -13491,10 +12234,7 @@ async function ucpCheckoutComplete(context) {
   if (!paymentInstrumentId) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
   }
-  const customerId = asRequiredString(
-    context.storedConfig.customerId,
-    "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`"
-  );
+  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const paymentMethodApi = createPaymentMethodApi(context);
   const refreshed = await executePaymentRequestWithRefresh({
     request: () => requestJson({
@@ -13508,11 +12248,7 @@ async function ucpCheckoutComplete(context) {
     refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
     dryRun: context.globalOptions.dryRun
   });
-  return finishApiCommand(
-    refreshed.result,
-    context,
-    refreshed.paymentMethodsRefreshWarning
-  );
+  return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
 }
 function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
   return {
@@ -13578,9 +12314,7 @@ function parseAbsoluteHttpUrl(value, flagName) {
 var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
 var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
 function normalizeExternalCheckoutCreateLineItems(lineItems, currency) {
-  return lineItems.map(
-    (lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`)
-  );
+  return lineItems.map((lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`));
 }
 function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (Array.isArray(value)) {
@@ -13589,15 +12323,13 @@ function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
   if (!isRecord6(value)) {
     return value;
   }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, fieldValue]) => {
-      const fieldPath = `${path3}.${key}`;
-      if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
-        return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
-      }
-      return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
-    })
-  );
+  return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
+    const fieldPath = `${path3}.${key}`;
+    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
+      return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
+    }
+    return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
+  }));
 }
 function isRecord6(value) {
   return typeof value === "object" && value !== null;
@@ -13671,7 +12403,7 @@ function rejectUcpCheckoutUnsupportedFlags(flags) {
 function buildUcpCheckoutHeaders(context) {
   return {
     ...buildCustomerApiKeyHeaders(context.runtimeConfig),
-    "Idempotency-Key": randomUUID3()
+    "Idempotency-Key": randomUUID2()
   };
 }
 async function handleInstructionCommand(subcommand, context) {
@@ -13730,9 +12462,7 @@ function normalizeInstructionMandates(mandates, isRecurring) {
     }
     const normalizedFrequency = frequency.trim().toUpperCase();
     if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
-      throw validationError(
-        `--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`
-      );
+      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
     }
     return {
       ...mandate,
@@ -13751,10 +12481,7 @@ function utcDateTimeFlag(flags, name) {
   return value;
 }
 function requireJsonArrayFlag(flags, name) {
-  const parsed = parseJsonFlag(
-    requireStringFlag(flags, `missing --${name} (JSON array)`, name),
-    `--${name}`
-  );
+  const parsed = parseJsonFlag(requireStringFlag(flags, `missing --${name} (JSON array)`, name), `--${name}`);
   if (!Array.isArray(parsed)) {
     throw validationError(`--${name} must be a JSON array`);
   }
@@ -13783,18 +12510,15 @@ async function instructionCreate(context) {
   const mandateIds = extractMandateIds(data);
   const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
-  printSuccess(
-    {
-      ...data,
-      action: "created",
-      instructionId,
-      paymentInstrumentId,
-      ...mandateIds.length > 0 ? { mandateIds } : {},
-      requiresPasskey: true,
-      passkeyUrl
-    },
-    context.globalOptions.format
-  );
+  printSuccess({
+    ...data,
+    action: "created",
+    instructionId,
+    paymentInstrumentId,
+    ...mandateIds.length > 0 ? { mandateIds } : {},
+    requiresPasskey: true,
+    passkeyUrl
+  }, context.globalOptions.format);
   await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId }
@@ -13802,11 +12526,7 @@ async function instructionCreate(context) {
   return EXIT_CODES.OK;
 }
 async function instructionGet(context) {
-  const instructionId = requireStringFlag(
-    context.args.flags,
-    "missing --purchase-instruction-id",
-    "purchase-instruction-id"
-  );
+  const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "GET",
@@ -13821,11 +12541,7 @@ async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const url = buildAgentPasskeyUrl(
-    resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
-    paymentInstrumentId,
-    instructionId
-  );
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
   maybeOpenBrowser(context.globalOptions.open, url);
   printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
@@ -14032,9 +12748,7 @@ function buildConfigView(config) {
   };
 }
 async function cachePaymentMethods(context, value) {
-  const paymentMethods = Array.isArray(value) ? value.filter(
-    (item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0
-  ) : [];
+  const paymentMethods = Array.isArray(value) ? value.filter((item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0) : [];
   const nextConfig = cloneStoredConfig(context.storedConfig);
   nextConfig.paymentMethods = paymentMethods.map((item) => ({ ...item }));
   await writeStoredConfig(nextConfig);
@@ -14057,10 +12771,7 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(
-    paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data,
-    context.globalOptions.format
-  );
+  printSuccess(paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
@@ -14145,7 +12856,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// src/index.ts
+// dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));

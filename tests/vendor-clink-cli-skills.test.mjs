@@ -151,6 +151,22 @@ test('vendored CLI exact Skill install dry-run keeps version in the package oper
   assert.equal(result.data.dryRun, true);
 });
 
+test('vendored CLI preserves a Skill install name containing spaces', () => {
+  const result = runBundleJson([
+    'skills', 'install',
+    'Jeff/SEO Deep Audit@v1.0.0',
+    '--dry-run',
+    '--format', 'json',
+  ]);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.publisher, 'Jeff');
+  assert.equal(result.data.skillName, 'SEO Deep Audit');
+  assert.equal(result.data.requestedVersion, 'v1.0.0');
+  assert.equal(result.data.action, 'planned');
+  assert.equal(result.data.dryRun, true);
+});
+
 test('vendored CLI rejects a separate Skill install version flag', () => {
   const result = runBundleRaw([
     'skills', 'install',

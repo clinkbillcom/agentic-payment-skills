@@ -107,6 +107,29 @@ test('identity install with a version builds one exact package operand', () => {
   assert.equal(result.expectedInstall.requestedVersion, 'v1.2.3');
 });
 
+test('identity install quotes a human-readable Skill name containing spaces', () => {
+  const result = classifySkillInstallPrerequisites({
+    install: authorizedInstall({
+      kind: 'identity',
+      publisher: 'Jeff',
+      skillName: 'SEO Deep Audit',
+      versionNo: 'v1.0.0',
+    }),
+  });
+
+  assert.equal(result.state, SkillInstallState.INSTALL_EXECUTION_READY);
+  assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
+  assert.equal(
+    result.command,
+    'clink-cli skills install "Jeff/SEO Deep Audit@v1.0.0" --format json',
+  );
+  assert.deepEqual(result.expectedInstall, {
+    publisher: 'Jeff',
+    skillName: 'SEO Deep Audit',
+    requestedVersion: 'v1.0.0',
+  });
+});
+
 test('identity install protects a leading-hyphen publisher from CLI option parsing', () => {
   const result = classifySkillInstallPrerequisites({
     install: authorizedInstall({

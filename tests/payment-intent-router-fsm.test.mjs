@@ -63,6 +63,19 @@ test('routes an explicitly authorized exact-version Skill install by identity', 
   });
 });
 
+test('routes an exact-version Skill install whose name contains spaces', () => {
+  const result = classifyPaymentIntent({ text: '安装 Jeff/SEO Deep Audit@v1.0.0' });
+
+  assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+  assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+  assert.deepEqual(result.install.target, {
+    kind: 'identity',
+    publisher: 'Jeff',
+    skillName: 'SEO Deep Audit',
+    versionNo: 'v1.0.0',
+  });
+});
+
 test('routes an explicitly authorized Skill install by displayed Number', () => {
   const result = classifyPaymentIntent({ text: '安装第 2 个 skill' });
 
