@@ -6150,7 +6150,8 @@ Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
-  Publisher and skill names accept Unicode letters and numbers, including Chinese.
+  Publisher and skill names accept Unicode letters, numbers, and internal ASCII spaces.
+  Quote publisher or skill-name values that contain spaces.
   Tips select the latest Marketplace version with sort=NEW.
   Successful results include the resolved versionNo when the Marketplace supplies it.
   Tips use the refreshed explicit default payment method.
@@ -8429,7 +8430,6 @@ import { pipeline } from "node:stream/promises";
 
 // dist/skills/spec.js
 var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
-var TIP_IDENTITY_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
 var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
@@ -8524,7 +8524,7 @@ function isValidSkillName(value) {
   return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
 }
 function isValidSkillTipIdentitySegment(value) {
-  return isValidSegment(value, TIP_IDENTITY_SEGMENT_PATTERN);
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
 }
 function isValidSegment(value, pattern) {
   return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
