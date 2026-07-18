@@ -6389,8 +6389,8 @@ Sandbox:
 
 Payment Methods:
   After bootstrap succeeds, wallet init refreshes cached payment methods through the
-  card setup-link endpoint. A refresh failure is reported in output but does not fail
-  wallet initialization.
+  card binding-link endpoint and returns the origin-only bindingUrl. A refresh failure
+  is reported in output but does not fail wallet initialization.
 
 Defaults:
   --source                     agent
@@ -11848,6 +11848,7 @@ async function walletInit(context) {
     email,
     name,
     hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
+    bindingUrl: paymentMethodsCache.bindingUrl,
     paymentMethodsCached: paymentMethodsCache.cached,
     paymentMethodCount: paymentMethodsCache.count,
     ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
@@ -11858,6 +11859,7 @@ async function walletInit(context) {
 async function refreshPaymentMethodsAfterWalletInit(context, config) {
   if (!config.customerId || !config.customerApiKey) {
     return {
+      bindingUrl: null,
       cached: false,
       count: 0,
       error: "missing customer credentials in bootstrap response"
@@ -11884,13 +11886,15 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
   try {
     const result = await callBindingLink(refreshContext);
     if (isDryRun(result)) {
-      return { cached: false, count: 0 };
+      return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
+    const bindingUrl = buildBareDomainUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"));
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
-    return { cached: true, count };
+    return { bindingUrl, cached: true, count };
   } catch (error) {
     return {
+      bindingUrl: null,
       cached: false,
       count: 0,
       error: stringifyRefreshError(error)

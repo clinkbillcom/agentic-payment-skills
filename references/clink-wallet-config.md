@@ -14,6 +14,8 @@ clink-cli wallet init --email <email> --name <name> --format json
 
 `wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
 
+After bootstrap succeeds, `wallet init` calls the card binding-link endpoint to refresh cached payment methods. It strips the returned URL to its HTTPS origin and returns that origin as `bindingUrl` in the success payload. Proactively send a non-empty `data.bindingUrl` to the user as the next card-binding step; never expose the original path, query string, or encoded email. If the refresh fails, report `paymentMethodsCacheError` without inventing a URL; wallet initialization itself remains successful.
+
 ### Email OTP Recovery
 
 After `wallet init` returns, classify the observation with `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and report the `[WALLET_FSM]` marker in structured handoffs. If the classifier returns `ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT`, do not treat it as a terminal setup failure. It matches any of these fields:

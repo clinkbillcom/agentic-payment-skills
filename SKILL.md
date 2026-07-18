@@ -99,6 +99,7 @@ FSM action contract:
 | `STOP_PAYMENT_FAILURE` | Stop the payment path or offer an explicit recovery; do not retry automatically. |
 | `VERIFY_BEFORE_RETRY` | Treat payment state as unknown and verify through a safe status/idempotency path before retry. |
 | `START_WALLET_SETUP` | Start wallet/config recovery before any new payment attempt. |
+| `RETURN_WALLET_READY` | Report wallet initialization success. When `data.bindingUrl` is non-empty, proactively send its origin-only card-binding URL to the user; never expose the original path/query, encoded email, or `customerApiKey`. |
 | `ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT` | When `clink-cli wallet init` returns `BOOTSTRAP_OTP_REQUIRED`, code `71160015`, `cwallet.bootstrap.otp.required`, or "Verification code has been sent to this email. Please retry with otp.", tell the user to check the Clink OTP email, ask for the OTP, then rerun wallet init with the same email/name plus `--otp <email_otp>`. |
 | `REFRESH_PAYMENT_INSTRUMENT_LIST` | Run `clink-cli card binding-link --no-watch --format json` and resolve the selected/default payment instrument before direct/session pay. |
 | `RUN_PAY_WITHOUT_AUTHORIZATION` | For direct/session pay, bypass instruction matching because the selected/default card is non-Visa or Visa without VIC readiness; run `clink-cli pay` without instruction/mandate IDs. |
@@ -163,6 +164,7 @@ FSM action contract:
 | Number installation lacks a valid scoped snapshot | Ask for publisher/name/version or ask the user to list Skills first; never scan Markdown, refresh and reuse Number silently, or guess. |
 | Skill installation returns `planned` | Report `PLANNED`, not installed. |
 | Need current payment-method readiness or refresh payment-instrument list | `clink-cli card binding-link --no-watch --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
+| `wallet init` succeeds with a non-empty `data.bindingUrl` | Tell the user initialization succeeded and proactively send the returned origin-only card-binding URL; do not expose its original path/query or make the user request it separately. |
 | `wallet init` returns `BOOTSTRAP_OTP_REQUIRED` / `71160015` / `cwallet.bootstrap.otp.required` | Ask the user to check the Clink verification email and provide the OTP, then retry `clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json` using the same email, name, and environment lock. |
 | User must bind/manage card or risk rules | Emit the link and immediately start a concurrent, non-blocking watch (bound command watch, or `events poll` for a hand-built URL such as the Visa Passkey registration link), then verify the matching event; do not wait for the user to report completion before listening |
 | Selected/default payment method is Visa + VIC ready for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |

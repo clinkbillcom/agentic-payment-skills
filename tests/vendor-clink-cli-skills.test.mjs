@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const bundlePath = fileURLToPath(
@@ -39,6 +42,92 @@ function runBundleRaw(args) {
 function runBundleJson(args) {
   return JSON.parse(runBundle(args));
 }
+
+function runBundleAsync(args, env = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bundlePath, ...args], {
+      env: { ...testEnv, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+test('vendored wallet init returns the binding URL from its payment-method refresh', async () => {
+  const requestPaths = [];
+  const server = createServer((request, response) => {
+    requestPaths.push(request.url);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    if (request.url === '/agent/cwallet/customer/bootstrap') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          customerId: 'cus_wallet_init_contract',
+          customerAPIKey: 'wallet_init_contract_key',
+        },
+      }));
+      return;
+    }
+    if (request.url === '/agent/cwallet/card/bindingLink') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          bindingUrl: 'https://agent.clinkbill.com/card-binding?token=%E4%B8%AD%E6%96%87%20value',
+          paymentMethodsVoList: [
+            { paymentInstrumentId: 'pi_wallet_init_contract' },
+          ],
+        },
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: 404, message: 'not found' }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  const home = await mkdtemp(join(tmpdir(), 'clink-wallet-init-'));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const result = await runBundleAsync([
+      'wallet', 'init',
+      '--email', 'wallet-init@example.com',
+      '--name', 'Wallet Init',
+      '--base-url', baseUrl,
+      '--format', 'json',
+    ], {
+      HOME: home,
+      CLINK_BASE_URL: baseUrl,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.ok, true);
+    assert.equal(
+      output.data.bindingUrl,
+      'https://agent.clinkbill.com',
+    );
+    assert.equal(output.data.paymentMethodsCached, true);
+    assert.equal(output.data.paymentMethodCount, 1);
+    assert.deepEqual(requestPaths, [
+      '/agent/cwallet/customer/bootstrap',
+      '/agent/cwallet/card/bindingLink',
+    ]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
 
 test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);

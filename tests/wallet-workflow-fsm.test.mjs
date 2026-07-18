@@ -52,6 +52,7 @@ test('wallet init classifier returns success for ok wallet init output', () => {
         customerId: 'cus_123',
         email: 'user@example.com',
         name: 'Alice',
+        bindingUrl: 'https://agent.clinkbill.com',
       },
     },
   });
@@ -60,6 +61,7 @@ test('wallet init classifier returns success for ok wallet init output', () => {
   assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
   assert.equal(result.terminal, true);
   assert.equal(result.reason, 'wallet_init_succeeded');
+  assert.equal(result.data.bindingUrl, 'https://agent.clinkbill.com');
 });
 
 test('wallet init classifier surfaces non-OTP errors', () => {

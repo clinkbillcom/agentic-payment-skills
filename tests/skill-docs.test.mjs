@@ -87,6 +87,14 @@ test('wallet init documents email OTP recovery flow', () => {
   assert.match(skill, /--otp <email_otp>/u);
 });
 
+test('wallet init proactively returns and surfaces the card binding URL', () => {
+  assert.match(walletConfig, /strips the returned URL to its HTTPS origin/u);
+  assert.match(walletConfig, /Proactively send a non-empty `data\.bindingUrl` to the user/u);
+  assert.match(walletConfig, /never expose the original path, query string, or encoded email/u);
+  assert.match(skill, /`RETURN_WALLET_READY`[\s\S]*`data\.bindingUrl`/u);
+  assert.match(skill, /proactively send the returned origin-only card-binding URL/u);
+});
+
 test('UCP checkout workflow uses parse-item as the product analysis command', () => {
   assert.match(skill, /clink-cli tool parse-item --url <item_url>/u);
   assert.match(ucpCheckout, /clink-cli tool parse-item --url <item_url>/u);
