@@ -6106,7 +6106,7 @@ Options:
   --force                     Replace an existing installation and agent link/copy backups
   --base-url <url>            Derive the dashboard environment from this API base URL
   --sandbox                   Use the sandbox dashboard environment unless overridden
-  --timeout <ms>              Request/download timeout in milliseconds
+  --timeout <ms>              Request timeout; package downloads use at least 300000 ms
   --dry-run                   Plan the install without network calls or filesystem writes
 ${OUTPUT_OPTIONS}
 
@@ -6160,6 +6160,7 @@ Notes:
   No explicit default fails with: No default payment method
   An unsupported explicit default fails with: Unsupported default payment method
   Insufficient or invalid default Credit fails with 402: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
+  Payment results expose rawPaymentStatus, rawPaymentMessage, and the original payment payload.
   The backend calculates Credit allocation.
 `;
 var TOOL_HELP = `clink-cli tool
@@ -10200,6 +10201,7 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
 
 // ../clink-cli/dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
+var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var DEFAULT_DEPENDENCIES2 = {
   getTicket: getSkillDownloadTicket,
   downloadPackage: downloadSkillPackage,
@@ -10224,6 +10226,7 @@ async function installSkill(input, overrides = {}) {
   const packageSpec = toPackageSpec(input);
   const skillsRoot = join4(input.homeDir, ".agents", "skills");
   const installPath = join4(skillsRoot, input.skillName);
+  const downloadTimeoutMs = Math.max(input.timeoutMs, MIN_SKILL_DOWNLOAD_TIMEOUT_MS);
   if (input.dryRun) {
     const detectedAgents = await dependencies.detectAgentRoots({
       homeDir: input.homeDir,
@@ -10262,7 +10265,7 @@ async function installSkill(input, overrides = {}) {
     const downloaded = await dependencies.downloadPackage({
       ticket,
       destinationPath: join4(preliminaryPaths.stagingPath, "package"),
-      timeoutMs: input.timeoutMs,
+      timeoutMs: downloadTimeoutMs,
       refreshTicket: () => dependencies.getTicket({
         baseUrl: input.dashboardBaseUrl,
         packageSpec,
@@ -10557,6 +10560,7 @@ async function executeSkillTip(args, runtime, dependencies) {
     throw new Error("charge dry-run is unreachable after tip lookup");
   }
   const status = execution.requires3ds ? "three_ds_required" : execution.status === 1 ? "paid" : execution.status !== void 0 && TERMINAL_PAYMENT_FAILURE_STATUSES.has(execution.status) ? "payment_failed" : "payment_unknown";
+  const rawPaymentMessage = channelPaymentMessage(execution.data);
   const orderId = paymentOrderId(execution.data);
   if (status === "paid" && orderId !== void 0) {
     try {
@@ -10584,6 +10588,8 @@ async function executeSkillTip(args, runtime, dependencies) {
     paymentInstrumentId: paymentMethod.paymentInstrumentId,
     authorization: "bypassed",
     payment: execution.data,
+    rawPaymentStatus: execution.status ?? null,
+    ...rawPaymentMessage ? { rawPaymentMessage } : {},
     ...execution.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: execution.paymentMethodsRefreshWarning } : {},
     ...execution.requires3ds ? { requires3ds: true } : {},
     ...execution.redirectUrl ? { redirectUrl: execution.redirectUrl } : {}
@@ -10640,6 +10646,16 @@ function paymentOrderId(data) {
   const paySuccessInfo = isRecord4(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
+}
+function channelPaymentMessage(data) {
+  const channel = isRecord4(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
+    const message = stringValue2(channel[key]).trim();
+    if (message) {
+      return message;
+    }
+  }
+  return void 0;
 }
 function stringValue2(value) {
   return typeof value === "string" ? value : "";
