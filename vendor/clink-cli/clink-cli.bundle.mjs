@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/commander/lib/error.js
+// ../clink-cli/node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "node_modules/commander/lib/error.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -71,9 +71,9 @@ var require_error = __commonJS({
   }
 });
 
-// node_modules/commander/lib/argument.js
+// ../clink-cli/node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "node_modules/commander/lib/argument.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -199,9 +199,9 @@ var require_argument = __commonJS({
   }
 });
 
-// node_modules/commander/lib/help.js
+// ../clink-cli/node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "node_modules/commander/lib/help.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -801,9 +801,9 @@ ${itemIndentStr}`);
   }
 });
 
-// node_modules/commander/lib/option.js
+// ../clink-cli/node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "node_modules/commander/lib/option.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1114,9 +1114,9 @@ var require_option = __commonJS({
   }
 });
 
-// node_modules/commander/lib/suggestSimilar.js
+// ../clink-cli/node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1194,9 +1194,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// node_modules/commander/lib/command.js
+// ../clink-cli/node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "node_modules/commander/lib/command.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path3 = __require("node:path");
@@ -3440,9 +3440,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// node_modules/commander/index.js
+// ../clink-cli/node_modules/commander/index.js
 var require_commander = __commonJS({
-  "node_modules/commander/index.js"(exports) {
+  "../clink-cli/node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3462,9 +3462,9 @@ var require_commander = __commonJS({
   }
 });
 
-// node_modules/pend/index.js
+// ../clink-cli/node_modules/pend/index.js
 var require_pend = __commonJS({
-  "node_modules/pend/index.js"(exports, module) {
+  "../clink-cli/node_modules/pend/index.js"(exports, module) {
     module.exports = Pend;
     function Pend() {
       this.pending = 0;
@@ -3517,9 +3517,9 @@ var require_pend = __commonJS({
   }
 });
 
-// node_modules/yauzl/fd-slicer.js
+// ../clink-cli/node_modules/yauzl/fd-slicer.js
 var require_fd_slicer = __commonJS({
-  "node_modules/yauzl/fd-slicer.js"(exports) {
+  "../clink-cli/node_modules/yauzl/fd-slicer.js"(exports) {
     var fs = __require("fs");
     var util = __require("util");
     var stream = __require("stream");
@@ -3674,9 +3674,9 @@ var require_fd_slicer = __commonJS({
   }
 });
 
-// node_modules/yauzl/crc32.js
+// ../clink-cli/node_modules/yauzl/crc32.js
 var require_crc32 = __commonJS({
-  "node_modules/yauzl/crc32.js"(exports, module) {
+  "../clink-cli/node_modules/yauzl/crc32.js"(exports, module) {
     var CRC_TABLE = new Int32Array([
       0,
       1996959894,
@@ -3946,9 +3946,9 @@ var require_crc32 = __commonJS({
   }
 });
 
-// node_modules/yauzl/index.js
+// ../clink-cli/node_modules/yauzl/index.js
 var require_yauzl = __commonJS({
-  "node_modules/yauzl/index.js"(exports) {
+  "../clink-cli/node_modules/yauzl/index.js"(exports) {
     var fs = __require("fs");
     var zlib = __require("zlib");
     var fd_slicer = require_fd_slicer();
@@ -4805,11 +4805,11 @@ var require_yauzl = __commonJS({
   }
 });
 
-// dist/cli.js
+// ../clink-cli/dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir } from "node:os";
 
-// node_modules/commander/esm.mjs
+// ../clink-cli/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// dist/errors.js
+// ../clink-cli/dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// dist/args.js
+// ../clink-cli/dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4998,7 +4998,7 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// dist/url.js
+// ../clink-cli/dist/url.js
 function httpOrigin(value) {
   try {
     const url = new URL(value);
@@ -5016,7 +5016,7 @@ function sameHttpOrigin(left, right) {
   return leftOrigin !== void 0 && leftOrigin === rightOrigin;
 }
 
-// dist/auth-identity.js
+// ../clink-cli/dist/auth-identity.js
 function runtimeAuthorizationIdentity(config) {
   if (config.authorization) {
     return {
@@ -5089,13 +5089,13 @@ function storedRuntimeConfig(storedConfig) {
   return runtimeConfig;
 }
 
-// dist/config.js
+// ../clink-cli/dist/config.js
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// dist/domains.js
+// ../clink-cli/dist/domains.js
 var API_BASE_URLS = {
   sandbox: "https://uat-api.clinkbill.com",
   // sandbox: "https://api.clinkbill.dev",
@@ -5113,7 +5113,7 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// dist/config.js
+// ../clink-cli/dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
@@ -5449,7 +5449,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// dist/http.js
+// ../clink-cli/dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5546,7 +5546,7 @@ function parseBody(rawText) {
   }
 }
 
-// dist/oauth-request.js
+// ../clink-cli/dist/oauth-request.js
 async function requestJsonWithOAuthRetry(runtime, buildRequest, requester = requestJson) {
   const initialConfig = await runtime.getRuntimeConfig();
   const initialRequest = buildRequest(initialConfig);
@@ -5589,7 +5589,7 @@ function isDryRun(value) {
   return "dryRun" in value;
 }
 
-// dist/utils.js
+// ../clink-cli/dist/utils.js
 import { spawn } from "node:child_process";
 var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink-cli wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
@@ -5845,7 +5845,7 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// dist/events.js
+// ../clink-cli/dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -6411,7 +6411,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// dist/help.js
+// ../clink-cli/dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -7782,7 +7782,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// dist/internal-ucp.production.json
+// ../clink-cli/dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7794,7 +7794,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// dist/internal-ucp.sandbox.json
+// ../clink-cli/dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7802,7 +7802,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// dist/internal-ucp.js
+// ../clink-cli/dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7855,7 +7855,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// dist/oauth.js
+// ../clink-cli/dist/oauth.js
 import { randomUUID as randomUUID2 } from "node:crypto";
 var OAUTH_CLIENT_ID = "clink-cli";
 var OAUTH_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
@@ -8230,7 +8230,7 @@ function mergeOAuthLoginConfig(current, options2) {
   return next;
 }
 
-// dist/output.js
+// ../clink-cli/dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -8275,7 +8275,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// dist/payment/amount.js
+// ../clink-cli/dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -8284,7 +8284,7 @@ function parseAmount(value) {
   return amount;
 }
 
-// dist/payment/authorization-api.js
+// ../clink-cli/dist/payment/authorization-api.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
@@ -8432,7 +8432,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/payment/post-payment-refresh.js
+// ../clink-cli/dist/payment/post-payment-refresh.js
 var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
 async function executePaymentRequestWithRefresh(input) {
   if (input.dryRun) {
@@ -8469,7 +8469,7 @@ function errorMessage(error) {
   return String(error);
 }
 
-// dist/payment/charge.js
+// ../clink-cli/dist/payment/charge.js
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -8555,12 +8555,12 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// dist/skills/install.js
+// ../clink-cli/dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
 import { mkdir as mkdir5, rm as rm6 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// dist/skills/agents.js
+// ../clink-cli/dist/skills/agents.js
 import { constants } from "node:fs";
 import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -9327,7 +9327,7 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/archive.js
+// ../clink-cli/dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
 import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
@@ -9335,7 +9335,7 @@ import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, 
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// dist/skills/spec.js
+// ../clink-cli/dist/skills/spec.js
 var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -9443,7 +9443,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// dist/skills/archive.js
+// ../clink-cli/dist/skills/archive.js
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -9862,7 +9862,7 @@ function closeZip(zipFile) {
   }
 }
 
-// dist/skills/download.js
+// ../clink-cli/dist/skills/download.js
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
@@ -10121,7 +10121,7 @@ async function cancelResponseBody(response) {
   }
 }
 
-// dist/skills/metrics.js
+// ../clink-cli/dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
@@ -10168,10 +10168,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// dist/skills/registry.js
+// ../clink-cli/dist/skills/registry.js
 import path2 from "node:path";
 
-// dist/skills/public-api.js
+// ../clink-cli/dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -10297,7 +10297,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// dist/skills/marketplace.js
+// ../clink-cli/dist/skills/marketplace.js
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -10364,7 +10364,7 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/skills/registry.js
+// ../clink-cli/dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
@@ -10435,10 +10435,10 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// dist/skills/store.js
+// ../clink-cli/dist/skills/store.js
 import { join as join3 } from "node:path";
 
-// dist/skills/store-publication.js
+// ../clink-cli/dist/skills/store-publication.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm5, symlink as symlink2, utimes } from "node:fs/promises";
@@ -11089,7 +11089,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/store.js
+// ../clink-cli/dist/skills/store.js
 function resolveStorePaths(homeDir, spec, sha256, uuid) {
   const skillsRoot = join3(homeDir, ".agents", "skills");
   const clinkRoot = join3(skillsRoot, ".clink");
@@ -11105,7 +11105,7 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
   };
 }
 
-// dist/skills/install.js
+// ../clink-cli/dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
 var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var DEFAULT_DEPENDENCIES2 = {
@@ -11403,7 +11403,7 @@ async function cleanupStaging(stagingPath, dependencies, primaryError) {
   }
 }
 
-// dist/skills/tip.js
+// ../clink-cli/dist/skills/tip.js
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
@@ -11576,7 +11576,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// dist/tool.js
+// ../clink-cli/dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -12353,7 +12353,7 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// dist/cli.js
+// ../clink-cli/dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
@@ -14022,7 +14022,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/index.js
+// ../clink-cli/dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));
