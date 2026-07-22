@@ -12,26 +12,28 @@ clink-cli wallet init --email <email> --name <name> --format json
 
 `bin/clink-cli` targets production by default; bind `--sandbox` into the logical wrapper for sandbox/UAT. Use credentials that belong to the locked environment and never mix production with sandbox/UAT credentials.
 
-`wallet init` stores `customerId`, `customerApiKey`, `email`, and `name` in the single local config. Re-running it overwrites the previous local customer and clears cached payment-method/risk-rule state. It is a setup step and must not be run automatically during a payment attempt.
+`wallet init` starts OAuth Device Authorization, prints a verification URL to stderr, attempts to open it, and polls until authorization completes. Stream stderr while the process is running. When `Complete authorization in your browser:` appears, send the following URL to the user once and keep the same process alive. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`.
 
-After bootstrap succeeds, `wallet init` calls the card binding-link endpoint to refresh cached payment methods. It strips the returned URL to its HTTPS origin and returns that origin as `bindingUrl` in the success payload. Proactively send a non-empty `data.bindingUrl` to the user as the next card-binding step; never expose the original path, query string, or encoded email. If the refresh fails, report `paymentMethodsCacheError` without inventing a URL; wallet initialization itself remains successful.
+Automatic browser launch may fail in a remote or headless runtime. That warning is non-terminal: show the printed URL and continue waiting. The URL keeps `user_code` in its query and carries email/name in its fragment. It is intended for the current user, but do not copy it into unrelated logs or handoffs.
 
-### Email OTP Recovery
+Successful initialization stores `customerId`, `email`, `name`, an environment-bound OAuth authorization, and sticky `oauthRequired=true` in the single local config. Final init output requires `hasAuthorization=true`, `authorizationType=oauth`, `hasCustomerApiKey=false`, and a non-empty `customerId`; it no longer echoes `oauthRequired`. Use `wallet status` to classify the persisted credential policy. The CLI refreshes expiring Access Tokens and atomically rotates Refresh Tokens. Never read, print, copy, or refresh either token directly.
 
-After `wallet init` returns, classify the observation with `lib/wallet-workflow-fsm.mjs` (`classifyWalletInitObservation`) and report the `[WALLET_FSM]` marker in structured handoffs. If the classifier returns `ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT`, do not treat it as a terminal setup failure. It matches any of these fields:
+After OAuth succeeds, `wallet init` calls the card binding-link endpoint to refresh cached payment methods. It strips the returned URL to its HTTPS origin and returns that origin as `bindingUrl`. Proactively send a non-empty `data.bindingUrl` as the next card-binding step; never expose its original path, query string, or encoded email. If refresh fails, report `paymentMethodsCacheError` without inventing a URL; OAuth initialization itself remains successful.
 
-- `BOOTSTRAP_OTP_REQUIRED`
-- `71160015`
-- `cwallet.bootstrap.otp.required`
-- `Verification code has been sent to this email. Please retry with otp.`
+Classify live stderr and final init output with `classifyWalletInitObservation` from `lib/wallet-workflow-fsm.mjs`:
 
-Tell the user that Clink sent a verification code to the same email address used for `wallet init`, ask them to check that email and send the OTP back, then retry once the user provides it:
+- `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`: send the URL once and keep waiting on the same process.
+- `RETURN_WALLET_PLAN`: report `--dry-run` as planned, not initialized.
+- `RETURN_WALLET_READY`: accept only the final OAuth initialization evidence above; do not require an `oauthRequired` field from `wallet init`.
+- `SURFACE_ERROR`: return the terminal CLI error without inventing recovery.
+
+## Wallet Logout
 
 ```bash
-clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json
+clink-cli wallet logout --format json
 ```
 
-Use the same `email`, `name`, and locked environment as the original attempt. Never invent or guess the OTP, never change the email to avoid the OTP challenge, and do not keep retrying `wallet init` without `--otp` after this error.
+Logout best-effort revokes the current Refresh Token, then removes OAuth authorization and any legacy customer API key. It retains customer metadata, caches, and the existing credential policy: `oauthRequired=true` remains true after OAuth, while a never-OAuth legacy wallet remains false. The logout result no longer echoes `oauthRequired`; run `wallet status` when the post-logout policy matters. If another login replaces the original identity while logout is running, the CLI preserves the newer login and fails the stale logout. Do not implement token revocation yourself.
 
 ## Wallet Status
 
@@ -39,7 +41,18 @@ Use the same `email`, `name`, and locked environment as the original attempt. Ne
 clink-cli wallet status --format json
 ```
 
-This is a local config check. Key fields include `customerId`, `email`, `name`, and `hasCustomerApiKey`.
+This is a local readiness check with no network request. It resolves the effective base URL and allowed environment/flag credentials for a never-OAuth legacy wallet while continuing to ignore them when `oauthRequired=true`. Key fields include `customerId`, `email`, `name`, `hasAuthorization`, `hasStoredAuthorization`, `authorizationEnvironmentMatches`, `authorizationType`, `oauthRequired`, `accessTokenExpiresAt`, `refreshTokenExpiresAt`, and legacy `hasCustomerApiKey`. It never returns raw tokens or API keys.
+
+Classify this output with `classifyWalletStatusObservation`:
+
+- OAuth ready: require `hasAuthorization=true`, `hasStoredAuthorization=true`, `authorizationEnvironmentMatches=true`, `authorizationType=oauth`, `oauthRequired=true`, `hasCustomerApiKey=false`, and a non-empty `customerId`.
+- OAuth environment mismatch: `hasAuthorization=false`, `hasStoredAuthorization=true`, `authorizationEnvironmentMatches=false`, `authorizationType=null`, and `oauthRequired=true`. Keep the selected environment lock and start `wallet init` for that origin; never send the stored authorization across origins.
+- OAuth reauthorization required: `oauthRequired=true` with no effective authorization. Start `wallet init`; never inspect stored/env/flag CSK.
+- Legacy CSK ready: require `hasAuthorization=false`, `hasStoredAuthorization=false`, `authorizationEnvironmentMatches=null`, `authorizationType=csk`, `hasCustomerApiKey=true`, `oauthRequired=false`, and a non-empty `customerId`. Continue the requested operation; migration is recommended but must not block it.
+- Setup required: neither mode is complete. Collect missing setup input before starting a new operation.
+- Invalid OAuth state: OAuth markers contradict each other or `oauthRequired=true` appears with CSK readiness. Fail closed; never fall back to CSK.
+
+New `wallet init` always creates OAuth and does not issue a new CSK. Existing CSK users may continue only while `oauthRequired` is omitted or exactly `false`. Once OAuth succeeds, logout, token expiry/revocation, malformed state, and base-URL changes retain the permanent OAuth-only policy. If an OAuth-authenticated command returns exit code 4 with `401`, stop the current business operation and start explicit reauthorization. For a never-OAuth legacy-CSK `401`, verify the locked environment and key or offer OAuth migration. For `403`, surface the permission/scope error without refreshing or retrying.
 
 ## Config Commands
 
@@ -59,11 +72,9 @@ clink-cli config set name <name> --format json
 clink-cli config set default-open-links false --format json
 ```
 
-Set the customer API key only through stdin:
+Do not add a new legacy customer API key through this Skill. Existing never-OAuth users may retain an already stored key or provide `CLINK_CUSTOMER_API_KEY` through the execution environment. The CLI always rejects `config set customer-api-key`; `config unset customer-api-key` remains available to remove an existing saved legacy key.
 
-```bash
-printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json
-```
+`config set customer-id` is allowed only for a never-OAuth wallet. Changing it clears cached payment methods and risk rules. For an OAuth-managed wallet, change identities through `wallet init`; do not set or unset `customer-id` directly.
 
 Unset values:
 
@@ -73,7 +84,13 @@ clink-cli config unset <key> --format json
 
 ## Config State Model
 
-The local config is a latest wallet state cache. It should contain the single local customer credentials, the latest known payment-method snapshot, risk-rule state, and user display data. It should not grow as an append-only log of events.
+The local config is a latest wallet state cache. OAuth authorization is bound to its issuer origin and a request never sends both OAuth and CSK. Successful OAuth stores sticky `oauthRequired=true`. Logout, Refresh Token expiry, and a terminal refresh rejection such as `invalid_grant` clear active credentials but retain that marker. Transient refresh failures such as network or service errors leave the current credentials intact; surface the error without falling back to CSK. Legacy CSK is considered only when the marker is absent or exactly false.
+
+Selecting another origin temporarily through `--base-url`, `CLINK_BASE_URL`, or `--sandbox` leaves the stored authorization in the config but makes it ineffective for that command. `wallet status` then reports `hasStoredAuthorization=true` with `authorizationEnvironmentMatches=false`, and authenticated commands require `wallet init` for the selected origin. Persisting a different origin with `clink-cli config set base-url <url>` instead clears the stored OAuth authorization, any legacy customer API key, payment-method cache, and risk rules. It preserves the existing credential policy: `oauthRequired=true` remains sticky after OAuth, while a never-OAuth wallet remains false. Run `wallet init` for the new origin.
+
+Every authenticated request, OAuth refresh/retry, payment-method cache write, event poll, and event ACK reloads and checks the current authorization identity. If another process replaces the login, changes the customer/device/session, or a webhook names a different customer, the stale operation fails without overwriting the newer wallet, caching the stale response, or acknowledging the mismatched event. Re-run `wallet status`; never automatically retry a state-changing payment, Tip, checkout, refund, or logout from that error.
+
+Never inspect `authorization.accessToken` or `authorization.refreshToken` directly. Use `wallet status` or `config get`, which return only redacted readiness metadata. The config should contain the latest known payment-method snapshot, risk-rule state, and user display data; it should not grow as an append-only log of events.
 
 When event processing sees payment-method changes, the CLI updates the cached payment-method snapshot. `risk_rule.updated` upserts local risk-rule state. Non-wallet business events are returned to the caller and acknowledged by the event path; they are not configuration history.
 

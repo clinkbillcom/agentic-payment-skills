@@ -72,7 +72,7 @@ Before any direct/session `clink-cli pay`, refresh payment methods and resolve t
 clink-cli card binding-link --no-watch --format json
 ```
 
-Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs` `classifyPaymentAuthorizationResolver` and include `[AUTHORIZATION_FSM] state=<STATE> action=<ACTION> reason=<REASON>` in structured handoffs.
+Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs` `classifyPaymentAuthorizationResolver`.
 
 Resolver branches:
 

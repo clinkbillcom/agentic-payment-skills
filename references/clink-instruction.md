@@ -73,6 +73,7 @@ clink-cli instruction create \
   --effective-until-time "2026-06-30 23:59:59" \
   --mandates '[{"title":"Hotel","description":"Hotel booking","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-30 23:59:59"}]' \
   --shipping-address '{"name":"Clink User","line1":"One Apple Park Way","city":"Cupertino","state":"CA","zip":"95014","countryCode":"US","deliveryContactDetails":{}}' \
+  --no-watch \
   --format json
 ```
 
@@ -134,6 +135,7 @@ Print the Passkey URL for an existing draft:
 clink-cli instruction sign-url \
   --payment-instrument-id <visa_pi> \
   --purchase-instruction-id <instructionId> \
+  --no-watch \
   --format json
 ```
 
@@ -148,7 +150,7 @@ Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fi
 
 ## Activation
 
-After `create` or `sign-url`, do not wait for the user to report completion before listening. Run `classifyAuthorizationDraftObservation` on the CLI output, send the returned `passkeyUrl`, and immediately start the returned activation waitSpec through the Event FSM. `update` and `cancel` still use the built-in link watch, but they are not authorization-draft activation flows.
+This Skill deliberately passes `--no-watch` to `create` and `sign-url` so one Event FSM owns correlation and output parsing. Do not run those commands with their built-in watch and then start a second poll. Run `classifyAuthorizationDraftObservation` on the immediate CLI output, send the returned `passkeyUrl`, and start the returned activation waitSpec at once. `update` and `cancel` may continue using the built-in link watch because they are not authorization-draft activation flows.
 
 ```bash
 clink-cli events poll --type purchase_instruction.activated --no-ack --format json

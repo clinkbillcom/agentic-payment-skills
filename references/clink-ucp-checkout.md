@@ -8,7 +8,7 @@ This flow is for product orders discovered by an agent, such as a Shopify storef
 - create binds `instruction_id` and `mandate_id`
 - complete path: `/agent/ucp/external/checkout-sessions/{checkoutId}/complete`
 - external complete sends `payment_instrument_id` only
-- checkout auth is customer API key only (`X-Customer-API-Key` and `X-Timestamp`)
+- checkout auth uses OAuth Bearer after OAuth has ever been enabled; only a never-OAuth legacy configuration where `oauthRequired` is absent or exactly `false` may use `X-Customer-API-Key` and `X-Timestamp`
 
 ## Boundary
 
@@ -38,7 +38,7 @@ Never invent missing values. Ask the caller or user when product identity, amoun
 
 ## Control Model
 
-Treat checkout as a closed-loop state machine. Use `lib/ucp-checkout-workflow-fsm.mjs` to classify each step, emit `[UCP_CHECKOUT_FSM] state=<STATE> action=<ACTION> reason=<REASON>`, and only then run the next command.
+Treat checkout as a closed-loop state machine. Use `lib/ucp-checkout-workflow-fsm.mjs` to classify each step, then run only the next allowed command.
 
 ```text
 DISCOVER_PRODUCT

@@ -22,7 +22,7 @@ The wrapper is:
 bin/clink-cli
 ```
 
-Credentials must match the selected environment. Never use a production customer API key with a sandbox/UAT command, or sandbox/UAT credentials with a production command.
+OAuth authorization is bound to its issuer origin. Initialize under the exact production, sandbox/UAT, or explicit base URL selected by the environment lock. Never send legacy production credentials to sandbox/UAT or vice versa.
 
 Resolve `clink-cli` to the selected invocation at the start of a workflow and keep the same flags and `CLINK_BASE_URL` for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper and preserves the same environment selection.
 
@@ -62,8 +62,8 @@ Inspect the process exit code first, then parse the stream that contains the env
 | --- | --- | --- |
 | 0 | Success | Parse `data`. |
 | 2 | Validation error | Fix input before retrying. |
-| 3 | Config error | Ask the user to initialize/configure wallet. |
-| 4 | Auth error | Verify base URL and customer API key. |
+| 3 | Config error | Ask the user to initialize/configure wallet. A logged-out or malformed OAuth-only wallet normally reaches this `Login required` path rather than falling back to CSK. |
+| 4 | Auth error | The CLI already refreshes OAuth and retries an unauthorized business request at most once. If OAuth `401` still escapes, or the session is expired/invalid/revoked, stop and explicitly reauthorize. For legacy-CSK `401`, verify the locked environment and key. For `403`, surface the permission/scope error without refresh or retry. |
 | 5 | API error | Show `error.message`; do not invent recovery. |
 | 6 | Network error or ambiguous timeout | Treat payment state as unknown; verify before retrying. |
 | 7 | 3DS required | Send redirect URL and wait for order event. |
@@ -79,14 +79,12 @@ Inspect the process exit code first, then parse the stream that contains the env
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |
 
-Base URL resolution is `--base-url`, then `CLINK_BASE_URL`, then `--sandbox`, then stored/default production config. Customer credentials resolve from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
+Base URL resolution is `--base-url`, then `CLINK_BASE_URL`, then `--sandbox`, then stored/default production config. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
+
+The CLI binds each long-running command to the authorization identity observed when it starts. OAuth refresh/retry, payment-method caching, event polling/ACK, and logout stop if another process replaces the customer, device, or OAuth session. A customer-mismatched webhook is neither cached nor acknowledged. Surface these authentication-change errors, re-run `wallet status` under the same environment lock, and never automatically retry a state-changing payment, Tip, checkout, refund, or logout.
 
 ## Secret Handling
 
-Never pass a customer API key as a literal shell argument. Use an environment variable and stdin:
+Never read or print OAuth Access/Refresh Tokens. Token refresh and revocation belong to the CLI; use `wallet init`, authenticated commands, and `wallet logout`. Never pass a legacy customer API key as a literal shell argument. A never-OAuth legacy workflow may receive `CLINK_CUSTOMER_API_KEY` from its execution environment. `config set customer-api-key` is always rejected; only `config unset customer-api-key` may remove an existing saved legacy key.
 
-```bash
-printenv CLINK_CUSTOMER_API_KEY | clink-cli config set customer-api-key --format json
-```
-
-Do not echo secrets in user-visible output or logs.
+Do not echo secrets in user-visible output or logs. `wallet status` and `config get` expose readiness metadata without raw tokens or API keys.

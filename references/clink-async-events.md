@@ -10,7 +10,7 @@ The local config remains a latest wallet state cache and does not persist histor
 
 ## Built-In Link Watch
 
-When a command prints a URL for user action, the CLI normally keeps running and polls the event queue until the first event batch arrives or the bounded wait expires. This applies to:
+When a command prints a URL for user action, the CLI normally keeps running and polls the event queue until its readiness condition is met or the bounded wait expires. Without `eventType` or `expectedResource`, an unscoped watcher returns after the first non-stale event batch. With either target, the watcher acknowledges unrelated events and continues polling until a matching event arrives or the wait expires. This applies to:
 
 - `card binding-link`
 - `card setup-link`
@@ -25,6 +25,8 @@ When a command prints a URL for user action, the CLI normally keeps running and 
 The first JSON envelope contains the URL or immediate command result. If the watch observes events, the CLI emits a second JSON envelope on stdout with the processed events.
 
 Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch.
+
+For the authorization FSM in this Skill, `instruction create` and `instruction sign-url` are the deliberate exception: invoke them with `--no-watch`, then start exactly one correlated `events poll` from the generated waitSpec. This avoids duplicate watchers and multiple competing JSON envelopes.
 
 ## Start Monitoring At Emit Time
 
@@ -43,6 +45,10 @@ clink-cli events poll --type <eventType> --format json
 ```
 
 Pass the process exit code into `classifyEventPollObservation`. A nonzero CLI exit becomes `EVENT_INVALID` with `SURFACE_EVENT_ERROR`; optional Agent Pay and Skill Tip aggregation convert that monitoring failure to `POLL_ERROR` without changing `PAID`.
+
+The CLI refreshes an expiring OAuth token before polling. If an event poll or ACK receives HTTP `401`, it forces one token refresh and retries that request once. Do not add a Skill-side refresh loop. A remaining `401` is an authentication failure; `403` is a permission/scope failure and must not trigger refresh.
+
+Each poll batch is bound to the customer/device/session identity that requested it. Before writing wallet caches or acknowledging records, the CLI reloads the current login and checks every available webhook customer identifier. If the login changed or an event belongs to another customer, it fails the stale operation without caching or acknowledging that batch. Re-run `wallet status` under the same environment lock; do not carry the stale event into a new login or automatically retry a state-changing business action.
 
 Options:
 
@@ -120,6 +126,7 @@ If the right event type appears for a different resource, keep the current workf
 ## Rules
 
 - Do not fabricate completion.
+- Do not cache, acknowledge, or correlate an event after the CLI reports a changed login or customer mismatch; preserve the newer wallet and re-observe status first.
 - Start listening at URL-emit time; do not wait for the user to report completion before you begin.
 - Do not busy-retry the initiating link command to check status.
 - Do not acknowledge events with `--no-ack` unless you intentionally only want to peek.

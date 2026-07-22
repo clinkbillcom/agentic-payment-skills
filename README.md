@@ -6,7 +6,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, publ
 
 - Node.js >= 20
 - The skill ships a vendored `clink-cli` bundle at `vendor/clink-cli/clink-cli.bundle.mjs`; a global `clink-cli` install is optional for local debugging
-- `clink-cli` config file at `~/.clink-cli/config.json` with a valid `customerId` and `customerApiKey`
+- New wallet initialization uses OAuth Device Authorization; an existing complete legacy CSK wallet remains supported only if that local wallet has never completed OAuth authorization
 
 ## Install Clink Payment Skills
 

@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../clink-cli/node_modules/commander/lib/error.js
+// node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "../clink-cli/node_modules/commander/lib/error.js"(exports) {
+  "node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -71,9 +71,9 @@ var require_error = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/commander/lib/argument.js
+// node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "../clink-cli/node_modules/commander/lib/argument.js"(exports) {
+  "node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -199,9 +199,9 @@ var require_argument = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/commander/lib/help.js
+// node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "../clink-cli/node_modules/commander/lib/help.js"(exports) {
+  "node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -801,9 +801,9 @@ ${itemIndentStr}`);
   }
 });
 
-// ../clink-cli/node_modules/commander/lib/option.js
+// node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "../clink-cli/node_modules/commander/lib/option.js"(exports) {
+  "node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1114,9 +1114,9 @@ var require_option = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/commander/lib/suggestSimilar.js
+// node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "../clink-cli/node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1194,9 +1194,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/commander/lib/command.js
+// node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "../clink-cli/node_modules/commander/lib/command.js"(exports) {
+  "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path3 = __require("node:path");
@@ -3440,9 +3440,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// ../clink-cli/node_modules/commander/index.js
+// node_modules/commander/index.js
 var require_commander = __commonJS({
-  "../clink-cli/node_modules/commander/index.js"(exports) {
+  "node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3462,9 +3462,9 @@ var require_commander = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/pend/index.js
+// node_modules/pend/index.js
 var require_pend = __commonJS({
-  "../clink-cli/node_modules/pend/index.js"(exports, module) {
+  "node_modules/pend/index.js"(exports, module) {
     module.exports = Pend;
     function Pend() {
       this.pending = 0;
@@ -3517,9 +3517,9 @@ var require_pend = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/yauzl/fd-slicer.js
+// node_modules/yauzl/fd-slicer.js
 var require_fd_slicer = __commonJS({
-  "../clink-cli/node_modules/yauzl/fd-slicer.js"(exports) {
+  "node_modules/yauzl/fd-slicer.js"(exports) {
     var fs = __require("fs");
     var util = __require("util");
     var stream = __require("stream");
@@ -3674,9 +3674,9 @@ var require_fd_slicer = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/yauzl/crc32.js
+// node_modules/yauzl/crc32.js
 var require_crc32 = __commonJS({
-  "../clink-cli/node_modules/yauzl/crc32.js"(exports, module) {
+  "node_modules/yauzl/crc32.js"(exports, module) {
     var CRC_TABLE = new Int32Array([
       0,
       1996959894,
@@ -3946,9 +3946,9 @@ var require_crc32 = __commonJS({
   }
 });
 
-// ../clink-cli/node_modules/yauzl/index.js
+// node_modules/yauzl/index.js
 var require_yauzl = __commonJS({
-  "../clink-cli/node_modules/yauzl/index.js"(exports) {
+  "node_modules/yauzl/index.js"(exports) {
     var fs = __require("fs");
     var zlib = __require("zlib");
     var fd_slicer = require_fd_slicer();
@@ -3958,7 +3958,7 @@ var require_yauzl = __commonJS({
     var PassThrough = __require("stream").PassThrough;
     var Writable = __require("stream").Writable;
     var crc32 = typeof zlib.crc32 === "function" ? zlib.crc32 : require_crc32();
-    exports.open = open4;
+    exports.open = open5;
     exports.fromFd = fromFd;
     exports.fromBuffer = fromBuffer;
     exports.fromRandomAccessReader = fromRandomAccessReader;
@@ -3976,7 +3976,7 @@ var require_yauzl = __commonJS({
     exports.RandomAccessReader = RandomAccessReader;
     function openPromise2(path3, options2) {
       return new Promise((resolve4, reject) => {
-        open4(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
+        open5(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
           resolve4(zipfile);
         });
@@ -4006,7 +4006,7 @@ var require_yauzl = __commonJS({
         });
       });
     }
-    function open4(path3, options2, callback) {
+    function open5(path3, options2, callback) {
       if (typeof options2 === "function") {
         callback = options2;
         options2 = null;
@@ -4805,11 +4805,11 @@ var require_yauzl = __commonJS({
   }
 });
 
-// ../clink-cli/dist/cli.js
-import { randomUUID as randomUUID2 } from "node:crypto";
+// dist/cli.js
+import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir } from "node:os";
 
-// ../clink-cli/node_modules/commander/esm.mjs
+// node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// ../clink-cli/dist/errors.js
+// dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// ../clink-cli/dist/args.js
+// dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4998,12 +4998,104 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// ../clink-cli/dist/config.js
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+// dist/url.js
+function httpOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return void 0;
+    }
+    return url.origin;
+  } catch {
+    return void 0;
+  }
+}
+function sameHttpOrigin(left, right) {
+  const leftOrigin = httpOrigin(left);
+  const rightOrigin = httpOrigin(right);
+  return leftOrigin !== void 0 && leftOrigin === rightOrigin;
+}
+
+// dist/auth-identity.js
+function runtimeAuthorizationIdentity(config) {
+  if (config.authorization) {
+    return {
+      type: "oauth",
+      customerId: config.authorization.customerId,
+      deviceId: config.authorization.deviceId,
+      issuerOrigin: config.authorization.issuerOrigin,
+      ...config.authorization.sessionId ? { sessionId: config.authorization.sessionId } : {}
+    };
+  }
+  if (config.customerApiKey) {
+    return {
+      type: "csk",
+      ...config.customerId ? { customerId: config.customerId } : {},
+      customerApiKey: config.customerApiKey,
+      baseUrl: config.baseUrl
+    };
+  }
+  return { type: "none" };
+}
+function authorizationIdentityCanContinue(expected, current) {
+  if (expected.type === "none" || current.type === "none") {
+    return expected.type === "none" && current.type === "none";
+  }
+  if (expected.type === "oauth" && current.type === "oauth") {
+    return expected.customerId === current.customerId && expected.deviceId === current.deviceId && expected.issuerOrigin === current.issuerOrigin && (expected.sessionId === void 0 || expected.sessionId === current.sessionId);
+  }
+  if (expected.type === "csk" && current.type === "csk") {
+    return (expected.customerId === void 0 || current.customerId === void 0 || expected.customerId === current.customerId) && expected.customerApiKey === current.customerApiKey && sameHttpOrigin(expected.baseUrl, current.baseUrl);
+  }
+  return expected.type === "csk" && current.type === "oauth" && Boolean(expected.customerId) && expected.customerId === current.customerId && sameHttpOrigin(expected.baseUrl, current.issuerOrigin);
+}
+function authorizationIdentityCustomerId(identity) {
+  return identity.type === "none" ? void 0 : identity.customerId;
+}
+function storedConfigCanCacheForIdentity(storedConfig, expected) {
+  if (expected.type === "none") {
+    return false;
+  }
+  if (storedConfig.authorization) {
+    return authorizationIdentityCanContinue(expected, runtimeAuthorizationIdentity(storedRuntimeConfig(storedConfig)));
+  }
+  if (storedConfig.oauthRequired) {
+    return false;
+  }
+  if (storedConfig.customerId && expected.customerId && storedConfig.customerId !== expected.customerId) {
+    return false;
+  }
+  if (storedConfig.customerApiKey && (expected.type !== "csk" || storedConfig.customerApiKey !== expected.customerApiKey)) {
+    return false;
+  }
+  return true;
+}
+function storedRuntimeConfig(storedConfig) {
+  const runtimeConfig = {
+    baseUrl: storedConfig.baseUrl,
+    defaultOpenLinks: storedConfig.defaultOpenLinks
+  };
+  if (storedConfig.authorization) {
+    runtimeConfig.customerId = storedConfig.authorization.customerId;
+    runtimeConfig.authorization = { ...storedConfig.authorization };
+  } else if (!storedConfig.oauthRequired) {
+    if (storedConfig.customerId) {
+      runtimeConfig.customerId = storedConfig.customerId;
+    }
+    if (storedConfig.customerApiKey) {
+      runtimeConfig.customerApiKey = storedConfig.customerApiKey;
+    }
+  }
+  return runtimeConfig;
+}
+
+// dist/config.js
+import { randomUUID } from "node:crypto";
+import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// ../clink-cli/dist/domains.js
+// dist/domains.js
 var API_BASE_URLS = {
   sandbox: "https://uat-api.clinkbill.com",
   // sandbox: "https://api.clinkbill.dev",
@@ -5021,9 +5113,12 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// ../clink-cli/dist/config.js
+// dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
+var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
+var CONFIG_LOCK_TIMEOUT_MS = 1e4;
+var CONFIG_LOCK_STALE_MS = 5 * 6e4;
 function defaultConfig() {
   return {
     baseUrl: DEFAULT_BASE_URL,
@@ -5041,12 +5136,24 @@ async function readStoredConfig() {
     throw configError(`failed to read config file: ${error.message}`);
   }
 }
-async function writeStoredConfig(config) {
-  await mkdir(CONFIG_DIR, { recursive: true });
-  await writeFile(CONFIG_PATH, `${JSON.stringify(config, null, 2)}
-`, "utf8");
+async function updateStoredConfig(update) {
+  return withConfigLock(async () => {
+    const current = await readStoredConfig();
+    const updated = await update(cloneStoredConfig(current));
+    const next = enforceCredentialInvariant(current, updated);
+    await writeStoredConfigUnlocked(next);
+    return next;
+  });
+}
+function enforceCredentialInvariant(current, next) {
+  if (current.oauthRequired || current.authorization || next.oauthRequired || next.authorization) {
+    next.oauthRequired = true;
+    delete next.customerApiKey;
+  }
+  return next;
 }
 function resolveRuntimeConfig(storedConfig, flags) {
+  const oauthRequired = Boolean(storedConfig.oauthRequired || storedConfig.authorization);
   const envConfig = compactDefined({
     customerId: process.env.CLINK_CUSTOMER_ID,
     customerApiKey: process.env.CLINK_CUSTOMER_API_KEY
@@ -5055,7 +5162,7 @@ function resolveRuntimeConfig(storedConfig, flags) {
     customerId: getStringFlag(flags, "customer-id"),
     customerApiKey: getStringFlag(flags, "customer-api-key")
   });
-  const resolved = {
+  const legacyConfig = {
     ...storedConfig,
     ...envConfig,
     ...flagConfig
@@ -5067,10 +5174,15 @@ function resolveRuntimeConfig(storedConfig, flags) {
     baseUrl: getStringFlag(flags, "base-url") ?? process.env.CLINK_BASE_URL ?? (getBooleanFlag(flags, "sandbox") ? API_BASE_URLS.sandbox : storedConfig.baseUrl),
     defaultOpenLinks: storedConfig.defaultOpenLinks
   };
-  assignIfDefined(runtimeConfig, "customerId", resolved.customerId);
-  assignIfDefined(runtimeConfig, "customerApiKey", resolved.customerApiKey);
-  assignIfDefined(runtimeConfig, "email", resolved.email);
-  assignIfDefined(runtimeConfig, "name", resolved.name);
+  if (storedConfig.authorization) {
+    runtimeConfig.customerId = storedConfig.authorization.customerId;
+    runtimeConfig.authorization = { ...storedConfig.authorization };
+  } else if (!oauthRequired) {
+    assignIfDefined(runtimeConfig, "customerId", legacyConfig.customerId);
+    assignIfDefined(runtimeConfig, "customerApiKey", legacyConfig.customerApiKey);
+  }
+  assignIfDefined(runtimeConfig, "email", storedConfig.email);
+  assignIfDefined(runtimeConfig, "name", storedConfig.name);
   return runtimeConfig;
 }
 function resolveWalletInitBaseUrl(flags) {
@@ -5106,6 +5218,9 @@ function parseConfigValue(key, rawValue) {
     }
     return rawValue === "true";
   }
+  if (key === "baseUrl" && !httpOrigin(rawValue)) {
+    throw configError("baseUrl must be an absolute http(s) URL");
+  }
   return rawValue;
 }
 function resolveOpenFlag(storedConfig, flags) {
@@ -5122,6 +5237,7 @@ function cloneStoredConfig(config) {
     ...config,
     baseUrl: config.baseUrl,
     defaultOpenLinks: config.defaultOpenLinks,
+    ...config.authorization ? { authorization: { ...config.authorization } } : {},
     ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
     ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {}
   };
@@ -5149,6 +5265,16 @@ function parseStoredCustomerState(raw) {
   const record = raw;
   assignCustomerString(customer, "customerId", record.customerId);
   assignCustomerString(customer, "customerApiKey", record.customerApiKey ?? record.customerAPIKey);
+  const authorization = parseStoredAuthorization(record.authorization, customer.customerId);
+  const oauthRequired = record.oauthRequired === true || record.authorization !== void 0;
+  if (authorization) {
+    customer.authorization = authorization;
+    customer.customerId = authorization.customerId;
+  }
+  if (oauthRequired) {
+    customer.oauthRequired = true;
+    delete customer.customerApiKey;
+  }
   assignCustomerString(customer, "email", record.email);
   assignCustomerString(customer, "name", record.name);
   assignPaymentMethods(customer, record.paymentMethods);
@@ -5158,6 +5284,8 @@ function parseStoredCustomerState(raw) {
 function assignStoredCustomerState(target, value) {
   assignIfDefined(target, "customerId", value.customerId);
   assignIfDefined(target, "customerApiKey", value.customerApiKey);
+  assignIfDefined(target, "authorization", value.authorization ? { ...value.authorization } : void 0);
+  assignIfDefined(target, "oauthRequired", value.oauthRequired);
   assignIfDefined(target, "email", value.email);
   assignIfDefined(target, "name", value.name);
   if (value.paymentMethods) {
@@ -5166,6 +5294,116 @@ function assignStoredCustomerState(target, value) {
   if (value.riskRules) {
     target.riskRules = value.riskRules.map((item) => ({ ...item }));
   }
+}
+function parseStoredAuthorization(raw, fallbackCustomerId) {
+  if (typeof raw !== "object" || raw === null) {
+    return void 0;
+  }
+  const record = raw;
+  const customerId = nonEmptyString(record.customerId) ?? fallbackCustomerId;
+  const customerIdVerified = record.customerIdVerified === true;
+  const sessionId = nonEmptyString(record.sessionId);
+  const deviceId = nonEmptyString(record.deviceId);
+  const issuerOrigin = httpOrigin(nonEmptyString(record.issuerOrigin) ?? "");
+  const accessToken = nonEmptyString(record.accessToken);
+  const refreshToken = nonEmptyString(record.refreshToken);
+  const scope = nonEmptyString(record.scope);
+  const accessTokenExpiresAt = finiteNumber(record.accessTokenExpiresAt);
+  const refreshTokenExpiresAt = finiteNumber(record.refreshTokenExpiresAt);
+  if (!customerId || !deviceId || !issuerOrigin || !accessToken || !refreshToken || !scope || accessTokenExpiresAt === void 0 || refreshTokenExpiresAt === void 0) {
+    return void 0;
+  }
+  return {
+    type: "oauth",
+    customerId,
+    ...customerIdVerified ? { customerIdVerified: true } : {},
+    ...sessionId ? { sessionId } : {},
+    deviceId,
+    issuerOrigin,
+    tokenType: "Bearer",
+    accessToken,
+    accessTokenExpiresAt,
+    refreshToken,
+    refreshTokenExpiresAt,
+    scope
+  };
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+async function writeStoredConfigUnlocked(config) {
+  await ensureConfigDirectory();
+  const tempPath = `${CONFIG_PATH}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}
+`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 384
+    });
+    if (process.platform !== "win32") {
+      await chmod(tempPath, 384);
+    }
+    await rename(tempPath, CONFIG_PATH);
+    if (process.platform !== "win32") {
+      await chmod(CONFIG_PATH, 384);
+    }
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
+async function withConfigLock(operation) {
+  await ensureConfigDirectory();
+  const deadline = Date.now() + CONFIG_LOCK_TIMEOUT_MS;
+  for (; ; ) {
+    let handle;
+    try {
+      handle = await open(CONFIG_LOCK_PATH, "wx", 384);
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw configError(`failed to lock config file: ${error.message}`);
+      }
+      await removeStaleConfigLock();
+      if (Date.now() >= deadline) {
+        throw configError("timed out waiting for config file lock");
+      }
+      await sleep(100);
+      continue;
+    }
+    try {
+      await handle.writeFile(`${process.pid}
+${Date.now()}
+`, "utf8");
+      return await operation();
+    } finally {
+      await handle.close();
+      await rm(CONFIG_LOCK_PATH, { force: true });
+    }
+  }
+}
+async function ensureConfigDirectory() {
+  await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
+  if (process.platform !== "win32") {
+    await chmod(CONFIG_DIR, 448);
+  }
+}
+async function removeStaleConfigLock() {
+  try {
+    const lockStat = await stat(CONFIG_LOCK_PATH);
+    if (Date.now() - lockStat.mtimeMs > CONFIG_LOCK_STALE_MS) {
+      await rm(CONFIG_LOCK_PATH, { force: true });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
 }
 function compactDefined(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
@@ -5211,7 +5449,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// ../clink-cli/dist/http.js
+// dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5236,7 +5474,7 @@ async function requestJson(options2) {
         // Redact credential headers: --dry-run is meant to show request shape, and its output lands
         // in logs / CI / shell history. The CLI never echoes customerApiKey elsewhere (see cli.ts).
         headers: redactSensitiveHeaders(headers),
-        body: options2.body
+        body: redactSensitiveBody(options2.body)
       }
     };
   }
@@ -5272,8 +5510,30 @@ function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 var SENSITIVE_HEADERS = /* @__PURE__ */ new Set(["x-customer-api-key", "authorization"]);
+var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
+  "access_token",
+  "accessToken",
+  "refresh_token",
+  "refreshToken",
+  "device_code",
+  "deviceCode",
+  "customerApiKey",
+  "customerAPIKey"
+]);
 function redactSensitiveHeaders(headers) {
   return Object.fromEntries(Object.entries(headers).map(([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]));
+}
+function redactSensitiveBody(value) {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveBody);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    SENSITIVE_BODY_KEYS.has(key) && item ? "***" : redactSensitiveBody(item)
+  ]));
 }
 function parseBody(rawText) {
   if (!rawText) {
@@ -5286,14 +5546,65 @@ function parseBody(rawText) {
   }
 }
 
-// ../clink-cli/dist/utils.js
+// dist/oauth-request.js
+async function requestJsonWithOAuthRetry(runtime, buildRequest, requester = requestJson) {
+  const initialConfig = await runtime.getRuntimeConfig();
+  const initialRequest = buildRequest(initialConfig);
+  const failedAuthorization = bearerAuthorizationSnapshot(initialConfig, initialRequest);
+  const initialResult = await requester(initialRequest);
+  if (!failedAuthorization || !runtime.refreshRuntimeConfig || isDryRun(initialResult) || !isUnauthorizedResponse(initialResult)) {
+    return initialResult;
+  }
+  const refreshedConfig = await runtime.refreshRuntimeConfig(failedAuthorization);
+  const retryConfig = runtime.reloadRuntimeConfig ? await runtime.reloadRuntimeConfig() : refreshedConfig;
+  return requester(buildRequest(retryConfig));
+}
+function bearerAuthorizationSnapshot(runtimeConfig, request) {
+  const authorization = runtimeConfig.authorization;
+  if (!authorization) {
+    return void 0;
+  }
+  const authorizationHeader = Object.entries(request.headers ?? {}).find(([name]) => name.toLowerCase() === "authorization")?.[1];
+  if (authorizationHeader !== `${authorization.tokenType} ${authorization.accessToken}`) {
+    return void 0;
+  }
+  return {
+    accessToken: authorization.accessToken,
+    customerId: authorization.customerId,
+    issuerOrigin: authorization.issuerOrigin,
+    deviceId: authorization.deviceId,
+    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
+  };
+}
+function isUnauthorizedResponse(response) {
+  if (response.status === 401) {
+    return true;
+  }
+  if (typeof response.body !== "object" || response.body === null) {
+    return false;
+  }
+  return Number(response.body.code) === 401;
+}
+function isDryRun(value) {
+  return "dryRun" in value;
+}
+
+// dist/utils.js
 import { spawn } from "node:child_process";
-function buildCustomerHeaders(config) {
+var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink-cli wallet init` to sign in.";
+var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
+function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
+  if (config.authorization) {
+    assertAuthorizationRequestOrigin(config, requestBaseUrl);
+    return {
+      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
+    };
+  }
   if (!config.customerId) {
-    throw configError("missing customerId; run `clink-cli wallet init` or pass --customer-id");
+    throw configError(LOGIN_REQUIRED_MESSAGE);
   }
   if (!config.customerApiKey) {
-    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
+    throw configError(LOGIN_REQUIRED_MESSAGE);
   }
   return {
     "X-Customer-ID": config.customerId,
@@ -5301,17 +5612,28 @@ function buildCustomerHeaders(config) {
     "X-Timestamp": Date.now().toString()
   };
 }
-function buildCustomerApiKeyHeaders(config) {
+function buildCustomerApiKeyHeaders(config, requestBaseUrl = config.baseUrl) {
+  if (config.authorization) {
+    assertAuthorizationRequestOrigin(config, requestBaseUrl);
+    return {
+      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
+    };
+  }
   if (!config.customerApiKey) {
-    throw configError("missing customerApiKey; run `clink-cli wallet init` or pass --customer-api-key");
+    throw configError(LOGIN_REQUIRED_MESSAGE);
   }
   return {
     "X-Customer-API-Key": config.customerApiKey,
     "X-Timestamp": Date.now().toString()
   };
 }
-function buildInstructionHeaders(config) {
-  return buildCustomerApiKeyHeaders(config);
+function buildInstructionHeaders(config, requestBaseUrl = config.baseUrl) {
+  return buildCustomerApiKeyHeaders(config, requestBaseUrl);
+}
+function assertAuthorizationRequestOrigin(config, requestBaseUrl) {
+  if (config.authorization && !sameHttpOrigin(config.authorization.issuerOrigin, requestBaseUrl)) {
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink-cli wallet init` for the selected --base-url");
+  }
 }
 function buildBareDomainUrl(bindingUrl) {
   return new URL(bindingUrl).origin;
@@ -5364,19 +5686,47 @@ function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId) 
   }
   return url.toString();
 }
-function maybeOpenBrowser(open4, url) {
-  if (!open4) {
+function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.write(`${message}
+`)) {
+  if (!open5) {
     return;
   }
-  if (process.platform === "darwin") {
-    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
-    return;
+  let failureReported = false;
+  const reportFailure = () => {
+    if (failureReported) {
+      return;
+    }
+    failureReported = true;
+    onFailure(BROWSER_OPEN_FAILURE_MESSAGE);
+  };
+  try {
+    const command = resolveBrowserOpenCommand(process.platform, url);
+    const child = spawn(command.executable, command.args, {
+      detached: true,
+      stdio: "ignore"
+    });
+    child.once("error", reportFailure);
+    child.once("exit", (code) => {
+      if (code !== 0) {
+        reportFailure();
+      }
+    });
+    child.unref();
+  } catch {
+    reportFailure();
   }
-  if (process.platform === "win32") {
-    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
-    return;
+}
+function resolveBrowserOpenCommand(platform, url) {
+  if (platform === "darwin") {
+    return { executable: "open", args: [url] };
   }
-  spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+  if (platform === "win32") {
+    return {
+      executable: "rundll32.exe",
+      args: ["url.dll,FileProtocolHandler", url]
+    };
+  }
+  return { executable: "xdg-open", args: [url] };
 }
 function parseJsonFlag(value, flagName) {
   try {
@@ -5495,14 +5845,14 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// ../clink-cli/dist/events.js
+// dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
-var DEFAULT_MAX_DURATION_MS = 15 * 6e4;
+var DEFAULT_EVENT_WATCH_DURATION_MS = 15 * 6e4;
 var DEFAULT_PAGE_SIZE = 20;
 var DEFAULT_COLLECT_POLL_INTERVAL_MS = 2e3;
-var DEFAULT_COLLECT_MAX_DURATION_MS = 6e4;
+var DEFAULT_EVENT_COLLECT_DURATION_MS = 6e4;
 var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   "agent_order.succeeded",
   "agent_order.failed",
@@ -5539,15 +5889,19 @@ var stderrLog = (message) => {
 `);
 };
 async function pollWebhookEvents(options2) {
-  const result = await requestJson({
-    baseUrl: options2.runtimeConfig.baseUrl,
+  const result = await requestJsonWithOAuthRetry({
+    getRuntimeConfig: options2.getRuntimeConfig ?? (() => options2.runtimeConfig),
+    ...options2.getRuntimeConfig ? { reloadRuntimeConfig: options2.getRuntimeConfig } : {},
+    ...options2.refreshRuntimeConfig ? { refreshRuntimeConfig: options2.refreshRuntimeConfig } : {}
+  }, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "POST",
     path: EVENT_POLL_PATH,
-    headers: buildInstructionHeaders(options2.runtimeConfig),
+    headers: buildInstructionHeaders(runtimeConfig),
     body: { pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE },
     timeoutMs: options2.timeoutMs,
     dryRun: false
-  });
+  }));
   if ("dryRun" in result) {
     return [];
   }
@@ -5563,15 +5917,36 @@ async function ackWebhookEvents(options2, eventIds) {
   if (eventIds.length === 0) {
     return;
   }
-  const result = await requestJson({
-    baseUrl: options2.runtimeConfig.baseUrl,
+  const refreshRuntimeConfig = options2.refreshRuntimeConfig;
+  const result = await requestJsonWithOAuthRetry({
+    getRuntimeConfig: async () => {
+      const runtimeConfig = options2.getRuntimeConfig ? await options2.getRuntimeConfig() : options2.runtimeConfig;
+      assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+      return runtimeConfig;
+    },
+    ...options2.getRuntimeConfig ? {
+      reloadRuntimeConfig: async () => {
+        const runtimeConfig = await options2.getRuntimeConfig();
+        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+        return runtimeConfig;
+      }
+    } : {},
+    ...refreshRuntimeConfig ? {
+      refreshRuntimeConfig: async (failedAuthorization) => {
+        const runtimeConfig = await refreshRuntimeConfig(failedAuthorization);
+        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+        return runtimeConfig;
+      }
+    } : {}
+  }, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "POST",
     path: EVENT_ACK_PATH,
-    headers: buildInstructionHeaders(options2.runtimeConfig),
+    headers: buildInstructionHeaders(runtimeConfig),
     body: { eventIds },
     timeoutMs: options2.timeoutMs,
     dryRun: false
-  });
+  }));
   if ("dryRun" in result) {
     return;
   }
@@ -5579,23 +5954,30 @@ async function ackWebhookEvents(options2, eventIds) {
 }
 async function watchEvents(options2) {
   const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
-  const sleep = options2.sleep ?? realSleep;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_WATCH_DURATION_MS;
+  const sleep3 = options2.sleep ?? realSleep;
   const now = options2.now ?? Date.now;
   const log = options2.log ?? stderrLog;
   const startedAtMs = now();
+  const runtimeState = { value: options2.runtimeConfig };
+  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
+  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   log(`Open this link in your browser to complete the ${options2.label}:`);
   log(`  ${options2.url}`);
   log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
   const deadline = startedAtMs + maxDurationMs;
   for (; ; ) {
     let records;
+    let polledIdentity = { type: "none" };
     try {
       records = await pollWebhookEvents({
-        runtimeConfig: options2.runtimeConfig,
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         timeoutMs: options2.timeoutMs,
         ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
       });
+      polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
     } catch (error) {
       if (!isRecoverableWatchPollError(error)) {
         throw error;
@@ -5603,7 +5985,7 @@ async function watchEvents(options2) {
       if (now() + pollIntervalMs >= deadline) {
         break;
       }
-      await sleep(pollIntervalMs);
+      await sleep3(pollIntervalMs);
       continue;
     }
     if (records.length > 0) {
@@ -5611,17 +5993,23 @@ async function watchEvents(options2) {
       const currentRecords = records.filter((record) => !isStaleForWatch(record, startedAtMs));
       const staleEventIds = staleRecords.map((record) => record.eventId).filter((id) => id.length > 0);
       if (staleEventIds.length > 0) {
-        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, staleEventIds);
+        await ackWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          expectedIdentity: polledIdentity,
+          timeoutMs: options2.timeoutMs
+        }, staleEventIds);
         log(`Ignored ${staleEventIds.length} stale event(s) from before the watch started.`);
       }
       if (currentRecords.length === 0) {
         if (now() + pollIntervalMs >= deadline) {
           break;
         }
-        await sleep(pollIntervalMs);
+        await sleep3(pollIntervalMs);
         continue;
       }
-      const events = await processEvents(currentRecords);
+      const events = await processEvents(currentRecords, polledIdentity, options2.resolveStoredRuntimeConfig);
       log(`Received ${events.length} event(s):`);
       for (const event of events) {
         log(`  ${event.summary}`);
@@ -5630,23 +6018,35 @@ async function watchEvents(options2) {
       const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
       if (watchTargetEnabled && matchedEvents.length === 0) {
         const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ignoredEventIds);
+        await ackWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          expectedIdentity: polledIdentity,
+          timeoutMs: options2.timeoutMs
+        }, ignoredEventIds);
         log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
         if (now() + pollIntervalMs >= deadline) {
           break;
         }
-        await sleep(pollIntervalMs);
+        await sleep3(pollIntervalMs);
         continue;
       }
       const ackedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
-      await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ackedEventIds);
+      await ackWebhookEvents({
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+        expectedIdentity: polledIdentity,
+        timeoutMs: options2.timeoutMs
+      }, ackedEventIds);
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
       return { watched: true, url: options2.url, timedOut: false, events: matchedEvents, ackedEventIds };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
     }
-    await sleep(pollIntervalMs);
+    await sleep3(pollIntervalMs);
   }
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
   return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
@@ -5730,29 +6130,61 @@ function normalizeEpochMs(value) {
 function isRecoverableWatchPollError(error) {
   return error instanceof CliError && (error.type === "network_error" || error.type === "api_error" && error.code === 429);
 }
+function trackRuntimeConfigLoader(runtimeState, getRuntimeConfig) {
+  if (!getRuntimeConfig) {
+    return void 0;
+  }
+  return async () => {
+    const loaded = await getRuntimeConfig();
+    runtimeState.value = loaded;
+    return loaded;
+  };
+}
+function trackRuntimeConfigRefresher(runtimeState, refreshRuntimeConfig) {
+  if (!refreshRuntimeConfig) {
+    return void 0;
+  }
+  return async (failedAuthorization) => {
+    const refreshed = await refreshRuntimeConfig(failedAuthorization);
+    runtimeState.value = refreshed;
+    return refreshed;
+  };
+}
 async function collectWebhookEvents(options2) {
   const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
-  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_COLLECT_MAX_DURATION_MS;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_COLLECT_DURATION_MS;
   const ack = options2.ack ?? true;
-  const sleep = options2.sleep ?? realSleep;
+  const sleep3 = options2.sleep ?? realSleep;
   const now = options2.now ?? Date.now;
+  const runtimeState = { value: options2.runtimeConfig };
+  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
+  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
   const targetReached = () => options2.type ? collected.some((event) => event.eventType === options2.type) : collected.length > 0;
   const deadline = now() + maxDurationMs;
   for (; ; ) {
     const records = await pollWebhookEvents({
-      runtimeConfig: options2.runtimeConfig,
+      runtimeConfig: runtimeState.value,
+      ...getRuntimeConfig ? { getRuntimeConfig } : {},
+      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
       timeoutMs: options2.timeoutMs,
       ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
     });
+    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
     if (records.length > 0) {
-      const events = await processEvents(records);
+      const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
       collected.push(...events);
       if (ack) {
         const ackable = options2.type ? events.filter((event) => event.eventType === options2.type) : events;
         const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({ runtimeConfig: options2.runtimeConfig, timeoutMs: options2.timeoutMs }, ids);
+        await ackWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          expectedIdentity: polledIdentity,
+          timeoutMs: options2.timeoutMs
+        }, ids);
         ackedEventIds.push(...ids);
       }
       if (targetReached()) {
@@ -5762,20 +6194,48 @@ async function collectWebhookEvents(options2) {
     if (now() + pollIntervalMs >= deadline) {
       break;
     }
-    await sleep(pollIntervalMs);
+    await sleep3(pollIntervalMs);
   }
   return { ready: false, timedOut: true, events: collected, ackedEventIds };
 }
-async function processEvents(records) {
-  const stored = await readStoredConfig();
-  const nextConfig = cloneStoredConfig(stored);
-  const events = records.map((record) => {
-    const event = toProcessedEvent(record);
-    applyEventToConfig(nextConfig, event);
-    return event;
+async function processEvents(records, expectedIdentity, resolveStoredRuntimeConfig = storedRuntimeConfig) {
+  const events = records.map(toProcessedEvent);
+  await updateStoredConfig((current) => {
+    if (expectedIdentity) {
+      assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig);
+    }
+    for (const event of events) {
+      applyEventToConfig(current, event);
+    }
+    return current;
   });
-  await writeStoredConfig(nextConfig);
   return events;
+}
+function assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig) {
+  const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
+  if (expectedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, expectedIdentity) || !authorizationIdentityCanContinue(expectedIdentity, currentIdentity)) {
+    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+  }
+  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
+  const mismatchedEvent = events.find((event) => eventCustomerIds(event).some((customerId) => expectedCustomerId !== void 0 && customerId !== expectedCustomerId) || eventCustomerIds(event).length > 1);
+  if (mismatchedEvent) {
+    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
+  }
+}
+function assertRuntimeIdentity(runtimeConfig, expectedIdentity) {
+  if (!expectedIdentity) {
+    return;
+  }
+  if (!authorizationIdentityCanContinue(expectedIdentity, runtimeAuthorizationIdentity(runtimeConfig))) {
+    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+  }
+}
+function eventCustomerIds(event) {
+  const customerIds = [event.customerId, asString(event.data.customerId)];
+  if (event.eventType === "risk_rule.updated") {
+    customerIds.push(event.resourceId);
+  }
+  return [...new Set(customerIds.filter((value) => Boolean(value)))];
 }
 function toProcessedEvent(record) {
   const data = parsePayloadData(record.payload);
@@ -5951,7 +6411,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// ../clink-cli/dist/help.js
+// dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -5962,8 +6422,8 @@ ${OUTPUT_OPTIONS}`;
 var API_BASE_OPTIONS = `  --base-url <url>              Override API base URL
   --sandbox                     Use sandbox API/agent environment unless --base-url or CLINK_BASE_URL overrides the API host`;
 var CUSTOMER_AUTH_OPTIONS = `  --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Override customer API key`;
-var CUSTOMER_API_KEY_OPTIONS = `  --customer-api-key <key>      Override customer API key`;
+  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
+var CUSTOMER_API_KEY_OPTIONS = `  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
 var CUSTOMER_REQUEST_OPTIONS = `${API_BASE_OPTIONS}
 ${CUSTOMER_AUTH_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
@@ -6010,7 +6470,7 @@ Global Options:
   --sandbox                     Target the sandbox environment (sandbox API base + agent domain);
                                 explicit --base-url / CLINK_BASE_URL still overrides the API host.
   --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Override customer API key
+  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only
   --timeout <ms>                Request timeout in milliseconds
   --help, -h                    Show help
 
@@ -6356,15 +6816,18 @@ var WALLET_HELP = `clink-cli wallet
 
 Usage:
   clink-cli wallet init --email <email> --name <name> [options]
+  clink-cli wallet logout [options]
   clink-cli wallet status [options]
 
 Subcommands:
-  init         Create or activate a customer wallet and persist credentials locally
-  status       Show local wallet configuration without network request
+  init         Authorize this CLI and persist OAuth credentials locally
+  logout       Revoke OAuth authorization and remove local credentials
+  status       Show effective wallet configuration without network request
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
   clink-cli wallet init --sandbox --email user@example.com --name Alice
+  clink-cli wallet logout
   clink-cli wallet status --format pretty
 `;
 var WALLET_INIT_HELP = `clink-cli wallet init
@@ -6373,33 +6836,51 @@ Usage:
   clink-cli wallet init --email <email> --name <name> [options]
 
 Arguments:
-  --email <email>              Customer email used to create or activate the wallet
-  --name <name>                Customer display name saved to local config
+  --email <email>              Customer email verified in the browser
+  --name <name>                Initial customer display name and local config name
 
 Options:
-  --otp <email_otp>            Email OTP to include in the bootstrap request
-  --source <value>             Bootstrap source value, defaults to "agent"
   --base-url <url>             Override API base URL
   --sandbox                    Use sandbox API base; without --sandbox wallet init uses production
   --timeout <ms>               Request timeout in milliseconds
-  --dry-run                    Print the bootstrap request without executing it
+  --dry-run                    Print the Device Authorization request without executing it
 ${OUTPUT_OPTIONS}
 
-Sandbox:
-  --sandbox switches the API/agent environment. Re-running wallet init overwrites the
-  single local customer credentials. Without --sandbox, wallet init uses production.
+Device Authorization:
+  The CLI keeps user_code in the browser URL query and carries email/name in its fragment.
+  The Portal removes those values from the address bar immediately after reading them.
+  The CLI attempts to open the URL, then polls until authorization completes. Browser launch failure only prints a warning;
+  open the displayed URL manually while polling continues.
+  Email OTP entry and confirmation happen in the browser.
+  Existing customers keep their server-side name; --name only creates the initial name
+  for a new customer and is always saved to local config.
 
 Payment Methods:
-  After bootstrap succeeds, wallet init refreshes cached payment methods through the
+  After authorization succeeds, wallet init refreshes cached payment methods through the
   card binding-link endpoint and returns the origin-only bindingUrl. A refresh failure
   is reported in output but does not fail wallet initialization.
-
-Defaults:
-  --source                     agent
 
 Examples:
   clink-cli wallet init --email user@example.com --name Alice
   clink-cli wallet init --sandbox --email user@example.com --name Alice
+`;
+var WALLET_LOGOUT_HELP = `clink-cli wallet logout
+
+Usage:
+  clink-cli wallet logout [options]
+
+Behavior:
+  Best-effort revokes the current OAuth Refresh Token, then removes both OAuth credentials
+  and any legacy customer API key from local config. Customer metadata and caches are retained.
+
+Options:
+  --timeout <ms>               Request timeout in milliseconds
+  --dry-run                    Print the revoke request without changing local config
+${OUTPUT_OPTIONS}
+
+Examples:
+  clink-cli wallet logout
+  clink-cli wallet logout --format pretty
 `;
 var WALLET_STATUS_HELP = `clink-cli wallet status
 
@@ -6407,9 +6888,15 @@ Usage:
   clink-cli wallet status [options]
 
 Notes:
-  Reads local config only and does not make a network request.
+  Shows the effective local wallet configuration after resolving flags, environment variables,
+  and saved config. Stored OAuth authorization takes priority over legacy CSK. OAuth wallets never
+  fall back to CSK, including after logout or expiry. No network request is made, and raw OAuth
+  tokens and customer API keys are never printed. authorizationEnvironmentMatches reports whether
+  saved OAuth can be used with the selected API base; oauthRequired remains true after logout.
 
 Options:
+${API_BASE_OPTIONS}
+${CUSTOMER_AUTH_OPTIONS}
 ${OUTPUT_OPTIONS}
 
 Examples:
@@ -6679,8 +7166,7 @@ Notes:
   expose an "external" mode or subcommand.
   When --endpoint is provided, create appends /checkout-sessions, get/update append
   /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
-  Authenticates by customer API key only (CSK): X-Customer-API-Key and X-Timestamp are sent, and
-  X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   create sends merchant_url, customer_id, buyer.email, and context.currency.
   customer_id and buyer.email come from the local clink-cli config JSON.
   Idempotency-Key is generated by clink-cli for create/update/complete; callers do not pass it.
@@ -6727,8 +7213,7 @@ Endpoint:
   POST /agent/ucp/external/checkout-sessions
 
 Notes:
-  Authenticates by customer API key only: X-Customer-API-Key and X-Timestamp are sent.
-  X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   customer_id and buyer.email are read from the local clink-cli config JSON.
   Idempotency-Key is generated by clink-cli.
   line_items price/amount fields are decimal major-unit values and are converted by --currency;
@@ -6759,7 +7244,7 @@ Endpoint:
   GET /agent/ucp/external/checkout-sessions/{checkoutId}
 
 Notes:
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
   clink-cli ucp-checkout get --checkout-id chk_xxx --format json
@@ -6786,7 +7271,7 @@ Endpoint:
   PUT /agent/ucp/external/checkout-sessions/{checkoutId}
 
 Notes:
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Idempotency-Key is generated by clink-cli.
   update sends line_items JSON unchanged.
 
@@ -6814,7 +7299,7 @@ Endpoint:
   POST /agent/ucp/external/checkout-sessions/{checkoutId}/cancel
 
 Notes:
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
   clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
@@ -6838,7 +7323,7 @@ Endpoint:
   POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
 
 Notes:
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Idempotency-Key is generated by clink-cli.
   Sends a standard UCP payment object in the request body. The selected instrument id is local
   config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
@@ -6860,15 +7345,17 @@ Subcommands:
   get        Show local config
   unset      Remove or reset a local config key
 
-Supported Keys:
+Settable Keys:
   base-url
   customer-id
-  customer-api-key
   default-open-links
   email
   name
 
 Notes:
+  customer-api-key cannot be stored with config set. Use config unset customer-api-key to remove
+  an existing saved legacy key.
+  customer-id can be set directly only for wallets that have never used OAuth.
   wallet init stores a single local customer. Running wallet init again overwrites customer
   credentials and clears cached payment methods/risk rules for the previous customer.
 `;
@@ -6884,10 +7371,9 @@ Arguments:
 Options:
 ${OUTPUT_OPTIONS}
 
-Supported Keys:
+Settable Keys:
   base-url
   customer-id
-  customer-api-key
   default-open-links
   email
   name
@@ -6960,7 +7446,7 @@ Notes:
   Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
   --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
   --valid-only lists ACTIVE instructions and, for one-time instructions, keeps only mandates with reserveStatus=0.
-  Authenticates by customer API key only (no X-Customer-ID header).
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
 Examples:
@@ -7009,7 +7495,7 @@ Mandate Fields:
 Notes:
   Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
   after the user completes Passkey/FIDO authorization on the agent page.
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
 
 Examples:
@@ -7056,7 +7542,7 @@ Endpoint:
 
 Notes:
   --valid-only cannot be combined with a non-ACTIVE --status.
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
   clink-cli instruction list --valid-only --payment-instrument-id pi_xxx --format json
@@ -7077,7 +7563,7 @@ Endpoint:
   GET /agent/cwallet/instructions/{purchaseInstructionId}
 
 Notes:
-  Authenticates by customer API key only. X-Customer-ID is not sent.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
   clink-cli instruction get --purchase-instruction-id ins_xxx --format json
@@ -7180,6 +7666,8 @@ function getHelpText(command, subcommand, nestedCommand) {
       switch (subcommand) {
         case "init":
           return WALLET_INIT_HELP;
+        case "logout":
+          return WALLET_LOGOUT_HELP;
         case "status":
           return WALLET_STATUS_HELP;
         default:
@@ -7294,7 +7782,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// ../clink-cli/dist/internal-ucp.production.json
+// dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7306,7 +7794,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// ../clink-cli/dist/internal-ucp.sandbox.json
+// dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7314,7 +7802,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// ../clink-cli/dist/internal-ucp.js
+// dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7367,7 +7855,382 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// ../clink-cli/dist/output.js
+// dist/oauth.js
+import { randomUUID as randomUUID2 } from "node:crypto";
+var OAUTH_CLIENT_ID = "clink-cli";
+var OAUTH_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+var OAUTH_REFRESH_GRANT_TYPE = "refresh_token";
+var OAUTH_DEFAULT_SCOPE = [
+  "wallet:read",
+  "wallet:setup",
+  "payment:execute",
+  "instruction:read",
+  "instruction:write",
+  "refund:read",
+  "refund:write",
+  "events:read",
+  "offline_access"
+].join(" ");
+var OAUTH_DEVICE_AUTHORIZATION_PATH = "/agent/cwallet/oauth/device/authorization";
+var OAUTH_TOKEN_PATH = "/agent/cwallet/oauth/token";
+var OAUTH_REVOKE_PATH = "/agent/cwallet/oauth/revoke";
+var DEFAULT_SERVER_POLL_INTERVAL_SECONDS = 5;
+var CLIENT_POLL_PADDING_SECONDS = 1;
+var SLOW_DOWN_INCREMENT_SECONDS = 5;
+var ACCESS_TOKEN_REFRESH_WINDOW_MS = 6e4;
+var OAuthProtocolError = class extends Error {
+  errorCode;
+  status;
+  constructor(errorCode, description, status) {
+    super(description || errorCode);
+    this.name = "OAuthProtocolError";
+    this.errorCode = errorCode;
+    this.status = status;
+  }
+};
+function resolveOAuthDeviceId(config) {
+  return config.authorization?.deviceId ?? randomUUID2();
+}
+async function createDeviceAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: OAUTH_DEVICE_AUTHORIZATION_PATH,
+    body: {
+      client_id: OAUTH_CLIENT_ID,
+      device_id: options2.deviceId,
+      scope: OAUTH_DEFAULT_SCOPE
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  if (isDryRun2(result)) {
+    return result;
+  }
+  const data = requireOAuthSuccess(result);
+  return {
+    deviceCode: requiredString(data.device_code, "OAuth response is missing device_code"),
+    userCode: requiredString(data.user_code, "OAuth response is missing user_code"),
+    verificationUri: requiredString(data.verification_uri, "OAuth response is missing verification_uri"),
+    verificationUriComplete: requiredString(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
+    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
+    interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
+  };
+}
+function buildVerificationUrl(authorization, email, name) {
+  const url = new URL(authorization.verificationUriComplete);
+  if (!url.searchParams.has("user_code")) {
+    url.searchParams.set("user_code", authorization.userCode);
+  }
+  url.searchParams.delete("email");
+  url.searchParams.delete("name");
+  const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+  fragment.set("email", email);
+  fragment.set("name", name);
+  url.hash = fragment.toString();
+  return url.toString();
+}
+async function pollDeviceToken(options2) {
+  const deadline = Date.now() + options2.expiresIn * 1e3;
+  let intervalSeconds = (nonNegativeNumber(options2.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS) + CLIENT_POLL_PADDING_SECONDS;
+  for (; ; ) {
+    if (Date.now() >= deadline) {
+      throw authError("Authorization expired; run `clink-cli wallet init` again.");
+    }
+    try {
+      return await requestToken({
+        baseUrl: options2.baseUrl,
+        timeoutMs: options2.timeoutMs,
+        body: {
+          grant_type: OAUTH_DEVICE_GRANT_TYPE,
+          client_id: OAUTH_CLIENT_ID,
+          device_id: options2.deviceId,
+          device_code: options2.deviceCode
+        }
+      });
+    } catch (error) {
+      if (!(error instanceof OAuthProtocolError)) {
+        throw error;
+      }
+      if (error.errorCode === "authorization_pending") {
+        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
+        continue;
+      }
+      if (error.errorCode === "slow_down") {
+        intervalSeconds += SLOW_DOWN_INCREMENT_SECONDS;
+        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
+        continue;
+      }
+      throw publicOAuthError(error, "device");
+    }
+  }
+}
+function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(), sessionId = randomUUID2()) {
+  const issuerOrigin = httpOrigin(issuerBaseUrl);
+  if (!issuerOrigin) {
+    throw configError("OAuth issuer must be an absolute http(s) URL");
+  }
+  return {
+    type: "oauth",
+    customerId: token.customerId,
+    customerIdVerified: true,
+    sessionId,
+    deviceId,
+    issuerOrigin,
+    tokenType: "Bearer",
+    accessToken: token.accessToken,
+    accessTokenExpiresAt: now + token.expiresIn * 1e3,
+    refreshToken: token.refreshToken,
+    refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
+    scope: token.scope
+  };
+}
+async function ensureFreshOAuthAuthorization(options2) {
+  const authorization = options2.storedConfig.authorization;
+  if (!authorization) {
+    return options2.storedConfig;
+  }
+  assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
+  if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
+    return options2.storedConfig;
+  }
+  const expectedAuthorization = {
+    accessToken: authorization.accessToken,
+    customerId: authorization.customerId,
+    issuerOrigin: authorization.issuerOrigin,
+    deviceId: authorization.deviceId,
+    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
+  };
+  return refreshStoredAuthorization({ ...options2, expectedAuthorization });
+}
+async function revokeStoredAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.authorization.issuerOrigin,
+    method: "POST",
+    path: OAUTH_REVOKE_PATH,
+    body: {
+      client_id: OAUTH_CLIENT_ID,
+      device_id: options2.authorization.deviceId,
+      refresh_token: options2.authorization.refreshToken
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  if (isDryRun2(result)) {
+    return result;
+  }
+  requireOAuthSuccess(result);
+  return { revoked: true };
+}
+function assertAuthorizationEnvironment(authorization, runtimeBaseUrl) {
+  if (!sameHttpOrigin(authorization.issuerOrigin, runtimeBaseUrl)) {
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink-cli wallet init` for the selected --base-url");
+  }
+}
+function isAccessTokenFresh(authorization, minimumValidityMs = ACCESS_TOKEN_REFRESH_WINDOW_MS) {
+  return authorization.accessTokenExpiresAt > Date.now() + minimumValidityMs;
+}
+function clearOAuthAndLegacyCredentials(config) {
+  delete config.authorization;
+  delete config.customerApiKey;
+}
+async function refreshStoredAuthorization(options2) {
+  let refreshFailure;
+  const updated = await updateStoredConfig(async (current) => {
+    const authorization = current.authorization;
+    if (!authorization) {
+      refreshFailure = authError("OAuth login is missing; run `clink-cli wallet init`.");
+      return current;
+    }
+    assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
+    if (!matchesAuthorizationIdentity(current, options2.expectedAuthorization)) {
+      refreshFailure = authError(options2.failedAuthorization ? "OAuth login changed while the request was in progress; retry the command." : "OAuth login changed while the command was in progress; retry the command.");
+      return current;
+    }
+    if (options2.failedAuthorization && !matchesAuthorizationIdentity(current, options2.failedAuthorization)) {
+      refreshFailure = authError("OAuth login changed while the request was in progress; retry the command.");
+      return current;
+    }
+    if (options2.failedAuthorization && authorization.accessToken !== options2.failedAuthorization.accessToken) {
+      return current;
+    }
+    if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
+      return current;
+    }
+    if (authorization.refreshTokenExpiresAt <= Date.now()) {
+      clearOAuthAndLegacyCredentials(current);
+      refreshFailure = authError("OAuth session expired; run `clink-cli wallet init` again.");
+      return current;
+    }
+    try {
+      const token = await requestToken({
+        baseUrl: authorization.issuerOrigin,
+        timeoutMs: options2.timeoutMs,
+        body: {
+          grant_type: OAUTH_REFRESH_GRANT_TYPE,
+          client_id: OAUTH_CLIENT_ID,
+          device_id: authorization.deviceId,
+          refresh_token: authorization.refreshToken
+        }
+      });
+      const customerChanged = token.customerId !== authorization.customerId;
+      if (authorization.customerIdVerified && customerChanged) {
+        refreshFailure = authError("OAuth refresh returned a different customer; run `clink-cli wallet init` again.");
+        return current;
+      }
+      current.authorization = toStoredAuthorization(authorization.deviceId, token, authorization.issuerOrigin, Date.now(), authorization.sessionId);
+      current.customerId = token.customerId;
+      if (customerChanged) {
+        delete current.paymentMethods;
+        delete current.riskRules;
+      }
+      return current;
+    } catch (error) {
+      if (error instanceof OAuthProtocolError && error.errorCode === "invalid_grant") {
+        clearOAuthAndLegacyCredentials(current);
+        refreshFailure = authError("OAuth session is invalid or revoked; run `clink-cli wallet init` again.");
+        return current;
+      }
+      throw error instanceof OAuthProtocolError ? publicOAuthError(error, "refresh") : error;
+    }
+  });
+  if (refreshFailure) {
+    throw refreshFailure;
+  }
+  return updated;
+}
+function matchesAuthorizationIdentity(config, failedAuthorization) {
+  const authorization = config.authorization;
+  return Boolean(authorization && authorization.customerId === failedAuthorization.customerId && authorization.issuerOrigin === failedAuthorization.issuerOrigin && authorization.deviceId === failedAuthorization.deviceId && (failedAuthorization.sessionId === void 0 || authorization.sessionId === failedAuthorization.sessionId));
+}
+async function requestToken(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: OAUTH_TOKEN_PATH,
+    body: options2.body,
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun2(result)) {
+    throw apiError("unexpected OAuth token dry-run response");
+  }
+  const data = requireOAuthSuccess(result);
+  const tokenType = requiredString(data.token_type, "OAuth response is missing token_type");
+  if (tokenType.toLowerCase() !== "bearer") {
+    throw apiError(`unsupported OAuth token type: ${tokenType}`);
+  }
+  return {
+    tokenType: "Bearer",
+    accessToken: requiredString(data.access_token, "OAuth response is missing access_token"),
+    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
+    refreshToken: requiredString(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
+    refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
+    customerId: requiredString(data.customer_id, "OAuth response is missing customer_id"),
+    scope: requiredString(data.scope, "OAuth response is missing scope")
+  };
+}
+function requireOAuthSuccess(response) {
+  const oauthError = parseOAuthError(response.body);
+  if (oauthError) {
+    throw new OAuthProtocolError(oauthError.error, oauthError.errorDescription, response.status);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw apiError(extractMessage(response.body) ?? `OAuth request failed with status ${response.status}`, response.status);
+  }
+  const body = unwrapResponseData(response.body);
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw apiError("OAuth response body is invalid");
+  }
+  return body;
+}
+function parseOAuthError(body) {
+  const candidate = unwrapResponseData(body);
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+    return void 0;
+  }
+  const record = candidate;
+  if (typeof record.error !== "string" || record.error.length === 0) {
+    return void 0;
+  }
+  const errorDescription = typeof record.error_description === "string" ? record.error_description : typeof record.errorDescription === "string" ? record.errorDescription : void 0;
+  return {
+    error: record.error,
+    ...errorDescription ? { errorDescription } : {}
+  };
+}
+function unwrapResponseData(body) {
+  if (typeof body === "object" && body !== null && "data" in body) {
+    return body.data;
+  }
+  return body;
+}
+function publicOAuthError(error, phase) {
+  switch (error.errorCode) {
+    case "access_denied":
+      return authError("Authorization was denied.");
+    case "expired_token":
+      return authError("Authorization expired; run `clink-cli wallet init` again.");
+    case "invalid_grant":
+      return authError(phase === "refresh" ? "OAuth session is invalid or revoked; run `clink-cli wallet init` again." : "Authorization code is invalid or already used; run `clink-cli wallet init` again.");
+    case "invalid_client":
+      return authError("OAuth client configuration was rejected.", error.status);
+    case "invalid_scope":
+      return configError("OAuth scope configuration was rejected by the server.");
+    case "invalid_request":
+      return apiError(error.message, error.status);
+    default:
+      return apiError(error.message, error.status);
+  }
+}
+async function sleepUntilNextPoll(intervalSeconds, deadline, pause) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw authError("Authorization expired; run `clink-cli wallet init` again.");
+  }
+  await pause(Math.min(intervalSeconds * 1e3, remaining));
+}
+function requiredString(value, message) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw apiError(message);
+  }
+  return value;
+}
+function positiveNumber(value, message) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    throw apiError(message);
+  }
+  return number;
+}
+function nonNegativeNumber(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : void 0;
+}
+function isDryRun2(value) {
+  return "dryRun" in value;
+}
+function sleep2(ms) {
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
+}
+function mergeOAuthLoginConfig(current, options2) {
+  if (options2.authorization.customerId !== options2.customerId) {
+    throw configError("OAuth token customer does not match the wallet login response");
+  }
+  const next = cloneStoredConfig(current);
+  next.baseUrl = options2.baseUrl;
+  next.email = options2.email;
+  next.name = options2.name;
+  next.customerId = options2.customerId;
+  next.authorization = { ...options2.authorization };
+  next.oauthRequired = true;
+  delete next.customerApiKey;
+  delete next.paymentMethods;
+  delete next.riskRules;
+  return next;
+}
+
+// dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -7412,7 +8275,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// ../clink-cli/dist/payment/amount.js
+// dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -7421,61 +8284,79 @@ function parseAmount(value) {
   return amount;
 }
 
-// ../clink-cli/dist/payment/authorization-api.js
+// dist/payment/authorization-api.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
     requestJson: overrides.requestJson ?? requestJson,
-    writeStoredConfig: overrides.writeStoredConfig ?? writeStoredConfig,
+    updateStoredConfig: overrides.updateStoredConfig ?? updateStoredConfig,
     collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
     ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
   };
+  const getRuntimeConfig = input.getRuntimeConfig ?? (() => input.runtimeConfig);
+  const resolveStoredRuntimeConfig = input.resolveStoredRuntimeConfig ?? storedRuntimeConfig;
+  const requestRuntime = {
+    getRuntimeConfig,
+    ...input.getRuntimeConfig ? { reloadRuntimeConfig: input.getRuntimeConfig } : {},
+    ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {}
+  };
   const refreshPaymentMethods = async () => {
-    const binding = await dependencies.requestJson({
-      baseUrl: input.runtimeConfig.baseUrl,
-      method: "POST",
-      path: "/agent/cwallet/card/bindingLink",
-      headers: buildCustomerHeaders(input.runtimeConfig),
-      body: {
-        customerId: input.runtimeConfig.customerId,
-        hasCustomerApiKey: Boolean(input.runtimeConfig.customerApiKey)
-      },
-      timeoutMs: input.timeoutMs,
-      dryRun: false
-    });
+    let requestedIdentity = { type: "none" };
+    const binding = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => {
+      requestedIdentity = runtimeAuthorizationIdentity(runtimeConfig);
+      return {
+        baseUrl: runtimeConfig.baseUrl,
+        method: "POST",
+        path: "/agent/cwallet/card/bindingLink",
+        headers: buildCustomerHeaders(runtimeConfig),
+        body: {
+          customerId: runtimeConfig.customerId,
+          hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
+        },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      };
+    }, dependencies.requestJson);
     const data = unwrapResponse(binding, "invalid card binding response");
     const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
-    const nextConfig = cloneStoredConfig(input.storedConfig);
-    nextConfig.paymentMethods = paymentMethods.map((method) => ({ ...method }));
-    await dependencies.writeStoredConfig(nextConfig);
-    input.storedConfig.paymentMethods = nextConfig.paymentMethods.map((method) => ({ ...method }));
+    const storedPaymentMethods = paymentMethods.map((method) => ({ ...method }));
+    const nextConfig = await dependencies.updateStoredConfig((current) => {
+      const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
+      if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
+        throw authError("Authentication changed while payment methods were refreshing; retry the command.");
+      }
+      current.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+      return current;
+    });
+    input.storedConfig.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+    input.setStoredConfig?.(nextConfig);
     return paymentMethods;
   };
   return {
     refreshPaymentMethods,
     refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
     listInstructions: async (paymentInstrumentId) => {
-      const result = await dependencies.requestJson({
-        baseUrl: input.runtimeConfig.baseUrl,
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
         method: "GET",
         path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(input.runtimeConfig),
+        headers: buildInstructionHeaders(runtimeConfig),
         query: { status: "ACTIVE", paymentInstrumentId },
         timeoutMs: input.timeoutMs,
         dryRun: false
-      });
+      }), dependencies.requestJson);
       return unwrapResponse(result, "invalid instruction list response");
     },
     createInstruction: async (draft) => {
-      const result = await dependencies.requestJson({
-        baseUrl: input.runtimeConfig.baseUrl,
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
         method: "POST",
         path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(input.runtimeConfig),
+        headers: buildInstructionHeaders(runtimeConfig),
         body: draft,
         timeoutMs: input.timeoutMs,
         dryRun: false
-      });
+      }), dependencies.requestJson);
       const data = unwrapResponse(result, "invalid instruction create response");
       const instructionId = optionalString(data.instructionId) ?? optionalString(data.purchaseInstructionId);
       if (!instructionId) {
@@ -7483,12 +8364,15 @@ function createTipAuthorizationApi(input, overrides = {}) {
       }
       return {
         instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(input.runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId)
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl((await getRuntimeConfig()).baseUrl), draft.paymentInstrumentId, instructionId)
       };
     },
     waitForActivation: async (instructionId) => {
       const collected = await dependencies.collectWebhookEvents({
-        runtimeConfig: input.runtimeConfig,
+        runtimeConfig: await getRuntimeConfig(),
+        getRuntimeConfig,
+        resolveStoredRuntimeConfig,
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
         timeoutMs: input.timeoutMs,
         type: "purchase_instruction.activated",
         ack: false
@@ -7498,18 +8382,25 @@ function createTipAuthorizationApi(input, overrides = {}) {
         return { activated: false };
       }
       const eventIds = matches.map((event) => event.eventId).filter(Boolean);
-      await dependencies.ackWebhookEvents({ runtimeConfig: input.runtimeConfig, timeoutMs: input.timeoutMs }, eventIds);
+      const ackRuntimeConfig = await getRuntimeConfig();
+      await dependencies.ackWebhookEvents({
+        runtimeConfig: ackRuntimeConfig,
+        getRuntimeConfig,
+        expectedIdentity: runtimeAuthorizationIdentity(ackRuntimeConfig),
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
+        timeoutMs: input.timeoutMs
+      }, eventIds);
       return { activated: true };
     },
     getInstruction: async (instructionId) => {
-      const result = await dependencies.requestJson({
-        baseUrl: input.runtimeConfig.baseUrl,
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
         method: "GET",
         path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
-        headers: buildInstructionHeaders(input.runtimeConfig),
+        headers: buildInstructionHeaders(runtimeConfig),
         timeoutMs: input.timeoutMs,
         dryRun: false
-      });
+      }), dependencies.requestJson);
       return unwrapResponse(result, "invalid instruction response");
     },
     now: input.now,
@@ -7541,7 +8432,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ../clink-cli/dist/payment/post-payment-refresh.js
+// dist/payment/post-payment-refresh.js
 var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
 async function executePaymentRequestWithRefresh(input) {
   if (input.dryRun) {
@@ -7578,7 +8469,7 @@ function errorMessage(error) {
   return String(error);
 }
 
-// ../clink-cli/dist/payment/charge.js
+// dist/payment/charge.js
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -7609,7 +8500,7 @@ function classifyChargeData(data) {
   const channel = isRecord2(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   const action = isRecord2(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
-  const status = finiteNumber(channel.status);
+  const status = finiteNumber2(channel.status);
   return {
     status,
     requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
@@ -7618,15 +8509,19 @@ function classifyChargeData(data) {
 }
 async function executeCharge(input, runtime) {
   const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestJson({
-      baseUrl: runtime.runtimeConfig.baseUrl,
+    request: () => requestJsonWithOAuthRetry({
+      getRuntimeConfig: runtime.getRuntimeConfig ?? (() => runtime.runtimeConfig),
+      ...runtime.getRuntimeConfig ? { reloadRuntimeConfig: runtime.getRuntimeConfig } : {},
+      ...runtime.refreshRuntimeConfig ? { refreshRuntimeConfig: runtime.refreshRuntimeConfig } : {}
+    }, (runtimeConfig) => ({
+      baseUrl: runtimeConfig.baseUrl,
       method: "POST",
       path: "/agent/order/charge",
-      headers: buildCustomerHeaders(runtime.runtimeConfig),
+      headers: buildCustomerHeaders(runtimeConfig),
       body: buildChargeBody(input),
       timeoutMs: runtime.timeoutMs,
       dryRun: runtime.dryRun
-    }),
+    })),
     refreshPaymentMethods: runtime.refreshPaymentMethods,
     dryRun: runtime.dryRun
   });
@@ -7646,7 +8541,7 @@ async function executeCharge(input, runtime) {
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function finiteNumber(value) {
+function finiteNumber2(value) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : void 0;
   }
@@ -7660,14 +8555,14 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// ../clink-cli/dist/skills/install.js
+// dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
-import { mkdir as mkdir5, rm as rm5 } from "node:fs/promises";
+import { mkdir as mkdir5, rm as rm6 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// ../clink-cli/dist/skills/agents.js
+// dist/skills/agents.js
 import { constants } from "node:fs";
-import { cp, copyFile, lstat, mkdir as mkdir2, open, readlink, realpath, rename, rm, rmdir, symlink } from "node:fs/promises";
+import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 var MARKER_FILE_NAME = ".clink-install.json";
 var DETECTION_FAILURE = "failed to detect installed agents";
@@ -7903,7 +8798,7 @@ function createWritePlan(preflight, input) {
     await assertWritableBoundary(boundary, ownedParent);
     await assertTargetAbsent(targetPath);
     await assertAuxiliaryAbsent(copyTempPath);
-    await copyDirectoryContents(releasePath, copyTempPath);
+    await copyDirectoryExclusively(releasePath, copyTempPath);
     copyTempFingerprint = await fingerprintPath(copyTempPath, detected.mode);
     const stagedMarker = await readMarkerRecord(copyTempPath);
     if (stagedMarker === null || !markersMatchIdentityAndSha(stagedMarker.marker, marker)) {
@@ -7911,15 +8806,13 @@ function createWritePlan(preflight, input) {
     }
     await assertWritableBoundary(boundary, ownedParent);
     await assertTargetAbsent(targetPath);
-    await mkdir2(targetPath);
-    const targetEntry = createEntryIdentity(await lstat(targetPath));
+    await rename2(copyTempPath, targetPath);
+    placedFingerprint = copyTempFingerprint;
+    copyTempFingerprint = null;
     await allowPendingFilesystemEvents();
-    await assertPathNamesEntry(targetPath, targetEntry);
-    placedFingerprint = await fingerprintPath(targetPath, detected.mode);
-    await copyDirectoryContents(copyTempPath, targetPath);
-    await assertPathNamesEntry(targetPath, targetEntry);
+    await assertPathNamesEntry(targetPath, entryIdentityFromFingerprint(placedFingerprint));
     const copiedFingerprint = await fingerprintPath(targetPath, detected.mode);
-    if (!sameCopiedObject(copyTempFingerprint, copiedFingerprint)) {
+    if (!sameMovedObject(placedFingerprint, copiedFingerprint)) {
       throw new Error("copy placement verification failed");
     }
     placedFingerprint = copiedFingerprint;
@@ -7927,8 +8820,6 @@ function createWritePlan(preflight, input) {
     if (installedSnapshot.kind !== "managed-copy" || !markersMatchIdentityAndSha(installedSnapshot.marker, marker)) {
       throw new Error("copy verification failed");
     }
-    await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
-    copyTempFingerprint = null;
     return { agent: detected.agent, status: "copied", path: targetPath };
   }
   async function ensureTargetParent() {
@@ -7954,7 +8845,7 @@ function createWritePlan(preflight, input) {
     await assertWritableBoundary(boundary, ownedParent);
     await assertTargetUnchanged(detected, input, snapshot);
     await assertPathNamesEntry(backupPath, backupContainerEntry);
-    await rename(targetPath, backupObjectPath);
+    await rename2(targetPath, backupObjectPath);
     backupMoved = true;
     await assertPathNamesEntry(backupPath, backupContainerEntry);
     movedBackupFingerprint = await fingerprintPath(backupObjectPath, detected.mode);
@@ -7975,7 +8866,7 @@ function createWritePlan(preflight, input) {
         if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
           throw new Error("installed target changed before rollback");
         }
-        await rm(targetPath, { recursive: true, force: true });
+        await rm2(targetPath, { recursive: true, force: true });
       }
       placedFingerprint = null;
     }
@@ -8046,7 +8937,7 @@ function createWritePlan(preflight, input) {
           await assertPathNamesEntry(backupPath, backupContainerEntry);
           const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
           if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
-            await rm(backupPath, { recursive: true, force: true });
+            await rm2(backupPath, { recursive: true, force: true });
             backupMoved = false;
             backupVerified = false;
             backupContainerEntry = null;
@@ -8143,6 +9034,21 @@ async function copyDirectoryContents(sourcePath, targetPath) {
   if (!sourceStat.isDirectory()) {
     throw new Error("copy source is not a directory");
   }
+  const entries = await readdir(sourcePath, { withFileTypes: true });
+  for (const entry of entries) {
+    await cp(join(sourcePath, entry.name), join(targetPath, entry.name), {
+      recursive: true,
+      dereference: false,
+      errorOnExist: true,
+      force: false
+    });
+  }
+}
+async function copyDirectoryExclusively(sourcePath, targetPath) {
+  const sourceStat = await lstat(sourcePath);
+  if (!sourceStat.isDirectory()) {
+    throw new Error("copy source is not a directory");
+  }
   await cp(sourcePath, targetPath, {
     recursive: true,
     dereference: false,
@@ -8181,12 +9087,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
   if (backupFingerprint.type === "symlink") {
     const linkText = await readlink(backupPath);
     await symlink(linkText, targetPath, "dir");
-    await rm(backupPath, { force: true });
+    await rm2(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "file") {
     await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
-    await rm(backupPath, { force: true });
+    await rm2(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "directory") {
@@ -8201,12 +9107,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
       if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
         throw new Error("restored directory verification failed");
       }
-      await rm(backupPath, { recursive: true });
+      await rm2(backupPath, { recursive: true });
       return;
     } catch (error) {
       const currentTarget = await lstatIfExists(targetPath);
       if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
-        await rm(targetPath, { recursive: true, force: true });
+        await rm2(targetPath, { recursive: true, force: true });
       }
       throw error;
     }
@@ -8333,7 +9239,7 @@ async function removeOwnedPath(filePath, expected, mode) {
   if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
     return;
   }
-  await rm(filePath, { recursive: true, force: true });
+  await rm2(filePath, { recursive: true, force: true });
 }
 function createEntryIdentity(stats) {
   return {
@@ -8384,7 +9290,7 @@ async function readMarkerRecord(rootPath) {
   }
   let handle;
   try {
-    handle = await open(markerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open2(markerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const raw = await handle.readFile({ encoding: "utf8" });
     const parsed = JSON.parse(raw);
     return isMarker(parsed) ? { marker: parsed, raw } : null;
@@ -8421,15 +9327,15 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// ../clink-cli/dist/skills/archive.js
+// dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
-import { chmod, lstat as lstat2, mkdir as mkdir3, open as open2, readdir, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// ../clink-cli/dist/skills/spec.js
+// dist/skills/spec.js
 var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -8537,7 +9443,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// ../clink-cli/dist/skills/archive.js
+// dist/skills/archive.js
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -8581,14 +9487,14 @@ async function extractSkillPackage(packagePath, destination, overrides = {}) {
     return await materializeRawSkill(classified.bytes, destinationRoot);
   } catch {
     try {
-      await rm2(destinationRoot, { recursive: true, force: true });
+      await rm3(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
   }
 }
 async function classifySkillPackage(packagePath, limits) {
-  const handle = await open2(packagePath, "r");
+  const handle = await open3(packagePath, "r");
   try {
     const metadata = await handle.stat();
     if (!metadata.isFile() || !Number.isSafeInteger(metadata.size) || metadata.size < 0) {
@@ -8614,15 +9520,15 @@ async function classifySkillPackage(packagePath, limits) {
 }
 async function materializeRawSkill(bytes, destinationRoot) {
   await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-  await chmod(destinationRoot, 493);
+  await chmod2(destinationRoot, 493);
   const rawRoot = resolve2(destinationRoot, "raw");
   assertPathContained(destinationRoot, rawRoot);
   await mkdir3(rawRoot, { mode: 493 });
-  await chmod(rawRoot, 493);
+  await chmod2(rawRoot, 493);
   const skillPath = resolve2(rawRoot, "SKILL.md");
   assertPathContained(rawRoot, skillPath);
   await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
-  await chmod(skillPath, 420);
+  await chmod2(skillPath, 420);
   return {
     layout: "single",
     skillRoot: rawRoot,
@@ -8646,11 +9552,11 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       throw new Error("archive entry limit exceeded");
     }
     await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-    await chmod(destinationRoot, 493);
+    await chmod2(destinationRoot, 493);
     const rawRoot = resolve2(destinationRoot, "raw");
     assertPathContained(destinationRoot, rawRoot);
     await mkdir3(rawRoot, { mode: 493 });
-    await chmod(rawRoot, 493);
+    await chmod2(rawRoot, 493);
     const registeredPaths = new ArchivePathRegistry();
     const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
     const byteCount = { total: 0 };
@@ -8684,7 +9590,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       if (meter.fileBytes !== entry.uncompressedSize) {
         throw new Error("archive entry size mismatch");
       }
-      await chmod(outputPath, mode);
+      await chmod2(outputPath, mode);
     }
     if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
       throw new Error("archive size metadata mismatch");
@@ -8699,7 +9605,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
   } catch {
     closeZip(zipFile);
     try {
-      await rm2(destinationRoot, { recursive: true, force: true });
+      await rm3(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
@@ -8868,11 +9774,11 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
       }
       knownDirectories.add(current);
     }
-    await chmod(current, 493);
+    await chmod2(current, 493);
   }
 }
 async function selectSkillLayout(rawRoot) {
-  const topLevelNames = (await readdir(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const topLevelNames = (await readdir2(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
   if (topLevelNames.includes("SKILL.md")) {
     const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
     if (rootSkill.isFile()) {
@@ -8889,7 +9795,7 @@ async function selectSkillLayout(rawRoot) {
       continue;
     }
     topLevelDirectories.push({ name, root: candidateRoot });
-    const candidateNames = await readdir(candidateRoot);
+    const candidateNames = await readdir2(candidateRoot);
     if (!candidateNames.includes("SKILL.md")) {
       continue;
     }
@@ -8919,7 +9825,7 @@ async function selectSkillLayout(rawRoot) {
   throw new Error("archive must contain one skill root or multiple one-level skill roots");
 }
 async function findDirectSkillRoots(parentRoot) {
-  const names = (await readdir(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const names = (await readdir2(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
   const skillRoots = [];
   for (const name of names) {
     const candidateRoot = resolve2(parentRoot, name);
@@ -8928,7 +9834,7 @@ async function findDirectSkillRoots(parentRoot) {
     if (!candidate.isDirectory()) {
       continue;
     }
-    const candidateNames = await readdir(candidateRoot);
+    const candidateNames = await readdir2(candidateRoot);
     if (!candidateNames.includes("SKILL.md")) {
       continue;
     }
@@ -8956,10 +9862,10 @@ function closeZip(zipFile) {
   }
 }
 
-// ../clink-cli/dist/skills/download.js
+// dist/skills/download.js
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
-import { lstat as lstat3, rm as rm3 } from "node:fs/promises";
+import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 var DEFAULT_DEPENDENCIES = {
@@ -9173,7 +10079,7 @@ async function cleanupDestination(destinationPath, state) {
     return true;
   }
   try {
-    await rm3(destinationPath, { force: true });
+    await rm4(destinationPath, { force: true });
     state.createdDestination = false;
     return true;
   } catch {
@@ -9215,7 +10121,7 @@ async function cancelResponseBody(response) {
   }
 }
 
-// ../clink-cli/dist/skills/metrics.js
+// dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
@@ -9262,10 +10168,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// ../clink-cli/dist/skills/registry.js
+// dist/skills/registry.js
 import path2 from "node:path";
 
-// ../clink-cli/dist/skills/public-api.js
+// dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -9391,7 +10297,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// ../clink-cli/dist/skills/marketplace.js
+// dist/skills/marketplace.js
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -9458,7 +10364,7 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ../clink-cli/dist/skills/registry.js
+// dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
@@ -9529,13 +10435,13 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// ../clink-cli/dist/skills/store.js
+// dist/skills/store.js
 import { join as join3 } from "node:path";
 
-// ../clink-cli/dist/skills/store-publication.js
-import { randomUUID } from "node:crypto";
+// dist/skills/store-publication.js
+import { randomUUID as randomUUID3 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { chmod as chmod2, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open3, readdir as readdir2, readlink as readlink2, realpath as realpath2, rename as rename2, rm as rm4, symlink as symlink2, utimes } from "node:fs/promises";
+import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm5, symlink as symlink2, utimes } from "node:fs/promises";
 import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
 var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
 var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
@@ -9825,7 +10731,7 @@ async function createImmutableRelease(paths, extractedRoot, marker) {
   if (existingRelease !== null) {
     return null;
   }
-  await rename2(extractedRoot, paths.releasePath);
+  await rename3(extractedRoot, paths.releasePath);
   const releaseFingerprint = await fingerprintPath2(paths.releasePath);
   if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
     throw new Error("release changed during publication");
@@ -9851,7 +10757,7 @@ async function ensureRealDirectory(path3) {
 }
 async function writeInstallMarker(rootPath, marker) {
   const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open3(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
+  const handle = await open4(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
   try {
     await handle.writeFile(JSON.stringify(marker), "utf8");
     await handle.chmod(420);
@@ -9866,7 +10772,7 @@ async function readNoFollowInstallMarker(path3) {
 async function readNoFollowJson(path3) {
   let handle;
   try {
-    handle = await open3(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+    handle = await open4(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
     const before = await handle.stat();
     if (!before.isFile()) {
       return null;
@@ -9915,7 +10821,7 @@ async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained)
   const entryPath = join2(containerPath, basename(paths.currentPath));
   try {
     await assertPathFingerprint(paths.currentPath, expectedCurrent);
-    await rename2(paths.currentPath, entryPath);
+    await rename3(paths.currentPath, entryPath);
   } catch (error) {
     await removeEmptyOwnedContainer(containerPath, containerFingerprint);
     throw error;
@@ -9944,8 +10850,8 @@ async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained)
 async function removeEmptyOwnedContainer(containerPath, expected) {
   try {
     const current = await fingerprintPath2(containerPath);
-    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir2(containerPath)).length === 0) {
-      await rm4(containerPath, { recursive: true });
+    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir3(containerPath)).length === 0) {
+      await rm5(containerPath, { recursive: true });
     }
   } catch {
   }
@@ -10016,7 +10922,7 @@ async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanup
   await mkdir4(containerPath, { mode: 448 });
   const containerFingerprint = await fingerprintPath2(containerPath);
   const entryPath = join2(containerPath, basename(currentPath));
-  await rename2(currentPath, entryPath);
+  await rename3(currentPath, entryPath);
   const moved = await fingerprintPath2(entryPath);
   if (!samePathFingerprint(moved, expected)) {
     await restoreBackup(currentPath, {
@@ -10057,7 +10963,7 @@ async function restoreBackup(currentPath, backup) {
     case "file":
       if (backup.retained) {
         await copyFile2(backup.entryPath, currentPath, constants2.COPYFILE_EXCL);
-        await chmod2(currentPath, backup.entryFingerprint.mode & 4095);
+        await chmod3(currentPath, backup.entryFingerprint.mode & 4095);
         await assertBackupAuthenticated(backup);
         const atime = backup.entryFingerprint.atimeMs / 1e3;
         const mtime = backup.entryFingerprint.mtimeMs / 1e3;
@@ -10086,7 +10992,7 @@ async function restoreBackup(currentPath, backup) {
 }
 async function restoreDirectory(sourcePath, destinationPath, mode) {
   await mkdir4(destinationPath, { mode: mode & 4095 });
-  for (const entry of await readdir2(sourcePath)) {
+  for (const entry of await readdir3(sourcePath)) {
     await cp2(join2(sourcePath, entry), join2(destinationPath, entry), {
       recursive: true,
       errorOnExist: true,
@@ -10095,30 +11001,30 @@ async function restoreDirectory(sourcePath, destinationPath, mode) {
       verbatimSymlinks: true
     });
   }
-  await chmod2(destinationPath, mode & 4095);
+  await chmod3(destinationPath, mode & 4095);
 }
 async function assertBackupAuthenticated(backup) {
   const container = await fingerprintPath2(backup.containerPath);
   const entry = await fingerprintPath2(backup.entryPath);
-  const entries = await readdir2(backup.containerPath);
+  const entries = await readdir3(backup.containerPath);
   if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
     throw new Error("backup authentication failed");
   }
 }
 async function removeAuthenticatedBackup(backup) {
   await assertBackupAuthenticated(backup);
-  const cleanupPath = `${backup.containerPath}.remove-${randomUUID()}`;
-  await rename2(backup.containerPath, cleanupPath);
+  const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
+  await rename3(backup.containerPath, cleanupPath);
   const movedContainer = await fingerprintPath2(cleanupPath);
   const movedEntry = await fingerprintPath2(join2(cleanupPath, basename(backup.entryPath)));
   if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
     try {
-      await rename2(cleanupPath, backup.containerPath);
+      await rename3(cleanupPath, backup.containerPath);
     } catch {
     }
     throw new Error("backup changed during removal");
   }
-  await rm4(cleanupPath, { recursive: true });
+  await rm5(cleanupPath, { recursive: true });
 }
 async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
   const current = await fingerprintPath2(releasePath);
@@ -10128,17 +11034,17 @@ async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
     throw new Error("created release changed before rollback");
   }
   const cleanupPath = `${releasePath}.rollback-${uuid}`;
-  await rename2(releasePath, cleanupPath);
+  await rename3(releasePath, cleanupPath);
   const moved = await fingerprintPath2(cleanupPath);
   const movedMarker = await readNoFollowInstallMarker(join2(cleanupPath, INSTALL_MARKER_NAME2));
   if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
     try {
-      await rename2(cleanupPath, releasePath);
+      await rename3(cleanupPath, releasePath);
     } catch {
     }
     throw new Error("created release changed during rollback");
   }
-  await rm4(cleanupPath, { recursive: true });
+  await rm5(cleanupPath, { recursive: true });
 }
 async function fingerprintPath2(path3) {
   const before = await lstat4(path3);
@@ -10183,7 +11089,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// ../clink-cli/dist/skills/store.js
+// dist/skills/store.js
 function resolveStorePaths(homeDir, spec, sha256, uuid) {
   const skillsRoot = join3(homeDir, ".agents", "skills");
   const clinkRoot = join3(skillsRoot, ".clink");
@@ -10199,7 +11105,7 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
   };
 }
 
-// ../clink-cli/dist/skills/install.js
+// dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
 var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var DEFAULT_DEPENDENCIES2 = {
@@ -10212,7 +11118,7 @@ var DEFAULT_DEPENDENCIES2 = {
   prepareAgents: prepareAgentPlans,
   randomUUID: createRandomUUID,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path3) => rm5(path3, { recursive: true, force: true }),
+  remove: async (path3) => rm6(path3, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -10497,7 +11403,7 @@ async function cleanupStaging(stagingPath, dependencies, primaryError) {
   }
 }
 
-// ../clink-cli/dist/skills/tip.js
+// dist/skills/tip.js
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
@@ -10670,7 +11576,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// ../clink-cli/dist/tool.js
+// dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -11447,12 +12353,13 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// ../clink-cli/dist/cli.js
+// dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
+var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
 async function runCli(argv) {
   const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
@@ -11471,8 +12378,10 @@ async function runCli(argv) {
     args,
     storedConfig,
     runtimeConfig,
+    authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
     globalOptions
   };
+  await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
     case "wallet":
       return handleWalletCommand(subcommand, context);
@@ -11548,6 +12457,8 @@ async function skillsInstall(context) {
 async function skillsTip(context) {
   const args = parseSkillTipArgs(context.args.positionals.slice(2), context.args.flags);
   const paymentMethodApi = createPaymentMethodApi(context);
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   const result = await executeSkillTip(args, {
     baseUrl: context.runtimeConfig.baseUrl,
     dashboardBaseUrl: resolveDashboardBaseUrl(context.runtimeConfig.baseUrl),
@@ -11555,6 +12466,8 @@ async function skillsTip(context) {
     dryRun: context.globalOptions.dryRun,
     chargeRuntime: {
       runtimeConfig: context.runtimeConfig,
+      getRuntimeConfig,
+      refreshRuntimeConfig,
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: context.globalOptions.dryRun,
       refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
@@ -11577,6 +12490,87 @@ async function skillsTip(context) {
     return EXIT_CODES.API;
   }
   return EXIT_CODES.OK;
+}
+async function prepareOAuthAuthorization(command, subcommand, context) {
+  if (context.globalOptions.dryRun || !context.storedConfig.authorization || !commandUsesCustomerAuthorization(command, subcommand)) {
+    return;
+  }
+  await refreshOAuthAuthorization(context);
+}
+async function refreshOAuthAuthorization(context, options2 = {}) {
+  if (context.globalOptions.dryRun || !context.storedConfig.authorization) {
+    return;
+  }
+  const previousAuthorization = context.storedConfig.authorization;
+  const wasCustomerIdUnverified = !previousAuthorization.customerIdVerified;
+  const refreshed = await ensureFreshOAuthAuthorization({
+    storedConfig: context.storedConfig,
+    runtimeBaseUrl: context.runtimeConfig.baseUrl,
+    timeoutMs: context.globalOptions.timeoutMs,
+    ...options2
+  });
+  context.storedConfig = refreshed;
+  context.runtimeConfig = resolveRuntimeConfig(refreshed, context.args.flags);
+  if (refreshed.authorization && (wasCustomerIdUnverified && refreshed.authorization.customerIdVerified || !previousAuthorization.sessionId && refreshed.authorization.sessionId)) {
+    context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
+  }
+}
+function createRuntimeConfigRefresher(context) {
+  return async (failedAuthorization) => {
+    await refreshOAuthAuthorization(context, { force: true, failedAuthorization });
+    return context.runtimeConfig;
+  };
+}
+function createRuntimeConfigLoader(context) {
+  return async () => {
+    const storedConfig = await readStoredConfig();
+    const runtimeConfig = resolveRuntimeConfig(storedConfig, context.args.flags);
+    const latestIdentity = runtimeAuthorizationIdentity(runtimeConfig);
+    assertCommandAuthorizationUnchanged(context.authorizationIdentity, latestIdentity);
+    if (context.authorizationIdentity.type === "csk" && latestIdentity.type === "oauth" || context.authorizationIdentity.type === "oauth" && !context.authorizationIdentity.sessionId && latestIdentity.type === "oauth" && Boolean(latestIdentity.sessionId)) {
+      context.authorizationIdentity = latestIdentity;
+    }
+    context.storedConfig = storedConfig;
+    context.runtimeConfig = runtimeConfig;
+    return runtimeConfig;
+  };
+}
+function createOAuthRequestRuntime(context) {
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  return {
+    getRuntimeConfig,
+    reloadRuntimeConfig: getRuntimeConfig,
+    refreshRuntimeConfig
+  };
+}
+function assertCommandAuthorizationUnchanged(original, latest) {
+  if (authorizationIdentityCanContinue(original, latest)) {
+    return;
+  }
+  throw authError("Authentication changed while the command was in progress; retry the command.");
+}
+async function requestOAuthBusinessJson(context, buildRequest) {
+  return requestJsonWithOAuthRetry(createOAuthRequestRuntime(context), buildRequest);
+}
+function commandUsesCustomerAuthorization(command, subcommand) {
+  switch (command) {
+    case "card":
+      return subcommand === "binding-link" || subcommand === "setup-link" || subcommand === "modify-link";
+    case "risk":
+      return subcommand === "get" || subcommand === "link";
+    case "skills":
+      return subcommand === "tip";
+    case "pay":
+      return true;
+    case "refund":
+    case "ucp-checkout":
+    case "instruction":
+    case "events":
+      return subcommand !== void 0;
+    default:
+      return false;
+  }
 }
 async function handleToolCommand(subcommand, context) {
   if (!subcommand) {
@@ -11731,8 +12725,16 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     return;
   }
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: DEFAULT_EVENT_WATCH_DURATION_MS + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   const result = await watchEvents({
     runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+    refreshRuntimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     url,
     label,
@@ -11762,11 +12764,20 @@ async function eventsPoll(context) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
+  const maxDurationMs = maxWaitSeconds !== void 0 ? maxWaitSeconds * 1e3 : DEFAULT_EVENT_COLLECT_DURATION_MS;
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: maxDurationMs + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   const result = await collectWebhookEvents({
     runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+    refreshRuntimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     ack,
-    ...maxWaitSeconds !== void 0 ? { maxDurationMs: maxWaitSeconds * 1e3 } : {},
+    maxDurationMs,
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {}
   });
@@ -11808,6 +12819,8 @@ async function handleWalletCommand(subcommand, context) {
   switch (subcommand) {
     case "init":
       return walletInit(context);
+    case "logout":
+      return walletLogout(context);
     case "status":
       return walletStatus(context);
     default:
@@ -11815,54 +12828,66 @@ async function handleWalletCommand(subcommand, context) {
   }
 }
 async function walletInit(context) {
-  const email = requireStringFlag(context.args.flags, "missing --email", "email");
-  const name = requireStringFlag(context.args.flags, "missing --name", "name");
-  const otp = getStringFlag(context.args.flags, "otp");
-  const source = getStringFlag(context.args.flags, "source") ?? "agent";
+  const email = requireStringFlag(context.args.flags, "missing --email", "email").trim();
+  const name = requireStringFlag(context.args.flags, "missing --name", "name").trim();
+  if (!email) {
+    throw validationError("email must not be blank");
+  }
+  if (email.length > 255) {
+    throw validationError("email must be at most 255 characters");
+  }
+  if (!name) {
+    throw validationError("name must not be blank");
+  }
+  if (name.length > 50) {
+    throw validationError("name must be at most 50 characters");
+  }
+  if (getStringFlag(context.args.flags, "otp")) {
+    throw validationError("--otp is no longer used by wallet init; complete email verification in the browser");
+  }
   const baseUrl = resolveWalletInitBaseUrl(context.args.flags);
-  const result = await requestJson({
+  const deviceId = resolveOAuthDeviceId(context.storedConfig);
+  const authorization = await createDeviceAuthorization({
     baseUrl,
-    method: "POST",
-    path: "/agent/cwallet/customer/bootstrap",
-    body: compact3({
-      email,
-      name,
-      otp,
-      source
-    }),
+    deviceId,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
-  if (isDryRun(result)) {
-    printSuccess(result, context.globalOptions.format);
+  if (isDryRun3(authorization)) {
+    printSuccess(authorization, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  const nextConfig = cloneStoredConfig(context.storedConfig);
-  nextConfig.baseUrl = baseUrl;
-  nextConfig.email = email;
-  nextConfig.name = name;
-  delete nextConfig.paymentMethods;
-  delete nextConfig.riskRules;
-  const customerId = asOptionalString(data.customerId);
-  const customerApiKey = asOptionalString(data.customerAPIKey ?? data.customerApiKey);
-  if (customerId) {
-    nextConfig.customerId = customerId;
-  } else {
-    delete nextConfig.customerId;
-  }
-  if (customerApiKey) {
-    nextConfig.customerApiKey = customerApiKey;
-  } else {
-    delete nextConfig.customerApiKey;
-  }
-  await writeStoredConfig(nextConfig);
-  const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
-  printSuccess({
-    customerId: nextConfig.customerId ?? null,
+  const verificationUrl = buildVerificationUrl(authorization, email, name);
+  process.stderr.write(`Complete authorization in your browser:
+${verificationUrl}
+`);
+  process.stderr.write("Opening your browser...\n");
+  maybeOpenBrowser(true, verificationUrl);
+  process.stderr.write("Waiting for authorization...\n");
+  const token = await pollDeviceToken({
+    baseUrl,
+    deviceId,
+    deviceCode: authorization.deviceCode,
+    expiresIn: authorization.expiresIn,
+    interval: authorization.interval,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  });
+  const storedAuthorization = toStoredAuthorization(deviceId, token, baseUrl);
+  const nextConfig = await updateStoredConfig((current) => mergeOAuthLoginConfig(current, {
+    baseUrl,
     email,
     name,
+    customerId: token.customerId,
+    authorization: storedAuthorization
+  }));
+  const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
+  printSuccess({
+    customerId: token.customerId,
+    email,
+    name,
+    hasAuthorization: true,
+    authorizationType: "oauth",
     hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
     bindingUrl: paymentMethodsCache.bindingUrl,
     paymentMethodsCached: paymentMethodsCache.cached,
@@ -11873,12 +12898,12 @@ async function walletInit(context) {
   return EXIT_CODES.OK;
 }
 async function refreshPaymentMethodsAfterWalletInit(context, config) {
-  if (!config.customerId || !config.customerApiKey) {
+  if (!config.customerId || !config.authorization && !config.customerApiKey) {
     return {
       bindingUrl: null,
       cached: false,
       count: 0,
-      error: "missing customer credentials in bootstrap response"
+      error: "missing customer credentials in OAuth response"
     };
   }
   const refreshContext = {
@@ -11888,10 +12913,12 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       baseUrl: config.baseUrl,
       defaultOpenLinks: config.defaultOpenLinks,
       customerId: config.customerId,
-      customerApiKey: config.customerApiKey,
+      ...config.authorization ? { authorization: { ...config.authorization } } : {},
+      ...config.customerApiKey ? { customerApiKey: config.customerApiKey } : {},
       ...config.email ? { email: config.email } : {},
       ...config.name ? { name: config.name } : {}
     },
+    authorizationIdentity: runtimeAuthorizationIdentity(resolveRuntimeConfig(config, {})),
     globalOptions: {
       ...context.globalOptions,
       dryRun: false,
@@ -11901,7 +12928,7 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
   };
   try {
     const result = await callBindingLink(refreshContext);
-    if (isDryRun(result)) {
+    if (isDryRun3(result)) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
@@ -11917,14 +12944,78 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
     };
   }
 }
-async function walletStatus(context) {
+async function walletLogout(context) {
+  const authorization = context.storedConfig.authorization;
+  const logoutIdentity = context.authorizationIdentity;
+  if (context.globalOptions.dryRun) {
+    if (authorization) {
+      const result = await revokeStoredAuthorization({
+        authorization,
+        timeoutMs: context.globalOptions.timeoutMs,
+        dryRun: true
+      });
+      printSuccess(result, context.globalOptions.format);
+    } else {
+      printSuccess({
+        dryRun: true,
+        wouldRemoveAuthorization: false,
+        wouldRemoveCustomerApiKey: Boolean(context.storedConfig.customerApiKey)
+      }, context.globalOptions.format);
+    }
+    return EXIT_CODES.OK;
+  }
+  let serverRevocation = "not_applicable";
+  if (authorization) {
+    try {
+      await revokeStoredAuthorization({
+        authorization,
+        timeoutMs: context.globalOptions.timeoutMs,
+        dryRun: false
+      });
+      serverRevocation = "succeeded";
+    } catch {
+      serverRevocation = "failed";
+    }
+  }
+  const hadCustomerApiKey = Boolean(context.storedConfig.customerApiKey);
+  await updateStoredConfig((current) => {
+    const currentIdentity = runtimeAuthorizationIdentity(resolveRuntimeConfig(current, context.args.flags));
+    const legacyOAuthChanged = Boolean(authorization && !authorization.sessionId && current.authorization && current.authorization.accessToken !== authorization.accessToken);
+    if (currentIdentity.type !== "none" && (currentIdentity.type !== logoutIdentity.type || !authorizationIdentityCanContinue(logoutIdentity, currentIdentity) || legacyOAuthChanged)) {
+      throw authError("Authentication changed while logout was in progress; the newer login was preserved.");
+    }
+    delete current.authorization;
+    delete current.customerApiKey;
+    return current;
+  });
   printSuccess({
-    baseUrl: context.storedConfig.baseUrl,
-    customerId: context.storedConfig.customerId ?? null,
-    email: context.storedConfig.email ?? null,
-    name: context.storedConfig.name ?? null,
-    hasCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
-    defaultOpenLinks: context.storedConfig.defaultOpenLinks,
+    loggedOut: true,
+    serverRevocation,
+    authorizationRemoved: Boolean(authorization),
+    customerApiKeyRemoved: hadCustomerApiKey,
+    configPath: "~/.clink-cli/config.json"
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function walletStatus(context) {
+  const storedAuthorization = context.runtimeConfig.authorization;
+  const authorizationEnvironmentMatches = storedAuthorization ? sameHttpOrigin(storedAuthorization.issuerOrigin, context.runtimeConfig.baseUrl) : null;
+  const authorization = authorizationEnvironmentMatches ? storedAuthorization : void 0;
+  const hasEffectiveCustomerApiKey = !authorization && Boolean(context.runtimeConfig.customerApiKey);
+  printSuccess({
+    baseUrl: context.runtimeConfig.baseUrl,
+    customerId: context.runtimeConfig.customerId ?? null,
+    email: context.runtimeConfig.email ?? null,
+    name: context.runtimeConfig.name ?? null,
+    hasAuthorization: Boolean(authorization),
+    hasStoredAuthorization: Boolean(storedAuthorization),
+    authorizationEnvironmentMatches,
+    authorizationType: authorization ? "oauth" : context.runtimeConfig.customerApiKey ? "csk" : null,
+    accessTokenExpiresAt: storedAuthorization ? new Date(storedAuthorization.accessTokenExpiresAt).toISOString() : null,
+    refreshTokenExpiresAt: storedAuthorization ? new Date(storedAuthorization.refreshTokenExpiresAt).toISOString() : null,
+    hasCustomerApiKey: hasEffectiveCustomerApiKey,
+    oauthRequired: Boolean(context.storedConfig.oauthRequired || storedAuthorization),
+    defaultOpenLinks: context.runtimeConfig.defaultOpenLinks,
     configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -11975,7 +13066,7 @@ async function cardRedirectLink(context, label) {
 }
 async function resolveBindingLink(context) {
   const result = await callBindingLink(context);
-  if (isDryRun(result)) {
+  if (isDryRun3(result)) {
     return { dryRun: true, result };
   }
   const data = unwrapApiData(result.body);
@@ -11985,19 +13076,19 @@ async function resolveBindingLink(context) {
   return { dryRun: false, data, url };
 }
 async function callBindingLink(context) {
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "POST",
     path: "/agent/cwallet/card/bindingLink",
-    headers: buildCustomerHeaders(context.runtimeConfig),
+    headers: buildCustomerHeaders(runtimeConfig),
     body: {
-      customerId: context.runtimeConfig.customerId,
-      hasCustomerApiKey: Boolean(context.runtimeConfig.customerApiKey)
+      customerId: runtimeConfig.customerId,
+      hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
     },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
-  if (!isDryRun(result)) {
+  }));
+  if (!isDryRun3(result)) {
     assertApiSuccess(result.status, result.body);
   }
   return result;
@@ -12038,14 +13129,14 @@ async function riskRuleLink(context) {
   return EXIT_CODES.OK;
 }
 async function riskRuleGet(context) {
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: "/agent/risk/rule/settings",
-    headers: buildCustomerHeaders(context.runtimeConfig),
+    headers: buildCustomerHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function handlePayCommand(context) {
@@ -12097,8 +13188,12 @@ async function handlePayCommand(context) {
     ...products ? { products } : {}
   };
   const paymentMethodApi = createPaymentMethodApi(context);
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   const execution = await executeCharge(chargeInput, {
     runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    refreshRuntimeConfig,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun,
     refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
@@ -12133,27 +13228,27 @@ async function handleRefundCommand(subcommand, context) {
 }
 async function refundCreate(context) {
   const orderId = requireStringFlag(context.args.flags, "missing --order-id", "order-id");
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "POST",
     path: "/agent/cwallet/refund/apply",
-    headers: buildCustomerHeaders(context.runtimeConfig),
+    headers: buildCustomerHeaders(runtimeConfig),
     body: { orderId },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function refundGet(context) {
   const refundId = requireStringFlag(context.args.flags, "missing --refund-id", "refund-id");
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: `/agent/cwallet/refund/${encodeURIComponent(refundId)}`,
-    headers: buildCustomerHeaders(context.runtimeConfig),
+    headers: buildCustomerHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function handleUcpCheckoutCommand(subcommand, context) {
@@ -12195,14 +13290,16 @@ async function ucpCheckoutCreate(context) {
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
-  const result = await requestJson({
-    ...resolveUcpCheckoutRequestTarget(context, ""),
+  const target = resolveUcpCheckoutRequestTarget(context, "");
+  const idempotencyKey = randomUUID4();
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    ...target,
     method: "POST",
-    headers: buildUcpCheckoutHeaders(context),
+    headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 function withWalletStatusEmail(buyer, email) {
@@ -12215,13 +13312,14 @@ async function ucpCheckoutGet(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
-  const result = await requestJson({
-    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`),
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    ...target,
     method: "GET",
-    headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
+    headers: buildCustomerApiKeyHeaders(runtimeConfig, target.baseUrl),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function ucpCheckoutUpdate(context) {
@@ -12234,14 +13332,16 @@ async function ucpCheckoutUpdate(context) {
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
-  const result = await requestJson({
-    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`),
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
+  const idempotencyKey = randomUUID4();
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    ...target,
     method: "PUT",
-    headers: buildUcpCheckoutHeaders(context),
+    headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function ucpCheckoutComplete(context) {
@@ -12257,15 +13357,17 @@ async function ucpCheckoutComplete(context) {
   }
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
   const paymentMethodApi = createPaymentMethodApi(context);
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`);
+  const idempotencyKey = randomUUID4();
   const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestJson({
-      ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`),
+    request: () => requestOAuthBusinessJson(context, (runtimeConfig) => ({
+      ...target,
       method: "POST",
-      headers: buildUcpCheckoutHeaders(context),
+      headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
       body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId),
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: context.globalOptions.dryRun
-    }),
+    })),
     refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
     dryRun: context.globalOptions.dryRun
   });
@@ -12293,13 +13395,14 @@ async function ucpCheckoutCancel(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
-  const result = await requestJson({
-    ...resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/cancel`),
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/cancel`);
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    ...target,
     method: "POST",
-    headers: buildCustomerApiKeyHeaders(context.runtimeConfig),
+    headers: buildCustomerApiKeyHeaders(runtimeConfig, target.baseUrl),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 function requireCheckoutId(flags) {
@@ -12421,10 +13524,10 @@ function rejectUcpCheckoutUnsupportedFlags(flags) {
     throw validationError("--idempotency-key is generated by clink-cli and cannot be provided");
   }
 }
-function buildUcpCheckoutHeaders(context) {
+function buildUcpCheckoutHeaders(runtimeConfig, requestBaseUrl, idempotencyKey) {
   return {
-    ...buildCustomerApiKeyHeaders(context.runtimeConfig),
-    "Idempotency-Key": randomUUID2()
+    ...buildCustomerApiKeyHeaders(runtimeConfig, requestBaseUrl),
+    "Idempotency-Key": idempotencyKey
   };
 }
 async function handleInstructionCommand(subcommand, context) {
@@ -12511,16 +13614,16 @@ function requireJsonArrayFlag(flags, name) {
 async function instructionCreate(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
   const body = instructionBody(context);
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "POST",
     path: INSTRUCTION_PATH2,
-    headers: buildInstructionHeaders(context.runtimeConfig),
+    headers: buildInstructionHeaders(runtimeConfig),
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
-  if (isDryRun(result)) {
+  }));
+  if (isDryRun3(result)) {
     printSuccess(result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
@@ -12548,14 +13651,14 @@ async function instructionCreate(context) {
 }
 async function instructionGet(context) {
   const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId)}`,
-    headers: buildInstructionHeaders(context.runtimeConfig),
+    headers: buildInstructionHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
+  }));
   return finishApiCommand(result, context);
 }
 async function instructionSignUrl(context) {
@@ -12582,16 +13685,16 @@ async function instructionList(context) {
     throw validationError(`invalid instruction status: ${status}`);
   }
   const paymentInstrumentId = getStringFlag(context.args.flags, "payment-instrument-id");
-  const result = await requestJson({
-    baseUrl: context.runtimeConfig.baseUrl,
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: INSTRUCTION_PATH2,
-    headers: buildInstructionHeaders(context.runtimeConfig),
+    headers: buildInstructionHeaders(runtimeConfig),
     query: { status, paymentInstrumentId },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
-  if (!validOnly || isDryRun(result)) {
+  }));
+  if (!validOnly || isDryRun3(result)) {
     return finishApiCommand(result, context);
   }
   assertApiSuccess(result.status, result.body);
@@ -12677,9 +13780,11 @@ async function configSet(context) {
     throw validationError("usage: clink-cli config set <key> <value>");
   }
   const key = normalizeConfigKey(rawKey);
-  const nextConfig = cloneStoredConfig(context.storedConfig);
-  setConfigValue(nextConfig, key, parseConfigValue(key, rawValue));
-  await writeStoredConfig(nextConfig);
+  const value = parseConfigValue(key, rawValue);
+  const nextConfig = await updateStoredConfig((current) => {
+    setConfigValue(current, key, value);
+    return current;
+  });
   printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -12693,13 +13798,14 @@ async function configUnset(context) {
     throw validationError("usage: clink-cli config unset <key>");
   }
   const key = normalizeConfigKey(rawKey);
-  const nextConfig = cloneStoredConfig(context.storedConfig);
-  if (key === "baseUrl" || key === "defaultOpenLinks") {
-    setConfigValue(nextConfig, key, defaultValueForRequiredKey(key));
-  } else {
-    unsetConfigValue(nextConfig, key);
-  }
-  await writeStoredConfig(nextConfig);
+  const nextConfig = await updateStoredConfig((current) => {
+    if (key === "baseUrl" || key === "defaultOpenLinks") {
+      setConfigValue(current, key, defaultValueForRequiredKey(key));
+    } else {
+      unsetConfigValue(current, key);
+    }
+    return current;
+  });
   printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -12710,11 +13816,17 @@ function setConfigValue(target, key, value) {
   if (isCustomerConfigKey(key)) {
     switch (key) {
       case "customerId":
+        if (target.oauthRequired || target.authorization) {
+          throw configError("customer-id is managed by OAuth; use wallet init to change wallets");
+        }
+        if (target.customerId !== value) {
+          delete target.paymentMethods;
+          delete target.riskRules;
+        }
         target.customerId = value;
         return;
       case "customerApiKey":
-        target.customerApiKey = value;
-        return;
+        throw configError("customer-api-key cannot be set in local config; use wallet init for OAuth");
       case "email":
         target.email = value;
         return;
@@ -12727,6 +13839,12 @@ function setConfigValue(target, key, value) {
   }
   switch (key) {
     case "baseUrl":
+      if (!sameHttpOrigin(target.baseUrl, value)) {
+        delete target.authorization;
+        delete target.customerApiKey;
+        delete target.paymentMethods;
+        delete target.riskRules;
+      }
       target.baseUrl = value;
       return;
     case "defaultOpenLinks":
@@ -12742,7 +13860,12 @@ function unsetConfigValue(target, key) {
   }
   switch (key) {
     case "customerId":
+      if (target.authorization) {
+        throw configError("customer-id is managed by OAuth; log out before removing local wallet metadata");
+      }
       delete target.customerId;
+      delete target.paymentMethods;
+      delete target.riskRules;
       break;
     case "customerApiKey":
       delete target.customerApiKey;
@@ -12758,23 +13881,36 @@ function unsetConfigValue(target, key) {
   }
 }
 function buildConfigView(config) {
+  const authorization = config.authorization;
   return {
     baseUrl: config.baseUrl,
     customerId: config.customerId ?? null,
     email: config.email ?? null,
     name: config.name ?? null,
+    hasAuthorization: Boolean(authorization),
+    authorizationType: authorization ? "oauth" : config.customerApiKey ? "csk" : null,
+    accessTokenExpiresAt: authorization ? new Date(authorization.accessTokenExpiresAt).toISOString() : null,
+    refreshTokenExpiresAt: authorization ? new Date(authorization.refreshTokenExpiresAt).toISOString() : null,
     hasCustomerApiKey: Boolean(config.customerApiKey),
+    oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
     configPath: "~/.clink-cli/config.json"
   };
 }
 async function cachePaymentMethods(context, value) {
+  const requestedIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
   const paymentMethods = Array.isArray(value) ? value.filter((item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0) : [];
-  const nextConfig = cloneStoredConfig(context.storedConfig);
-  nextConfig.paymentMethods = paymentMethods.map((item) => ({ ...item }));
-  await writeStoredConfig(nextConfig);
-  context.storedConfig.paymentMethods = nextConfig.paymentMethods;
-  return nextConfig.paymentMethods.length;
+  const nextConfig = await updateStoredConfig((current) => {
+    const currentIdentity = runtimeAuthorizationIdentity(resolveRuntimeConfig(current, context.args.flags));
+    if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
+      throw authError("Authentication changed while payment methods were refreshing; retry the command.");
+    }
+    current.paymentMethods = paymentMethods.map((item) => ({ ...item }));
+    return current;
+  });
+  context.storedConfig = nextConfig;
+  context.runtimeConfig = resolveRuntimeConfig(nextConfig, context.args.flags);
+  return nextConfig.paymentMethods?.length ?? 0;
 }
 function getStoredPaymentMethods(context) {
   return Array.isArray(context.storedConfig.paymentMethods) ? context.storedConfig.paymentMethods : [];
@@ -12786,7 +13922,7 @@ function stringifyRefreshError(error) {
   return String(error);
 }
 async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
-  if (isDryRun(result)) {
+  if (isDryRun3(result)) {
     printSuccess(result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
@@ -12796,9 +13932,18 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   return createTipAuthorizationApi({
     runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+    refreshRuntimeConfig,
     storedConfig: context.storedConfig,
+    setStoredConfig: (storedConfig) => {
+      context.storedConfig = storedConfig;
+      context.runtimeConfig = resolveRuntimeConfig(storedConfig, context.args.flags);
+    },
     timeoutMs: context.globalOptions.timeoutMs,
     watch: false,
     now: Date.now,
@@ -12806,7 +13951,7 @@ function createPaymentMethodApi(context) {
     }
   });
 }
-function isDryRun(value) {
+function isDryRun3(value) {
   return "dryRun" in value;
 }
 function parseTimeout(value) {
@@ -12877,7 +14022,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// ../clink-cli/dist/index.js
+// dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));

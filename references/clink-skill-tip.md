@@ -13,9 +13,9 @@ Use `lib/payment-intent-router-fsm.mjs` before choosing a payment workflow.
 - List/query language wins over execution language. A combined list-and-tip request displays the list and then requires confirmation before payment.
 - Bare confirmation or cancellation is meaningful only when the same context contains one unambiguous `AWAITING_CONFIRMATION` single-tip or batch pending object.
 
-Use `lib/skill-tip-workflow-fsm.mjs` for list parsing, recent-context selection, Number-to-identity resolution, confirmation claiming, CLI result classification, and optional account-event aggregation. Emit `[SKILL_TIP_FSM] state=<STATE> action=<ACTION> reason=<REASON>`.
+Use `lib/skill-tip-workflow-fsm.mjs` for list parsing, recent-context selection, Number-to-identity resolution, confirmation claiming, CLI result classification, and optional account-event aggregation.
 
-Use `lib/skill-tip-batch-workflow-fsm.mjs` for batch normalization, de-duplication, atomic confirmation, sequential progress, and aggregate results. Emit `[SKILL_TIP_BATCH_FSM] state=<STATE> action=<ACTION> reason=<REASON>`.
+Use `lib/skill-tip-batch-workflow-fsm.mjs` for batch normalization, de-duplication, atomic confirmation, sequential progress, and aggregate results.
 
 ## List Public Skills
 

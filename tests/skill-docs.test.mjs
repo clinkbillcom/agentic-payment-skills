@@ -34,7 +34,7 @@ test('environment guidance matches the production-default CLI wrapper', () => {
 
 test('main skill routes direct and session pay through authorization resolver before pay', () => {
   assert.match(skill, /lib\/authorization-workflow-fsm\.mjs/u);
-  assert.match(skill, /AUTHORIZATION_FSM/u);
+  assert.match(skill, /classifyPaymentAuthorizationResolver/u);
   assert.match(skill, /Direct\/session payment is explicitly authorized/u);
   assert.match(skill, /Visa \+ VIC ready/u);
   assert.match(skill, /non-Visa or Visa without VIC readiness/u);
@@ -77,20 +77,82 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
   assert.match(asyncEvents, /timeout[\s\S]*poll error[\s\S]*AMBIGUOUS[\s\S]*PAID/iu);
 });
 
-test('wallet init documents email OTP recovery flow', () => {
-  assert.match(walletConfig, /BOOTSTRAP_OTP_REQUIRED/u);
-  assert.match(walletConfig, /71160015/u);
-  assert.match(walletConfig, /Verification code has been sent to this email/u);
-  assert.match(walletConfig, /clink-cli wallet init --email <email> --name <name> --otp <email_otp> --format json/u);
+test('wallet init documents OAuth browser authorization without OTP recovery', () => {
+  assert.match(walletConfig, /OAuth Device Authorization/u);
+  assert.match(walletConfig, /Complete authorization in your browser/u);
+  assert.match(walletConfig, /hasAuthorization=true/u);
+  assert.match(walletConfig, /authorizationType=oauth/u);
+  assert.match(walletConfig, /init output[\s\S]*no longer echoes `oauthRequired`/u);
+  assert.match(walletConfig, /clink-cli wallet logout --format json/u);
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
-  assert.match(skill, /WALLET_FSM/u);
-  assert.match(skill, /--otp <email_otp>/u);
+  assert.match(skill, /classifyWalletStatusObservation/u);
+  assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
+  assert.doesNotMatch(walletConfig, /BOOTSTRAP_OTP_REQUIRED|--otp <email_otp>/u);
+  assert.doesNotMatch(skill, /ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT|--otp <email_otp>/u);
+  assert.match(readme, /New wallet initialization uses OAuth Device Authorization/u);
+  assert.match(readmeZh, /新的钱包初始化使用 OAuth Device Authorization/u);
+});
+
+test('OAuth authentication guidance distinguishes 401 from 403 and keeps CSK legacy-only', () => {
+  assert.match(cliInvocation, /OAuth authorization is bound to its issuer origin/u);
+  assert.match(cliInvocation, /If OAuth `401`[\s\S]*reauthorize/u);
+  assert.match(cliInvocation, /For `403`[\s\S]*without refresh or retry/u);
+  assert.match(ucpCheckout, /OAuth Bearer[\s\S]*legacy/u);
+  assert.match(ucpCheckout, /`oauthRequired` is absent or exactly `false`/u);
+  assert.match(skill, /OAuth refresh is owned by the CLI/u);
+  assert.match(cliInvocation, /oauthRequired=true[\s\S]*stored\/env\/flag CSK is ignored/u);
+});
+
+test('legacy CSK readiness remains compatible without weakening OAuth fail-closed behavior', () => {
+  assert.match(walletConfig, /Legacy CSK ready/u);
+  assert.match(walletConfig, /migration is recommended but must not block/u);
+  assert.match(walletConfig, /Invalid OAuth state[\s\S]*never fall back to CSK/u);
+  assert.match(walletConfig, /OAuth reauthorization required[\s\S]*never inspect stored\/env\/flag CSK/u);
+  assert.match(skill, /Preserve legacy CSK compatibility/u);
+  assert.match(skill, /Do not force[\s\S]*to migrate/u);
+  assert.match(skill, /New `wallet init` always creates OAuth/u);
+  assert.match(skill, /Once OAuth succeeds, `oauthRequired=true` is permanent/u);
+  assert.doesNotMatch(skill, /printenv CLINK_CUSTOMER_API_KEY \| clink-cli config set customer-api-key/u);
+});
+
+test('latest CLI identity continuity and effective wallet status are documented', () => {
+  assert.match(walletConfig, /hasStoredAuthorization/u);
+  assert.match(walletConfig, /authorizationEnvironmentMatches/u);
+  assert.match(walletConfig, /leaves the stored authorization in the config but makes it ineffective/iu);
+  assert.match(walletConfig, /another process replaces the login/u);
+  assert.match(walletConfig, /without overwriting the newer wallet/u);
+  assert.match(asyncEvents, /bound to the customer\/device\/session identity/u);
+  assert.match(asyncEvents, /without caching or acknowledging/u);
+  assert.match(cliInvocation, /authorization identity observed when it starts/u);
+  assert.match(skill, /CLI reports that authentication\/login changed/u);
+  assert.match(skill, /webhook event customer does not match/u);
+});
+
+test('latest CLI config mutation boundaries are documented', () => {
+  assert.match(walletConfig, /always rejects `config set customer-api-key`/u);
+  assert.match(walletConfig, /`config unset customer-api-key` remains available/u);
+  assert.match(walletConfig, /`config set customer-id` is allowed only for a never-OAuth wallet/u);
+  assert.match(walletConfig, /Changing it clears cached payment methods and risk rules/u);
+  assert.match(cliInvocation, /`config set customer-api-key` is always rejected/u);
+  assert.match(walletConfig, /Refresh Token expiry[\s\S]*`invalid_grant`[\s\S]*clear active credentials/iu);
+  assert.match(walletConfig, /Transient refresh failures[\s\S]*leave the current credentials intact/iu);
+  assert.match(walletConfig, /--base-url[\s\S]*CLINK_BASE_URL[\s\S]*--sandbox[\s\S]*hasStoredAuthorization=true[\s\S]*authorizationEnvironmentMatches=false/iu);
+  assert.match(walletConfig, /config set base-url[\s\S]*clears the stored OAuth authorization/iu);
+});
+
+test('instruction activation uses one explicit Event FSM watcher', () => {
+  assert.match(instruction, /instruction create[\s\S]*--no-watch[\s\S]*--format json/u);
+  assert.match(instruction, /instruction sign-url[\s\S]*--no-watch[\s\S]*--format json/u);
+  assert.match(instruction, /one Event FSM owns correlation/u);
+  assert.match(asyncEvents, /avoids duplicate watchers/u);
+  assert.match(asyncEvents, /Without `eventType` or `expectedResource`[\s\S]*first non-stale event batch/iu);
+  assert.match(asyncEvents, /With either target[\s\S]*acknowledges unrelated events[\s\S]*matching event/iu);
 });
 
 test('wallet init proactively returns and surfaces the card binding URL', () => {
   assert.match(walletConfig, /strips the returned URL to its HTTPS origin/u);
-  assert.match(walletConfig, /Proactively send a non-empty `data\.bindingUrl` to the user/u);
-  assert.match(walletConfig, /never expose the original path, query string, or encoded email/u);
+  assert.match(walletConfig, /Proactively send a non-empty `data\.bindingUrl`/u);
+  assert.match(walletConfig, /never expose its original path, query string, or encoded email/u);
   assert.match(skill, /`RETURN_WALLET_READY`[\s\S]*`data\.bindingUrl`/u);
   assert.match(skill, /proactively send the returned origin-only card-binding URL/u);
 });
@@ -107,16 +169,16 @@ test('UCP checkout workflow uses parse-item as the product analysis command', ()
 
 test('skill documents intent routing and checkout route FSMs', () => {
   assert.match(skill, /lib\/payment-intent-router-fsm\.mjs/u);
-  assert.match(skill, /PAYMENT_INTENT_FSM/u);
+  assert.match(skill, /classifyPaymentIntent/u);
   assert.match(skill, /explicit buy\/order\/checkout language or an upstream purchaseIntent/u);
   assert.match(skill, /lib\/ucp-checkout-route-fsm\.mjs/u);
-  assert.match(skill, /UCP_CHECKOUT_ROUTE_FSM/u);
+  assert.match(skill, /classifyUcpCheckoutRoute/u);
 });
 
 test('skill documents public skill listing and explicitly authorized tip routing', () => {
   assert.match(skill, /references\/clink-skill-tip\.md/u);
   assert.match(skill, /lib\/skill-tip-workflow-fsm\.mjs/u);
-  assert.match(skill, /SKILL_TIP_FSM/u);
+  assert.match(skill, /SKILL_TIP/u);
   assert.match(skill, /clink-cli skills list --all --tippable --format json/u);
   assert.match(skill, /clink-cli skills tip --publisher/u);
   assert.doesNotMatch(
@@ -173,7 +235,7 @@ test('skill tip reference documents authorization questions and fallback correla
 test('skill documents context-bound Skill installation routing', () => {
   assert.match(skill, /references\/clink-skill-install\.md/u);
   assert.match(skill, /lib\/skill-install-workflow-fsm\.mjs/u);
-  assert.match(skill, /SKILL_INSTALL_FSM/u);
+  assert.match(skill, /classifySkillInstallPrerequisites/u);
   assert.match(skill, /clink-cli skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
   assert.match(skill, /omit.*version.*latest/isu);
   assert.match(skill, /Number.*confirmation/isu);
@@ -212,15 +274,15 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
   assert.match(cliInvocation, /\| 8 \| Install error/u);
 });
 
-test('skill and package versions are bumped for batch Skill Tip routing', () => {
-  assert.match(skill, /version:\s*"1\.7\.0"/u);
-  assert.equal(packageJson.version, '1.7.0');
+test('skill and package versions are bumped for OAuth wallet routing', () => {
+  assert.match(skill, /version:\s*"1\.8\.0"/u);
+  assert.equal(packageJson.version, '1.8.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
 test('skill documents atomic sequential batch tipping with itemized outcomes', () => {
   for (const document of [skill, skillTip]) {
-    assert.match(document, /SKILL_TIP_BATCH_FSM/u);
+    assert.match(document, /skill-tip-batch-workflow-fsm\.mjs/u);
     assert.match(document, /one confirmation|一次确认/iu);
     assert.match(document, /first occurrence|首次出现/iu);
     assert.match(document, /sequential|串行/iu);

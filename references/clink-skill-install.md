@@ -13,7 +13,7 @@ Read this before routing or executing a public Skill installation.
 
 ## Routing and Authorization
 
-Use `classifyPaymentIntent` before choosing the workflow. An imperative request for exactly one Skill routes to `SKILL_INSTALL`; then use `classifySkillInstallPrerequisites` from `lib/skill-install-workflow-fsm.mjs`. Emit `[SKILL_INSTALL_FSM] state=<STATE> action=<ACTION> reason=<REASON>`.
+Use `classifyPaymentIntent` before choosing the workflow. An imperative request for exactly one Skill routes to `SKILL_INSTALL`; then use `classifySkillInstallPrerequisites` from `lib/skill-install-workflow-fsm.mjs`.
 
 Accept one target only:
 
