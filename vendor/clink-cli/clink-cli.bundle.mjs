@@ -4940,6 +4940,10 @@ function parseArgs(argv) {
       preFlags.watch = true;
       continue;
     }
+    if (token === "--no-open") {
+      preFlags["no-open"] = true;
+      continue;
+    }
     if (token === "--no-ack") {
       preFlags["no-ack"] = true;
       continue;
@@ -5224,6 +5228,9 @@ function parseConfigValue(key, rawValue) {
   return rawValue;
 }
 function resolveOpenFlag(storedConfig, flags) {
+  if (getBooleanFlag(flags, "no-open")) {
+    return false;
+  }
   if (flags.open !== void 0) {
     return getBooleanFlag(flags, "open");
   }
@@ -6465,6 +6472,7 @@ Global Options:
   --format <json|pretty>        Output format
   --dry-run                     Print request without executing
   --open                        Open generated link in browser
+  --no-open                     Do not open generated links; overrides --open and saved defaults
   --no-watch                    Do not poll for webhook events after printing a link
   --base-url <url>              Override API base URL
   --sandbox                     Target the sandbox environment (sandbox API base + agent domain);
@@ -6843,14 +6851,17 @@ Options:
   --base-url <url>             Override API base URL
   --sandbox                    Use sandbox API base; without --sandbox wallet init uses production
   --timeout <ms>               Request timeout in milliseconds
+  --open                       Open the authorization URL in the browser
+  --no-open                    Do not open the browser; overrides --open and default-open-links
   --dry-run                    Print the Device Authorization request without executing it
 ${OUTPUT_OPTIONS}
 
 Device Authorization:
   The CLI keeps user_code in the browser URL query and carries email/name in its fragment.
   The Portal removes those values from the address bar immediately after reading them.
-  The CLI attempts to open the URL, then polls until authorization completes. Browser launch failure only prints a warning;
-  open the displayed URL manually while polling continues.
+  The CLI prints the URL, opens it only when --open or default-open-links is enabled, then polls
+  until authorization completes. --no-open always disables browser launch. If launch fails, open
+  the displayed URL manually while polling continues.
   Email OTP entry and confirmation happen in the browser.
   Existing customers keep their server-side name; --name only creates the initial name
   for a new customer and is always saved to local config.
@@ -12861,8 +12872,10 @@ async function walletInit(context) {
   process.stderr.write(`Complete authorization in your browser:
 ${verificationUrl}
 `);
-  process.stderr.write("Opening your browser...\n");
-  maybeOpenBrowser(true, verificationUrl);
+  if (context.globalOptions.open) {
+    process.stderr.write("Opening your browser...\n");
+    maybeOpenBrowser(context.globalOptions.open, verificationUrl);
+  }
   process.stderr.write("Waiting for authorization...\n");
   const token = await pollDeviceToken({
     baseUrl,

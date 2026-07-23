@@ -141,12 +141,15 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
       '--email', 'wallet-init@example.com',
       '--name', 'Wallet Init',
       '--base-url', baseUrl,
+      '--no-open',
       '--format', 'json',
     ], env);
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /Complete authorization in your browser:/u);
     assert.match(result.stderr, /user_code=ABCD-EFGH/u);
+    assert.doesNotMatch(result.stderr, /Opening your browser/iu);
+    assert.doesNotMatch(result.stderr, /Could not open (?:a|the) browser automatically/iu);
     const output = JSON.parse(result.stdout);
     assert.equal(output.ok, true);
     assert.equal(output.data.hasAuthorization, true);

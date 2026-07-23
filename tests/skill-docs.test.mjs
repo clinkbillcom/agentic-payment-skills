@@ -79,7 +79,15 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
 
 test('wallet init documents OAuth browser authorization without OTP recovery', () => {
   assert.match(walletConfig, /OAuth Device Authorization/u);
+  assert.match(
+    walletConfig,
+    /clink-cli wallet init --email <email> --name <name> --no-open --format json/u,
+  );
   assert.match(walletConfig, /Complete authorization in your browser/u);
+  assert.match(walletConfig, /only from the original process's live stderr/u);
+  assert.match(walletConfig, /keep that same process alive/u);
+  assert.match(walletConfig, /Do not navigate to, preview, or prefetch the URL/u);
+  assert.match(walletConfig, /duplicate verification-code sends or resend throttling/u);
   assert.match(walletConfig, /hasAuthorization=true/u);
   assert.match(walletConfig, /authorizationType=oauth/u);
   assert.match(walletConfig, /init output[\s\S]*no longer echoes `oauthRequired`/u);
@@ -87,6 +95,12 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
+  assert.match(skill, /wallet init --email <email> --name <name> --no-open --format json/u);
+  assert.match(skill, /verification URL only from the original process's live stderr/u);
+  assert.match(cliInvocation, /`--no-open`[\s\S]*overrid/iu);
+  assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
+  assert.doesNotMatch(walletConfig, /attempts to open it|Automatic browser launch may fail/u);
+  assert.doesNotMatch(skill, /Automatic browser-open failure/u);
   assert.doesNotMatch(walletConfig, /BOOTSTRAP_OTP_REQUIRED|--otp <email_otp>/u);
   assert.doesNotMatch(skill, /ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT|--otp <email_otp>/u);
   assert.match(readme, /New wallet initialization uses OAuth Device Authorization/u);

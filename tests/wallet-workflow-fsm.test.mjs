@@ -8,13 +8,12 @@ import {
   classifyWalletStatusObservation,
 } from '../lib/wallet-workflow-fsm.mjs';
 
-test('wallet init classifier returns a live OAuth browser authorization step', () => {
+test('wallet init classifier returns a live OAuth authorization step without browser launch', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
       'Complete authorization in your browser:',
       'https://agent.example.com/oauth?user_code=ABCD#email=user%40example.com',
-      'Opening your browser...',
       'Waiting for authorization...',
     ].join('\n'),
   });
@@ -30,7 +29,7 @@ test('wallet init classifier returns a live OAuth browser authorization step', (
   assert.equal(result.browserOpenFailed, false);
 });
 
-test('wallet init classifier keeps waiting when automatic browser launch fails', () => {
+test('wallet init classifier remains compatible with a legacy browser launch warning', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
