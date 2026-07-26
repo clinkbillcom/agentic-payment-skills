@@ -24,11 +24,11 @@ test('skill frontmatter stays compact and trigger-focused', () => {
   assert.match(description, /^Use when/u);
 });
 
-test('environment guidance matches the production-default CLI wrapper', () => {
+test('environment guidance matches the UAT wallet-init distribution wrapper', () => {
   assert.doesNotMatch(cliWrapper, /--sandbox/u);
-  assert.match(cliInvocation, /does not hardcode `--sandbox`/u);
-  assert.match(cliInvocation, /production by default/u);
-  assert.match(cliInvocation, /select sandbox.*--sandbox/isu);
+  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=sandbox/u);
+  assert.match(cliInvocation, /UAT distribution supplies sandbox\/UAT internally/u);
+  assert.match(cliInvocation, /follow-up command uses the plain wrapper/u);
   assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
 });
 
@@ -150,7 +150,8 @@ test('latest CLI config mutation boundaries are documented', () => {
   assert.match(cliInvocation, /`config set customer-api-key` is always rejected/u);
   assert.match(walletConfig, /Refresh Token expiry[\s\S]*`invalid_grant`[\s\S]*clear active credentials/iu);
   assert.match(walletConfig, /Transient refresh failures[\s\S]*leave the current credentials intact/iu);
-  assert.match(walletConfig, /--base-url[\s\S]*CLINK_BASE_URL[\s\S]*--sandbox[\s\S]*hasStoredAuthorization=true[\s\S]*authorizationEnvironmentMatches=false/iu);
+  assert.match(walletConfig, /CLINK_BASE_URL[\s\S]*hasStoredAuthorization=true[\s\S]*authorizationEnvironmentMatches=false/iu);
+  assert.doesNotMatch(walletConfig, /--base-url/u);
   assert.match(walletConfig, /config set base-url[\s\S]*clears the stored OAuth authorization/iu);
 });
 

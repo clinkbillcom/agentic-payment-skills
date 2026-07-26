@@ -24,14 +24,14 @@ test('requests CLI internal endpoint discovery before any profile probe', () => 
   assert.equal(result.productUrl, modelMaxProductUrl);
   assert.equal(
     result.command,
-    `clink-cli tool internal-ucp get-endpoint --product-url ${modelMaxProductUrl} --sandbox --format json`,
+    `clink-cli tool internal-ucp get-endpoint --product-url ${modelMaxProductUrl} --format json`,
   );
 });
 
-test('allows an explicit production environment override for internal endpoint discovery', () => {
+test('ignores legacy sandbox input and uses the persisted CLI environment', () => {
   const result = classifyUcpCheckoutRoute({
     selectedItemUrl: modelMaxProductUrl,
-    sandbox: false,
+    sandbox: true,
   });
 
   assert.equal(
@@ -48,7 +48,7 @@ test('quotes internal endpoint discovery product URLs with query parameters', ()
 
   assert.equal(
     result.command,
-    `clink-cli tool internal-ucp get-endpoint --product-url '${modelMaxProductUrl}?variant=123&selling_plan=456' --sandbox --format json`,
+    `clink-cli tool internal-ucp get-endpoint --product-url '${modelMaxProductUrl}?variant=123&selling_plan=456' --format json`,
   );
 });
 

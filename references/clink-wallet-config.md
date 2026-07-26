@@ -4,13 +4,13 @@ Read this before wallet setup, local config work, card readiness checks, payment
 
 ## Wallet Setup
 
-Select and lock the `clink-cli` environment once (see `references/clink-cli-invocation.md`). Wallet init then only needs the account fields:
+Select and lock the `clink-cli` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init then needs the account fields:
 
 ```bash
 clink-cli wallet init --email <email> --name <name> --no-open --format json
 ```
 
-`bin/clink-cli` targets production by default; bind `--sandbox` into the logical wrapper for sandbox/UAT. Use credentials that belong to the locked environment and never mix production with sandbox/UAT credentials.
+The main distribution targets production by default, while the UAT distribution supplies its wallet-init environment internally. Use `--test` only when selecting test is permitted. After initialization, run all follow-up commands without environment flags and verify the persisted environment through `wallet status`.
 
 `wallet init` starts OAuth Device Authorization and polls until authorization completes. In Agent workflows, always pass `--no-open`; it prevents browser launch for this invocation even if stored configuration enables link opening. The original process prints the verification URL to live stderr. Stream that stderr while the process is running.
 
@@ -86,7 +86,7 @@ clink-cli config unset <key> --format json
 
 The local config is a latest wallet state cache. OAuth authorization is bound to its issuer origin and a request never sends both OAuth and CSK. Successful OAuth stores sticky `oauthRequired=true`. Logout, Refresh Token expiry, and a terminal refresh rejection such as `invalid_grant` clear active credentials but retain that marker. Transient refresh failures such as network or service errors leave the current credentials intact; surface the error without falling back to CSK. Legacy CSK is considered only when the marker is absent or exactly false.
 
-Selecting another origin temporarily through `--base-url`, `CLINK_BASE_URL`, or `--sandbox` leaves the stored authorization in the config but makes it ineffective for that command. `wallet status` then reports `hasStoredAuthorization=true` with `authorizationEnvironmentMatches=false`, and authenticated commands require `wallet init` for the selected origin. Persisting a different origin with `clink-cli config set base-url <url>` instead clears the stored OAuth authorization, any legacy customer API key, payment-method cache, and risk rules. It preserves the existing credential policy: `oauthRequired=true` remains sticky after OAuth, while a never-OAuth wallet remains false. Run `wallet init` for the new origin.
+Selecting another origin temporarily through `CLINK_BASE_URL` leaves the stored authorization in the config but makes it ineffective for that command. `wallet status` then reports `hasStoredAuthorization=true` with `authorizationEnvironmentMatches=false`, and authenticated commands require `wallet init` for the selected origin. Persisting a different origin with `clink-cli config set base-url <url>` instead clears the stored OAuth authorization, any legacy customer API key, payment-method cache, and risk rules. It preserves the existing credential policy: `oauthRequired=true` remains sticky after OAuth, while a never-OAuth wallet remains false. Run `wallet init` for the new origin.
 
 Every authenticated request, OAuth refresh/retry, payment-method cache write, event poll, and event ACK reloads and checks the current authorization identity. If another process replaces the login, changes the customer/device/session, or a webhook names a different customer, the stale operation fails without overwriting the newer wallet, caching the stale response, or acknowledging the mismatched event. Re-run `wallet status`; never automatically retry a state-changing payment, Tip, checkout, refund, or logout from that error.
 

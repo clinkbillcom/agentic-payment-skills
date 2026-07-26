@@ -240,7 +240,7 @@ Reject a candidate when the merchant semantics point to another merchant, anothe
 
 Resolve internal vs external checkout with `lib/ucp-checkout-route-fsm.mjs` `classifyUcpCheckoutRoute`. Merchant configuration and exact hostname matching belong to `clink-cli`, not prompt logic or the skill FSM.
 
-First run the `GET_INTERNAL_UCP_ENDPOINT` action returned by the FSM. Use the exact selected product/item URL and the environment-locked CLI:
+First run the `GET_INTERNAL_UCP_ENDPOINT` action returned by the FSM. Use the exact selected product/item URL; the CLI uses the environment persisted by `wallet init`:
 
 ```bash
 clink-cli tool internal-ucp get-endpoint --product-url <selected_item_url> --format json

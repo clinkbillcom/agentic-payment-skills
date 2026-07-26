@@ -2,7 +2,7 @@
 name: clink-payment-skill
 description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
 metadata:
-  version: "1.7.9"
+  version: "1.8.0"
   requires:
     node: ">=20"
     bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -29,7 +29,7 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Operation | Must read |
 | --- | --- |
 | Any command invocation, JSON parsing, exit-code handling, local bundle usage | `references/clink-cli-invocation.md` |
-| Wallet init/status, single-user config, sandbox, card readiness, card management, risk links | `references/clink-wallet-config.md` |
+| Wallet init/status, single-user config, production/UAT/test environment selection, card readiness, card management, risk links | `references/clink-wallet-config.md` |
 | Waiting for binding, risk, refund, VIC, instruction, 3DS completion, or optional Agent Pay account-confirmation events | `references/clink-async-events.md` |
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel | `references/clink-instruction.md` |
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
@@ -42,7 +42,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 ## When to Use
 
 - initialize a user's Clink wallet
-- check wallet, sandbox, or payment-method readiness
+- check wallet environment or payment-method readiness
 - refresh payment-instrument list / `paymentMethodsVoList` from Clink before selecting a card or relying on cached payment methods
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, refresh the payment-instrument list, then run the direct/session authorization resolver before pay; Visa + VIC direct/session pay must list/match ACTIVE instruction+mandate before pay
@@ -88,7 +88,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain an **environment lock**: select production, sandbox/UAT, or one explicit base URL once (see `references/clink-cli-invocation.md`), bind `clink-cli` to that exact wrapper invocation, and reuse it for every command in the workflow. `bin/clink-cli` defaults to production; a sandbox workflow binds `--sandbox` into the logical wrapper once. Individual command recipes stay environment-neutral.
+Maintain an **environment lock** from the effective `wallet status` base URL. Select production, UAT, or test only during `wallet init`; the successful initialization persists that environment. Run every follow-up command without `--sandbox` or `--test`. The UAT distribution supplies its wallet-init environment internally, while the main distribution defaults to production.
 
 FSM action contract:
 
