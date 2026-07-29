@@ -81,8 +81,10 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /OAuth Device Authorization/u);
   assert.match(
     walletConfig,
-    /clink-cli wallet init --email <email> --name <name> --no-open --format json/u,
+    /clink-cli wallet init --email <email> \[--name <name>\] --no-open --format json/u,
   );
+  assert.match(walletConfig, /derives the display name from the email text before `@`/u);
+  assert.match(walletConfig, /Do not ask the user for a name during ordinary initialization/u);
   assert.match(walletConfig, /Complete authorization in your browser/u);
   assert.match(walletConfig, /only from the original process's live stderr/u);
   assert.match(walletConfig, /keep that same process alive/u);
@@ -95,7 +97,12 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
-  assert.match(skill, /wallet init --email <email> --name <name> --no-open --format json/u);
+  assert.match(
+    skill,
+    /complete value of `authorizationUrl` verbatim on its own line[\s\S]*Do not add, remove, parse, encode, decode, rebuild, reduce to an origin, or truncate any character[\s\S]*preserve the query after `\?` and the fragment after `#`/u,
+  );
+  assert.match(skill, /wallet init --email <email> \[--name <name>\] --no-open --format json/u);
+  assert.match(skill, /Do not ask for a name by default/u);
   assert.match(skill, /verification URL only from the original process's live stderr/u);
   assert.match(cliInvocation, /`--no-open`[\s\S]*overrid/iu);
   assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
@@ -104,7 +111,9 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.doesNotMatch(walletConfig, /BOOTSTRAP_OTP_REQUIRED|--otp <email_otp>/u);
   assert.doesNotMatch(skill, /ASK_FOR_EMAIL_OTP_AND_RETRY_WALLET_INIT|--otp <email_otp>/u);
   assert.match(readme, /New wallet initialization uses OAuth Device Authorization/u);
+  assert.match(readme, /derives the name from the email text before `@`/u);
   assert.match(readmeZh, /新的钱包初始化使用 OAuth Device Authorization/u);
+  assert.match(readmeZh, /默认取邮箱 `@` 前部分作为姓名/u);
 });
 
 test('OAuth authentication guidance distinguishes 401 from 403 and keeps CSK legacy-only', () => {

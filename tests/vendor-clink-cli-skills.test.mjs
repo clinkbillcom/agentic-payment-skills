@@ -139,7 +139,6 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     const result = await runBundleAsync([
       'wallet', 'init',
       '--email', 'wallet-init@example.com',
-      '--name', 'Wallet Init',
       '--no-open',
       '--format', 'json',
     ], env);
@@ -153,6 +152,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(output.ok, true);
     assert.equal(output.data.hasAuthorization, true);
     assert.equal(output.data.authorizationType, 'oauth');
+    assert.equal(output.data.name, 'wallet-init');
     assert.equal('oauthRequired' in output.data, false);
     assert.equal(
       output.data.bindingUrl,
@@ -172,6 +172,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(statusOutput.data.authorizationEnvironmentMatches, true);
     assert.equal(statusOutput.data.authorizationType, 'oauth');
     assert.equal(statusOutput.data.oauthRequired, true);
+    assert.equal(statusOutput.data.name, 'wallet-init');
     assert.doesNotMatch(status.stdout, /access_wallet_init_contract|refresh_wallet_init_contract/u);
 
     const mismatchedStatus = await runBundleAsync([
@@ -377,11 +378,32 @@ test('vendored CLI discovers skills list and tip commands', () => {
   );
 });
 
+test('vendored CLI exposes ucp-catalog and rejects the legacy catalog command', () => {
+  const rootHelp = runBundle(['--help']);
+  const catalogHelp = runBundle(['ucp-catalog', '--help']);
+  const productHelp = runBundle(['ucp-catalog', 'product', '--help']);
+  assert.match(rootHelp, /ucp-catalog/u);
+  assert.doesNotMatch(rootHelp, /^\s*catalog\s/mu);
+  assert.match(catalogHelp, /clink-cli ucp-catalog search/u);
+  assert.match(catalogHelp, /clink-cli ucp-catalog product/u);
+  assert.match(productHelp, /--product-id <id>/u);
+  assert.match(productHelp, /\/agent\/ucp\/\{merchantId\}\/catalog\/product/u);
+
+  const legacy = runBundleRaw([
+    'catalog', 'search',
+    '--merchant-id', 'merchant_1',
+    '--query', 'watch',
+    '--format', 'json',
+  ]);
+  assert.equal(legacy.status, 2);
+  assert.match(legacy.stderr, /unsupported command: catalog/u);
+});
+
 test('vendored CLI metadata records its upstream working-tree base', () => {
   assert.equal(vendorPackage.version, '0.2.1');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c62874959f9cd4346443791e584015c1c3f650d6',
+    '6b6fc2aae3e3705fd998207a553f5230c2ef4a3a',
   );
   assert.equal(vendorPackage.upstreamDirty, true);
   assert.equal('upstreamPatch' in vendorPackage, false);

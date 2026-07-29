@@ -20,7 +20,7 @@ OAuth authorization is bound to its issuer origin. Initialize under the exact pr
 
 Resolve `clink-cli` to this wrapper and verify `wallet status.data.baseUrl` before the workflow. Reuse the plain wrapper for every follow-up command; this persisted base URL is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper.
 
-For Agent-run wallet initialization, explicitly pass `--no-open` on the `wallet init` invocation. This per-invocation opt-out overrides both `--open` and the stored `default-open-links` setting. Do not rely on the stored default: the Agent must stream the original process's live stderr, send the verification URL once, and leave that same process running while the user authorizes in their browser.
+For Agent-run wallet initialization, require only `--email` and explicitly pass `--no-open`. Omit `--name` by default so the CLI uses the email text before `@`; pass optional `--name` only for an explicit user override or when the derived name is invalid or longer than 50 characters. The per-invocation `--no-open` opt-out overrides both `--open` and the stored `default-open-links` setting. Do not rely on the stored default: the Agent must stream the original process's live stderr, send the verification URL once, and leave that same process running while the user authorizes in their browser.
 
 To inspect help without installing a global binary, call the bundle directly:
 

@@ -4,17 +4,19 @@ Read this before wallet setup, local config work, card readiness checks, payment
 
 ## Wallet Setup
 
-Select and lock the `clink-cli` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init then needs the account fields:
+Select and lock the `clink-cli` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init requires the email; the display name is optional:
 
 ```bash
-clink-cli wallet init --email <email> --name <name> --no-open --format json
+clink-cli wallet init --email <email> [--name <name>] --no-open --format json
 ```
+
+By default, the CLI derives the display name from the email text before `@`. Do not ask the user for a name during ordinary initialization. Pass `--name` only when the user explicitly requests an override or when the derived name is empty or longer than 50 characters.
 
 The main distribution targets production by default, while the UAT distribution supplies its wallet-init environment internally. Use `--test` only when selecting test is permitted. After initialization, run all follow-up commands without environment flags and verify the persisted environment through `wallet status`.
 
 `wallet init` starts OAuth Device Authorization and polls until authorization completes. In Agent workflows, always pass `--no-open`; it prevents browser launch for this invocation even if stored configuration enables link opening. The original process prints the verification URL to live stderr. Stream that stderr while the process is running.
 
-Read the verification URL only from the original process's live stderr. When `Complete authorization in your browser:` appears, send the following URL to the user exactly once and keep that same process alive. Do not open the URL from the Agent runtime, start a second `wallet init`, or reconstruct the URL from final stdout. Do not navigate to, preview, or prefetch the URL with an Agent browser: that request can overlap with the user's page load and trigger duplicate verification-code sends or resend throttling. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`. The URL keeps `user_code` in its query and carries email/name in its fragment. It is intended for the current user, but do not copy it into unrelated logs or handoffs.
+Read the verification URL only from the original process's live stderr. When `Complete authorization in your browser:` appears, send the following URL to the user exactly once and keep that same process alive. Do not open the URL from the Agent runtime, start a second `wallet init`, or reconstruct the URL from final stdout. Do not navigate to, preview, or prefetch the URL with an Agent browser: that request can overlap with the user's page load and trigger duplicate verification-code sends or resend throttling. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`. The URL keeps `user_code` in its query and carries the email and resolved name in its fragment. It is intended for the current user, but do not copy it into unrelated logs or handoffs.
 
 Successful initialization stores `customerId`, `email`, `name`, an environment-bound OAuth authorization, and sticky `oauthRequired=true` in the single local config. Final init output requires `hasAuthorization=true`, `authorizationType=oauth`, `hasCustomerApiKey=false`, and a non-empty `customerId`; it no longer echoes `oauthRequired`. Use `wallet status` to classify the persisted credential policy. The CLI refreshes expiring Access Tokens and atomically rotates Refresh Tokens. Never read, print, copy, or refresh either token directly.
 

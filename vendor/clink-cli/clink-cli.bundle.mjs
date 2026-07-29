@@ -36,9 +36,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/commander/lib/error.js
+// ../clink-cli/node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "node_modules/commander/lib/error.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -71,9 +71,9 @@ var require_error = __commonJS({
   }
 });
 
-// node_modules/commander/lib/argument.js
+// ../clink-cli/node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "node_modules/commander/lib/argument.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -199,9 +199,9 @@ var require_argument = __commonJS({
   }
 });
 
-// node_modules/commander/lib/help.js
+// ../clink-cli/node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "node_modules/commander/lib/help.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -801,9 +801,9 @@ ${itemIndentStr}`);
   }
 });
 
-// node_modules/commander/lib/option.js
+// ../clink-cli/node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "node_modules/commander/lib/option.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1114,9 +1114,9 @@ var require_option = __commonJS({
   }
 });
 
-// node_modules/commander/lib/suggestSimilar.js
+// ../clink-cli/node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1194,9 +1194,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// node_modules/commander/lib/command.js
+// ../clink-cli/node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "node_modules/commander/lib/command.js"(exports) {
+  "../clink-cli/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path3 = __require("node:path");
@@ -3440,9 +3440,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// node_modules/commander/index.js
+// ../clink-cli/node_modules/commander/index.js
 var require_commander = __commonJS({
-  "node_modules/commander/index.js"(exports) {
+  "../clink-cli/node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3462,9 +3462,9 @@ var require_commander = __commonJS({
   }
 });
 
-// node_modules/pend/index.js
+// ../clink-cli/node_modules/pend/index.js
 var require_pend = __commonJS({
-  "node_modules/pend/index.js"(exports, module) {
+  "../clink-cli/node_modules/pend/index.js"(exports, module) {
     module.exports = Pend;
     function Pend() {
       this.pending = 0;
@@ -3517,9 +3517,9 @@ var require_pend = __commonJS({
   }
 });
 
-// node_modules/yauzl/fd-slicer.js
+// ../clink-cli/node_modules/yauzl/fd-slicer.js
 var require_fd_slicer = __commonJS({
-  "node_modules/yauzl/fd-slicer.js"(exports) {
+  "../clink-cli/node_modules/yauzl/fd-slicer.js"(exports) {
     var fs = __require("fs");
     var util = __require("util");
     var stream = __require("stream");
@@ -3674,9 +3674,9 @@ var require_fd_slicer = __commonJS({
   }
 });
 
-// node_modules/yauzl/crc32.js
+// ../clink-cli/node_modules/yauzl/crc32.js
 var require_crc32 = __commonJS({
-  "node_modules/yauzl/crc32.js"(exports, module) {
+  "../clink-cli/node_modules/yauzl/crc32.js"(exports, module) {
     var CRC_TABLE = new Int32Array([
       0,
       1996959894,
@@ -3946,9 +3946,9 @@ var require_crc32 = __commonJS({
   }
 });
 
-// node_modules/yauzl/index.js
+// ../clink-cli/node_modules/yauzl/index.js
 var require_yauzl = __commonJS({
-  "node_modules/yauzl/index.js"(exports) {
+  "../clink-cli/node_modules/yauzl/index.js"(exports) {
     var fs = __require("fs");
     var zlib = __require("zlib");
     var fd_slicer = require_fd_slicer();
@@ -4805,11 +4805,11 @@ var require_yauzl = __commonJS({
   }
 });
 
-// dist/cli.js
+// ../clink-cli/dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir } from "node:os";
 
-// node_modules/commander/esm.mjs
+// ../clink-cli/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -4826,7 +4826,7 @@ var {
   Help
 } = import_index.default;
 
-// dist/errors.js
+// ../clink-cli/dist/errors.js
 var EXIT_CODES = {
   OK: 0,
   GENERAL: 1,
@@ -4869,7 +4869,7 @@ function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
 
-// dist/args.js
+// ../clink-cli/dist/args.js
 var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
@@ -4902,6 +4902,7 @@ var OPTION_DEFINITIONS = [
   { name: "metadata", flags: "--metadata <json>" },
   { name: "credential-token", flags: "--credential-token <token>" },
   { name: "merchant-id", flags: "--merchant-id <id>" },
+  { name: "product-id", flags: "--product-id <id>" },
   { name: "query", flags: "--query <text>" },
   { name: "context", flags: "--context <json>" },
   { name: "filters", flags: "--filters <json>" },
@@ -5010,7 +5011,7 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// dist/url.js
+// ../clink-cli/dist/url.js
 function httpOrigin(value) {
   try {
     const url = new URL(value);
@@ -5028,7 +5029,7 @@ function sameHttpOrigin(left, right) {
   return leftOrigin !== void 0 && leftOrigin === rightOrigin;
 }
 
-// dist/auth-identity.js
+// ../clink-cli/dist/auth-identity.js
 function runtimeAuthorizationIdentity(config) {
   if (config.authorization) {
     return {
@@ -5101,13 +5102,13 @@ function storedRuntimeConfig(storedConfig) {
   return runtimeConfig;
 }
 
-// dist/config.js
+// ../clink-cli/dist/config.js
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// dist/domains.js
+// ../clink-cli/dist/domains.js
 var API_BASE_URLS = {
   sandbox: "https://uat-api.clinkbill.com",
   test: "https://api.clinkbill.dev",
@@ -5135,7 +5136,7 @@ var DASHBOARD_BASE_URLS = {
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
-// dist/config.js
+// ../clink-cli/dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
@@ -5497,7 +5498,7 @@ function assignRiskRules(target, value) {
   }
 }
 
-// dist/http.js
+// ../clink-cli/dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
@@ -5594,7 +5595,7 @@ function parseBody(rawText) {
   }
 }
 
-// dist/oauth-request.js
+// ../clink-cli/dist/oauth-request.js
 async function requestJsonWithOAuthRetry(runtime, buildRequest, requester = requestJson) {
   const initialConfig = await runtime.getRuntimeConfig();
   const initialRequest = buildRequest(initialConfig);
@@ -5637,7 +5638,7 @@ function isDryRun(value) {
   return "dryRun" in value;
 }
 
-// dist/utils.js
+// ../clink-cli/dist/utils.js
 import { spawn } from "node:child_process";
 var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink-cli wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
@@ -5899,7 +5900,7 @@ function pickDefaultPaymentInstrument(items) {
   return pickDefaultPaymentMethod(items).paymentInstrumentId;
 }
 
-// dist/events.js
+// ../clink-cli/dist/events.js
 var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
 var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
 var DEFAULT_POLL_INTERVAL_MS = 5e3;
@@ -6465,7 +6466,7 @@ function asString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 
-// dist/help.js
+// ../clink-cli/dist/help.js
 var HELP_OPTION = `  --help, -h                    Show this help`;
 var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
 ${HELP_OPTION}`;
@@ -6504,7 +6505,7 @@ Commands:
   pay               Charge a payment instrument
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
-  catalog           Search merchant UCP catalogs
+  ucp-catalog       Search merchant UCP catalogs
   instruction       Manage purchase instruction mandates (agentic authorization)
   events            Poll the webhook-event queue for state-change events
   tool              Utility tools for UCP and checkout workflows
@@ -6539,15 +6540,15 @@ Event Watching:
   (see 'clink-cli events --help').
 
 Examples:
-  clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --email user@example.com --name Alice
-  clink-cli wallet init --test --email user@example.com --name Alice
+  clink-cli wallet init --email alice@example.com
+  clink-cli wallet init --sandbox --email alice@example.com
+  clink-cli wallet init --test --email alice@example.com
   clink-cli wallet status --format pretty
   clink-cli card setup-link --open
   clink-cli skills list --all --format pretty
   clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
   clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
-  clink-cli catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
   clink-cli ucp-checkout get --checkout-id chk_xxx
   clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
   clink-cli refund create --order-id order_xxx
@@ -6556,7 +6557,7 @@ More Help:
   clink-cli wallet --help
   clink-cli card --help
   clink-cli skills --help
-  clink-cli catalog --help
+  clink-cli ucp-catalog --help
   clink-cli ucp-checkout --help
   clink-cli refund --help
   clink-cli instruction --help
@@ -6735,9 +6736,10 @@ Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Shopify is detected first when the hostname ends with .myshopify.com. Otherwise the CLI sends
-  GET https://<host> and detects Shopify when a powered-by response header contains Shopify. Other
-  sites return site_type "unknown".
+  Shopify is detected first when the hostname ends with .myshopify.com. Otherwise the CLI sends a
+  browser-like GET to https://<host> and checks the powered-by response header, then falls back to
+  the hostname's CNAME chain. A storefront rate limit is returned as a network error instead of
+  being misclassified as site_type "unknown". Other sites return site_type "unknown".
 
 Examples:
   clink-cli tool parse-site --url https://store.example.com --format pretty
@@ -6867,7 +6869,7 @@ Examples:
 var WALLET_HELP = `clink-cli wallet
 
 Usage:
-  clink-cli wallet init --email <email> --name <name> [options]
+  clink-cli wallet init --email <email> [--name <name>] [options]
   clink-cli wallet logout [options]
   clink-cli wallet status [options]
 
@@ -6877,20 +6879,20 @@ Subcommands:
   status       Show effective wallet configuration without network request
 
 Examples:
-  clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --email user@example.com --name Alice
-  clink-cli wallet init --test --email user@example.com --name Alice
+  clink-cli wallet init --email alice@example.com
+  clink-cli wallet init --sandbox --email alice@example.com
+  clink-cli wallet init --test --email alice@example.com
   clink-cli wallet logout
   clink-cli wallet status --format pretty
 `;
 var WALLET_INIT_HELP = `clink-cli wallet init
 
 Usage:
-  clink-cli wallet init --email <email> --name <name> [options]
+  clink-cli wallet init --email <email> [--name <name>] [options]
 
 Arguments:
   --email <email>              Customer email verified in the browser
-  --name <name>                Initial customer display name and local config name
+  --name <name>                Optional display name; defaults to the email text before @
 
 Options:
   --sandbox                    Use sandbox API base from domains.ts
@@ -6905,14 +6907,14 @@ Device Authorization:
   An explicit --sandbox/--test or a distribution-fixed environment takes precedence. Otherwise
   wallet init uses CLINK_BASE_URL when present and production when absent. A successful initialization
   saves the selected base URL for every later command. Re-run wallet init to switch environments.
-  The CLI keeps user_code in the browser URL query and carries email/name in its fragment.
+  The CLI keeps user_code in the browser URL query and carries email/derived name in its fragment.
   The Portal removes those values from the address bar immediately after reading them.
   The CLI prints the URL, opens it only when --open or default-open-links is enabled, then polls
   until authorization completes. --no-open always disables browser launch. If launch fails, open
   the displayed URL manually while polling continues.
   Email OTP entry and confirmation happen in the browser.
-  Existing customers keep their server-side name; --name only creates the initial name
-  for a new customer and is always saved to local config.
+  Existing customers keep their server-side name. New customers default to the email text before @;
+  --name can override that initial name. The resolved name is always saved to local config.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -6920,9 +6922,9 @@ Payment Methods:
   is reported in output but does not fail wallet initialization.
 
 Examples:
-  clink-cli wallet init --email user@example.com --name Alice
-  clink-cli wallet init --sandbox --email user@example.com --name Alice
-  clink-cli wallet init --test --email user@example.com --name Alice
+  clink-cli wallet init --email alice@example.com
+  clink-cli wallet init --sandbox --email alice@example.com
+  clink-cli wallet init --test --email alice@example.com
 `;
 var WALLET_LOGOUT_HELP = `clink-cli wallet logout
 
@@ -7245,22 +7247,24 @@ Examples:
   clink-cli ucp-checkout complete --checkout-id chk_xxx --format json
   clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
-var CATALOG_HELP = `clink-cli catalog
+var UCP_CATALOG_HELP = `clink-cli ucp-catalog
 
 Usage:
-  clink-cli catalog search --merchant-id <id> --query <text> [options]
+  clink-cli ucp-catalog search --merchant-id <id> --query <text> [options]
 
 Actions:
-  search    Search one merchant's UCP Catalog
+  search     Search one merchant's UCP Catalog
+  product    Get one product by the ID returned from Catalog search
 
 Examples:
-  clink-cli catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink-cli catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
+  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink-cli ucp-catalog product --merchant-id merchant_xxx --product-id product_xxx --format json
+  clink-cli ucp-catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
 `;
-var CATALOG_SEARCH_HELP = `clink-cli catalog search
+var UCP_CATALOG_SEARCH_HELP = `clink-cli ucp-catalog search
 
 Usage:
-  clink-cli catalog search --merchant-id <id> --query <text> [options]
+  clink-cli ucp-catalog search --merchant-id <id> --query <text> [options]
 
 Required Arguments:
   --merchant-id <id>          Merchant-scoped UCP Catalog owner
@@ -7285,8 +7289,36 @@ Behavior:
   their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
 
 Examples:
-  clink-cli catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink-cli catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink-cli ucp-catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+`;
+var UCP_CATALOG_PRODUCT_HELP = `clink-cli ucp-catalog product
+
+Usage:
+  clink-cli ucp-catalog product --merchant-id <id> --product-id <id> [options]
+
+Required Arguments:
+  --merchant-id <id>          Merchant-scoped UCP Catalog owner
+  --product-id <id>           Product ID returned by ucp-catalog search
+
+Optional Request Fields:
+  --context <json>            UCP Catalog context JSON object
+  --filters <json>            UCP Catalog filters JSON object; prices use minor units
+  --signals <json>            UCP Catalog signals JSON object
+  --attribution <json>        UCP Catalog attribution JSON object
+  --request-id <id>           Request-Id header; defaults to a generated UUID
+  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Behavior:
+  Sends POST /agent/ucp/{merchantId}/catalog/product using the environment saved by wallet init.
+  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
+  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+
+Examples:
+  clink-cli ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
 `;
 var UCP_CHECKOUT_CREATE_HELP = `clink-cli ucp-checkout create
 
@@ -7866,8 +7898,15 @@ function getHelpText(command, subcommand, nestedCommand) {
         default:
           return UCP_CHECKOUT_HELP;
       }
-    case "catalog":
-      return subcommand === "search" ? CATALOG_SEARCH_HELP : CATALOG_HELP;
+    case "ucp-catalog":
+      switch (subcommand) {
+        case "search":
+          return UCP_CATALOG_SEARCH_HELP;
+        case "product":
+          return UCP_CATALOG_PRODUCT_HELP;
+        default:
+          return UCP_CATALOG_HELP;
+      }
     case "config":
       switch (subcommand) {
         case "set":
@@ -7884,7 +7923,7 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// dist/internal-ucp.production.json
+// ../clink-cli/dist/internal-ucp.production.json
 var internal_ucp_production_default = [
   {
     domain_name: "uebmaw-it.myshopify.com",
@@ -7896,7 +7935,7 @@ var internal_ucp_production_default = [
   }
 ];
 
-// dist/internal-ucp.sandbox.json
+// ../clink-cli/dist/internal-ucp.sandbox.json
 var internal_ucp_sandbox_default = [
   {
     domain_name: "modelmax-store-uat.myshopify.com",
@@ -7904,7 +7943,7 @@ var internal_ucp_sandbox_default = [
   }
 ];
 
-// dist/internal-ucp.js
+// ../clink-cli/dist/internal-ucp.js
 function validateInternalUcpMerchants(value, source) {
   if (!Array.isArray(value)) {
     throw validationError(`invalid internal UCP config: ${source}`);
@@ -7967,7 +8006,7 @@ function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
-// dist/oauth.js
+// ../clink-cli/dist/oauth.js
 import { randomUUID as randomUUID2 } from "node:crypto";
 var OAUTH_CLIENT_ID = "clink-cli";
 var OAUTH_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
@@ -8342,7 +8381,7 @@ function mergeOAuthLoginConfig(current, options2) {
   return next;
 }
 
-// dist/output.js
+// ../clink-cli/dist/output.js
 function printSuccess(data, format) {
   const envelope = {
     ok: true,
@@ -8387,7 +8426,7 @@ function renderHumanError(error, helpHint) {
 `;
 }
 
-// dist/payment/amount.js
+// ../clink-cli/dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -8396,7 +8435,7 @@ function parseAmount(value) {
   return amount;
 }
 
-// dist/payment/authorization-api.js
+// ../clink-cli/dist/payment/authorization-api.js
 var INSTRUCTION_PATH = "/agent/cwallet/instructions";
 function createTipAuthorizationApi(input, overrides = {}) {
   const dependencies = {
@@ -8544,7 +8583,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/payment/post-payment-refresh.js
+// ../clink-cli/dist/payment/post-payment-refresh.js
 var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
 async function executePaymentRequestWithRefresh(input) {
   if (input.dryRun) {
@@ -8581,7 +8620,7 @@ function errorMessage(error) {
   return String(error);
 }
 
-// dist/payment/charge.js
+// ../clink-cli/dist/payment/charge.js
 function buildChargeBody(input) {
   const authorization = input.authorization;
   const aiAgentInstructionBo = compact({
@@ -8667,12 +8706,12 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
-// dist/skills/install.js
+// ../clink-cli/dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
 import { mkdir as mkdir5, rm as rm6 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
-// dist/skills/agents.js
+// ../clink-cli/dist/skills/agents.js
 import { constants } from "node:fs";
 import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -9439,7 +9478,7 @@ function isErrorCode(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/archive.js
+// ../clink-cli/dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
 import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
@@ -9447,7 +9486,7 @@ import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, 
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// dist/skills/spec.js
+// ../clink-cli/dist/skills/spec.js
 var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
 var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
 var MAX_SEGMENT_LENGTH = 128;
@@ -9555,7 +9594,7 @@ function invalidTipIdentity() {
   return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
 }
 
-// dist/skills/archive.js
+// ../clink-cli/dist/skills/archive.js
 var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
   maxEntries: 4096,
   maxTotalBytes: 200 * 1024 * 1024,
@@ -9974,7 +10013,7 @@ function closeZip(zipFile) {
   }
 }
 
-// dist/skills/download.js
+// ../clink-cli/dist/skills/download.js
 import { createHash } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
@@ -10233,7 +10272,7 @@ async function cancelResponseBody(response) {
   }
 }
 
-// dist/skills/metrics.js
+// ../clink-cli/dist/skills/metrics.js
 var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
 var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
 var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
@@ -10280,10 +10319,10 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// dist/skills/registry.js
+// ../clink-cli/dist/skills/registry.js
 import path2 from "node:path";
 
-// dist/skills/public-api.js
+// ../clink-cli/dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
 var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
 var MAX_ATTEMPTS2 = 3;
@@ -10409,7 +10448,7 @@ async function sleepBeforeRetry(dependencies, attempt) {
   await dependencies.sleep(delay);
 }
 
-// dist/skills/marketplace.js
+// ../clink-cli/dist/skills/marketplace.js
 var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
 var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
@@ -10476,7 +10515,7 @@ function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/skills/registry.js
+// ../clink-cli/dist/skills/registry.js
 var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
 var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
 var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
@@ -10547,10 +10586,10 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// dist/skills/store.js
+// ../clink-cli/dist/skills/store.js
 import { join as join3 } from "node:path";
 
-// dist/skills/store-publication.js
+// ../clink-cli/dist/skills/store-publication.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm5, symlink as symlink2, utimes } from "node:fs/promises";
@@ -11201,7 +11240,7 @@ function isErrorCode2(error, code) {
   return error?.code === code;
 }
 
-// dist/skills/store.js
+// ../clink-cli/dist/skills/store.js
 function resolveStorePaths(homeDir, spec, sha256, uuid) {
   const skillsRoot = join3(homeDir, ".agents", "skills");
   const clinkRoot = join3(skillsRoot, ".clink");
@@ -11217,7 +11256,7 @@ function resolveStorePaths(homeDir, spec, sha256, uuid) {
   };
 }
 
-// dist/skills/install.js
+// ../clink-cli/dist/skills/install.js
 var PENDING_SHA_SENTINEL = "pending";
 var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
 var DEFAULT_DEPENDENCIES2 = {
@@ -11515,7 +11554,7 @@ async function cleanupStaging(stagingPath, dependencies, primaryError) {
   }
 }
 
-// dist/skills/tip.js
+// ../clink-cli/dist/skills/tip.js
 var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
@@ -11688,7 +11727,7 @@ function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
-// dist/tool.js
+// ../clink-cli/dist/tool.js
 import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
@@ -11700,13 +11739,27 @@ async function resolveSiteTypeFromUrl(rawUrl, options2 = {}) {
   if (isMyShopifyHost(hostname)) {
     return siteTypeResult("shopify", "myshopify_domain");
   }
+  let storefrontError;
   try {
-    const fetchSite = options2.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options2.timeoutMs));
+    const fetchSite = options2.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options2.timeoutMs, options2.fetchPage));
     const headers = await fetchSite(buildHttpsOriginUrl(url));
     if (hasShopifyPoweredByHeader(headers)) {
       return siteTypeResult("shopify", "powered_by_header");
     }
-  } catch {
+  } catch (error) {
+    storefrontError = error;
+  }
+  if (options2.resolveCname || !options2.fetchSite) {
+    try {
+      const resolveCname = options2.resolveCname ?? nodeResolveCname;
+      if (await hasShopifyCname(hostname, resolveCname)) {
+        return siteTypeResult("shopify", "cname");
+      }
+    } catch {
+    }
+  }
+  if (storefrontError instanceof CliError) {
+    throw storefrontError;
   }
   return siteTypeResult("unknown", "unknown");
 }
@@ -11835,15 +11888,33 @@ function appendJsonExtension(pathname) {
   }
   return `${trimmed}.js`;
 }
-async function fetchSiteHeaders(url, timeoutMs = 1e4) {
+async function fetchSiteHeaders(url, timeoutMs = 1e4, fetchPage = fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await fetchPage(url, {
       method: "GET",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US",
+        "User-Agent": CHECKOUT_USER_AGENT
+      },
       signal: controller.signal
     });
+    if (!response.ok) {
+      const retryAfter = response.headers.get("retry-after")?.trim();
+      const retrySuffix = retryAfter ? /^\d+$/u.test(retryAfter) ? `; retry after ${retryAfter} seconds` : `; retry after ${retryAfter}` : "";
+      throw networkError(`site detection request failed with status ${response.status}${retrySuffix}`);
+    }
     return response.headers;
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    if (error.name === "AbortError") {
+      throw networkError(`site detection request timed out after ${timeoutMs}ms`);
+    }
+    throw networkError(error.message);
   } finally {
     clearTimeout(timeout);
   }
@@ -12465,7 +12536,7 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// dist/cli.js
+// ../clink-cli/dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
@@ -12511,8 +12582,8 @@ async function runCli(argv) {
       return handleRefundCommand(subcommand, context);
     case "ucp-checkout":
       return handleUcpCheckoutCommand(subcommand, context);
-    case "catalog":
-      return handleCatalogCommand(subcommand, context);
+    case "ucp-catalog":
+      return handleUcpCatalogCommand(subcommand, context);
     case "instruction":
       return handleInstructionCommand(subcommand, context);
     case "events":
@@ -12693,7 +12764,7 @@ function commandUsesCustomerAuthorization(command, subcommand) {
       return true;
     case "refund":
     case "ucp-checkout":
-    case "catalog":
+    case "ucp-catalog":
     case "instruction":
     case "events":
       return subcommand !== void 0;
@@ -12978,18 +13049,25 @@ async function handleWalletCommand(subcommand, context) {
 }
 async function walletInit(context) {
   const email = requireStringFlag(context.args.flags, "missing --email", "email").trim();
-  const name = requireStringFlag(context.args.flags, "missing --name", "name").trim();
+  const providedName = getStringFlag(context.args.flags, "name");
   if (!email) {
     throw validationError("email must not be blank");
   }
   if (email.length > 255) {
     throw validationError("email must be at most 255 characters");
   }
+  let name;
+  if (providedName === void 0) {
+    const emailSeparatorIndex = email.indexOf("@");
+    name = emailSeparatorIndex > 0 ? email.slice(0, emailSeparatorIndex).trim() : "";
+  } else {
+    name = providedName.trim();
+  }
   if (!name) {
-    throw validationError("name must not be blank");
+    throw validationError(providedName === void 0 ? "email must include a name before @" : "name must not be blank");
   }
   if (name.length > 50) {
-    throw validationError("name must be at most 50 characters");
+    throw validationError(providedName === void 0 ? "email name before @ must be at most 50 characters; use --name to provide a shorter name" : "name must be at most 50 characters");
   }
   if (getStringFlag(context.args.flags, "otp")) {
     throw validationError("--otp is no longer used by wallet init; complete email verification in the browser");
@@ -13422,18 +13500,23 @@ async function handleUcpCheckoutCommand(subcommand, context) {
       throw validationError(`unsupported ucp-checkout command: ${subcommand}`);
   }
 }
-async function handleCatalogCommand(subcommand, context) {
+async function handleUcpCatalogCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("catalog");
+    printHelp("ucp-catalog");
     return EXIT_CODES.OK;
   }
-  if (subcommand !== "search") {
-    throw validationError(`unsupported catalog command: ${subcommand}`);
+  switch (subcommand) {
+    case "search":
+      return ucpCatalogSearch(context);
+    case "product":
+      return ucpCatalogProduct(context);
+    default:
+      throw validationError(`unsupported ucp-catalog command: ${subcommand}`);
   }
-  return catalogSearch(context);
 }
-async function catalogSearch(context) {
+async function ucpCatalogSearch(context) {
   const flags = context.args.flags;
+  rejectUcpCatalogFlags(flags, "search", ["product-id"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const query = requireNonBlankFlag(flags, "query", "missing --query");
   const limit = parseIntFlag(getStringFlag(flags, "limit"), "--limit must be an integer between 1 and 100", 1);
@@ -13466,6 +13549,41 @@ async function catalogSearch(context) {
     dryRun: context.globalOptions.dryRun
   }));
   return finishApiCommand(result, context);
+}
+async function ucpCatalogProduct(context) {
+  const flags = context.args.flags;
+  rejectUcpCatalogFlags(flags, "product", ["query", "cursor", "limit"]);
+  const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
+  const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
+  const body = compact3({
+    id: productId,
+    context: optionalJsonObjectFlag(flags, "context"),
+    signals: optionalJsonObjectFlag(flags, "signals"),
+    attribution: optionalJsonObjectFlag(flags, "attribution"),
+    filters: optionalJsonObjectFlag(flags, "filters")
+  });
+  const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
+  const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/product`,
+    headers: {
+      ...buildCustomerApiKeyHeaders(runtimeConfig),
+      "Request-Id": requestId,
+      "UCP-Agent": ucpAgent
+    },
+    body,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  }));
+  return finishApiCommand(result, context);
+}
+function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
+  const unsupported = unsupportedFlags.find((name) => name in flags);
+  if (unsupported) {
+    throw validationError(`--${unsupported} is not supported by ucp-catalog ${subcommand}`);
+  }
 }
 function requireNonBlankFlag(flags, name, missingMessage) {
   const value = requireStringFlag(flags, missingMessage, name).trim();
@@ -14225,7 +14343,7 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/index.js
+// ../clink-cli/dist/index.js
 async function main() {
   try {
     const exitCode = await runCli(process.argv.slice(2));
@@ -14273,7 +14391,7 @@ function detectHelpHint(argv) {
   if (!command) {
     return "Run `clink-cli --help`.";
   }
-  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "catalog", "instruction", "events", "tool", "config"].includes(command)) {
+  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "ucp-catalog", "instruction", "events", "tool", "config"].includes(command)) {
     return `Run \`clink-cli ${command} --help\`.`;
   }
   return "Run `clink-cli --help`.";

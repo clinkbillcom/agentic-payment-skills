@@ -13,7 +13,7 @@ test('wallet init classifier returns a live OAuth authorization step without bro
     running: true,
     stderr: [
       'Complete authorization in your browser:',
-      'https://agent.example.com/oauth?user_code=ABCD#email=user%40example.com',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
       'Waiting for authorization...',
     ].join('\n'),
   });
@@ -24,7 +24,7 @@ test('wallet init classifier returns a live OAuth authorization step without bro
   assert.equal(result.reason, 'wallet_init_oauth_authorization_required');
   assert.equal(
     result.authorizationUrl,
-    'https://agent.example.com/oauth?user_code=ABCD#email=user%40example.com',
+    'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
   );
   assert.equal(result.browserOpenFailed, false);
 });
