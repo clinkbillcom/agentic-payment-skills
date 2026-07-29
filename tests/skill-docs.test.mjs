@@ -24,11 +24,12 @@ test('skill frontmatter stays compact and trigger-focused', () => {
   assert.match(description, /^Use when/u);
 });
 
-test('environment guidance matches the production-default CLI wrapper', () => {
-  assert.doesNotMatch(cliWrapper, /--sandbox/u);
-  assert.match(cliInvocation, /does not hardcode `--sandbox`/u);
-  assert.match(cliInvocation, /production by default/u);
-  assert.match(cliInvocation, /select sandbox.*--sandbox/isu);
+test('environment guidance scopes environment flags to wallet init', () => {
+  assert.doesNotMatch(cliWrapper, /--sandbox|--test/u);
+  assert.match(cliInvocation, /Environment selection belongs to `wallet init`/u);
+  assert.match(cliInvocation, /accepted only by `wallet init`/u);
+  assert.match(cliInvocation, /There is no `--base-url` flag/u);
+  assert.match(cliInvocation, /mutually exclusive/u);
   assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
 });
 
@@ -81,7 +82,7 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /OAuth Device Authorization/u);
   assert.match(
     walletConfig,
-    /clink-cli wallet init --email <email> --name <name> --no-open --format json/u,
+    /clink-cli wallet init --email <email> --no-open --format json/u,
   );
   assert.match(walletConfig, /Complete authorization in your browser/u);
   assert.match(walletConfig, /only from the original process's live stderr/u);
@@ -95,7 +96,8 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
-  assert.match(skill, /wallet init --email <email> --name <name> --no-open --format json/u);
+  assert.match(skill, /wallet init --email <email> --no-open --format json/u);
+  assert.doesNotMatch(skill, /wallet init[^|\n]*--name/u);
   assert.match(skill, /verification URL only from the original process's live stderr/u);
   assert.match(cliInvocation, /`--no-open`[\s\S]*overrid/iu);
   assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
@@ -150,7 +152,7 @@ test('latest CLI config mutation boundaries are documented', () => {
   assert.match(cliInvocation, /`config set customer-api-key` is always rejected/u);
   assert.match(walletConfig, /Refresh Token expiry[\s\S]*`invalid_grant`[\s\S]*clear active credentials/iu);
   assert.match(walletConfig, /Transient refresh failures[\s\S]*leave the current credentials intact/iu);
-  assert.match(walletConfig, /--base-url[\s\S]*CLINK_BASE_URL[\s\S]*--sandbox[\s\S]*hasStoredAuthorization=true[\s\S]*authorizationEnvironmentMatches=false/iu);
+  assert.match(walletConfig, /CLINK_BASE_URL[\s\S]*hasStoredAuthorization=true[\s\S]*authorizationEnvironmentMatches=false/iu);
   assert.match(walletConfig, /config set base-url[\s\S]*clears the stored OAuth authorization/iu);
 });
 
@@ -289,8 +291,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions are bumped for OAuth wallet routing', () => {
-  assert.match(skill, /version:\s*"1\.8\.0"/u);
-  assert.equal(packageJson.version, '1.8.0');
+  assert.match(skill, /version:\s*"1\.8\.1"/u);
+  assert.equal(packageJson.version, '1.8.1');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 

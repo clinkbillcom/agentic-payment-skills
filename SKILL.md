@@ -2,7 +2,7 @@
 name: clink-payment-skill
 description: "Use when handling Clink wallet init/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
 metadata:
-  version: "1.7.9"
+  version: "1.8.1"
   requires:
     node: ">=20"
     bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -33,7 +33,7 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Waiting for binding, risk, refund, VIC, instruction, 3DS completion, or optional Agent Pay account-confirmation events | `references/clink-async-events.md` |
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel | `references/clink-instruction.md` |
 | Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
-| UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, checkout route resolution, checkout create/complete | `references/clink-ucp-checkout.md` |
+| UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, merchant UCP Catalog search, checkout route resolution, checkout create/complete | `references/clink-ucp-checkout.md` |
 | Public skill listing, skill tip input/authorization, Number snapshot safety, tip result handling, optional merchant account events | `references/clink-skill-tip.md` |
 | Public Skill installation by identity or Number, confirmation safety, CLI result handling, install conflicts | `references/clink-skill-install.md` |
 
@@ -88,7 +88,7 @@ Every workflow follows:
 4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
 5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
 
-Maintain an **environment lock**: select production, sandbox/UAT, or one explicit base URL once (see `references/clink-cli-invocation.md`), bind `clink-cli` to that exact wrapper invocation, and reuse it for every command in the workflow. `bin/clink-cli` defaults to production; a sandbox workflow binds `--sandbox` into the logical wrapper once. Individual command recipes stay environment-neutral.
+Maintain an **environment lock**: the environment is chosen once by `wallet init` (production by default, `--sandbox` for sandbox/UAT, `--test` for `*.clinkbill.dev`) and saved for every later command (see `references/clink-cli-invocation.md`). `--sandbox`/`--test` are rejected by every command other than `wallet init`, and `--base-url` no longer exists. Do not change the saved environment or `CLINK_BASE_URL` mid-workflow. Individual command recipes stay environment-neutral.
 
 FSM action contract:
 
@@ -222,7 +222,7 @@ FSM action contract:
 - Never invent payment parameters. Missing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, or target payment method means stop and ask the caller or user for the missing data.
 - Never expose OAuth Access Tokens, Refresh Tokens, `customerApiKey`, or other secrets in user-visible output.
 - Never add or replace a legacy customer API key through this Skill. A never-OAuth legacy user may keep an already stored key or supply `CLINK_CUSTOMER_API_KEY` through the execution environment; never print it or pass it as a literal shell argument.
-- Never run `wallet init` as hidden recovery inside payment, checkout, tip, or refund execution. For exit code 3 or an OAuth `401`, stop the current operation and start an explicit wallet setup/reauthorization workflow after collecting only missing email/name input. For `403`, surface the permission error without refreshing or retrying.
+- Never run `wallet init` as hidden recovery inside payment, checkout, tip, or refund execution. For exit code 3 or an OAuth `401`, stop the current operation and start an explicit wallet setup/reauthorization workflow after collecting only missing email input. For `403`, surface the permission error without refreshing or retrying.
 - Wallet initialization uses OAuth Device Authorization. Always invoke Agent-run `wallet init` with `--no-open`. Read the verification URL only from the original process's live stderr, send it once, keep that same process running, and wait for the user to finish browser authorization. Never open the URL from the Agent runtime, start another init process, ask the user to send an email OTP, or add `--otp`.
 - OAuth refresh is owned by the CLI. Never read, copy, refresh, or revoke raw tokens outside `clink-cli`; use `wallet logout` for explicit logout. OAuth credentials are environment-bound, so preserve the exact environment lock and re-run `wallet init` when the selected API origin changes. A stored authorization from another origin remains visible through `wallet status` but is not effective; logout and origin changes retain `oauthRequired=true`.
 - Preserve legacy CSK compatibility only for users whose local wallet has never completed OAuth and still has a complete `customerId + customerApiKey` configuration. Once OAuth succeeds, `oauthRequired=true` is permanent: never use stored, environment, or flag CSK after logout, expiry, revocation, malformed OAuth state, or environment changes. New `wallet init` always creates OAuth; recommend migration separately to never-OAuth CSK users or after legacy authentication fails.
@@ -260,7 +260,7 @@ FSM action contract:
 | Install by displayed Number | Resolve the recent scoped snapshot, freeze publisher/name/version, confirm, atomically claim, then use the identity command. |
 | Wait for optional Agent Pay/Tip new-account evidence | `clink-cli events poll --type account-created --max-wait 60 --format json` |
 | Wait for optional Agent Pay/Tip reload evidence | `clink-cli events poll --type account-reloaded --max-wait 60 --format json` |
-| Initialize wallet | `clink-cli wallet init --email <email> --name <name> --no-open --format json`; read the verification URL once from live stderr and keep the original process running while the user completes browser authorization |
+| Initialize wallet | `clink-cli wallet init --email <email> --no-open --format json`; read the verification URL once from live stderr and keep the original process running while the user completes browser authorization |
 | Log out wallet | `clink-cli wallet logout --format json`; this removes current credentials while preserving the existing policy. The logout result no longer echoes `oauthRequired`; use `wallet status` when the post-logout policy must be classified. |
 | Check wallet readiness | `clink-cli wallet status --format json` |
 | Refresh payment-instrument list without waiting | `clink-cli card binding-link --no-watch --format json` (returns `paymentMethodsVoList` and updates the local cache) |
@@ -278,6 +278,8 @@ FSM action contract:
 | Print instruction Passkey URL | `clink-cli instruction sign-url ... --no-watch --format json`, then run the Event FSM waitSpec |
 | Get one VIC instruction | `clink-cli instruction get --purchase-instruction-id <id> --format json` |
 | Analyze UCP product item(s) | `clink-cli tool parse-item --url <item_url> --format json` |
+| Search a merchant UCP catalog | `clink-cli ucp-catalog search --merchant-id <id> --query <text> [--limit <n>] [--cursor <cursor>] --format json` |
+| Get one UCP catalog product | `clink-cli ucp-catalog product --merchant-id <id> --product-id <id> --format json` |
 | Resolve configured internal UCP endpoint | `clink-cli tool internal-ucp get-endpoint --product-url <item_url> --format json` |
 | Resolve fallback standard-profile REST endpoint | `clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json` |
 | Create UCP checkout | `clink-cli ucp-checkout create [--endpoint <rest_endpoint>] ... --instruction-id <id> --mandate-id <id> --format json` |

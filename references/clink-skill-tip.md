@@ -53,7 +53,7 @@ After the table is actually displayed, store a structured snapshot in the workfl
   "scope": "tippable",
   "userId": "user_1",
   "conversationId": "conversation_1",
-  "environment": "sandbox:https://api.clinkbill.dev",
+  "environment": "test:https://api.clinkbill.dev",
   "listedAt": "2026-07-15T10:00:00.000Z",
   "displayedAt": "2026-07-15T10:00:00.000Z",
   "rows": [
@@ -191,7 +191,7 @@ When no valid snapshot exists, the `RUN_SKILL_TIP_LIST_WORKFLOW` result carries 
   "snapshotId": "snapshot_1",
   "userId": "user_1",
   "conversationId": "conversation_1",
-  "environment": "sandbox:https://api.clinkbill.dev",
+  "environment": "test:https://api.clinkbill.dev",
   "createdAt": "2026-07-15T10:00:00.000Z",
   "expiresAt": "2026-07-15T12:00:00.000Z"
 }

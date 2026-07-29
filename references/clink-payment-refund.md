@@ -5,7 +5,7 @@ Read this before executing `clink-cli pay`, handling 3DS, or creating/checking r
 ## Preconditions
 
 - Wallet is initialized with credentials matching the selected environment.
-- The same production, sandbox/UAT, or explicit-base-url `clink-cli` environment lock is reused for the whole workflow.
+- The environment saved by `wallet init` is reused unchanged for the whole workflow.
 - At least one current payment method is available. Refresh with `card binding-link --no-watch` before relying on cached methods.
 - Payment parameters come from the user or an upstream merchant workflow.
 - The payment is explicitly authorized for this request.

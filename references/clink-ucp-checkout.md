@@ -68,6 +68,19 @@ Every transition has a guard. If the guard fails, stop and report the exact miss
 
 Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent, first open or request the product URL with browser tools, page extraction, merchant tools, or a direct page request. When the user gives only a product name, search or browse until one product detail URL is found or until multiple candidates require selection. Do not ask the user for product title, price, currency, availability, variant ID, or option values before browser exploration and page request attempts have failed or left multiple valid choices.
 
+### Optional: Merchant UCP Catalog Search
+
+When a merchant is already known by `merchantId` and the user is browsing rather than naming a URL, the merchant's registered UCP Catalog can be queried directly instead of scraping storefront pages:
+
+```bash
+clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --limit <n> --format json
+clink-cli ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --format json
+```
+
+Both send `POST /agent/ucp/{merchantId}/catalog/{search,product}` using the environment saved by `wallet init`. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID and stays stable across an OAuth refresh retry; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
+
+Catalog access is merchant-scoped and optional. A merchant without Catalog enabled returns an API error carrying the backend `catalog_not_supported` message ("Catalog is not available for this merchant") with exit code 5. Treat that specific code as "this merchant has no Catalog" and continue with normal product-URL exploration instead of reporting a failure to the user; surface every other Catalog error normally. Catalog results are a product-discovery aid only; they do not replace `tool parse-item`, which remains the source of the frozen item facts used by checkout.
+
 When a product detail URL is available, run:
 
 ```bash

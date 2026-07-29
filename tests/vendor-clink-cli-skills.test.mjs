@@ -139,8 +139,6 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     const result = await runBundleAsync([
       'wallet', 'init',
       '--email', 'wallet-init@example.com',
-      '--name', 'Wallet Init',
-      '--base-url', baseUrl,
       '--no-open',
       '--format', 'json',
     ], env);
@@ -164,7 +162,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.deepEqual(authorizationHeaders, ['Bearer access_wallet_init_contract']);
 
     const status = await runBundleAsync([
-      'wallet', 'status', '--base-url', baseUrl, '--format', 'json',
+      'wallet', 'status', '--format', 'json',
     ], env);
     assert.equal(status.status, 0, status.stderr);
     const statusOutput = JSON.parse(status.stdout);
@@ -176,8 +174,8 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.doesNotMatch(status.stdout, /access_wallet_init_contract|refresh_wallet_init_contract/u);
 
     const mismatchedStatus = await runBundleAsync([
-      'wallet', 'status', '--base-url', 'https://api.clinkbill.com', '--format', 'json',
-    ], env);
+      'wallet', 'status', '--format', 'json',
+    ], { ...env, CLINK_BASE_URL: 'https://api.clinkbill.com' });
     assert.equal(mismatchedStatus.status, 0, mismatchedStatus.stderr);
     const mismatchedStatusOutput = JSON.parse(mismatchedStatus.stdout);
     assert.equal(mismatchedStatusOutput.data.hasAuthorization, false);
@@ -187,7 +185,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(mismatchedStatusOutput.data.oauthRequired, true);
 
     const logout = await runBundleAsync([
-      'wallet', 'logout', '--base-url', baseUrl, '--format', 'json',
+      'wallet', 'logout', '--format', 'json',
     ], env);
     assert.equal(logout.status, 0, logout.stderr);
     const logoutOutput = JSON.parse(logout.stdout);
@@ -197,7 +195,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal('oauthRequired' in logoutOutput.data, false);
 
     const statusAfterLogout = await runBundleAsync([
-      'wallet', 'status', '--base-url', baseUrl, '--format', 'json',
+      'wallet', 'status', '--format', 'json',
     ], env);
     assert.equal(statusAfterLogout.status, 0, statusAfterLogout.stderr);
     const statusAfterLogoutOutput = JSON.parse(statusAfterLogout.stdout);
@@ -209,7 +207,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(statusAfterLogoutOutput.data.hasCustomerApiKey, false);
 
     const rejectedFallback = await runBundleAsync([
-      'risk', 'get', '--base-url', baseUrl, '--format', 'json',
+      'risk', 'get', '--format', 'json',
     ], env);
     assert.equal(rejectedFallback.status, 3);
     assert.match(rejectedFallback.stderr, /Login required/u);
@@ -338,7 +336,7 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
     );
 
     const status = await runBundleAsync([
-      'wallet', 'status', '--base-url', baseUrl, '--format', 'json',
+      'wallet', 'status', '--format', 'json',
     ], { HOME: home, CLINK_BASE_URL: baseUrl });
     assert.equal(status.status, 0, status.stderr);
     const statusOutput = JSON.parse(status.stdout);
@@ -350,7 +348,7 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
     assert.equal(statusOutput.data.hasCustomerApiKey, false);
 
     const result = await runBundleAsync([
-      'risk', 'get', '--base-url', baseUrl, '--format', 'json',
+      'risk', 'get', '--format', 'json',
     ], { HOME: home, CLINK_BASE_URL: baseUrl });
     assert.equal(result.status, 3);
     assert.match(result.stderr, /Login required/u);
@@ -379,11 +377,12 @@ test('vendored CLI discovers skills list and tip commands', () => {
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.0');
+  assert.equal(vendorPackage.version, '0.2.3');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'ef79b1b1e032dd44bc61bee2e53a5708684c9177',
+    'd6a5430c105d50f996bd8dbace39ee126313bcd4',
   );
+  assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
@@ -395,11 +394,10 @@ test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.doesNotMatch(bundleSource, /\/agent\/cwallet\/customer\/bootstrap/u);
 });
 
-test('vendored CLI embeds the .dev sandbox API, agent, and dashboard domains', () => {
+test('vendored CLI embeds the .dev test API, agent, and dashboard domains', () => {
   assert.match(bundleSource, /https:\/\/api\.clinkbill\.dev/u);
   assert.match(bundleSource, /https:\/\/agent\.clinkbill\.dev/u);
   assert.match(bundleSource, /https:\/\/dashboard\.clinkbill\.dev/u);
-  assert.match(runBundle(['skills', 'list', '--help']), /https:\/\/dashboard\.clinkbill\.dev/u);
 });
 
 test('vendored instruction sign-url exposes identifiers for correlated activation watches', async () => {
@@ -459,12 +457,20 @@ test('vendored CLI rejects versioned Skill Tips and wallet OTP input', () => {
   const walletOtp = runBundleRaw([
     'wallet', 'init',
     '--email', 'wallet@example.com',
-    '--name', 'Wallet User',
     '--otp', '123456',
     '--format', 'json',
   ]);
   assert.equal(walletOtp.status, 2);
   assert.match(walletOtp.stderr, /--otp is no longer used by wallet init/u);
+
+  const walletName = runBundleRaw([
+    'wallet', 'init',
+    '--email', 'wallet@example.com',
+    '--name', 'Wallet User',
+    '--format', 'json',
+  ]);
+  assert.equal(walletName.status, 2);
+  assert.match(walletName.stderr, /--name is no longer used by wallet init/u);
 });
 
 test('vendored CLI rejects Number as a payment target', () => {

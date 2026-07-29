@@ -72,7 +72,7 @@ Every Number installation requires confirmation, even when its snapshot is curre
   "snapshotId": "snapshot_1",
   "userId": "user_1",
   "conversationId": "conversation_1",
-  "environment": "sandbox:https://api.clinkbill.dev",
+  "environment": "test:https://api.clinkbill.dev",
   "createdAt": "2026-07-16T10:00:00.000Z",
   "expiresAt": "2026-07-16T12:00:00.000Z"
 }

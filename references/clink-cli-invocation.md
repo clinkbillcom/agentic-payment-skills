@@ -8,13 +8,13 @@ Command examples are execution recipes for the agent. Run them through the avail
 
 Every example in this skill uses `clink-cli` as the stable command name. This repository provides that command through package.json `bin.clink-cli`, which points to `bin/clink-cli`. Use that single entrypoint for every operation instead of repeating the bundle path.
 
-**`bin/clink-cli` uses production by default and does not hardcode `--sandbox`.** Select the environment once at the start of a workflow, bind the logical `clink-cli` command to that exact invocation, and reuse it for every follow-up command:
+**Environment selection belongs to `wallet init`, not to the wrapper.** `--sandbox` and `--test` are accepted only by `wallet init`; every other command rejects them with exit code 2. There is no `--base-url` flag. Select the environment once during initialization:
 
-- production: `bin/clink-cli`;
-- sandbox/UAT: `bin/clink-cli --sandbox`;
-- explicit API host: `bin/clink-cli --base-url <url>` or one fixed `CLINK_BASE_URL` value.
+- production: `bin/clink-cli wallet init --email <email> --no-open --format json`;
+- sandbox/UAT: add `--sandbox`;
+- test (`*.clinkbill.dev`): add `--test`.
 
-To select sandbox/UAT, include `--sandbox` in that locked logical wrapper.
+`--sandbox` and `--test` are mutually exclusive. A successful initialization saves the selected environment, so every later command reuses it with no environment flag. Re-run `wallet init` to switch environments. `CLINK_BASE_URL` remains an advanced process-level override for custom endpoints; keep one fixed value for the whole workflow if used at all.
 
 The wrapper is:
 
@@ -22,9 +22,9 @@ The wrapper is:
 bin/clink-cli
 ```
 
-OAuth authorization is bound to its issuer origin. Initialize under the exact production, sandbox/UAT, or explicit base URL selected by the environment lock. Never send legacy production credentials to sandbox/UAT or vice versa.
+OAuth authorization is bound to its issuer origin. Initialize under the exact environment the workflow needs. Never send legacy production credentials to sandbox/UAT/test or vice versa.
 
-Resolve `clink-cli` to the selected invocation at the start of a workflow and keep the same flags and `CLINK_BASE_URL` for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper and preserves the same environment selection.
+Resolve `clink-cli` to `bin/clink-cli` at the start of a workflow and keep the saved environment (and any `CLINK_BASE_URL`) unchanged for every follow-up command; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper.
 
 For Agent-run wallet initialization, explicitly pass `--no-open` on the `wallet init` invocation. This per-invocation opt-out overrides both `--open` and the stored `default-open-links` setting. Do not rely on the stored default: the Agent must stream the original process's live stderr, send the verification URL once, and leave that same process running while the user authorizes in their browser.
 
@@ -78,13 +78,13 @@ The OAuth verification URL from `wallet init --no-open` is the narrow exception:
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--sandbox` | false | Selects sandbox/UAT API, dashboard, and agent pages. Bind it into the workflow's logical `clink-cli` command when sandbox is selected. |
+| `--sandbox` / `--test` | false | Accepted only by `wallet init`; selects the sandbox/UAT or test API, dashboard, and agent environment and saves it. Mutually exclusive. Every other command rejects them with exit code 2. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--no-open` | false | Force-disable browser launch for this invocation, overriding `--open` and stored `default-open-links`; required for Agent-run `wallet init`. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |
 
-Base URL resolution is `--base-url`, then `CLINK_BASE_URL`, then `--sandbox`, then stored/default production config. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
+Base URL resolution is `CLINK_BASE_URL`, then the environment saved by `wallet init` (default production). `--base-url` no longer exists and returns `unknown option: --base-url`. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
 
 The CLI binds each long-running command to the authorization identity observed when it starts. OAuth refresh/retry, payment-method caching, event polling/ACK, and logout stop if another process replaces the customer, device, or OAuth session. A customer-mismatched webhook is neither cached nor acknowledged. Surface these authentication-change errors, re-run `wallet status` under the same environment lock, and never automatically retry a state-changing payment, Tip, checkout, refund, or logout.
 
