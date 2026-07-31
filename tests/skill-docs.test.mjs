@@ -13,6 +13,7 @@ const cliInvocation = await readFile(new URL('../references/clink-cli-invocation
 const instruction = await readFile(new URL('../references/clink-instruction.md', import.meta.url), 'utf8');
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
 const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
+const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink-cli', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -398,4 +399,90 @@ test('instruction activation waits are FSM-driven and correlated before resume',
   assert.match(instruction, /ACTIVE/u);
   assert.match(instruction, /classifyAuthorizationDraftObservation/u);
   assert.match(ucpCheckout, /activation waitSpec/u);
+});
+
+test('catalog discovery loads the merchant list before matching intent on descriptions', () => {
+  assert.match(skill, /references\/clink-catalog-discovery\.md/u);
+  assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
+  assert.match(skill, /classifyCatalogDiscovery/u);
+  assert.match(skill, /clink-cli tool internal-ucp get-merchant-list --format json/u);
+
+  assert.match(catalogDiscovery, /clink-cli tool internal-ucp get-merchant-list --format json/u);
+  assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
+  assert.match(catalogDiscovery, /`description`/u);
+  assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
+});
+
+test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
+  assert.match(skill, /clink-cli ucp-catalog search --merchant-id <id> --query <text> --format json/u);
+  assert.match(skill, /clink-cli catalog search --query <text> --format json/u);
+  assert.match(skill, /never takes `--merchant-id`/u);
+
+  assert.match(catalogDiscovery, /clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
+  assert.match(catalogDiscovery, /clink-cli catalog search --query <text> \[--ext <json>\] --format json/u);
+  assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
+  assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
+});
+
+test('catalog ext narrowing pins the eats365 channel and supported region', () => {
+  assert.match(skill, /channel_type/u);
+  assert.match(skill, /eats365/u);
+  assert.match(skill, /normalize the `eat365` spelling/u);
+  assert.match(skill, /`region` `hk` only/u);
+  assert.match(skill, /never send `region` or `store_id` without `channel_type`/u);
+
+  assert.match(catalogDiscovery, /"channel_type":"eats365","region":"hk","store_id":"HK081034"/u);
+  assert.match(catalogDiscovery, /unsupported_catalog_region/u);
+  assert.match(catalogDiscovery, /catalog_channel_type_missing/u);
+  assert.match(catalogDiscovery, /Never invent one/u);
+});
+
+test('catalog discovery delegates outward instead of claiming unavailability', () => {
+  assert.match(skill, /DELEGATE_EXTERNAL_PRODUCT_DISCOVERY/u);
+  assert.match(skill, /browser, MCP, or another Skill/u);
+  assert.match(skill, /Do not report the product as unavailable or retry the same query/u);
+
+  assert.match(catalogDiscovery, /EXTERNAL_DISCOVERY_REQUIRED/u);
+  assert.match(catalogDiscovery, /browser, MCP, or another Skill/u);
+  assert.match(catalogDiscovery, /not that the product does not exist/u);
+  assert.match(catalogDiscovery, /do not retry the same query/u);
+});
+
+test('catalog discovery results are not purchase authorization', () => {
+  assert.match(skill, /Catalog discovery results are discovery only, never purchase authorization/u);
+  assert.match(catalogDiscovery, /is not purchase authorization/u);
+  assert.match(catalogDiscovery, /discovery only/u);
+  assert.match(catalogDiscovery, /clink-ucp-checkout\.md/u);
+});
+
+test('described product purchase routes through catalog discovery before checkout', () => {
+  assert.match(skill, /CATALOG_PURCHASE/u);
+  assert.match(skill, /RUN_CATALOG_DISCOVERY_WORKFLOW/u);
+  assert.match(skill, /RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT/u);
+  assert.match(skill, /never straight to `UCP_CHECKOUT`/u);
+  assert.match(skill, /bare purchase verb/u);
+
+  assert.match(catalogDiscovery, /Described Product Purchase Route/u);
+  assert.match(catalogDiscovery, /RUN_CATALOG_DISCOVERY_WORKFLOW/u);
+  assert.match(catalogDiscovery, /USER_SELECTS_ONE_PRODUCT/u);
+  assert.match(catalogDiscovery, /needs a product detail URL/u);
+});
+
+test('catalog product selection belongs to the user and resolves only presented candidates', () => {
+  assert.match(skill, /ASK_FOR_CATALOG_PRODUCT_SELECTION/u);
+  assert.match(skill, /CANCEL_PENDING_CATALOG_PRODUCT_SELECTION/u);
+  assert.match(skill, /structured product id, structured index, or a bare ordinal/u);
+  assert.match(skill, /never auto-select/u);
+
+  assert.match(catalogDiscovery, /AWAITING_SELECTION/u);
+  assert.match(catalogDiscovery, /selected_product_not_in_candidates/u);
+  assert.match(catalogDiscovery, /selected_index_out_of_range/u);
+  assert.match(catalogDiscovery, /Do not preselect a product/u);
+  assert.match(catalogDiscovery, /mutually exclusive/u);
+});
+
+test('catalog selection does not bypass UCP checkout guards', () => {
+  assert.match(catalogDiscovery, /clink-ucp-checkout\.md/u);
+  assert.match(catalogDiscovery, /Selecting a product does not skip any of them/u);
+  assert.match(catalogDiscovery, /Selection is not authorization to skip/u);
 });
