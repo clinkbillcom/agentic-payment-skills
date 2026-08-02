@@ -378,34 +378,32 @@ test('vendored CLI discovers skills list and tip commands', () => {
   );
 });
 
-test('vendored CLI exposes ucp-catalog and rejects the legacy catalog command', () => {
+test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', () => {
   const rootHelp = runBundle(['--help']);
   const catalogHelp = runBundle(['ucp-catalog', '--help']);
   const productHelp = runBundle(['ucp-catalog', 'product', '--help']);
   assert.match(rootHelp, /ucp-catalog/u);
-  assert.doesNotMatch(rootHelp, /^\s*catalog\s/mu);
-  assert.match(catalogHelp, /clink-cli ucp-catalog search/u);
-  assert.match(catalogHelp, /clink-cli ucp-catalog product/u);
+  assert.match(rootHelp, /^\s*catalog\s/mu);
+  assert.match(catalogHelp, /ucp-catalog search/u);
+  assert.match(catalogHelp, /ucp-catalog product/u);
   assert.match(productHelp, /--product-id <id>/u);
   assert.match(productHelp, /\/agent\/ucp\/\{merchantId\}\/catalog\/product/u);
 
-  const legacy = runBundleRaw([
-    'catalog', 'search',
-    '--merchant-id', 'merchant_1',
-    '--query', 'watch',
-    '--format', 'json',
-  ]);
-  assert.equal(legacy.status, 2);
-  assert.match(legacy.stderr, /unsupported command: catalog/u);
+  // catalog is the cross-merchant path that answers "who carries this"; naming a merchant is the
+  // scoped question, so help must route the caller to ucp-catalog instead. Asserted through help
+  // rather than a run, because config checks fire before flag validation under the test env.
+  const crossMerchantHelp = runBundle(['catalog', 'search', '--help']);
+  assert.match(crossMerchantHelp, /Takes no --merchant-id/u);
+  assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
 });
 
 test('vendored CLI metadata records its upstream working-tree base', () => {
   assert.equal(vendorPackage.version, '0.2.1');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '6b6fc2aae3e3705fd998207a553f5230c2ef4a3a',
+    '1c329010d931f9ae8c816e898232f8b90654de12',
   );
-  assert.equal(vendorPackage.upstreamDirty, true);
+  assert.equal(vendorPackage.upstreamDirty, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
