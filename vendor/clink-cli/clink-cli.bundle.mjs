@@ -6757,8 +6757,11 @@ ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
   Shopify is detected first when the hostname ends with .myshopify.com, then eats365 when it ends
-  with .eats365pos.com. Otherwise the CLI sends GET https://<host> and detects Shopify when a
-  powered-by response header contains Shopify. Other sites return site_type "unknown".
+  with .eats365pos.com. Otherwise the CLI sends a browser-like GET request to https://<host> and
+  detects Shopify when a powered-by response header contains Shopify. If the header is absent or
+  the request fails, the CLI checks whether the hostname's CNAME chain reaches
+  shops.myshopify.com. A rate-limited request returns site_detection_rate_limited only when DNS
+  cannot confirm Shopify. Other sites return site_type "unknown".
 
 Examples:
   clink tool parse-site --url https://store.example.com --format pretty
@@ -6777,20 +6780,22 @@ ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
   First detects the site type with the same detector as parse-site. Unknown sites return
-  error_code "unkonw site type". eats365 sites return a normal success envelope with
+  error_code "unkonw site type"; inconclusive rate-limited detection returns
+  site_detection_rate_limited. eats365 sites return a normal success envelope with
   resolution "manual_item_facts", an empty items array, and a required_fields list: the platform
   publishes no machine-readable product data, so this is an instruction to source those fields
   from the conversation context and pass them to ucp-checkout create, not a failure to handle.
   That envelope also carries checkout_mapping, which maps each field to its ucp-checkout create
   flag, and unit_price_format. eats365 unitPrice is a major-unit decimal such as "28.00" because
   create scales line_items price by --currency; minor units there would overcharge by that scale.
-  Both cases exit 0. Shopify product URLs are normalized by removing query/hash
-  parameters and appending .js, then the command reads the Shopify product JSON and returns one
-  top-level item fact object. The items array contains one entry per variant with itemId,
-  title, unitPriceMinor, available, itemUrl, options, and inventoryStatus. Shopify unitPriceMinor
-  is in minor units, unlike the eats365 unitPrice field. itemId is the raw
-  Shopify variant ID. Currency is read from product JSON when present, otherwise from Shopify
-  /cart.js. The command does not infer MCC or merchantCategoryCode.
+  Both cases exit 0. For custom Shopify domains, the standard UCP profile's validated
+  merchant_origin is used as the canonical storefront origin when available. Shopify product URLs
+  are normalized by removing query/hash parameters and appending .js, then the command reads the
+  Shopify product JSON and returns one top-level item fact object. The items array contains one
+  entry per variant with itemId, title, unitPriceMinor, available, itemUrl, options, and
+  inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365 unitPrice field.
+  itemId is the raw Shopify variant ID. Currency is read from product JSON when present,
+  otherwise from Shopify /cart.js. The command does not infer MCC or merchantCategoryCode.
 
 Examples:
   clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
@@ -12046,25 +12051,54 @@ import { execFile } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
+var DEFAULT_SITE_TIMEOUT_MS = 1e4;
+var DEFAULT_RESOURCE_TIMEOUT_MS = 3e4;
+var BROWSER_LAUNCH_TIMEOUT_MS = 3e4;
+var BROWSER_CHANNELS = ["chrome", "msedge"];
 var CHECKOUT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+var CnameLookupTimeoutError = class extends Error {
+  constructor(timeoutMs) {
+    super(`request timed out after ${timeoutMs}ms`);
+    this.name = "CnameLookupTimeoutError";
+  }
+};
 async function resolveSiteTypeFromUrl(rawUrl, options2 = {}) {
+  return (await resolveSiteTypeDetailsFromUrl(rawUrl, options2)).result;
+}
+async function resolveSiteTypeDetailsFromUrl(rawUrl, options2) {
   const url = parseUrl(rawUrl);
   const hostname = normalizeHostname(url.hostname);
   if (isMyShopifyHost(hostname)) {
-    return siteTypeResult("shopify", "myshopify_domain");
+    return {
+      result: siteTypeResult("shopify", "myshopify_domain")
+    };
   }
   if (isEats365Host(hostname)) {
-    return siteTypeResult("eats365", "eats365pos_domain");
+    return {
+      result: siteTypeResult("eats365", "eats365pos_domain")
+    };
   }
+  let siteStatus;
+  let finalUrl;
   try {
-    const fetchSite = options2.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options2.timeoutMs));
-    const headers = await fetchSite(buildHttpsOriginUrl(url));
-    if (hasShopifyPoweredByHeader(headers)) {
-      return siteTypeResult("shopify", "powered_by_header");
+    const fetchSite = options2.fetchSite ?? ((siteUrl) => fetchSiteHeaders(siteUrl, options2.timeoutMs, options2.fetchPage));
+    const site = normalizeSiteFetchResult(await fetchSite(buildHttpsOriginUrl(url)));
+    siteStatus = site.status;
+    finalUrl = site.url;
+    if (hasShopifyPoweredByHeader(site.headers)) {
+      return siteTypeResolveDetails("shopify", "powered_by_header", finalUrl);
     }
   } catch {
   }
-  return siteTypeResult("unknown", "unknown");
+  const resolveCname = options2.resolveCname ?? nodeResolveCname;
+  const cnameDeadline = createCnameLookupDeadline(options2.timeoutMs, DEFAULT_SITE_TIMEOUT_MS);
+  if (await hasShopifyCname(hostname, resolveCname, { deadline: cnameDeadline })) {
+    return siteTypeResolveDetails("shopify", "cname", finalUrl);
+  }
+  if (siteStatus === 429) {
+    throw networkError("site_detection_rate_limited");
+  }
+  return siteTypeResolveDetails("unknown", "unknown", finalUrl);
 }
 async function resolveCheckoutTotalFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
@@ -12104,18 +12138,46 @@ var EATS365_MANUAL_ITEM_FIELDS = [
   "merchantCategoryCode"
 ];
 async function resolveParseItemFromUrl(rawUrl, options2 = {}) {
-  const siteType = await resolveSiteTypeFromUrl(rawUrl, options2);
-  if (siteType.site_type === "eats365") {
+  const siteType = await resolveSiteTypeDetailsFromUrl(rawUrl, options2);
+  if (siteType.result.site_type === "eats365") {
     throw validationError("EATS365_MANUAL_ITEM_REQUIRED");
   }
-  if (siteType.site_type !== "shopify") {
+  if (siteType.result.site_type !== "shopify") {
     throw validationError("unkonw site type");
   }
-  const productJsonUrl = buildShopifyProductJsonUrl(rawUrl);
-  const fetchJson = options2.fetchJson ?? ((url) => fetchJsonResource(url, options2.timeoutMs));
-  const productJson = await fetchJson(productJsonUrl);
-  const currency = readCurrency(productJson) ?? readCurrency(await fetchJson(buildShopifyCartJsonUrl(rawUrl))) ?? "unknown";
-  return parseShopifyProductItems(rawUrl, productJson, currency);
+  const canonicalItemUrl = await resolveCanonicalShopifyItemUrl(rawUrl, options2, siteType.finalUrl);
+  const productJsonUrl = buildShopifyProductJsonUrl(canonicalItemUrl);
+  let browserSession;
+  const timeoutMs = options2.timeoutMs ?? DEFAULT_RESOURCE_TIMEOUT_MS;
+  const fetchDirectJson = options2.fetchDirectJson ?? ((url) => fetchJsonResourceWithFetch(url, timeoutMs));
+  const fetchJson = options2.fetchJson ?? (async (url) => {
+    if (!browserSession) {
+      try {
+        return await fetchDirectJson(url);
+      } catch (error) {
+        if (!shouldUseBrowserFallback(error)) {
+          throw error;
+        }
+        const createBrowserSession = options2.createBrowserJsonSession ?? createInstalledBrowserJsonSession;
+        try {
+          browserSession = await createBrowserSession(canonicalItemUrl, timeoutMs);
+        } catch (browserError) {
+          if (browserError instanceof CliError && browserError.type === "install_error") {
+            throw installError(`${error.message}; ${browserError.message}`);
+          }
+          throw browserError;
+        }
+      }
+    }
+    return browserSession.fetchJson(url);
+  });
+  try {
+    const productJson = await fetchJson(productJsonUrl);
+    const currency = readCurrency(productJson) ?? readCurrency(await fetchJson(buildShopifyCartJsonUrl(canonicalItemUrl))) ?? "unknown";
+    return parseShopifyProductItems(canonicalItemUrl, productJson, currency);
+  } finally {
+    await browserSession?.close().catch(() => void 0);
+  }
 }
 async function resolveUcpProfileFromUrl(rawUrl, options2 = {}) {
   const url = parseUrl(rawUrl);
@@ -12177,6 +12239,12 @@ function siteTypeResult(siteType, strategy) {
     strategy
   };
 }
+function siteTypeResolveDetails(siteType, strategy, finalUrl) {
+  return {
+    result: siteTypeResult(siteType, strategy),
+    ...finalUrl ? { finalUrl } : {}
+  };
+}
 function isMyShopifyHost(hostname) {
   return hostname === "myshopify.com" || hostname.endsWith(".myshopify.com");
 }
@@ -12200,6 +12268,114 @@ function buildShopifyCartJsonUrl(rawUrl) {
   url.pathname = "/cart.js";
   return url.toString();
 }
+async function resolveCanonicalShopifyItemUrl(rawUrl, options2, finalSiteUrl) {
+  const itemUrl = parseUrl(rawUrl);
+  const itemHostname = normalizeHostname(itemUrl.hostname);
+  if (isMyShopifyHost(itemHostname)) {
+    return itemUrl.toString();
+  }
+  const resolveCname = options2.resolveCname ?? nodeResolveCname;
+  const redirectedOrigin = parseRedirectedOrigin(finalSiteUrl);
+  if (redirectedOrigin) {
+    const redirectCnameDeadline = createCnameLookupDeadline(options2.timeoutMs, DEFAULT_RESOURCE_TIMEOUT_MS);
+    if (await replaceWithValidatedShopifyOrigin(itemUrl, redirectedOrigin, resolveCname, redirectCnameDeadline)) {
+      return itemUrl.toString();
+    }
+  }
+  const fetchProfile = options2.fetchProfileJsonIfOk ?? ((profileUrl) => fetchJsonResourceIfOk(profileUrl, options2.timeoutMs));
+  let profile;
+  try {
+    profile = await fetchProfile(`${buildHttpsOriginUrl(itemUrl)}/.well-known/ucp`);
+  } catch {
+    return itemUrl.toString();
+  }
+  const merchantCnameDeadline = createCnameLookupDeadline(options2.timeoutMs, DEFAULT_RESOURCE_TIMEOUT_MS);
+  for (const merchantOrigin of readShopifyMerchantOrigins(profile)) {
+    const canonicalOrigin = parseMerchantOrigin(merchantOrigin);
+    if (!canonicalOrigin) {
+      continue;
+    }
+    if (normalizeHostname(canonicalOrigin.hostname) === itemHostname) {
+      itemUrl.protocol = "https:";
+      itemUrl.host = canonicalOrigin.host;
+      return itemUrl.toString();
+    }
+    if (await replaceWithValidatedShopifyOrigin(itemUrl, canonicalOrigin, resolveCname, merchantCnameDeadline)) {
+      return itemUrl.toString();
+    }
+  }
+  return itemUrl.toString();
+}
+function parseRedirectedOrigin(value) {
+  if (!value) {
+    return void 0;
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.port) {
+      return void 0;
+    }
+    return new URL(url.origin);
+  } catch {
+    return void 0;
+  }
+}
+async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resolveCname, deadline) {
+  const itemHostname = normalizeHostname(itemUrl.hostname);
+  const candidateHostname = normalizeHostname(candidateOrigin.hostname);
+  if (candidateHostname === itemHostname) {
+    return false;
+  }
+  if (!isMyShopifyHost(candidateHostname) && !await hasShopifyCname(candidateHostname, resolveCname, { deadline })) {
+    return false;
+  }
+  itemUrl.protocol = "https:";
+  itemUrl.host = candidateOrigin.host;
+  return true;
+}
+function readShopifyMerchantOrigins(profile) {
+  if (!isRecord5(profile)) {
+    return [];
+  }
+  const ucp = isRecord5(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord5(ucp.payment_handlers) ? ucp.payment_handlers : isRecord5(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  if (!paymentHandlers) {
+    return [];
+  }
+  const origins = [];
+  const seenOrigins = /* @__PURE__ */ new Set();
+  for (const handlers of Object.values(paymentHandlers)) {
+    if (!Array.isArray(handlers)) {
+      continue;
+    }
+    for (const handler of handlers) {
+      if (!isRecord5(handler) || !isRecord5(handler.config)) {
+        continue;
+      }
+      const merchantInfo = isRecord5(handler.config.merchant_info) ? handler.config.merchant_info : isRecord5(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
+      if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
+        seenOrigins.add(merchantOrigin);
+        origins.push(merchantOrigin);
+      }
+    }
+  }
+  return origins;
+}
+function parseMerchantOrigin(value) {
+  if (!value) {
+    return void 0;
+  }
+  try {
+    const origin = new URL(/^[a-z][a-z0-9+.-]*:\/\//iu.test(value) ? value : `https://${value}`);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.port || origin.pathname !== "/" && origin.pathname !== "" || origin.search || origin.hash) {
+      return void 0;
+    }
+    return origin;
+  } catch {
+    return void 0;
+  }
+}
 function appendJsonExtension(pathname) {
   const trimmed = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   if (!trimmed || trimmed === ".js" || trimmed.endsWith(".js")) {
@@ -12207,25 +12383,45 @@ function appendJsonExtension(pathname) {
   }
   return `${trimmed}.js`;
 }
-async function fetchSiteHeaders(url, timeoutMs = 1e4) {
+function normalizeSiteFetchResult(result) {
+  if (result instanceof Headers) {
+    return {
+      status: 200,
+      headers: result
+    };
+  }
+  return result;
+}
+async function fetchSiteHeaders(url, timeoutMs = 1e4, fetchPage = fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await fetchPage(url, {
       method: "GET",
+      redirect: "follow",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US",
+        "User-Agent": CHECKOUT_USER_AGENT
+      },
       signal: controller.signal
     });
-    return response.headers;
+    return {
+      status: response.status,
+      headers: response.headers,
+      ...response.url ? { url: response.url } : {}
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
-async function fetchJsonResource(url, timeoutMs = 3e4) {
+async function fetchJsonResourceWithFetch(url, timeoutMs = DEFAULT_RESOURCE_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       method: "GET",
+      redirect: "follow",
       headers: {
         Accept: "application/json",
         "Accept-Language": "en-US",
@@ -12234,7 +12430,9 @@ async function fetchJsonResource(url, timeoutMs = 3e4) {
       signal: controller.signal
     });
     if (!response.ok) {
-      throw networkError(`request failed with status ${response.status}`);
+      const retryAfter = response.headers.get("retry-after");
+      const retryAfterSuffix = retryAfter ? ` (retry-after: ${retryAfter})` : "";
+      throw new CliError("network_error", `request failed with status ${response.status}${retryAfterSuffix}`, EXIT_CODES.NETWORK, response.status);
     }
     return await response.json();
   } catch (error) {
@@ -12249,12 +12447,157 @@ async function fetchJsonResource(url, timeoutMs = 3e4) {
     clearTimeout(timeout);
   }
 }
+function shouldUseBrowserFallback(error) {
+  return error instanceof CliError && error.type === "network_error" && error.code === 429;
+}
+async function createInstalledBrowserJsonSession(itemUrl, requestTimeoutMs, createChannelSession = createPlaywrightBrowserChannelSession) {
+  let lastError;
+  for (const channel of BROWSER_CHANNELS) {
+    try {
+      const session = await createChannelSession(channel, itemUrl, requestTimeoutMs, BROWSER_LAUNCH_TIMEOUT_MS);
+      if (session) {
+        return session;
+      }
+    } catch (error) {
+      lastError = normalizeBrowserLaunchError(error, channel, BROWSER_LAUNCH_TIMEOUT_MS);
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  throw installError("browser fallback unavailable: Google Chrome and Microsoft Edge are not installed; install Google Chrome and retry");
+}
+async function createPlaywrightBrowserChannelSession(channel, itemUrl, requestTimeoutMs, launchTimeoutMs) {
+  let chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch {
+    throw installError("browser fallback unavailable: install Google Chrome and retry");
+  }
+  let browser;
+  try {
+    browser = await chromium.launch({
+      channel,
+      headless: true,
+      timeout: launchTimeoutMs
+    });
+  } catch (error) {
+    if (isMissingBrowserExecutableError(error)) {
+      return void 0;
+    }
+    throw error;
+  }
+  const launchedBrowser = browser;
+  try {
+    const page = await launchedBrowser.newPage();
+    const response = await page.goto(itemUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: requestTimeoutMs
+    });
+    if (!response) {
+      throw networkError("browser navigation returned no response");
+    }
+    if (!response.ok()) {
+      throw networkError(`browser navigation failed with status ${response.status()}`);
+    }
+    return {
+      fetchJson: (url) => fetchJsonResourceWithBrowser(page, url, requestTimeoutMs),
+      close: () => launchedBrowser.close()
+    };
+  } catch (error) {
+    await launchedBrowser.close().catch(() => void 0);
+    throw normalizeBrowserError(error, requestTimeoutMs);
+  }
+}
+function isMissingBrowserExecutableError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /distribution '[^']+' is not found|executable doesn't exist at/iu.test(message);
+}
+function normalizeBrowserLaunchError(error, channel, launchTimeoutMs) {
+  if (error instanceof CliError) {
+    return error;
+  }
+  const browserError = error;
+  if (browserError.name === "TimeoutError") {
+    return networkError(`${browserChannelName(channel)} launch timed out after ${launchTimeoutMs}ms`);
+  }
+  return networkError(`failed to launch ${browserChannelName(channel)}: ${browserError.message}`);
+}
+function browserChannelName(channel) {
+  return channel === "chrome" ? "Google Chrome" : "Microsoft Edge";
+}
+async function fetchJsonResourceWithBrowser(page, url, timeoutMs) {
+  let result;
+  try {
+    result = await page.evaluate(async ({ requestUrl, requestTimeoutMs }) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+      try {
+        const response = await fetch(requestUrl, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Accept-Language": "en-US"
+          },
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        return {
+          kind: "response",
+          status: response.status,
+          text: await response.text(),
+          retryAfter: response.headers.get("retry-after")
+        };
+      } catch (error) {
+        return {
+          kind: "error",
+          name: error instanceof Error ? error.name : "Error",
+          message: error instanceof Error ? error.message : String(error)
+        };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }, {
+      requestUrl: url,
+      requestTimeoutMs: timeoutMs
+    });
+  } catch (error) {
+    throw normalizeBrowserError(error, timeoutMs);
+  }
+  if (result.kind === "error") {
+    if (result.name === "AbortError") {
+      throw networkError(`request timed out after ${timeoutMs}ms`);
+    }
+    throw networkError(result.message);
+  }
+  if (result.status < 200 || result.status >= 300) {
+    const retryAfter = result.retryAfter ? ` (retry-after: ${result.retryAfter})` : "";
+    throw networkError(`request failed with status ${result.status}${retryAfter}`);
+  }
+  try {
+    return JSON.parse(result.text);
+  } catch (error) {
+    throw networkError(error.message);
+  }
+}
+function normalizeBrowserError(error, timeoutMs) {
+  if (error instanceof CliError) {
+    return error;
+  }
+  const browserError = error;
+  if (browserError.name === "TimeoutError") {
+    return networkError(`request timed out after ${timeoutMs}ms`);
+  }
+  return networkError(browserError.message);
+}
 async function fetchJsonResourceIfOk(url, timeoutMs = 3e4) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       method: "GET",
+      redirect: "follow",
       headers: {
         Accept: "application/json",
         "Accept-Language": "en-US",
@@ -12288,7 +12631,8 @@ function hasShopifyPoweredByHeader(headers) {
   }
   return false;
 }
-async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ new Set()) {
+async function hasShopifyCname(hostname, resolveCname, options2 = {}) {
+  const seen = options2.seen ?? /* @__PURE__ */ new Set();
   const normalized = normalizeHostname(hostname);
   if (seen.has(normalized) || seen.size >= 8) {
     return false;
@@ -12296,8 +12640,11 @@ async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ ne
   seen.add(normalized);
   let cnames;
   try {
-    cnames = await resolveCname(normalized);
-  } catch {
+    cnames = await resolveCnameWithinDeadline(normalized, resolveCname, options2.deadline);
+  } catch (error) {
+    if (error instanceof CnameLookupTimeoutError) {
+      throw networkError(error.message);
+    }
     return false;
   }
   for (const cname of cnames.map(normalizeHostname)) {
@@ -12306,11 +12653,40 @@ async function hasShopifyCname(hostname, resolveCname, seen = /* @__PURE__ */ ne
     }
   }
   for (const cname of cnames) {
-    if (await hasShopifyCname(cname, resolveCname, seen)) {
+    if (await hasShopifyCname(cname, resolveCname, { ...options2, seen })) {
       return true;
     }
   }
   return false;
+}
+function createCnameLookupDeadline(timeoutMs, defaultTimeoutMs) {
+  const effectiveTimeoutMs = timeoutMs ?? defaultTimeoutMs;
+  return {
+    expiresAt: Date.now() + effectiveTimeoutMs,
+    timeoutMs: effectiveTimeoutMs
+  };
+}
+async function resolveCnameWithinDeadline(hostname, resolveCname, deadline) {
+  if (!deadline) {
+    return resolveCname(hostname);
+  }
+  const remainingMs = deadline.expiresAt - Date.now();
+  if (remainingMs <= 0) {
+    throw new CnameLookupTimeoutError(deadline.timeoutMs);
+  }
+  let timeout;
+  try {
+    return await Promise.race([
+      resolveCname(hostname),
+      new Promise((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new CnameLookupTimeoutError(deadline.timeoutMs)), remainingMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 async function fetchCheckoutHtml(url, timeoutMs = 3e4, fetchPage) {
   if (!fetchPage) {

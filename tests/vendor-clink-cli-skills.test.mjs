@@ -397,13 +397,13 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
 });
 
-test('vendored CLI metadata records its upstream working-tree base', () => {
-  assert.equal(vendorPackage.version, '0.2.1');
+test('vendored CLI metadata records its upstream merge base', () => {
+  assert.equal(vendorPackage.version, '0.2.3');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '1c329010d931f9ae8c816e898232f8b90654de12',
+    '93f5bb57aa1ebf94695de8688db0c6fa04e41540',
   );
-  assert.equal(vendorPackage.upstreamDirty, false);
+  assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
