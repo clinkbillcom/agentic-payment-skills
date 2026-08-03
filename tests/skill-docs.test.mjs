@@ -440,6 +440,29 @@ test('catalog ext narrowing pins the eats365 channel and supported region', () =
   assert.match(catalogDiscovery, /Never invent one/u);
 });
 
+// A platform-store item has no product detail page. When the docs did not say so, the agent read
+// parse-item's empty `items` array as a failed lookup, went browsing for a page that cannot exist,
+// and ended the turn asking the user for a link the catalog had already returned.
+test('platform-store checkout uses the candidate url and its manual-facts envelope', () => {
+  assert.match(skill, /manual_item_facts/u);
+  assert.match(skill, /success envelope and an instruction, not a failure/u);
+  assert.match(skill, /do not browse for a product detail page that does not exist/iu);
+  assert.match(skill, /store ordering page carrying `\?product_id=`/u);
+
+  assert.match(catalogDiscovery, /manual_item_facts/u);
+  assert.match(catalogDiscovery, /store ordering page with `\?product_id=`/u);
+  assert.doesNotMatch(skill, /Resolve a product detail URL for `parse-item` before checkout create/u);
+});
+
+// --line-items is a major-unit string while catalogs report minor units, so passing the catalog
+// value straight through bills 100x the agreed amount.
+test('the line-item price unit conversion is stated where checkout is built', () => {
+  assert.match(skill, /major-unit decimal string/u);
+  assert.match(skill, /minor units[\s\S]{0,200}100x/u);
+  assert.match(skill, /`totalAmountMinor` stays in minor units/u);
+  assert.match(catalogDiscovery, /overcharges by 100x/u);
+});
+
 test('catalog discovery delegates outward instead of claiming unavailability', () => {
   assert.match(skill, /DELEGATE_EXTERNAL_PRODUCT_DISCOVERY/u);
   assert.match(skill, /browser, MCP, or another Skill/u);

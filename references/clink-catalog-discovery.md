@@ -141,6 +141,8 @@ Tell the user the Clink catalogs had no match and that discovery is continuing e
 - Never invent `merchant_id`, `store_id`, `region`, or `channel_type`. Missing channel context means omit `--ext`, not fabricate one.
 - Treat an empty result and a CLI error differently. An empty scoped search widens; an error surfaces and stops.
 - Discovery results are not purchase authorization. Do not chain into `ucp-checkout create` without explicit buy/order/checkout intent for the selected product.
+- A platform-store candidate carries its own `url`: the store ordering page with `?product_id=`, not a product detail page. Carry it into checkout as-is. `parse-item` answers `manual_item_facts` for it, which is the expected success envelope — the store has no per-product page to find, so browsing for one only wastes a turn and ends in the same place.
+- Prices in candidates are minor units (`price.amount: 2600` is HK$26.00). `ucp-checkout create --line-items` wants a major-unit string (`"26.00"`) and scales it by `--currency`. Convert once at checkout build time; passing the minor value through overcharges by 100x.
 - Keep the environment lock. The merchant list, both search paths, and any later checkout all run under the environment saved by `wallet init`.
 
 ## Common Mistakes
