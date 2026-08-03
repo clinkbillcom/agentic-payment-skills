@@ -431,7 +431,10 @@ test('catalog ext narrowing pins the eats365 channel and supported region', () =
   assert.match(skill, /`region` `hk` only/u);
   assert.match(skill, /never send `region` or `store_id` without `channel_type`/u);
 
-  assert.match(catalogDiscovery, /"channel_type":"eats365","region":"hk","store_id":"HK081034"/u);
+  assert.match(catalogDiscovery, /"channel_type":"eats365","region":"hk","store_id":"arabica_cheklapkok"/u);
+  // Real eats365 store ids are lowercase slugs, not numeric store codes; a fabricated-looking
+  // example invites the agent to invent one instead of taking it from context.
+  assert.doesNotMatch(catalogDiscovery, /store_id":"[A-Z]{2}\d+/u);
   assert.match(catalogDiscovery, /unsupported_catalog_region/u);
   assert.match(catalogDiscovery, /catalog_channel_type_missing/u);
   assert.match(catalogDiscovery, /Never invent one/u);

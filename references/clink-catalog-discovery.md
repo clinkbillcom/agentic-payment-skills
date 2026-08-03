@@ -113,13 +113,13 @@ Use `--ext` to narrow the search when context establishes a channel. `resolveCat
 | No channel established | omit `--ext` |
 | A channel, no region or store | `{"channel_type":"eats365"}` |
 | A channel and region | `{"channel_type":"eats365","region":"hk"}` |
-| One specific store in a region | `{"channel_type":"eats365","region":"hk","store_id":"HK081034"}` |
+| One specific store in a region | `{"channel_type":"eats365","region":"hk","store_id":"arabica_cheklapkok"}` |
 
 Rules for `--ext`:
 
 - The channel type is `eats365`. The FSM normalizes the `eat365` spelling to `eats365`; passing `eat365` through to the backend matches no channel because platform store snapshots are published under the `eats365` name.
 - `region` currently supports `hk` only. Another region returns `unsupported_catalog_region` and asks instead of running a search, because an unpublished region cannot be narrowed and would silently widen the search.
-- `store_id` is the platform-side store id, such as `HK081034`. Take it from context — a store the user named, or a store returned by an earlier broad search group. Never invent one.
+- `store_id` is the platform-side store id, a lowercase slug such as `arabica_cheklapkok` rather than a numeric store code. Take it from context — a store the user named, or a store returned by an earlier broad search group. Never invent one.
 - `region` and `store_id` require a `channel_type`. Alone they return `catalog_channel_type_missing`, since neither identifies a channel on its own.
 
 ## Step 5 - Delegate Product Discovery

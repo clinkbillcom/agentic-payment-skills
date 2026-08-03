@@ -186,19 +186,19 @@ test('narrows a broad search to one eats365 HK store through ext', () => {
     merchantMatch: false,
     channelType: 'eats365',
     region: 'hk',
-    storeId: 'HK081034',
+    storeId: 'arabica_cheklapkok',
   });
 
   assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
   assert.deepEqual(result.ext, {
     channel_type: 'eats365',
     region: 'hk',
-    store_id: 'HK081034',
+    store_id: 'arabica_cheklapkok',
   });
   assert.equal(
     result.command,
     'clink-cli catalog search --query \'iced matcha latte\''
-      + ' --ext \'{"channel_type":"eats365","region":"hk","store_id":"HK081034"}\' --format json',
+      + ' --ext \'{"channel_type":"eats365","region":"hk","store_id":"arabica_cheklapkok"}\' --format json',
   );
 });
 
@@ -237,7 +237,7 @@ test('requires a channel type before accepting a region or store id', () => {
     query: 'croissant',
     merchantListOutput,
     merchantMatch: false,
-    storeId: 'HK081034',
+    storeId: 'arabica_cheklapkok',
   });
 
   assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_MISSING);
@@ -254,7 +254,7 @@ test('returns grouped broad-search results with a cross-target product count', (
       groups: [
         {
           channel_type: 'eats365',
-          store_id: 'HK081034',
+          store_id: 'arabica_cheklapkok',
           region: 'hk',
           name: '%Arabica (Alexandra House)',
           products: [{ id: 'p1' }, { id: 'p2' }],
@@ -268,7 +268,7 @@ test('returns grouped broad-search results with a cross-target product count', (
   assert.equal(result.reason, 'broad_catalog_search_matched');
   assert.equal(result.scope, 'BROAD');
   assert.equal(result.productCount, 2);
-  assert.equal(result.groups[0].store_id, 'HK081034');
+  assert.equal(result.groups[0].store_id, 'arabica_cheklapkok');
 });
 
 test('derives the product count when the response omits total_products', () => {
@@ -278,7 +278,7 @@ test('derives the product count when the response omits total_products', () => {
     merchantMatch: false,
     broadSearchOutput: {
       groups: [
-        { store_id: 'HK081034', products: [{ id: 'p1' }] },
+        { store_id: 'arabica_cheklapkok', products: [{ id: 'p1' }] },
         { store_id: 'HK026559', products: [{ id: 'p2' }, { id: 'p3' }] },
       ],
     },
@@ -314,7 +314,7 @@ test('delegates to external discovery when a scoped store search returns nothing
     merchantMatch: false,
     channelType: 'eats365',
     region: 'hk',
-    storeId: 'HK081034',
+    storeId: 'arabica_cheklapkok',
     broadSearchOutput: { groups: [], total_products: 0 },
   });
 
@@ -322,7 +322,7 @@ test('delegates to external discovery when a scoped store search returns nothing
   assert.deepEqual(result.ext, {
     channel_type: 'eats365',
     region: 'hk',
-    store_id: 'HK081034',
+    store_id: 'arabica_cheklapkok',
   });
 });
 
