@@ -6788,15 +6788,14 @@ Behavior:
   That envelope also carries checkout_mapping, which maps each field to its ucp-checkout create
   flag, and unit_price_format. eats365 unitPrice is a major-unit decimal such as "28.00" because
   create scales line_items price by --currency; minor units there would overcharge by that scale.
-  Both the unknown and eats365 cases exit 0. For custom Shopify domains, the standard UCP
-  profile's validated merchant_origin is used as the canonical storefront origin when available.
-  Product URLs are normalized by removing query/hash parameters and appending .js, then the
-  command reads the Shopify product JSON and returns one top-level item fact object. The items
-  array contains one entry per variant with itemId, title, unitPriceMinor, available, itemUrl,
-  options, and inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365
-  unitPrice field. itemId is the raw Shopify variant ID. Currency is read from product JSON when
-  present, otherwise from Shopify /cart.js. The command does not infer MCC or
-  merchantCategoryCode.
+  Both cases exit 0. For custom Shopify domains, the standard UCP profile's validated
+  merchant_origin is used as the canonical storefront origin when available. Shopify product URLs
+  are normalized by removing query/hash parameters and appending .js, then the command reads the
+  Shopify product JSON and returns one top-level item fact object. The items array contains one
+  entry per variant with itemId, title, unitPriceMinor, available, itemUrl, options, and
+  inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365 unitPrice field.
+  itemId is the raw Shopify variant ID. Currency is read from product JSON when present,
+  otherwise from Shopify /cart.js. The command does not infer MCC or merchantCategoryCode.
 
 Examples:
   clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
@@ -6934,7 +6933,7 @@ Examples:
 var WALLET_HELP = `clink wallet
 
 Usage:
-  clink wallet init --email <email> [options]
+  clink wallet init --email <email> [--name <name>] [options]
   clink wallet logout [options]
   clink wallet status [options]
 
@@ -6953,10 +6952,11 @@ Examples:
 var WALLET_INIT_HELP = `clink wallet init
 
 Usage:
-  clink wallet init --email <email> [options]
+  clink wallet init --email <email> [--name <name>] [options]
 
 Arguments:
   --email <email>              Customer email verified in the browser
+  --name <name>                Optional display name; defaults to the email text before @
 
 Options:
   --sandbox                    Use sandbox API base from domains.ts
@@ -6977,8 +6977,8 @@ Device Authorization:
   until authorization completes. --no-open always disables browser launch. If launch fails, open
   the displayed URL manually while polling continues.
   Email OTP entry and confirmation happen in the browser.
-  Existing customers keep their server-side name. New customers get the email text before @ as
-  their initial name; --name is rejected. Use \`config set name\` to change the local name later.
+  Existing customers keep their server-side name. New customers default to the email text before @;
+  --name can override that initial name. The resolved name is always saved to local config.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -13658,6 +13658,9 @@ function resolveWatchFlag(flags) {
 }
 async function maybeWatchEvents(context, url, label, watchTarget = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
+    if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
+      printPendingWatchHandoff(url, watchTarget.eventType);
+    }
     return;
   }
   await refreshOAuthAuthorization(context, {
@@ -13676,6 +13679,14 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}) {
     ...watchTarget
   });
   printSuccess(result, context.globalOptions.format);
+}
+function printPendingWatchHandoff(url, eventType) {
+  if (!url || !eventType) {
+    return;
+  }
+  process.stderr.write(`Watch not started (--no-watch). This link needs a listener before the user acts on it.
+Run now: clink-cli events poll --type ${eventType} --no-ack --format json
+`);
 }
 async function handleEventsCommand(subcommand, context) {
   if (!subcommand) {
@@ -13782,22 +13793,25 @@ async function handleWalletCommand(subcommand, context) {
 }
 async function walletInit(context) {
   const email = requireStringFlag(context.args.flags, "missing --email", "email").trim();
-  if (getStringFlag(context.args.flags, "name") !== void 0) {
-    throw validationError("--name is no longer used by wallet init; the initial name comes from the email text before @, use `config set name` to change it");
-  }
+  const providedName = getStringFlag(context.args.flags, "name");
   if (!email) {
     throw validationError("email must not be blank");
   }
   if (email.length > 255) {
     throw validationError("email must be at most 255 characters");
   }
-  const emailSeparatorIndex = email.indexOf("@");
-  const name = emailSeparatorIndex > 0 ? email.slice(0, emailSeparatorIndex).trim() : "";
+  let name;
+  if (providedName === void 0) {
+    const emailSeparatorIndex = email.indexOf("@");
+    name = emailSeparatorIndex > 0 ? email.slice(0, emailSeparatorIndex).trim() : "";
+  } else {
+    name = providedName.trim();
+  }
   if (!name) {
-    throw validationError("email must include a name before @");
+    throw validationError(providedName === void 0 ? "email must include a name before @" : "name must not be blank");
   }
   if (name.length > 50) {
-    throw validationError("email name before @ must be at most 50 characters; use `config set name` to change it after initialization");
+    throw validationError(providedName === void 0 ? "email name before @ must be at most 50 characters; use --name to provide a shorter name" : "name must be at most 50 characters");
   }
   if (getStringFlag(context.args.flags, "otp")) {
     throw validationError("--otp is no longer used by wallet init; complete email verification in the browser");

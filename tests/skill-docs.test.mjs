@@ -174,6 +174,19 @@ test('instruction activation uses one explicit Event FSM watcher', () => {
   assert.match(asyncEvents, /With either target[\s\S]*acknowledges unrelated events[\s\S]*matching event/iu);
 });
 
+// The Passkey URL once went out with no listener behind it, and the flow then asked the user to
+// report completion by hand. The CLI now prints the poll to run; the docs must point at that line
+// so it reads as the handoff it is rather than a notice.
+test('the --no-watch handoff is documented as the next command to run', () => {
+  assert.match(asyncEvents, /Watch not started \(--no-watch\)/u);
+  assert.match(
+    asyncEvents,
+    /Run now: clink-cli events poll --type purchase_instruction\.activated --no-ack --format json/u,
+  );
+  assert.match(asyncEvents, /Run that command before sending the Passkey URL/u);
+  assert.match(skill, /`Watch not started \(--no-watch\)`[\s\S]*that line is the handoff/u);
+});
+
 test('wallet init proactively returns and surfaces the card binding URL', () => {
   assert.match(walletConfig, /strips the returned URL to its HTTPS origin/u);
   assert.match(walletConfig, /Proactively send a non-empty `data\.bindingUrl`/u);

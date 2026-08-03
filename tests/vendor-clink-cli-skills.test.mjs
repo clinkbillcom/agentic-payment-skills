@@ -401,7 +401,7 @@ test('vendored CLI metadata records its upstream merge base', () => {
   assert.equal(vendorPackage.version, '0.2.3');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '93f5bb57aa1ebf94695de8688db0c6fa04e41540',
+    '6e7cc041c87fb37b1eafbe70cd510254cef3c248',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
