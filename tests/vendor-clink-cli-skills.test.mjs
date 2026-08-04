@@ -152,6 +152,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(output.ok, true);
     assert.equal(output.data.hasAuthorization, true);
     assert.equal(output.data.authorizationType, 'oauth');
+    assert.equal(output.data.name, 'wallet-init');
     assert.equal('oauthRequired' in output.data, false);
     assert.equal(
       output.data.bindingUrl,
@@ -171,6 +172,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal(statusOutput.data.authorizationEnvironmentMatches, true);
     assert.equal(statusOutput.data.authorizationType, 'oauth');
     assert.equal(statusOutput.data.oauthRequired, true);
+    assert.equal(statusOutput.data.name, 'wallet-init');
     assert.doesNotMatch(status.stdout, /access_wallet_init_contract|refresh_wallet_init_contract/u);
 
     const mismatchedStatus = await runBundleAsync([
@@ -376,11 +378,30 @@ test('vendored CLI discovers skills list and tip commands', () => {
   );
 });
 
+test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', () => {
+  const rootHelp = runBundle(['--help']);
+  const catalogHelp = runBundle(['ucp-catalog', '--help']);
+  const productHelp = runBundle(['ucp-catalog', 'product', '--help']);
+  assert.match(rootHelp, /ucp-catalog/u);
+  assert.match(rootHelp, /^\s*catalog\s/mu);
+  assert.match(catalogHelp, /ucp-catalog search/u);
+  assert.match(catalogHelp, /ucp-catalog product/u);
+  assert.match(productHelp, /--product-id <id>/u);
+  assert.match(productHelp, /\/agent\/ucp\/\{merchantId\}\/catalog\/product/u);
+
+  // catalog is the cross-merchant path that answers "who carries this"; naming a merchant is the
+  // scoped question, so help must route the caller to ucp-catalog instead. Asserted through help
+  // rather than a run, because config checks fire before flag validation under the test env.
+  const crossMerchantHelp = runBundle(['catalog', 'search', '--help']);
+  assert.match(crossMerchantHelp, /Takes no --merchant-id/u);
+  assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
+});
+
 test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.equal(vendorPackage.version, '0.2.3');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'd6a5430c105d50f996bd8dbace39ee126313bcd4',
+    'f258c141551699aba7a7d93e1bd0e8ebaaf4e1f0',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
@@ -398,6 +419,7 @@ test('vendored CLI embeds the .dev test API, agent, and dashboard domains', () =
   assert.match(bundleSource, /https:\/\/api\.clinkbill\.dev/u);
   assert.match(bundleSource, /https:\/\/agent\.clinkbill\.dev/u);
   assert.match(bundleSource, /https:\/\/dashboard\.clinkbill\.dev/u);
+  assert.doesNotMatch(runBundle(['skills', 'list', '--help']), /--sandbox|--test|--base-url/u);
 });
 
 test('vendored instruction sign-url exposes identifiers for correlated activation watches', async () => {

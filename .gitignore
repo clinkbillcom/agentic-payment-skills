@@ -1,4 +1,7 @@
 .omx/
 tests/*
+!tests/catalog-discovery-fsm.test.mjs
+!tests/fsm-action-coverage.test.mjs
 !tests/skill-install-workflow-fsm.test.mjs
 !tests/skill-tip-batch-workflow-fsm.test.mjs
+!tests/uat-wrapper-environment.test.mjs

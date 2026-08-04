@@ -429,8 +429,8 @@ test('does not let productName purchase context get preempted by Skill installat
     productName: 'skill 安装服务',
   });
 
-  assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
-  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+  assert.equal(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
 });
 
 test('does not let itemId purchase context get preempted by Skill installation wording', () => {
@@ -482,29 +482,37 @@ test('an install prefix cannot preempt an explicit merchant payment route', () =
   assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
 });
 
-for (const input of [
+for (const { input, route, action } of [
   {
-    intent: 'skill_install',
-    publisher: 'clinkpay',
-    skillName: 'pollyreach',
-    installAuthorized: true,
-    productName: 'Laptop',
-    purchaseIntent: true,
+    input: {
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'pollyreach',
+      installAuthorized: true,
+      productName: 'Laptop',
+      purchaseIntent: true,
+    },
+    route: PaymentIntentRoute.CATALOG_PURCHASE,
+    action: PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW,
   },
   {
-    intent: 'skill_install',
-    publisher: 'clinkpay',
-    skillName: 'pollyreach',
-    installAuthorized: true,
-    itemId: 'sku_1',
-    checkoutIntent: true,
+    input: {
+      intent: 'skill_install',
+      publisher: 'clinkpay',
+      skillName: 'pollyreach',
+      installAuthorized: true,
+      itemId: 'sku_1',
+      checkoutIntent: true,
+    },
+    route: PaymentIntentRoute.UCP_CHECKOUT,
+    action: PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW,
   },
 ]) {
   test('structured product purchase context cannot be preempted by structured install fields', () => {
     const result = classifyPaymentIntent(input);
 
-    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
-    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+    assert.equal(result.route, route);
+    assert.equal(result.action, action);
   });
 }
 
@@ -545,25 +553,41 @@ for (const [field, productUrl] of [
   });
 }
 
-for (const input of [
+for (const { input, route, action } of [
   {
-    productUrl: '',
-    itemUrl: 'https://shop.test/item/sku_1',
+    input: {
+      productUrl: '',
+      itemUrl: 'https://shop.test/item/sku_1',
+    },
+    route: PaymentIntentRoute.UCP_CHECKOUT,
+    action: PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW,
   },
   {
-    productUrl: '   ',
-    product_url: '',
-    item_url: 'https://shop.test/p/sku_1',
+    input: {
+      productUrl: '   ',
+      product_url: '',
+      item_url: 'https://shop.test/p/sku_1',
+    },
+    route: PaymentIntentRoute.UCP_CHECKOUT,
+    action: PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW,
   },
   {
-    productName: '',
-    product_name: '   ',
-    itemName: 'Laptop',
+    input: {
+      productName: '',
+      product_name: '   ',
+      itemName: 'Laptop',
+    },
+    route: PaymentIntentRoute.CATALOG_PURCHASE,
+    action: PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW,
   },
   {
-    itemId: '',
-    item_id: '   ',
-    productId: 'sku_1',
+    input: {
+      itemId: '',
+      item_id: '   ',
+      productId: 'sku_1',
+    },
+    route: PaymentIntentRoute.UCP_CHECKOUT,
+    action: PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW,
   },
 ]) {
   test(`an empty product alias cannot hide a valid lower-priority alias: ${JSON.stringify(input)}`, () => {
@@ -576,8 +600,8 @@ for (const input of [
       ...input,
     });
 
-    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
-    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+    assert.equal(result.route, route);
+    assert.equal(result.action, action);
   });
 }
 
@@ -1363,4 +1387,184 @@ test('generic confirmation resumes a batch only when it is the sole pending skil
   });
   assert.equal(ambiguous.route, PaymentIntentRoute.INPUT_REQUIRED);
   assert.equal(ambiguous.reason, 'skill_confirmation_ambiguous');
+});
+
+test('routes a described product purchase with no link to catalog discovery', () => {
+  const result = classifyPaymentIntent({ text: '我想买一件李小龙的 T 恤' });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PURCHASE_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'product_purchase_intent_without_product_url');
+  assert.equal(result.catalogQuery, '我想买一件李小龙的 T 恤');
+});
+
+test('prefers a structured product name as the catalog query', () => {
+  const result = classifyPaymentIntent({
+    text: 'buy this for me',
+    productName: 'Bruce Lee T-shirt',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.productName, 'Bruce Lee T-shirt');
+  assert.equal(result.catalogQuery, 'Bruce Lee T-shirt');
+});
+
+for (const resolvedTarget of [
+  { productUrl: 'https://shop.test/products/sku_1' },
+  { itemId: 'sku_1' },
+  { merchantId: 'merchant_1' },
+]) {
+  test(`an already resolved target stays on UCP checkout: ${JSON.stringify(resolvedTarget)}`, () => {
+    const result = classifyPaymentIntent({
+      text: 'buy the Bruce Lee T-shirt',
+      productName: 'Bruce Lee T-shirt',
+      ...resolvedTarget,
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.UCP_CHECKOUT);
+    assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+  });
+}
+
+test('a described product without purchase intent still asks for purchase intent', () => {
+  const result = classifyPaymentIntent({ text: '看看李小龙的 T 恤', productName: '李小龙 T 恤' });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_PAYMENT_TARGET);
+  assert.equal(result.reason, 'purchase_intent_missing');
+});
+
+const pendingCatalogSelection = {
+  status: 'AWAITING_SELECTION',
+  candidates: [
+    {
+      product_id: 'product_1',
+      title: 'Bruce Lee Tee',
+      url: 'https://www.bruceleeclub.com/products/tee',
+      merchant_id: 'mcht_frnz6yfrz1sd',
+    },
+    {
+      product_id: 'product_2',
+      title: 'Iced Matcha Latte',
+      channel_type: 'eats365',
+      region: 'hk',
+      store_id: 'HK081034',
+    },
+  ],
+};
+
+test('resolves a bare ordinal reply into the matching catalog product', () => {
+  const result = classifyPaymentIntent({
+    text: '2',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PRODUCT_SELECTION_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
+  assert.equal(result.reason, 'catalog_product_selected');
+  assert.equal(result.selectedProduct.productId, 'product_2');
+  assert.equal(result.selectedProduct.storeId, 'HK081034');
+  assert.equal(result.selectedProduct.channelType, 'eats365');
+});
+
+test('resolves a Chinese ordinal reply into the matching catalog product', () => {
+  const result = classifyPaymentIntent({
+    text: '第一个',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+  assert.equal(result.selectedProduct.productId, 'product_1');
+  assert.equal(result.selectedProduct.productUrl, 'https://www.bruceleeclub.com/products/tee');
+});
+
+test('resolves an explicit structured product id selection', () => {
+  const result = classifyPaymentIntent({
+    text: '就这个',
+    selectedProductId: 'product_1',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
+  assert.equal(result.selectedProduct.productId, 'product_1');
+});
+
+test('rejects a selected product id outside the presented candidates', () => {
+  const result = classifyPaymentIntent({
+    text: '就这个',
+    selectedProductId: 'product_never_shown',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PRODUCT_SELECTION_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'selected_product_not_in_candidates');
+  assert.equal(result.rejectedProductId, 'product_never_shown');
+});
+
+for (const outOfRange of ['0', '3']) {
+  test(`rejects an out-of-range ordinal selection: ${outOfRange}`, () => {
+    const result = classifyPaymentIntent({
+      text: outOfRange,
+      pendingCatalogProductSelection: pendingCatalogSelection,
+    });
+
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
+    assert.equal(result.reason, 'selected_index_out_of_range');
+  });
+}
+
+test('rejects an out-of-range structured index selection', () => {
+  const result = classifyPaymentIntent({
+    text: '选一个',
+    selectedIndex: 9,
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'selected_index_out_of_range');
+  assert.equal(result.rejectedIndex, 9);
+});
+
+test('cancels a pending catalog selection without starting checkout', () => {
+  const result = classifyPaymentIntent({
+    text: '都不要',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PRODUCT_SELECTION_REJECTED);
+  assert.equal(result.action, PaymentIntentAction.CANCEL_PENDING_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'catalog_product_selection_rejected');
+  assert.equal(result.terminal, true);
+});
+
+test('asks again when a pending selection carries no candidates', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: { status: 'AWAITING_SELECTION', candidates: [] },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'catalog_selection_candidates_missing');
+});
+
+test('ignores a consumed catalog selection object', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: { ...pendingCatalogSelection, status: 'EXECUTING' },
+  });
+
+  assert.notEqual(result.route, PaymentIntentRoute.CATALOG_PURCHASE);
+});
+
+test('leaves an ambiguous free-text reply unresolved instead of guessing a product', () => {
+  const result = classifyPaymentIntent({
+    text: '那个便宜点的吧',
+    pendingCatalogProductSelection: pendingCatalogSelection,
+  });
+
+  assert.notEqual(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
 });

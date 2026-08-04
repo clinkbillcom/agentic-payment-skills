@@ -6,7 +6,7 @@
 
 - Node.js >= 20
 - Skill 内置 vendored `clink-cli` bundle：`vendor/clink-cli/clink-cli.bundle.mjs`；全局安装 `clink-cli` 只作为本地调试可选项
-- 新的钱包初始化使用 OAuth Device Authorization；仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
+- 新的钱包初始化使用 OAuth Device Authorization，并默认取邮箱 `@` 前部分作为姓名；仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
 
 ## 安装 Clink Payment Skills
 

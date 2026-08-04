@@ -28,7 +28,7 @@ test('requests CLI internal endpoint discovery before any profile probe', () => 
   );
 });
 
-test('never emits an environment flag for internal endpoint discovery', () => {
+test('ignores legacy sandbox input and never emits an environment flag', () => {
   for (const environmentHint of [undefined, true, false]) {
     const result = classifyUcpCheckoutRoute({
       selectedItemUrl: modelMaxProductUrl,

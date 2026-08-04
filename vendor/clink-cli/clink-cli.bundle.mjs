@@ -4911,6 +4911,9 @@ var OPTION_DEFINITIONS = [
   { name: "cursor", flags: "--cursor <cursor>" },
   { name: "request-id", flags: "--request-id <id>" },
   { name: "ucp-agent", flags: "--ucp-agent <value>" },
+  { name: "ext", flags: "--ext <json>" },
+  { name: "channel-type", flags: "--channel-type <type>" },
+  { name: "form-type", flags: "--form-type <type>" },
   { name: "amount", flags: "--amount <amount>" },
   { name: "currency", flags: "--currency <currency>" },
   { name: "instruction-id", flags: "--instruction-id <id>" },
@@ -4934,6 +4937,10 @@ var OPTION_DEFINITIONS = [
   { name: "extra", flags: "--extra <json>" },
   { name: "max-wait", flags: "--max-wait <seconds>" },
   { name: "limit", flags: "--limit <n>" },
+  { name: "page", flags: "--page <n>" },
+  { name: "size", flags: "--size <n>" },
+  { name: "start-time", flags: "--start-time <datetime>" },
+  { name: "end-time", flags: "--end-time <datetime>" },
   { name: "type", flags: "--type <eventType>" },
   { name: "url", flags: "--url <url>" }
 ];
@@ -5133,6 +5140,9 @@ var DASHBOARD_BASE_URLS = {
   sandbox: "https://uat-dashboard.clinkbill.com",
   test: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
+};
+var MERCHANT_LIST_URLS = {
+  production: "https://www.clinkbill.com/.well-known/ucp-merchants.json"
 };
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
@@ -5502,7 +5512,9 @@ function assignRiskRules(target, value) {
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
   for (const [key, value] of Object.entries(options2.query ?? {})) {
-    if (value !== void 0) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => url.searchParams.append(key, String(item)));
+    } else if (value !== void 0) {
       url.searchParams.set(key, String(value));
     }
   }
@@ -5640,7 +5652,7 @@ function isDryRun(value) {
 
 // dist/utils.js
 import { spawn } from "node:child_process";
-var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink-cli wallet init` to sign in.";
+var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
 function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
   if (config.authorization) {
@@ -5681,7 +5693,7 @@ function buildInstructionHeaders(config, requestBaseUrl = config.baseUrl) {
 }
 function assertAuthorizationRequestOrigin(config, requestBaseUrl) {
   if (config.authorization && !sameHttpOrigin(config.authorization.issuerOrigin, requestBaseUrl)) {
-    throw configError("saved OAuth authorization belongs to a different API environment; run `clink-cli wallet init` for the selected wallet environment");
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
   }
 }
 function buildBareDomainUrl(bindingUrl) {
@@ -6472,7 +6484,6 @@ var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to
 ${HELP_OPTION}`;
 var TOOL_NETWORK_OPTIONS = `  --timeout <ms>                Request timeout in milliseconds
 ${OUTPUT_OPTIONS}`;
-var TOOL_ENDPOINT_OPTIONS = OUTPUT_OPTIONS;
 var CUSTOMER_AUTH_OPTIONS = `  --customer-id <id>            Override customer ID
   --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
 var CUSTOMER_API_KEY_OPTIONS = `  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
@@ -6490,12 +6501,12 @@ var CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --no-watch                    Do not poll for webhook events after printing the link
   --dry-run                     Print the link without polling for webhook events
 ${OUTPUT_OPTIONS}`;
-var ROOT_HELP = `clink-cli
+var ROOT_HELP = `clink
 
 Clink customer wallet CLI.
 
 Usage:
-  clink-cli <command> [subcommand] [options]
+  clink <command> [subcommand] [options]
 
 Commands:
   wallet            Initialize wallet and inspect local wallet status
@@ -6506,6 +6517,8 @@ Commands:
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
   ucp-catalog       Search merchant UCP catalogs
+  catalog           Search catalogs across merchants without naming one
+  ucp-order         Query UCP orders by ID or list them by status and time range
   instruction       Manage purchase instruction mandates (agentic authorization)
   events            Poll the webhook-event queue for state-change events
   tool              Utility tools for UCP and checkout workflows
@@ -6536,38 +6549,43 @@ Event Watching:
   prints the events to stdout. Progress is written to stderr; the events envelope
   is written to stdout. Pass --no-watch to skip polling (for scripted or
   non-interactive use, including card binding-link refreshes). To pull state
-  changes on demand without printing a link, use 'clink-cli events poll'
-  (see 'clink-cli events --help').
+  changes on demand without printing a link, use 'clink events poll'
+  (see 'clink events --help').
 
 Examples:
-  clink-cli wallet init --email alice@example.com
-  clink-cli wallet init --sandbox --email alice@example.com
-  clink-cli wallet init --test --email alice@example.com
-  clink-cli wallet status --format pretty
-  clink-cli card setup-link --open
-  clink-cli skills list --all --format pretty
-  clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
-  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink-cli ucp-checkout get --checkout-id chk_xxx
-  clink-cli tool item-id --url https://shop.example/products/t-shirt?variant=123
-  clink-cli refund create --order-id order_xxx
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
+  clink wallet status --format pretty
+  clink card setup-link --open
+  clink skills list --all --format pretty
+  clink skills tip --publisher clinkpay --name PollyReach --amount 2
+  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink catalog search --query "iced latte" --format json
+  clink ucp-checkout get --checkout-id chk_xxx
+  clink ucp-order get --order-id order_xxx
+  clink ucp-order list --status paid --start-time 2026-07-01T00:00:00Z
+  clink tool item-id --url https://shop.example/products/t-shirt?variant=123
+  clink refund create --order-id order_xxx
 
 More Help:
-  clink-cli wallet --help
-  clink-cli card --help
-  clink-cli skills --help
-  clink-cli ucp-catalog --help
-  clink-cli ucp-checkout --help
-  clink-cli refund --help
-  clink-cli instruction --help
-  clink-cli tool --help
-  clink-cli config --help
+  clink wallet --help
+  clink card --help
+  clink skills --help
+  clink ucp-catalog --help
+  clink catalog --help
+  clink ucp-checkout --help
+  clink ucp-order --help
+  clink refund --help
+  clink instruction --help
+  clink tool --help
+  clink config --help
 `;
-var SKILLS_HELP = `clink-cli skills
+var SKILLS_HELP = `clink skills
 
 Usage:
-  clink-cli skills <list|install|tip> [options]
+  clink skills <list|install|tip> [options]
 
 Actions:
   list              List all public skills in reversed NEW order with one-based Number fields
@@ -6575,15 +6593,15 @@ Actions:
   tip               Tip a skill publisher using the refreshed default payment method
 
 Examples:
-  clink-cli skills list --all --format pretty
-  clink-cli skills install clinkpay/PollyReach@v1.0.0
-  clink-cli skills install clinkpay/PollyReach --force
-  clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2
+  clink skills list --all --format pretty
+  clink skills install clinkpay/PollyReach@v1.0.0
+  clink skills install clinkpay/PollyReach --force
+  clink skills tip --publisher clinkpay --name PollyReach --amount 2
 `;
-var SKILLS_LIST_HELP = `clink-cli skills list
+var SKILLS_LIST_HELP = `clink skills list
 
 Usage:
-  clink-cli skills list --all [options]
+  clink skills list --all [options]
 
 Required Arguments:
   --all                        Request all public skills with pageSize=999
@@ -6603,13 +6621,13 @@ Behavior:
   The resulting JSON array is returned through the standard success envelope.
 
 Examples:
-  clink-cli skills list --all --format pretty
-  clink-cli skills list --all --tippable --format pretty
+  clink skills list --all --format pretty
+  clink skills list --all --tippable --format pretty
 `;
-var SKILLS_INSTALL_HELP = `clink-cli skills install
+var SKILLS_INSTALL_HELP = `clink skills install
 
 Usage:
-  clink-cli skills install <publisher>/<skillName>[@<version>] [options]
+  clink skills install <publisher>/<skillName>[@<version>] [options]
 
 Arguments:
   <publisher>/<skillName>[@<version>]
@@ -6642,15 +6660,15 @@ Endpoint:
   GET /prod-api/skill-marketplace/public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
 
 Examples:
-  clink-cli skills install clinkpay/PollyReach@v1.0.0
-  clink-cli skills install clinkpay/PollyReach
-  clink-cli skills install clinkpay/PollyReach --force
-  clink-cli skills install clinkpay/PollyReach --dry-run --format pretty
+  clink skills install clinkpay/PollyReach@v1.0.0
+  clink skills install clinkpay/PollyReach
+  clink skills install clinkpay/PollyReach --force
+  clink skills install clinkpay/PollyReach --dry-run --format pretty
 `;
-var SKILLS_TIP_HELP = `clink-cli skills tip
+var SKILLS_TIP_HELP = `clink skills tip
 
 Usage:
-  clink-cli skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
+  clink skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
 
 Target:
   --publisher <publisher>      Exact publisher; requires --name
@@ -6676,16 +6694,17 @@ Notes:
   Payment results expose rawPaymentStatus, rawPaymentMessage, and the original payment payload.
   The backend calculates Credit allocation.
 `;
-var TOOL_HELP = `clink-cli tool
+var TOOL_HELP = `clink tool
 
 Usage:
-  clink-cli tool item-id --url <url> [options]
-  clink-cli tool parse-site --url <url> [options]
-  clink-cli tool parse-item --url <url> [options]
-  clink-cli tool checkout-total --url <url> [options]
-  clink-cli tool get-ucp-profile --url <url> [options]
-  clink-cli tool get-rest-endpoint --url <url> [options]
-  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool item-id --url <url> [options]
+  clink tool parse-site --url <url> [options]
+  clink tool parse-item --url <url> [options]
+  clink tool checkout-total --url <url> [options]
+  clink tool get-ucp-profile --url <url> [options]
+  clink tool get-rest-endpoint --url <url> [options]
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-merchant-list [options]
 
 Tools:
   item-id        Extract a UCP item_id from a product URL
@@ -6694,21 +6713,22 @@ Tools:
   checkout-total Extract the total amount from a Shopify checkout URL
   get-ucp-profile Fetch a merchant UCP discovery profile
   get-rest-endpoint Resolve the UCP REST endpoint and provider
-  internal-ucp   Resolve an internal Clink UCP endpoint from a product URL
+  internal-ucp   Read supported merchants or resolve an internal Clink UCP endpoint
 
 Examples:
-  clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
-  clink-cli tool parse-site --url https://store.example.com --format json
-  clink-cli tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format json
-  clink-cli tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
-  clink-cli tool get-ucp-profile --url https://merchant.example.com --format json
-  clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
-  clink-cli tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format json
+  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
+  clink tool parse-site --url https://store.example.com --format json
+  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format json
+  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
+  clink tool get-ucp-profile --url https://merchant.example.com --format json
+  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format json
+  clink tool internal-ucp get-merchant-list --format json
 `;
-var TOOL_ITEM_ID_HELP = `clink-cli tool item-id
+var TOOL_ITEM_ID_HELP = `clink tool item-id
 
 Usage:
-  clink-cli tool item-id --url <url> [options]
+  clink tool item-id --url <url> [options]
 
 Arguments:
   --url <url>   Product URL to inspect
@@ -6722,12 +6742,12 @@ Behavior:
   Other sites return item_id "unknown".
 
 Examples:
-  clink-cli tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
+  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
 `;
-var TOOL_PARSE_SITE_HELP = `clink-cli tool parse-site
+var TOOL_PARSE_SITE_HELP = `clink tool parse-site
 
 Usage:
-  clink-cli tool parse-site --url <url> [options]
+  clink tool parse-site --url <url> [options]
 
 Arguments:
   --url <url>   Site URL to inspect
@@ -6736,20 +6756,21 @@ Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Shopify is detected first when the hostname ends with .myshopify.com. Otherwise the CLI sends
-  a browser-like GET request to https://<host> and detects Shopify when a powered-by response
-  header contains Shopify. If the header is absent or the request fails, the CLI checks whether
-  the hostname's CNAME chain reaches shops.myshopify.com. A rate-limited request returns
-  site_detection_rate_limited only when DNS cannot confirm Shopify. Other sites return site_type
-  "unknown".
+  Shopify is detected first when the hostname ends with .myshopify.com, then eats365 when it ends
+  with .eats365pos.com. Otherwise the CLI sends a browser-like GET request to https://<host> and
+  detects Shopify when a powered-by response header contains Shopify. If the header is absent or
+  the request fails, the CLI checks whether the hostname's CNAME chain reaches
+  shops.myshopify.com. A rate-limited request returns site_detection_rate_limited only when DNS
+  cannot confirm Shopify. Other sites return site_type "unknown".
 
 Examples:
-  clink-cli tool parse-site --url https://store.example.com --format pretty
+  clink tool parse-site --url https://store.example.com --format pretty
+  clink tool parse-site --url https://store.eats365pos.com --format pretty
 `;
-var TOOL_PARSE_ITEM_HELP = `clink-cli tool parse-item
+var TOOL_PARSE_ITEM_HELP = `clink tool parse-item
 
 Usage:
-  clink-cli tool parse-item --url <url> [options]
+  clink tool parse-item --url <url> [options]
 
 Arguments:
   --url <url>   Product detail URL to inspect
@@ -6758,24 +6779,32 @@ Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  First detects the site type with the same Shopify detector as parse-site. Unknown sites return
+  First detects the site type with the same detector as parse-site. Unknown sites return
   error_code "unkonw site type"; inconclusive rate-limited detection returns
-  site_detection_rate_limited. For custom Shopify domains, the standard UCP profile's validated
-  merchant_origin is used as the canonical storefront origin when available. Product URLs are
-  normalized by removing query/hash parameters and appending .js, then the command reads the
-  Shopify product JSON and returns one top-level item fact object. The items array contains one
-  entry per variant with itemId, title, unitPriceMinor, available, itemUrl, options, and
-  inventoryStatus. itemId is the raw Shopify variant ID. Currency is read from product JSON when
+  site_detection_rate_limited. eats365 sites return a normal success envelope with
+  resolution "manual_item_facts", an empty items array, and a required_fields list: the platform
+  publishes no machine-readable product data, so this is an instruction to source those fields
+  from the conversation context and pass them to ucp-checkout create, not a failure to handle.
+  That envelope also carries checkout_mapping, which maps each field to its ucp-checkout create
+  flag, and unit_price_format. eats365 unitPrice is a major-unit decimal such as "28.00" because
+  create scales line_items price by --currency; minor units there would overcharge by that scale.
+  Both the unknown and eats365 cases exit 0. For custom Shopify domains, the standard UCP
+  profile's validated merchant_origin is used as the canonical storefront origin when available.
+  Product URLs are normalized by removing query/hash parameters and appending .js, then the
+  command reads the Shopify product JSON and returns one top-level item fact object. The items
+  array contains one entry per variant with itemId, title, unitPriceMinor, available, itemUrl,
+  options, and inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365
+  unitPrice field. itemId is the raw Shopify variant ID. Currency is read from product JSON when
   present, otherwise from Shopify /cart.js. The command does not infer MCC or
   merchantCategoryCode.
 
 Examples:
-  clink-cli tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
+  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
 `;
-var TOOL_CHECKOUT_TOTAL_HELP = `clink-cli tool checkout-total
+var TOOL_CHECKOUT_TOTAL_HELP = `clink tool checkout-total
 
 Usage:
-  clink-cli tool checkout-total --url <url> [options]
+  clink tool checkout-total --url <url> [options]
 
 Arguments:
   --url <url>   Shopify checkout URL to inspect
@@ -6791,12 +6820,12 @@ Behavior:
   "checkout_state_not_found".
 
 Examples:
-  clink-cli tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format pretty
+  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format pretty
 `;
-var TOOL_GET_UCP_PROFILE_HELP = `clink-cli tool get-ucp-profile
+var TOOL_GET_UCP_PROFILE_HELP = `clink tool get-ucp-profile
 
 Usage:
-  clink-cli tool get-ucp-profile --url <url> [options]
+  clink tool get-ucp-profile --url <url> [options]
 
 Arguments:
   --url <url>   Merchant URL or domain to inspect
@@ -6811,12 +6840,12 @@ Behavior:
   error_code "NO_UCP_SITE".
 
 Examples:
-  clink-cli tool get-ucp-profile --url https://merchant.example.com --format pretty
+  clink tool get-ucp-profile --url https://merchant.example.com --format pretty
 `;
-var TOOL_GET_REST_ENDPOINT_HELP = `clink-cli tool get-rest-endpoint
+var TOOL_GET_REST_ENDPOINT_HELP = `clink tool get-rest-endpoint
 
 Usage:
-  clink-cli tool get-rest-endpoint --url <url> [options]
+  clink tool get-rest-endpoint --url <url> [options]
 
 Arguments:
   --url <url>   UCP site URL or domain to inspect
@@ -6830,53 +6859,84 @@ Behavior:
   domains return error_code "NO_UCP_REST_ENDPOINT".
 
 Examples:
-  clink-cli tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
+  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
 `;
-var TOOL_INTERNAL_UCP_HELP = `clink-cli tool internal-ucp
+var TOOL_INTERNAL_UCP_HELP = `clink tool internal-ucp
 
 Usage:
-  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-merchant-list [options]
 
 Subcommands:
-  get-endpoint   Resolve an internal Clink UCP endpoint from a product URL
+  get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
+  get-merchant-list  Return the supported merchant-list document for the configured environment
 
 Options:
-${TOOL_ENDPOINT_OPTIONS}
+${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Uses the environment saved by wallet init to select the bundled merchant list and endpoint base.
-  A product domain outside the selected list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
+  Reads the merchant list for the configured environment, normally saved by wallet init.
+  get-merchant-list returns the document; get-endpoint generates an endpoint from the effective API
+  base. Production is fetched on every call; sandbox/UAT and test use their bundled lists.
+  A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
 
 Examples:
-  clink-cli tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
-  clink-cli tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
+  clink tool internal-ucp get-merchant-list --format pretty
 `;
-var TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP = `clink-cli tool internal-ucp get-endpoint
+var TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP = `clink tool internal-ucp get-endpoint
 
 Usage:
-  clink-cli tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
 
 Arguments:
   --product-url <url>   Product URL whose exact hostname identifies the merchant
 
 Options:
-${TOOL_ENDPOINT_OPTIONS}
+${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Resolves a configured internal merchant by exact product hostname and generates its Clink UCP
-  REST endpoint using the environment saved by wallet init. Re-run wallet init to switch environments.
-  Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" without a network request.
+  Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
+  using the environment saved by wallet init. Re-run wallet init to switch environments.
+  Production fetches its merchant list from https://www.clinkbill.com/.well-known/ucp-merchants.json
+  on every call and never caches it, so upstream merchant changes apply without a new CLI release.
+  Sandbox/UAT and test use the lists bundled from public/uat and public/test with no request.
+  A merchant entry with "enabled": false is treated as absent.
+  Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
+  A production merchant-list request that fails, times out, or does not return JSON is a network
+  error (exit 6) and is never reported as a missing merchant.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
-  clink-cli tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
-  clink-cli tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
 `;
-var WALLET_HELP = `clink-cli wallet
+var TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP = `clink tool internal-ucp get-merchant-list
 
 Usage:
-  clink-cli wallet init --email <email> [options]
-  clink-cli wallet logout [options]
-  clink-cli wallet status [options]
+  clink tool internal-ucp get-merchant-list [options]
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Returns the complete merchant-list document after validating its merchant entries.
+  The environment normally comes from wallet init; CLINK_BASE_URL can override it for the process.
+  Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
+  Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
+  The output preserves list metadata, descriptions, enabled flags, and disabled entries.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
+
+Examples:
+  clink tool internal-ucp get-merchant-list --format json
+`;
+var WALLET_HELP = `clink wallet
+
+Usage:
+  clink wallet init --email <email> [options]
+  clink wallet logout [options]
+  clink wallet status [options]
 
 Subcommands:
   init         Authorize this CLI and persist OAuth credentials locally
@@ -6884,16 +6944,16 @@ Subcommands:
   status       Show effective wallet configuration without network request
 
 Examples:
-  clink-cli wallet init --email alice@example.com
-  clink-cli wallet init --sandbox --email alice@example.com
-  clink-cli wallet init --test --email alice@example.com
-  clink-cli wallet logout
-  clink-cli wallet status --format pretty
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
+  clink wallet logout
+  clink wallet status --format pretty
 `;
-var WALLET_INIT_HELP = `clink-cli wallet init
+var WALLET_INIT_HELP = `clink wallet init
 
 Usage:
-  clink-cli wallet init --email <email> [options]
+  clink wallet init --email <email> [options]
 
 Arguments:
   --email <email>              Customer email verified in the browser
@@ -6926,14 +6986,14 @@ Payment Methods:
   is reported in output but does not fail wallet initialization.
 
 Examples:
-  clink-cli wallet init --email alice@example.com
-  clink-cli wallet init --sandbox --email alice@example.com
-  clink-cli wallet init --test --email alice@example.com
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
 `;
-var WALLET_LOGOUT_HELP = `clink-cli wallet logout
+var WALLET_LOGOUT_HELP = `clink wallet logout
 
 Usage:
-  clink-cli wallet logout [options]
+  clink wallet logout [options]
 
 Behavior:
   Best-effort revokes the current OAuth Refresh Token, then removes both OAuth credentials
@@ -6945,13 +7005,13 @@ Options:
 ${OUTPUT_OPTIONS}
 
 Examples:
-  clink-cli wallet logout
-  clink-cli wallet logout --format pretty
+  clink wallet logout
+  clink wallet logout --format pretty
 `;
-var WALLET_STATUS_HELP = `clink-cli wallet status
+var WALLET_STATUS_HELP = `clink wallet status
 
 Usage:
-  clink-cli wallet status [options]
+  clink wallet status [options]
 
 Notes:
   Shows the effective local wallet configuration after resolving flags, environment variables,
@@ -6965,17 +7025,17 @@ ${CUSTOMER_AUTH_OPTIONS}
 ${OUTPUT_OPTIONS}
 
 Examples:
-  clink-cli wallet status
-  clink-cli wallet status --format pretty
+  clink wallet status
+  clink wallet status --format pretty
 `;
-var CARD_HELP = `clink-cli card
+var CARD_HELP = `clink card
 
 Usage:
-  clink-cli card binding-link [options]
-  clink-cli card setup-link [--open] [options]
-  clink-cli card modify-link [--open] [options]
-  clink-cli card list [options]
-  clink-cli card get --payment-instrument-id <id> [options]
+  clink card binding-link [options]
+  clink card setup-link [--open] [options]
+  clink card modify-link [--open] [options]
+  clink card list [options]
+  clink card get --payment-instrument-id <id> [options]
 
 Subcommands:
   binding-link   Fetch raw binding link and refresh cached payment methods
@@ -6984,10 +7044,10 @@ Subcommands:
   list           List cached payment methods from local config
   get            Get cached payment method detail from local config
 `;
-var CARD_BINDING_LINK_HELP = `clink-cli card binding-link
+var CARD_BINDING_LINK_HELP = `clink card binding-link
 
 Usage:
-  clink-cli card binding-link [options]
+  clink card binding-link [options]
 
 Options:
   --no-watch                   Skip polling for webhook events after printing the link
@@ -7000,13 +7060,13 @@ Notes:
   pass --no-watch when you only need to refresh the cached card list.
 
 Examples:
-  clink-cli card binding-link
-  clink-cli card binding-link --no-watch --format pretty
+  clink card binding-link
+  clink card binding-link --no-watch --format pretty
 `;
-var CARD_SETUP_LINK_HELP = `clink-cli card setup-link
+var CARD_SETUP_LINK_HELP = `clink card setup-link
 
 Usage:
-  clink-cli card setup-link [--open] [options]
+  clink card setup-link [--open] [options]
 
 Options:
   --open                       Open the generated setup link in the browser
@@ -7019,13 +7079,13 @@ Notes:
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
-  clink-cli card setup-link
-  clink-cli card setup-link --open
+  clink card setup-link
+  clink card setup-link --open
 `;
-var CARD_MODIFY_LINK_HELP = `clink-cli card modify-link
+var CARD_MODIFY_LINK_HELP = `clink card modify-link
 
 Usage:
-  clink-cli card modify-link [--open] [options]
+  clink card modify-link [--open] [options]
 
 Options:
   --open                       Open the generated manage-card link in the browser
@@ -7038,13 +7098,13 @@ Notes:
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
-  clink-cli card modify-link
-  clink-cli card modify-link --open
+  clink card modify-link
+  clink card modify-link --open
 `;
-var CARD_LIST_HELP = `clink-cli card list
+var CARD_LIST_HELP = `clink card list
 
 Usage:
-  clink-cli card list [options]
+  clink card list [options]
 
 Notes:
   Reads payment methods from local config only and does not make a network request.
@@ -7053,13 +7113,13 @@ Options:
 ${OUTPUT_OPTIONS}
 
 Examples:
-  clink-cli card list
-  clink-cli card list --format pretty
+  clink card list
+  clink card list --format pretty
 `;
-var CARD_GET_HELP = `clink-cli card get
+var CARD_GET_HELP = `clink card get
 
 Usage:
-  clink-cli card get --payment-instrument-id <id> [options]
+  clink card get --payment-instrument-id <id> [options]
 
 Arguments:
   --payment-instrument-id <id> Payment instrument ID to read from local cached payment methods
@@ -7071,23 +7131,23 @@ Notes:
   Reads payment method detail from local config only and does not make a network request.
 
 Examples:
-  clink-cli card get --payment-instrument-id pi_xxx
-  clink-cli card get --payment-instrument-id pi_xxx --format pretty
+  clink card get --payment-instrument-id pi_xxx
+  clink card get --payment-instrument-id pi_xxx --format pretty
 `;
-var RISK_RULE_HELP = `clink-cli risk
+var RISK_RULE_HELP = `clink risk
 
 Usage:
-  clink-cli risk get [options]
-  clink-cli risk link [--open] [options]
+  clink risk get [options]
+  clink risk link [--open] [options]
 
 Subcommands:
   get          Fetch current risk rule settings
   link         Print the agent risk-rule setup page URL
 `;
-var RISK_RULE_GET_HELP = `clink-cli risk get
+var RISK_RULE_GET_HELP = `clink risk get
 
 Usage:
-  clink-cli risk get [options]
+  clink risk get [options]
 
 Options:
 ${CUSTOMER_REQUEST_OPTIONS}
@@ -7096,13 +7156,13 @@ Notes:
   Calls GET /agent/risk/rule/settings.
 
 Examples:
-  clink-cli risk get
-  clink-cli risk get --format pretty
+  clink risk get
+  clink risk get --format pretty
 `;
-var RISK_RULE_LINK_HELP = `clink-cli risk link
+var RISK_RULE_LINK_HELP = `clink risk link
 
 Usage:
-  clink-cli risk link [--open] [options]
+  clink risk link [--open] [options]
 
 Options:
 ${CUSTOMER_API_KEY_LINK_OPTIONS}
@@ -7114,14 +7174,14 @@ Notes:
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
-  clink-cli risk link
-  clink-cli risk link --open
+  clink risk link
+  clink risk link --open
 `;
-var PAY_HELP = `clink-cli pay
+var PAY_HELP = `clink pay
 
 Usage:
-  clink-cli pay --merchant-id <id> --amount <amount> --currency <currency> [--payment-instrument-id <id>] [options]
-  clink-cli pay --session-id <id> [--payment-instrument-id <id>] [options]
+  clink pay --merchant-id <id> --amount <amount> --currency <currency> [--payment-instrument-id <id>] [options]
+  clink pay --session-id <id> [--payment-instrument-id <id>] [options]
 
 Arguments:
   --merchant-id <id>           Merchant ID for direct charge mode
@@ -7141,7 +7201,7 @@ ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   If --payment-instrument-id is omitted, pay uses the default cached payment method from local config.
-  Refresh cached payment methods with clink-cli card binding-link when needed.
+  Refresh cached payment methods with clink card binding-link when needed.
   For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
   For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
   street_address, extended_address, address_locality, address_region, address_country,
@@ -7151,24 +7211,24 @@ Notes:
   Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
 
 Examples:
-  clink-cli pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
-  clink-cli pay --session-id sess_xxx --payment-instrument-id pi_xxx
-  clink-cli pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
+  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
+  clink pay --session-id sess_xxx --payment-instrument-id pi_xxx
+  clink pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
 `;
-var REFUND_HELP = `clink-cli refund
+var REFUND_HELP = `clink refund
 
 Usage:
-  clink-cli refund create --order-id <id> [options]
-  clink-cli refund get --refund-id <id> [options]
+  clink refund create --order-id <id> [options]
+  clink refund get --refund-id <id> [options]
 
 Subcommands:
   create       Apply full refund for an order
   get          Query refund status
 `;
-var REFUND_CREATE_HELP = `clink-cli refund create
+var REFUND_CREATE_HELP = `clink refund create
 
 Usage:
-  clink-cli refund create --order-id <id> [options]
+  clink refund create --order-id <id> [options]
 
 Arguments:
   --order-id <id>              Order ID to refund
@@ -7180,13 +7240,13 @@ Notes:
   Applies a full refund for the given order.
 
 Examples:
-  clink-cli refund create --order-id order_xxx
-  clink-cli refund create --order-id order_xxx --format pretty
+  clink refund create --order-id order_xxx
+  clink refund create --order-id order_xxx --format pretty
 `;
-var REFUND_GET_HELP = `clink-cli refund get
+var REFUND_GET_HELP = `clink refund get
 
 Usage:
-  clink-cli refund get --refund-id <id> [options]
+  clink refund get --refund-id <id> [options]
 
 Arguments:
   --refund-id <id>             Refund order ID to query
@@ -7195,13 +7255,13 @@ Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Examples:
-  clink-cli refund get --refund-id rfd_xxx
-  clink-cli refund get --refund-id rfd_xxx --format pretty
+  clink refund get --refund-id rfd_xxx
+  clink refund get --refund-id rfd_xxx --format pretty
 `;
-var UCP_CHECKOUT_HELP = `clink-cli ucp-checkout
+var UCP_CHECKOUT_HELP = `clink ucp-checkout
 
 Usage:
-  clink-cli ucp-checkout <create|get|update|cancel|complete> [options]
+  clink ucp-checkout <create|get|update|cancel|complete> [options]
 
 Actions:
   create    Create a UCP checkout session for an external/shadow merchant
@@ -7232,8 +7292,8 @@ Notes:
   /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   create sends merchant_url, customer_id, buyer.email, and context.currency.
-  customer_id and buyer.email come from the local clink-cli config JSON.
-  Idempotency-Key is generated by clink-cli for create/update/complete; callers do not pass it.
+  customer_id and buyer.email come from the local clink config JSON.
+  Idempotency-Key is generated by clink for create/update/complete; callers do not pass it.
   create treats line_items price/amount fields as decimal major-unit values and converts them by
   --currency before calling the external checkout API; --currency is sent as context.currency.
   complete sends a standard UCP payment object with payment.instruments[0].id as local
@@ -7241,34 +7301,34 @@ Notes:
   omitted, it uses the local cached default card.
 
 Examples:
-  clink-cli ucp-checkout create \\
+  clink ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
-  clink-cli ucp-checkout get --checkout-id chk_xxx --format json
-  clink-cli ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
-  clink-cli ucp-checkout complete --checkout-id chk_xxx --format json
-  clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
+  clink ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
+  clink ucp-checkout complete --checkout-id chk_xxx --format json
+  clink ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
-var UCP_CATALOG_HELP = `clink-cli ucp-catalog
+var UCP_CATALOG_HELP = `clink ucp-catalog
 
 Usage:
-  clink-cli ucp-catalog search --merchant-id <id> --query <text> [options]
+  clink ucp-catalog search --merchant-id <id> --query <text> [options]
 
 Actions:
   search     Search one merchant's UCP Catalog
   product    Get one product by the ID returned from Catalog search
 
 Examples:
-  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink-cli ucp-catalog product --merchant-id merchant_xxx --product-id product_xxx --format json
-  clink-cli ucp-catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink ucp-catalog product --merchant-id merchant_xxx --product-id product_xxx --format json
+  clink ucp-catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
 `;
-var UCP_CATALOG_SEARCH_HELP = `clink-cli ucp-catalog search
+var UCP_CATALOG_SEARCH_HELP = `clink ucp-catalog search
 
 Usage:
-  clink-cli ucp-catalog search --merchant-id <id> --query <text> [options]
+  clink ucp-catalog search --merchant-id <id> --query <text> [options]
 
 Required Arguments:
   --merchant-id <id>          Merchant-scoped UCP Catalog owner
@@ -7293,13 +7353,13 @@ Behavior:
   their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
 
 Examples:
-  clink-cli ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink-cli ucp-catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
 `;
-var UCP_CATALOG_PRODUCT_HELP = `clink-cli ucp-catalog product
+var UCP_CATALOG_PRODUCT_HELP = `clink ucp-catalog product
 
 Usage:
-  clink-cli ucp-catalog product --merchant-id <id> --product-id <id> [options]
+  clink ucp-catalog product --merchant-id <id> --product-id <id> [options]
 
 Required Arguments:
   --merchant-id <id>          Merchant-scoped UCP Catalog owner
@@ -7322,12 +7382,139 @@ Behavior:
   their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
 
 Examples:
-  clink-cli ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
+  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
 `;
-var UCP_CHECKOUT_CREATE_HELP = `clink-cli ucp-checkout create
+var CATALOG_HELP = `clink catalog
 
 Usage:
-  clink-cli ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
+  clink catalog search --query <text> [options]
+
+Actions:
+  search     Search catalogs across merchants without naming one
+
+Examples:
+  clink catalog search --query "iced latte" --format json
+  clink catalog search --query shoes --channel-type shopify --format pretty
+`;
+var CATALOG_SEARCH_HELP = `clink catalog search
+
+Usage:
+  clink catalog search --query <text> [options]
+
+Required Arguments:
+  --query <text>              Catalog search text
+
+Optional Request Fields:
+  --channel-type <type>       Narrow to one channel, for example shopify or eats365.
+                              Omitted means discovery across every channel
+  --form-type <type>          Caller-declared form or scenario type; echoed back in discovery mode
+  --ext <json>                Caller-defined extension map, passed through and logged only.
+                              It never affects search conditions or the response shape
+  --context <json>            UCP Catalog context JSON object
+  --filters <json>            UCP Catalog filters JSON object; prices use minor units
+  --signals <json>            UCP Catalog signals JSON object
+  --attribution <json>        UCP Catalog attribution JSON object
+  --cursor <cursor>           Pagination cursor from a previous response
+  --limit <n>                 Page size from 1 to 100
+  --request-id <id>           Request-Id header; defaults to a generated UUID
+  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/ucp/extra/catalog/search
+
+Behavior:
+  Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
+  not need to know one up front. Use ucp-catalog search when the merchant is already known.
+  Results come back grouped by target, each group carrying channel_type plus either merchant_id
+  (internal merchant) or store_id (external platform store). The shape does not change with
+  --channel-type; only the number of groups does.
+
+Examples:
+  clink catalog search --query "iced latte" --format json
+  clink catalog search \\
+    --query shoes --channel-type shopify \\
+    --ext '{"trace":"demo-1"}' \\
+    --context '{"currency":"USD","language":"en-US"}' \\
+    --limit 10 --format pretty
+`;
+var UCP_ORDER_HELP = `clink ucp-order
+
+Usage:
+  clink ucp-order <get|list> [options]
+
+Actions:
+  get        Get one UCP order's current status by order ID
+  list       List the calling wallet's orders, newest first
+
+Examples:
+  clink ucp-order get --order-id order_xxx --format json
+  clink ucp-order list --status paid --format json
+  clink ucp-order list --status paid,refunded --start-time 2026-07-01T00:00:00Z --format pretty
+`;
+var UCP_ORDER_GET_HELP = `clink ucp-order get
+
+Usage:
+  clink ucp-order get --order-id <id> [options]
+
+Required Arguments:
+  --order-id <id>             Order ID to fetch
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/ucp/orders/{orderId}
+
+Behavior:
+  Uses the environment saved by wallet init. The endpoint is not merchant-scoped: ownership is
+  checked against the caller's wallet identity, so another buyer's order returns not_found.
+  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
+  their legacy customer API key.
+
+Examples:
+  clink ucp-order get --order-id order_xxx --format json
+`;
+var UCP_ORDER_LIST_HELP = `clink ucp-order list
+
+Usage:
+  clink ucp-order list [--status <statuses>] [--start-time <utc>] [--end-time <utc>] [options]
+
+Optional Arguments:
+  --status <statuses>         Comma-separated order statuses; matches any of them. One of
+                              draft, pending, paid, cancelled, partially_refunded, refunded
+  --start-time <utc>          Created-at lower bound, inclusive; UTC RFC 3339
+  --end-time <utc>            Created-at upper bound, inclusive; UTC RFC 3339
+  --page <n>                  Page number starting at 1; server default is 1
+  --size <n>                  Page size; the server applies its own default and upper bound
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/ucp/orders?created_from=&created_to=&status=&page=&size=
+  Multiple statuses are sent as repeated status params, for example status=paid&status=refunded.
+
+Behavior:
+  Returns only the calling wallet's own orders, newest first: ownership comes from the wallet
+  identity and cannot be passed in. Timestamps without a zone offset are read as UTC and sent as
+  RFC 3339. Rows carry id, checkout_id, status, payment_status, amount, currency, and created_at;
+  use ucp-order get for the full order.
+
+Examples:
+  clink ucp-order list --status paid --format json
+  clink ucp-order list \\
+    --status paid,partially_refunded,refunded \\
+    --start-time 2026-07-01T00:00:00Z \\
+    --end-time 2026-07-31T23:59:59Z \\
+    --size 20 --format pretty
+`;
+var UCP_CHECKOUT_CREATE_HELP = `clink ucp-checkout create
+
+Usage:
+  clink ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
 
 Required Arguments:
   --merchant-url <url>            External merchant checkout URL
@@ -7351,22 +7538,22 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  customer_id and buyer.email are read from the local clink-cli config JSON.
-  Idempotency-Key is generated by clink-cli.
+  customer_id and buyer.email are read from the local clink config JSON.
+  Idempotency-Key is generated by clink.
   line_items price/amount fields are decimal major-unit values and are converted by --currency;
   --currency is sent as context.currency.
 
 Examples:
-  clink-cli ucp-checkout create \\
+  clink ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
 `;
-var UCP_CHECKOUT_GET_HELP = `clink-cli ucp-checkout get
+var UCP_CHECKOUT_GET_HELP = `clink ucp-checkout get
 
 Usage:
-  clink-cli ucp-checkout get --checkout-id <id> [options]
+  clink ucp-checkout get --checkout-id <id> [options]
 
 Required Arguments:
   --checkout-id <id>              Checkout ID to fetch
@@ -7384,12 +7571,12 @@ Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
-  clink-cli ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout get --checkout-id chk_xxx --format json
 `;
-var UCP_CHECKOUT_UPDATE_HELP = `clink-cli ucp-checkout update
+var UCP_CHECKOUT_UPDATE_HELP = `clink ucp-checkout update
 
 Usage:
-  clink-cli ucp-checkout update --checkout-id <id> --line-items <json> [options]
+  clink ucp-checkout update --checkout-id <id> --line-items <json> [options]
 
 Required Arguments:
   --checkout-id <id>              Checkout ID to update
@@ -7409,19 +7596,19 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Idempotency-Key is generated by clink-cli.
+  Idempotency-Key is generated by clink.
   update sends line_items JSON unchanged.
 
 Examples:
-  clink-cli ucp-checkout update \\
+  clink ucp-checkout update \\
     --checkout-id chk_xxx \\
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' \\
     --format json
 `;
-var UCP_CHECKOUT_CANCEL_HELP = `clink-cli ucp-checkout cancel
+var UCP_CHECKOUT_CANCEL_HELP = `clink ucp-checkout cancel
 
 Usage:
-  clink-cli ucp-checkout cancel --checkout-id <id> [options]
+  clink ucp-checkout cancel --checkout-id <id> [options]
 
 Required Arguments:
   --checkout-id <id>              Checkout ID to cancel
@@ -7439,12 +7626,12 @@ Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
-  clink-cli ucp-checkout cancel --checkout-id chk_xxx --format json
+  clink ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
-var UCP_CHECKOUT_COMPLETE_HELP = `clink-cli ucp-checkout complete
+var UCP_CHECKOUT_COMPLETE_HELP = `clink ucp-checkout complete
 
 Usage:
-  clink-cli ucp-checkout complete --checkout-id <id> [--payment-instrument-id <id>] [options]
+  clink ucp-checkout complete --checkout-id <id> [--payment-instrument-id <id>] [options]
 
 Required Arguments:
   --checkout-id <id>              Checkout ID to complete
@@ -7461,21 +7648,21 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Idempotency-Key is generated by clink-cli.
+  Idempotency-Key is generated by clink.
   Sends a standard UCP payment object in the request body. The selected instrument id is local
   config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
   --payment-instrument-id is omitted or empty, the CLI uses the local cached default card.
 
 Examples:
-  clink-cli ucp-checkout complete --checkout-id chk_xxx --format json
-  clink-cli ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
+  clink ucp-checkout complete --checkout-id chk_xxx --format json
+  clink ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
 `;
-var CONFIG_HELP = `clink-cli config
+var CONFIG_HELP = `clink config
 
 Usage:
-  clink-cli config set <key> <value>
-  clink-cli config get
-  clink-cli config unset <key>
+  clink config set <key> <value>
+  clink config get
+  clink config unset <key>
 
 Subcommands:
   set        Update local config
@@ -7496,10 +7683,10 @@ Notes:
   wallet init stores a single local customer. Running wallet init again overwrites customer
   credentials and clears cached payment methods/risk rules for the previous customer.
 `;
-var CONFIG_SET_HELP = `clink-cli config set
+var CONFIG_SET_HELP = `clink config set
 
 Usage:
-  clink-cli config set <key> <value>
+  clink config set <key> <value>
 
 Arguments:
   <key>                        Config key to update
@@ -7516,26 +7703,26 @@ Settable Keys:
   name
 
 Examples:
-  clink-cli config set base-url https://api.clinkbill.com
-  clink-cli config set customer-id cus_xxx
-  clink-cli config set default-open-links true
+  clink config set base-url https://api.clinkbill.com
+  clink config set customer-id cus_xxx
+  clink config set default-open-links true
 `;
-var CONFIG_GET_HELP = `clink-cli config get
+var CONFIG_GET_HELP = `clink config get
 
 Usage:
-  clink-cli config get [options]
+  clink config get [options]
 
 Options:
 ${OUTPUT_OPTIONS}
 
 Examples:
-  clink-cli config get
-  clink-cli config get --format pretty
+  clink config get
+  clink config get --format pretty
 `;
-var CONFIG_UNSET_HELP = `clink-cli config unset
+var CONFIG_UNSET_HELP = `clink config unset
 
 Usage:
-  clink-cli config unset <key> [options]
+  clink config unset <key> [options]
 
 Arguments:
   <key>                        Config key to remove or reset
@@ -7552,13 +7739,13 @@ Supported Keys:
   name
 
 Examples:
-  clink-cli config unset customer-api-key
-  clink-cli config unset base-url
+  clink config unset customer-api-key
+  clink config unset base-url
 `;
-var INSTRUCTION_HELP = `clink-cli instruction
+var INSTRUCTION_HELP = `clink instruction
 
 Usage:
-  clink-cli instruction <create|sign-url|list|get|update|cancel> [options]
+  clink instruction <create|sign-url|list|get|update|cancel> [options]
 
 Actions:
   create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
@@ -7586,21 +7773,21 @@ Notes:
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
 Examples:
-  clink-cli instruction create \\
+  clink instruction create \\
     --payment-instrument-id pi_xxx --title "Business trip" \\
     --effective-until-time "2026-06-25 00:00:00" \\
     --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
     --format json
-  clink-cli instruction sign-url \\
+  clink instruction sign-url \\
     --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --format json
-  clink-cli instruction list --valid-only --payment-instrument-id pi_xxx --format json
-  clink-cli instruction get --purchase-instruction-id ins_xxx --format json
-  clink-cli instruction cancel --format json
+  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
+  clink instruction get --purchase-instruction-id ins_xxx --format json
+  clink instruction cancel --format json
 `;
-var INSTRUCTION_CREATE_HELP = `clink-cli instruction create
+var INSTRUCTION_CREATE_HELP = `clink instruction create
 
 Usage:
-  clink-cli instruction create --payment-instrument-id <id> --title <title> --mandates <json> [options]
+  clink instruction create --payment-instrument-id <id> --title <title> --mandates <json> [options]
 
 Required Arguments:
   --payment-instrument-id <id> Payment instrument ID for the Visa card
@@ -7635,16 +7822,16 @@ Notes:
   Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
 
 Examples:
-  clink-cli instruction create \\
+  clink instruction create \\
     --payment-instrument-id pi_xxx --title "Business trip" \\
     --effective-until-time "2026-06-25 00:00:00" \\
     --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
     --format json
 `;
-var INSTRUCTION_SIGN_URL_HELP = `clink-cli instruction sign-url
+var INSTRUCTION_SIGN_URL_HELP = `clink instruction sign-url
 
 Usage:
-  clink-cli instruction sign-url --payment-instrument-id <id> --purchase-instruction-id <id> [options]
+  clink instruction sign-url --payment-instrument-id <id> --purchase-instruction-id <id> [options]
 
 Required Arguments:
   --payment-instrument-id <id>    Payment instrument ID for the Visa card
@@ -7658,12 +7845,12 @@ Notes:
   authResult after the user authorizes.
 
 Examples:
-  clink-cli instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
+  clink instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
 `;
-var INSTRUCTION_LIST_HELP = `clink-cli instruction list
+var INSTRUCTION_LIST_HELP = `clink instruction list
 
 Usage:
-  clink-cli instruction list [options]
+  clink instruction list [options]
 
 Optional Arguments:
   --status <status>              Filter by status: CREATED, ACTIVE, PENDING, CANCELLED, EXPIRED, DECLINED
@@ -7681,13 +7868,13 @@ Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
-  clink-cli instruction list --valid-only --payment-instrument-id pi_xxx --format json
-  clink-cli instruction list --status ACTIVE --format pretty
+  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
+  clink instruction list --status ACTIVE --format pretty
 `;
-var INSTRUCTION_GET_HELP = `clink-cli instruction get
+var INSTRUCTION_GET_HELP = `clink instruction get
 
 Usage:
-  clink-cli instruction get --purchase-instruction-id <id> [options]
+  clink instruction get --purchase-instruction-id <id> [options]
 
 Required Arguments:
   --purchase-instruction-id <id>  Purchase instruction ID to fetch
@@ -7702,12 +7889,12 @@ Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
 
 Examples:
-  clink-cli instruction get --purchase-instruction-id ins_xxx --format json
+  clink instruction get --purchase-instruction-id ins_xxx --format json
 `;
-var INSTRUCTION_UPDATE_HELP = `clink-cli instruction update
+var INSTRUCTION_UPDATE_HELP = `clink instruction update
 
 Usage:
-  clink-cli instruction update [options]
+  clink instruction update [options]
 
 Options:
 ${CUSTOMER_API_KEY_LINK_OPTIONS}
@@ -7717,12 +7904,12 @@ Notes:
   because updates require Passkey/WebAuthn authorization in the browser.
 
 Examples:
-  clink-cli instruction update --open
+  clink instruction update --open
 `;
-var INSTRUCTION_CANCEL_HELP = `clink-cli instruction cancel
+var INSTRUCTION_CANCEL_HELP = `clink instruction cancel
 
 Usage:
-  clink-cli instruction cancel [options]
+  clink instruction cancel [options]
 
 Options:
 ${CUSTOMER_API_KEY_LINK_OPTIONS}
@@ -7732,21 +7919,21 @@ Notes:
   because cancellation requires Passkey/WebAuthn authorization in the browser.
 
 Examples:
-  clink-cli instruction cancel --open
+  clink instruction cancel --open
 `;
-var EVENTS_HELP = `clink-cli events
+var EVENTS_HELP = `clink events
 
 Usage:
-  clink-cli events poll [options]
+  clink events poll [options]
 
 Subcommands:
   poll              Poll the webhook-event queue for state-change events
 
 Examples:
-  clink-cli events poll --format json
-  clink-cli events poll --type payment_method.added --format json
+  clink events poll --format json
+  clink events poll --type payment_method.added --format json
 `;
-var EVENTS_POLL_HELP = `clink-cli events poll
+var EVENTS_POLL_HELP = `clink events poll
 
 Poll the latest state-change events (POST /agent/event-hub/webhook-events/poll)
 within a bounded window, process and cache them, and (by default) acknowledge them via
@@ -7754,7 +7941,7 @@ POST /agent/event-hub/webhook-events/ack. Use this to consume state changes on d
 instead of relying on the link-command watch.
 
 Usage:
-  clink-cli events poll [options]
+  clink events poll [options]
 
 Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
@@ -7777,9 +7964,9 @@ Notes:
   --no-ack peeks without acknowledging anything.
 
 Examples:
-  clink-cli events poll --format json
-  clink-cli events poll --type payment_method.updated --format json
-  clink-cli events poll --no-ack --format json
+  clink events poll --format json
+  clink events poll --type payment_method.updated --format json
+  clink events poll --no-ack --format json
 `;
 function printHelp(command, subcommand, nestedCommand) {
   const output = getHelpText(command, subcommand, nestedCommand);
@@ -7874,7 +8061,14 @@ function getHelpText(command, subcommand, nestedCommand) {
         case "get-rest-endpoint":
           return TOOL_GET_REST_ENDPOINT_HELP;
         case "internal-ucp":
-          return nestedCommand === "get-endpoint" ? TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP : TOOL_INTERNAL_UCP_HELP;
+          switch (nestedCommand) {
+            case "get-endpoint":
+              return TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP;
+            case "get-merchant-list":
+              return TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP;
+            default:
+              return TOOL_INTERNAL_UCP_HELP;
+          }
         default:
           return TOOL_HELP;
       }
@@ -7911,6 +8105,22 @@ function getHelpText(command, subcommand, nestedCommand) {
         default:
           return UCP_CATALOG_HELP;
       }
+    case "catalog":
+      switch (subcommand) {
+        case "search":
+          return CATALOG_SEARCH_HELP;
+        default:
+          return CATALOG_HELP;
+      }
+    case "ucp-order":
+      switch (subcommand) {
+        case "get":
+          return UCP_ORDER_GET_HELP;
+        case "list":
+          return UCP_ORDER_LIST_HELP;
+        default:
+          return UCP_ORDER_HELP;
+      }
     case "config":
       switch (subcommand) {
         case "set":
@@ -7927,33 +8137,46 @@ function getHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// dist/internal-ucp.production.json
-var internal_ucp_production_default = [
-  {
-    domain_name: "uebmaw-it.myshopify.com",
-    merchant_id: "mcht_frnagwqi4k43"
-  },
-  {
-    domain_name: "www.bruceleeclub.com",
-    merchant_id: "mcht_frnz6yfrz1sd"
-  }
-];
+// public/uat/ucp-merchants.json
+var ucp_merchants_default = {
+  version: 1,
+  updated_at: "2026-07-29T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    }
+  ]
+};
 
-// dist/internal-ucp.sandbox.json
-var internal_ucp_sandbox_default = [
-  {
-    domain_name: "modelmax-store-uat.myshopify.com",
-    merchant_id: "mcht_fcq09yoqqink"
-  }
-];
+// public/test/ucp-merchants.json
+var ucp_merchants_default2 = {
+  version: 1,
+  updated_at: "2026-07-29T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    }
+  ]
+};
 
 // dist/internal-ucp.js
+var MERCHANT_LIST_USER_AGENT = "clink-cli";
+var MERCHANT_LIST_TIMEOUT_MS = 15e3;
+var BUNDLED_MERCHANT_LISTS = {
+  sandbox: ucp_merchants_default,
+  test: ucp_merchants_default2
+};
 function validateInternalUcpMerchants(value, source) {
-  if (!Array.isArray(value)) {
-    throw validationError(`invalid internal UCP config: ${source}`);
-  }
+  const records = merchantRecordsOf(value, source);
   const merchants = /* @__PURE__ */ new Map();
-  value.forEach((record, index) => {
+  const seenDomains = /* @__PURE__ */ new Set();
+  records.forEach((record, index) => {
     if (!record || typeof record !== "object" || Array.isArray(record)) {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
@@ -7963,16 +8186,45 @@ function validateInternalUcpMerchants(value, source) {
     if (!domainName || !merchantId) {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
-    if (merchants.has(domainName)) {
+    if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (seenDomains.has(domainName)) {
       throw validationError(`duplicate internal UCP domain: ${domainName}`);
     }
-    merchants.set(domainName, merchantId);
+    seenDomains.add(domainName);
+    if (fields.enabled !== false) {
+      merchants.set(domainName, merchantId);
+    }
   });
   return merchants;
 }
-var PRODUCTION_MERCHANTS = validateInternalUcpMerchants(internal_ucp_production_default, "internal-ucp.production.json");
-var SANDBOX_MERCHANTS = validateInternalUcpMerchants(internal_ucp_sandbox_default, "internal-ucp.sandbox.json");
-function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
+function merchantRecordsOf(value, source) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const envelope = value;
+    if (Array.isArray(envelope.merchants)) {
+      return envelope.merchants;
+    }
+  }
+  throw validationError(`invalid internal UCP config: ${source}`);
+}
+async function getInternalUcpMerchantList(options2 = {}) {
+  const environment = options2.environment ?? "production";
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  validateInternalUcpMerchants(loaded.document, loaded.source);
+  const merchants = merchantRecordsOf(loaded.document, loaded.source);
+  if (Array.isArray(loaded.document)) {
+    return { merchants: [...merchants] };
+  }
+  return {
+    ...loaded.document,
+    merchants: [...merchants]
+  };
+}
+async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl;
   try {
     productUrl = new URL(rawProductUrl);
@@ -7981,9 +8233,12 @@ function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   }
   const environment = options2.environment ?? "production";
   const domainName = canonicalDomain(productUrl.hostname);
-  const merchants = options2.merchants ?? (environment === "production" ? PRODUCTION_MERCHANTS : SANDBOX_MERCHANTS);
-  const merchantId = domainName ? merchants.get(domainName) : void 0;
-  if (!domainName || !merchantId) {
+  if (!domainName) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  const merchants = options2.merchants ?? await loadInternalUcpMerchants(environment, options2);
+  const merchantId = merchants.get(domainName);
+  if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
   const baseUrl = options2.baseUrl ?? API_BASE_URLS[environment];
@@ -8002,6 +8257,66 @@ function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     provider: "clinkbill",
     endpoint: endpoint.toString()
   };
+}
+async function loadInternalUcpMerchants(environment, options2) {
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  return validateInternalUcpMerchants(loaded.document, loaded.source);
+}
+async function loadInternalUcpMerchantListDocument(environment, options2) {
+  const explicitUrl = options2.merchantListUrl?.trim() || process.env.CLINK_UCP_MERCHANTS_URL?.trim() || void 0;
+  if (!explicitUrl) {
+    const bundled = BUNDLED_MERCHANT_LISTS[environment];
+    if (bundled !== void 0) {
+      return {
+        document: bundled,
+        source: `public/${bundledListName(environment)}/ucp-merchants.json`
+      };
+    }
+  }
+  const listUrl = explicitUrl ?? MERCHANT_LIST_URLS[environment];
+  if (!listUrl) {
+    throw configError(`no internal UCP merchant list for the ${environment} environment; set CLINK_UCP_MERCHANTS_URL`);
+  }
+  const fetchList = options2.fetchMerchantList ?? ((url) => fetchMerchantListDocument(url, options2.timeoutMs));
+  return {
+    document: await fetchList(listUrl),
+    source: listUrl
+  };
+}
+function bundledListName(environment) {
+  return environment === "sandbox" ? "uat" : environment;
+}
+async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "en-US",
+        "User-Agent": MERCHANT_LIST_USER_AGENT
+      },
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+    }
+    throw networkError(`internal UCP merchant list request failed: ${error.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!response.ok) {
+    throw networkError(`internal UCP merchant list request failed with status ${response.status}`);
+  }
+  const rawText = await response.text();
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    throw networkError(`internal UCP merchant list is not valid JSON: ${url}`);
+  }
 }
 function stringValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
@@ -8090,7 +8405,7 @@ async function pollDeviceToken(options2) {
   let intervalSeconds = (nonNegativeNumber(options2.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS) + CLIENT_POLL_PADDING_SECONDS;
   for (; ; ) {
     if (Date.now() >= deadline) {
-      throw authError("Authorization expired; run `clink-cli wallet init` again.");
+      throw authError("Authorization expired; run `clink wallet init` again.");
     }
     try {
       return await requestToken({
@@ -8179,7 +8494,7 @@ async function revokeStoredAuthorization(options2) {
 }
 function assertAuthorizationEnvironment(authorization, runtimeBaseUrl) {
   if (!sameHttpOrigin(authorization.issuerOrigin, runtimeBaseUrl)) {
-    throw configError("saved OAuth authorization belongs to a different API environment; run `clink-cli wallet init` for the selected wallet environment");
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
   }
 }
 function isAccessTokenFresh(authorization, minimumValidityMs = ACCESS_TOKEN_REFRESH_WINDOW_MS) {
@@ -8194,7 +8509,7 @@ async function refreshStoredAuthorization(options2) {
   const updated = await updateStoredConfig(async (current) => {
     const authorization = current.authorization;
     if (!authorization) {
-      refreshFailure = authError("OAuth login is missing; run `clink-cli wallet init`.");
+      refreshFailure = authError("OAuth login is missing; run `clink wallet init`.");
       return current;
     }
     assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
@@ -8214,7 +8529,7 @@ async function refreshStoredAuthorization(options2) {
     }
     if (authorization.refreshTokenExpiresAt <= Date.now()) {
       clearOAuthAndLegacyCredentials(current);
-      refreshFailure = authError("OAuth session expired; run `clink-cli wallet init` again.");
+      refreshFailure = authError("OAuth session expired; run `clink wallet init` again.");
       return current;
     }
     try {
@@ -8230,7 +8545,7 @@ async function refreshStoredAuthorization(options2) {
       });
       const customerChanged = token.customerId !== authorization.customerId;
       if (authorization.customerIdVerified && customerChanged) {
-        refreshFailure = authError("OAuth refresh returned a different customer; run `clink-cli wallet init` again.");
+        refreshFailure = authError("OAuth refresh returned a different customer; run `clink wallet init` again.");
         return current;
       }
       current.authorization = toStoredAuthorization(authorization.deviceId, token, authorization.issuerOrigin, Date.now(), authorization.sessionId);
@@ -8243,7 +8558,7 @@ async function refreshStoredAuthorization(options2) {
     } catch (error) {
       if (error instanceof OAuthProtocolError && error.errorCode === "invalid_grant") {
         clearOAuthAndLegacyCredentials(current);
-        refreshFailure = authError("OAuth session is invalid or revoked; run `clink-cli wallet init` again.");
+        refreshFailure = authError("OAuth session is invalid or revoked; run `clink wallet init` again.");
         return current;
       }
       throw error instanceof OAuthProtocolError ? publicOAuthError(error, "refresh") : error;
@@ -8325,9 +8640,9 @@ function publicOAuthError(error, phase) {
     case "access_denied":
       return authError("Authorization was denied.");
     case "expired_token":
-      return authError("Authorization expired; run `clink-cli wallet init` again.");
+      return authError("Authorization expired; run `clink wallet init` again.");
     case "invalid_grant":
-      return authError(phase === "refresh" ? "OAuth session is invalid or revoked; run `clink-cli wallet init` again." : "Authorization code is invalid or already used; run `clink-cli wallet init` again.");
+      return authError(phase === "refresh" ? "OAuth session is invalid or revoked; run `clink wallet init` again." : "Authorization code is invalid or already used; run `clink wallet init` again.");
     case "invalid_client":
       return authError("OAuth client configuration was rejected.", error.status);
     case "invalid_scope":
@@ -8341,7 +8656,7 @@ function publicOAuthError(error, phase) {
 async function sleepUntilNextPoll(intervalSeconds, deadline, pause) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
-    throw authError("Authorization expired; run `clink-cli wallet init` again.");
+    throw authError("Authorization expired; run `clink wallet init` again.");
   }
   await pause(Math.min(intervalSeconds * 1e3, remaining));
 }
@@ -11758,6 +12073,11 @@ async function resolveSiteTypeDetailsFromUrl(rawUrl, options2) {
       result: siteTypeResult("shopify", "myshopify_domain")
     };
   }
+  if (isEats365Host(hostname)) {
+    return {
+      result: siteTypeResult("eats365", "eats365pos_domain")
+    };
+  }
   let siteStatus;
   let finalUrl;
   try {
@@ -11807,8 +12127,21 @@ async function resolveCheckoutTotalFromUrl(rawUrl, options2 = {}) {
     source: total.source
   };
 }
+var EATS365_MANUAL_ITEM_FIELDS = [
+  "itemId",
+  "title",
+  "unitPrice",
+  "quantity",
+  "currency",
+  "merchantUrl",
+  "merchantName",
+  "merchantCategoryCode"
+];
 async function resolveParseItemFromUrl(rawUrl, options2 = {}) {
   const siteType = await resolveSiteTypeDetailsFromUrl(rawUrl, options2);
+  if (siteType.result.site_type === "eats365") {
+    throw validationError("EATS365_MANUAL_ITEM_REQUIRED");
+  }
   if (siteType.result.site_type !== "shopify") {
     throw validationError("unkonw site type");
   }
@@ -11914,6 +12247,9 @@ function siteTypeResolveDetails(siteType, strategy, finalUrl) {
 }
 function isMyShopifyHost(hostname) {
   return hostname === "myshopify.com" || hostname.endsWith(".myshopify.com");
+}
+function isEats365Host(hostname) {
+  return hostname === "eats365pos.com" || hostname.endsWith(".eats365pos.com");
 }
 function buildHttpsOriginUrl(url) {
   return `https://${url.host}`;
@@ -12883,6 +13219,16 @@ var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDIN
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
+var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
+var UCP_ORDER_PATH = "/agent/ucp/orders";
+var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
+  "draft",
+  "pending",
+  "paid",
+  "cancelled",
+  "partially_refunded",
+  "refunded"
+]);
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
 async function runCli(argv) {
@@ -12925,6 +13271,10 @@ async function runCli(argv) {
       return handleUcpCheckoutCommand(subcommand, context);
     case "ucp-catalog":
       return handleUcpCatalogCommand(subcommand, context);
+    case "catalog":
+      return handleCatalogCommand(subcommand, context);
+    case "ucp-order":
+      return handleUcpOrderCommand(subcommand, context);
     case "instruction":
       return handleInstructionCommand(subcommand, context);
     case "events":
@@ -13106,6 +13456,8 @@ function commandUsesCustomerAuthorization(command, subcommand) {
     case "refund":
     case "ucp-checkout":
     case "ucp-catalog":
+    case "catalog":
+    case "ucp-order":
     case "instruction":
     case "events":
       return subcommand !== void 0;
@@ -13155,6 +13507,26 @@ async function toolParseItem(context) {
     const result = await resolveParseItemFromUrl(url, { timeoutMs: context.globalOptions.timeoutMs });
     printSuccess(result, context.globalOptions.format);
   } catch (error) {
+    if (isEats365ManualItem(error)) {
+      printSuccess({
+        site_type: "eats365",
+        resolution: "manual_item_facts",
+        reason: "eats365 publishes no machine-readable product data for this URL",
+        next_step: "Determine each field in required_fields from the conversation context, confirm them with the user, then pass them to ucp-checkout create",
+        required_fields: [...EATS365_MANUAL_ITEM_FIELDS],
+        // unitPrice maps to line_items[].item.price, which ucp-checkout create scales by
+        // --currency. Passing minor units there would bill the customer 100x the agreed amount.
+        checkout_mapping: {
+          currency: "--currency",
+          merchantUrl: "--merchant-url",
+          merchantCategoryCode: "--merchant-category-code",
+          line_items: `--line-items '[{"id":"li_1","item":{"id":"<itemId>","title":"<title>","price":"<unitPrice>"},"quantity":<quantity>}]'`
+        },
+        unit_price_format: 'unitPrice is a major-unit decimal string, for example "28.00" for 28 HKD. ucp-checkout create converts it to minor units by --currency, so never pass minor units',
+        items: []
+      }, context.globalOptions.format);
+      return EXIT_CODES.OK;
+    }
     if (isUnknownSiteType(error)) {
       printJson({ error_code: error.message }, context.globalOptions.format);
       return EXIT_CODES.OK;
@@ -13211,31 +13583,51 @@ async function toolInternalUcp(context) {
     printHelp("tool", "internal-ucp");
     return EXIT_CODES.OK;
   }
-  if (nestedCommand !== "get-endpoint") {
-    throw validationError(`unsupported internal-ucp tool command: ${nestedCommand}`);
-  }
-  const productUrl = requireStringFlag(context.args.flags, "missing --product-url", "product-url");
-  try {
-    const baseUrl = context.runtimeConfig.baseUrl;
-    const result = resolveInternalUcpEndpoint(productUrl, {
-      baseUrl,
-      environment: clinkEnvironmentForApiBaseUrl(baseUrl) ?? "production"
-    });
-    printJson(result, context.globalOptions.format);
-  } catch (error) {
-    if (error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST") {
-      printJson({ error_code: error.message }, context.globalOptions.format);
+  const baseUrl = context.runtimeConfig.baseUrl;
+  const configuredEnvironment = clinkEnvironmentForApiBaseUrl(baseUrl);
+  switch (nestedCommand) {
+    case "get-merchant-list": {
+      const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
+      if (!configuredEnvironment && !hasMerchantListOverride) {
+        throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
+      }
+      const result = await getInternalUcpMerchantList({
+        environment: configuredEnvironment ?? "production",
+        timeoutMs: context.globalOptions.timeoutMs
+      });
+      printJson(result, context.globalOptions.format);
       return EXIT_CODES.OK;
     }
-    throw error;
+    case "get-endpoint": {
+      const productUrl = requireStringFlag(context.args.flags, "missing --product-url", "product-url");
+      try {
+        const result = await resolveInternalUcpEndpoint(productUrl, {
+          baseUrl,
+          environment: configuredEnvironment ?? "production",
+          timeoutMs: context.globalOptions.timeoutMs
+        });
+        printJson(result, context.globalOptions.format);
+      } catch (error) {
+        if (error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST") {
+          printJson({ error_code: error.message }, context.globalOptions.format);
+          return EXIT_CODES.OK;
+        }
+        throw error;
+      }
+      return EXIT_CODES.OK;
+    }
+    default:
+      throw validationError(`unsupported internal-ucp tool command: ${nestedCommand}`);
   }
-  return EXIT_CODES.OK;
 }
 function isCheckoutStateNotFound(error) {
   return error instanceof CliError && error.message === "checkout_state_not_found";
 }
 function isUnknownSiteType(error) {
   return error instanceof CliError && error.message === "unkonw site type";
+}
+function isEats365ManualItem(error) {
+  return error instanceof CliError && error.message === "EATS365_MANUAL_ITEM_REQUIRED";
 }
 function isNoUcpSite(error) {
   return error instanceof CliError && error.message === "NO_UCP_SITE";
@@ -13266,6 +13658,9 @@ function resolveWatchFlag(flags) {
 }
 async function maybeWatchEvents(context, url, label, watchTarget = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
+    if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
+      printPendingWatchHandoff(url, watchTarget.eventType);
+    }
     return;
   }
   await refreshOAuthAuthorization(context, {
@@ -13284,6 +13679,14 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}) {
     ...watchTarget
   });
   printSuccess(result, context.globalOptions.format);
+}
+function printPendingWatchHandoff(url, eventType) {
+  if (!url || !eventType) {
+    return;
+  }
+  process.stderr.write(`Watch not started (--no-watch). This link needs a listener before the user acts on it.
+Run now: clink-cli events poll --type ${eventType} --no-ack --format json
+`);
 }
 async function handleEventsCommand(subcommand, context) {
   if (!subcommand) {
@@ -13346,7 +13749,7 @@ function parseIntFlag(value, message, min) {
   return parsed;
 }
 function buildResumeCommand(type, ack, format, baseUrlOverride) {
-  const parts = ["clink-cli events poll"];
+  const parts = ["clink events poll"];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
   }
@@ -13923,6 +14326,143 @@ function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
     throw validationError(`--${unsupported} is not supported by ucp-catalog ${subcommand}`);
   }
 }
+async function handleCatalogCommand(subcommand, context) {
+  if (!subcommand) {
+    printHelp("catalog");
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "search":
+      return catalogSearch(context);
+    default:
+      throw validationError(`unsupported catalog command: ${subcommand}`);
+  }
+}
+async function catalogSearch(context) {
+  const flags = context.args.flags;
+  if ("merchant-id" in flags) {
+    throw validationError("--merchant-id is not supported by catalog search; use ucp-catalog search");
+  }
+  const query = requireNonBlankFlag(flags, "query", "missing --query");
+  const limit = parseIntFlag(getStringFlag(flags, "limit"), "--limit must be an integer between 1 and 100", 1);
+  if (limit !== void 0 && limit > 100) {
+    throw validationError("--limit must be an integer between 1 and 100");
+  }
+  const cursor = getStringFlag(flags, "cursor")?.trim() || void 0;
+  const pagination = compact3({ cursor, limit });
+  const body = compact3({
+    query,
+    context: optionalJsonObjectFlag(flags, "context"),
+    signals: optionalJsonObjectFlag(flags, "signals"),
+    attribution: optionalJsonObjectFlag(flags, "attribution"),
+    filters: optionalJsonObjectFlag(flags, "filters"),
+    channel_type: getStringFlag(flags, "channel-type")?.trim() || void 0,
+    form_type: getStringFlag(flags, "form-type")?.trim() || void 0,
+    ext: optionalJsonObjectFlag(flags, "ext"),
+    pagination: Object.keys(pagination).length > 0 ? pagination : void 0
+  });
+  const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
+  const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: EXTRA_CATALOG_SEARCH_PATH,
+    headers: {
+      ...buildCustomerApiKeyHeaders(runtimeConfig),
+      "Request-Id": requestId,
+      "UCP-Agent": ucpAgent
+    },
+    body,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  }));
+  return finishApiCommand(result, context);
+}
+async function handleUcpOrderCommand(subcommand, context) {
+  if (!subcommand) {
+    printHelp("ucp-order");
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "get":
+      return ucpOrderGet(context);
+    case "list":
+      return ucpOrderList(context);
+    default:
+      throw validationError(`unsupported ucp-order command: ${subcommand}`);
+  }
+}
+async function ucpOrderGet(context) {
+  const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: `${UCP_ORDER_PATH}/${encodeURIComponent(orderId)}`,
+    headers: buildCustomerApiKeyHeaders(runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  }));
+  return finishApiCommand(result, context);
+}
+async function ucpOrderList(context) {
+  const flags = context.args.flags;
+  if ("order-id" in flags) {
+    throw validationError("--order-id is not supported by ucp-order list; use ucp-order get");
+  }
+  const status = parseUcpOrderStatusFlag(flags);
+  const createdFrom = parseUcpOrderTimeFlag(flags, "start-time");
+  const createdTo = parseUcpOrderTimeFlag(flags, "end-time");
+  if (createdFrom && createdTo && createdFrom > createdTo) {
+    throw validationError("--start-time must not be after --end-time");
+  }
+  const page = parseIntFlag(getStringFlag(flags, "page"), "--page must be an integer of at least 1", 1);
+  const size = parseIntFlag(getStringFlag(flags, "size"), "--size must be an integer of at least 1", 1);
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: UCP_ORDER_PATH,
+    headers: buildCustomerApiKeyHeaders(runtimeConfig),
+    query: { created_from: createdFrom, created_to: createdTo, status, page, size },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  }));
+  return finishApiCommand(result, context);
+}
+function parseUcpOrderStatusFlag(flags) {
+  if (!("status" in flags)) {
+    return void 0;
+  }
+  const raw = getStringFlag(flags, "status")?.trim();
+  if (!raw) {
+    throw validationError("--status must not be blank");
+  }
+  const statuses = raw.split(",").map((value) => value.trim().toLowerCase());
+  if (statuses.some((value) => !value)) {
+    throw validationError("--status must not contain blank values");
+  }
+  const unsupported = statuses.find((value) => !UCP_ORDER_STATUSES.has(value));
+  if (unsupported) {
+    throw validationError(`unsupported order status: ${unsupported}; expected ${[...UCP_ORDER_STATUSES].join(", ")}`);
+  }
+  return [...new Set(statuses)];
+}
+var UCP_ORDER_TIME_ZONE_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+var UCP_ORDER_TIME_COMPONENT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+function parseUcpOrderTimeFlag(flags, name) {
+  if (!(name in flags)) {
+    return void 0;
+  }
+  const raw = getStringFlag(flags, name)?.trim();
+  if (!raw) {
+    throw validationError(`--${name} must not be blank`);
+  }
+  const normalized = UCP_ORDER_TIME_COMPONENT.test(raw) && !UCP_ORDER_TIME_ZONE_SUFFIX.test(raw) ? `${raw.replace(" ", "T")}Z` : raw;
+  const timestamp = Date.parse(normalized);
+  if (Number.isNaN(timestamp)) {
+    throw validationError(`--${name} must be a UTC RFC 3339 timestamp, for example 2026-07-30T00:00:00Z or 2026-07-30`);
+  }
+  return new Date(timestamp).toISOString();
+}
 function requireNonBlankFlag(flags, name, missingMessage) {
   const value = requireStringFlag(flags, missingMessage, name).trim();
   if (!value) {
@@ -13934,8 +14474,8 @@ async function ucpCheckoutCreate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const currency = requireStringFlag(flags, "missing --currency", "currency");
-  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
-  const email = asRequiredString(context.storedConfig.email, "missing email; run `clink-cli wallet init` or run `clink-cli config set email <email>`");
+  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink wallet init` or run `clink config set customer-id <customerId>`");
+  const email = asRequiredString(context.storedConfig.email, "missing email; run `clink wallet init` or run `clink config set email <email>`");
   const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
   const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
@@ -14014,7 +14554,7 @@ async function ucpCheckoutComplete(context) {
   if (!paymentInstrumentId) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
   }
-  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink-cli wallet init` or run `clink-cli config set customer-id <customerId>`");
+  const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink wallet init` or run `clink config set customer-id <customerId>`");
   const paymentMethodApi = createPaymentMethodApi(context);
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`);
   const idempotencyKey = randomUUID4();
@@ -14180,7 +14720,7 @@ function rejectUcpCheckoutUnsupportedFlags(flags) {
     throw validationError("--instruction-id and --mandate-id are not supported on ucp-checkout");
   }
   if ("idempotency-key" in flags) {
-    throw validationError("--idempotency-key is generated by clink-cli and cannot be provided");
+    throw validationError("--idempotency-key is generated by clink and cannot be provided");
   }
 }
 function buildUcpCheckoutHeaders(runtimeConfig, requestBaseUrl, idempotencyKey) {
@@ -14436,7 +14976,7 @@ async function handleConfigCommand(subcommand, context) {
 async function configSet(context) {
   const [, , rawKey, rawValue] = context.args.positionals;
   if (!rawKey || rawValue === void 0) {
-    throw validationError("usage: clink-cli config set <key> <value>");
+    throw validationError("usage: clink config set <key> <value>");
   }
   const key = normalizeConfigKey(rawKey);
   const value = parseConfigValue(key, rawValue);
@@ -14454,7 +14994,7 @@ async function configGet(context) {
 async function configUnset(context) {
   const [, , rawKey] = context.args.positionals;
   if (!rawKey) {
-    throw validationError("usage: clink-cli config unset <key>");
+    throw validationError("usage: clink config unset <key>");
   }
   const key = normalizeConfigKey(rawKey);
   const nextConfig = await updateStoredConfig((current) => {
@@ -14727,11 +15267,11 @@ function hasExplicitFormat(argv) {
 function detectHelpHint(argv) {
   const command = argv.find((token) => !token.startsWith("-"));
   if (!command) {
-    return "Run `clink-cli --help`.";
+    return "Run `clink --help`.";
   }
-  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "ucp-catalog", "instruction", "events", "tool", "config"].includes(command)) {
-    return `Run \`clink-cli ${command} --help\`.`;
+  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "ucp-catalog", "catalog", "ucp-order", "instruction", "events", "tool", "config"].includes(command)) {
+    return `Run \`clink ${command} --help\`.`;
   }
-  return "Run `clink-cli --help`.";
+  return "Run `clink --help`.";
 }
 void main();

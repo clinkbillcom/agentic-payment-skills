@@ -28,6 +28,15 @@ Use `--no-watch` only when you want the URL or cache refresh without waiting. `-
 
 For the authorization FSM in this Skill, `instruction create` and `instruction sign-url` are the deliberate exception: invoke them with `--no-watch`, then start exactly one correlated `events poll` from the generated waitSpec. This avoids duplicate watchers and multiple competing JSON envelopes.
 
+Those two commands print the handoff on stderr rather than leaving the gap silent:
+
+```
+Watch not started (--no-watch). This link needs a listener before the user acts on it.
+Run now: clink-cli events poll --type purchase_instruction.activated --no-ack --format json
+```
+
+Run that command before sending the Passkey URL. Skipping it sends the user a link nothing is listening for, and the only way the flow learns authorization finished is by asking the user — which this Skill forbids.
+
 ## Start Monitoring At Emit Time
 
 Start the event listener the moment a browser-action URL is emitted, concurrently with sending that URL to the user. Do not wait for the user to report "done" before you begin listening; the completion event can arrive before, during, or after the user's message. Start a non-blocking watch through the available runtime and keep working while it listens, then correlate the event when it arrives.

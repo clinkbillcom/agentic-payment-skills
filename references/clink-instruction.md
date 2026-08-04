@@ -30,7 +30,7 @@ Then confirm authoritatively by refreshing the card and checking `visaRegistrati
 clink-cli card get --payment-instrument-id <visa_pi> --format json
 ```
 
-The agent page environment follows the environment saved by `wallet init` (see `references/clink-cli-invocation.md`); do not re-initialize into another environment between instruction commands.
+The agent page environment follows the base URL persisted by `wallet init` (see `references/clink-cli-invocation.md`); run instruction commands without environment flags and do not re-initialize into another environment during the workflow.
 
 ## Preparation Steps
 
