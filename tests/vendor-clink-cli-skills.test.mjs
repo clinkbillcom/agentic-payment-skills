@@ -479,7 +479,6 @@ test('vendored CLI rejects versioned Skill Tips and wallet OTP input', () => {
   const walletOtp = runBundleRaw([
     'wallet', 'init',
     '--email', 'wallet@example.com',
-    '--name', 'Wallet User',
     '--otp', '123456',
     '--format', 'json',
   ]);
