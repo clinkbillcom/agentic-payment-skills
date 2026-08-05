@@ -812,9 +812,21 @@ test('synchronous paid agent pay starts optional account event monitoring', () =
     skillId: 'skill_1',
   });
   assert.deepEqual(result.pollCommands, [
-    'clink-cli events poll --type account-created --max-wait 60 --format json',
-    'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
+    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
+  assert.deepEqual(
+    result.accountWaitSpecs.map(({ eventType, pollCommand }) => ({ eventType, pollCommand })),
+    [
+      {
+        eventType: 'account-created',
+        pollCommand: result.pollCommands[0],
+      },
+      {
+        eventType: 'account-reloaded',
+        pollCommand: result.pollCommands[0],
+      },
+    ],
+  );
 });
 
 test('paid tip carries caller stable identifiers for account-event fallback correlation', () => {
@@ -1182,7 +1194,7 @@ test('optional account aggregation accepts event FSM timeout results', () => {
   assert.equal(result.paymentStatus, 'PAID');
 });
 
-test('optional account event aggregation waits for the sibling poll', () => {
+test('optional account event aggregation waits for both any-of type classifications', () => {
   const result = classifySkillTipAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{ eventType: 'account-created', timedOut: true }],
@@ -1195,7 +1207,7 @@ test('optional account event aggregation waits for the sibling poll', () => {
   assert.equal(result.terminal, false);
 });
 
-test('one optional poll error waits for the sibling before returning a warning', () => {
+test('one optional type error waits for the other any-of classification before warning', () => {
   const result = classifySkillTipAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{ eventType: 'account-created', error: { message: 'network' } }],

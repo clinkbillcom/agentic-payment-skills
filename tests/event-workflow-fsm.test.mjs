@@ -447,7 +447,7 @@ test('event wait request starts a typed no-ack poll with resource correlation me
   );
 });
 
-test('poll command builder uses no-ack by default to avoid consuming before correlation', () => {
+test('poll command builder uses no-ack to preserve the selected type before correlation', () => {
   assert.equal(
     pollCommandForWaitSpec(instructionWaitSpec),
     'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',

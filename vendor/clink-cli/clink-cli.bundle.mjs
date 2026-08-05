@@ -5745,11 +5745,14 @@ function resolveDashboardBaseUrl(apiBaseUrl) {
   }
   return DASHBOARD_BASE_URLS.production;
 }
-function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId) {
+function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, email) {
   const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
   url.searchParams.set("type", "visa");
   if (instructionId) {
     url.searchParams.set("instructionId", instructionId);
+  }
+  if (email) {
+    url.searchParams.set("email", email);
   }
   return url.toString();
 }
@@ -5937,10 +5940,10 @@ var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   "payment_method.deleted",
   "payment_method.default_change",
   "risk_rule.updated",
-  // UCP/VIC purchase-instruction + device events. These have NO producer in the backend codebase
-  // yet; the type names and `data` field names below are provisional and must be reconciled with
-  // the UCP event contract before it ships.
+  // The VIC device event remains provisional until its producer contract is verified.
   "vic_device.binding_succeeded",
+  // CWallet publishes the purchase-instruction lifecycle events. Matching also accepts the poll
+  // record's top-level resourceId because Event Hub may normalize the event-specific payload.
   "purchase_instruction.created",
   "purchase_instruction.activated",
   "purchase_instruction.updated",
@@ -6026,6 +6029,7 @@ async function watchEvents(options2) {
   const now = options2.now ?? Date.now;
   const log = options2.log ?? stderrLog;
   const startedAtMs = now();
+  const staleEventCutoffMs = options2.staleEventCutoffMs ?? startedAtMs;
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
@@ -6056,8 +6060,8 @@ async function watchEvents(options2) {
       continue;
     }
     if (records.length > 0) {
-      const staleRecords = records.filter((record) => isStaleForWatch(record, startedAtMs));
-      const currentRecords = records.filter((record) => !isStaleForWatch(record, startedAtMs));
+      const staleRecords = records.filter((record) => isStaleForWatch(record, staleEventCutoffMs));
+      const currentRecords = records.filter((record) => !isStaleForWatch(record, staleEventCutoffMs));
       const staleEventIds = staleRecords.map((record) => record.eventId).filter((id) => id.length > 0);
       if (staleEventIds.length > 0) {
         await ackWebhookEvents({
@@ -6118,9 +6122,33 @@ async function watchEvents(options2) {
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
   return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
 }
-function isStaleForWatch(record, startedAtMs) {
-  const eventTimeMs = parseEventTimeMs(record.eventTime);
-  return eventTimeMs !== void 0 && eventTimeMs <= startedAtMs;
+function isStaleForWatch(record, staleEventCutoffMs) {
+  const rawEventTime = record.eventTime;
+  const eventTimeMs = parseEventTimeMs(rawEventTime);
+  if (eventTimeMs === void 0) {
+    return false;
+  }
+  const precisionMs = eventTimePrecisionMs(rawEventTime);
+  const comparableCutoffMs = Math.floor(staleEventCutoffMs / precisionMs) * precisionMs;
+  return eventTimeMs < comparableCutoffMs;
+}
+function eventTimePrecisionMs(value) {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value < 1e12 ? 1e3 : 1;
+  }
+  if (typeof value !== "string") {
+    return 1;
+  }
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) < 1e12 ? 1e3 : 1;
+  }
+  const timestamp = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.(\d{1,3}))?(?:Z|[+-]\d{2}:?\d{2})?$/.exec(trimmed);
+  if (!timestamp) {
+    return 1;
+  }
+  const fractionalDigits = timestamp[1]?.length ?? 0;
+  return fractionalDigits === 0 ? 1e3 : 10 ** (3 - fractionalDigits);
 }
 function hasWatchTarget(options2) {
   return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
@@ -6223,12 +6251,15 @@ async function collectWebhookEvents(options2) {
   const ack = options2.ack ?? true;
   const sleep3 = options2.sleep ?? realSleep;
   const now = options2.now ?? Date.now;
+  const requestedTypes = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
+  const hasTypeFilter = requestedTypes.size > 0;
+  const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
-  const targetReached = () => options2.type ? collected.some((event) => event.eventType === options2.type) : collected.length > 0;
+  const targetReached = () => collected.length > 0;
   const deadline = now() + maxDurationMs;
   for (; ; ) {
     const records = await pollWebhookEvents({
@@ -6241,19 +6272,18 @@ async function collectWebhookEvents(options2) {
     const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
     if (records.length > 0) {
       const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-      collected.push(...events);
-      if (ack) {
-        const ackable = options2.type ? events.filter((event) => event.eventType === options2.type) : events;
-        const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({
-          runtimeConfig: runtimeState.value,
-          ...getRuntimeConfig ? { getRuntimeConfig } : {},
-          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-          expectedIdentity: polledIdentity,
-          timeoutMs: options2.timeoutMs
-        }, ids);
-        ackedEventIds.push(...ids);
-      }
+      const matchingEvents = hasTypeFilter ? events.filter(matchesRequestedType) : events;
+      collected.push(...matchingEvents);
+      const ackable = hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+      const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
+      await ackWebhookEvents({
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+        expectedIdentity: polledIdentity,
+        timeoutMs: options2.timeoutMs
+      }, ids);
+      ackedEventIds.push(...ids);
       if (targetReached()) {
         return { ready: true, timedOut: false, events: collected, ackedEventIds };
       }
@@ -7335,7 +7365,10 @@ Required Arguments:
   --query <text>              Catalog search text
 
 Optional Request Fields:
-  --context <json>            UCP Catalog context JSON object
+  --context <json>            UCP Catalog context JSON object. Fields:
+                              - address_country: ISO 3166-1 alpha-2 context hint (e.g., "SG", "HK")
+                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
+                              - currency: ISO 4217 code (e.g., "USD", "HKD")
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -7410,12 +7443,13 @@ Optional Request Fields:
   --form-type <type>          Caller-declared form or scenario type; echoed back in discovery mode
   --ext <json>                Caller-defined extension map, passed through and logged only.
                               It never affects search conditions or the response shape
-  --context <json>            UCP Catalog context JSON object
+  --context <json>            UCP Catalog context JSON object. Fields:
+                              - address_country: ISO 3166-1 alpha-2 region hint (e.g., "SG", "HK")
+                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
+                              - currency: ISO 4217 code (e.g., "USD", "HKD")
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
-  --cursor <cursor>           Pagination cursor from a previous response
-  --limit <n>                 Page size from 1 to 100
   --request-id <id>           Request-Id header; defaults to a generated UUID
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
@@ -7428,6 +7462,10 @@ Endpoint:
 Behavior:
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
+  address_country is a discovery hint, not a strict filter. Published external-store mappings
+  currently cover HK and SG; other ISO codes may leave results un-narrowed.
+  Broad discovery returns a bounded, non-exhaustive result window and currently exposes no pagination.
+  Use ucp-catalog search for real cursor pagination when a merchant is already known.
   Results come back grouped by target, each group carrying channel_type plus either merchant_id
   (internal merchant) or store_id (external platform store). The shape does not change with
   --channel-type; only the number of groups does.
@@ -7438,7 +7476,11 @@ Examples:
     --query shoes --channel-type shopify \\
     --ext '{"trace":"demo-1"}' \\
     --context '{"currency":"USD","language":"en-US"}' \\
-    --limit 10 --format pretty
+    --format pretty
+  clink catalog search \\
+    --query coffee \\
+    --context '{"address_country":"SG","currency":"SGD","language":"en"}' \\
+    --format json
 `;
 var UCP_ORDER_HELP = `clink ucp-order
 
@@ -7853,7 +7895,8 @@ Usage:
   clink instruction list [options]
 
 Optional Arguments:
-  --status <status>              Filter by status: CREATED, ACTIVE, PENDING, CANCELLED, EXPIRED, DECLINED
+  --status <status>              Filter by status: CREATED, ACTIVE, PENDING, INPROGRESS, COMPLETED,
+                                 CANCELLED, EXPIRED, DECLINED
   --valid-only                   List ACTIVE instructions only; one-time mandates are filtered to reserveStatus=0
   --payment-instrument-id <id>   Filter by payment instrument ID
 
@@ -7946,8 +7989,8 @@ Usage:
 Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
   --limit <n>                  Max events per poll (pageSize, default 20)
-  --type <eventType>           Return early once an event of this type arrives (exact match)
-  --no-ack                     Peek without acknowledging the events
+  --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
+  --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
 Output (data):
@@ -7956,16 +7999,18 @@ Output (data):
   removed server-side, so no offset is needed).
 
 Notes:
-  A single poll returns the whole batch it reads in "events". payment_method.* events
-  refresh the cached payment methods in local wallet state; risk_rule.updated events
-  upsert local risk rule state. --type controls both when to stop waiting and which
-  events are acked: only events matching --type are acknowledged, so unrelated events
-  stay on the queue for a later poll. Without --type, the whole batch is acked.
-  --no-ack peeks without acknowledging anything.
+  Every record read is processed: payment_method.* events refresh cached payment methods
+  and risk_rule.updated events upsert local risk rule state. With --type, "events" contains
+  only matching records; a comma-separated list waits for any listed type. Unrelated records
+  are acknowledged and skipped so an older page cannot block the requested type. Matching
+  records are also acknowledged by default.
+  With both --type and --no-ack, matching records stay queued but unrelated records are still
+  acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
 
 Examples:
   clink events poll --format json
   clink events poll --type payment_method.updated --format json
+  clink events poll --type account-created,account-reloaded --format json
   clink events poll --no-ack --format json
 `;
 function printHelp(command, subcommand, nestedCommand) {
@@ -8818,11 +8863,11 @@ function createTipAuthorizationApi(input, overrides = {}) {
       return unwrapResponse(result, "invalid instruction list response");
     },
     createInstruction: async (draft) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
-        baseUrl: runtimeConfig.baseUrl,
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
+        baseUrl: runtimeConfig2.baseUrl,
         method: "POST",
         path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(runtimeConfig),
+        headers: buildInstructionHeaders(runtimeConfig2),
         body: draft,
         timeoutMs: input.timeoutMs,
         dryRun: false
@@ -8832,9 +8877,10 @@ function createTipAuthorizationApi(input, overrides = {}) {
       if (!instructionId) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
+      const runtimeConfig = await getRuntimeConfig();
       return {
         instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl((await getRuntimeConfig()).baseUrl), draft.paymentInstrumentId, instructionId)
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId, runtimeConfig.email)
       };
     },
     waitForActivation: async (instructionId) => {
@@ -13215,7 +13261,16 @@ function normalizeHostname(value) {
 
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
-var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set(["CREATED", "ACTIVE", "PENDING", "CANCELLED", "EXPIRED", "DECLINED"]);
+var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+  "CREATED",
+  "ACTIVE",
+  "PENDING",
+  "INPROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+  "EXPIRED",
+  "DECLINED"
+]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
@@ -13368,9 +13423,12 @@ async function skillsTip(context) {
     executeCharge,
     reportTip: reportSkillTip
   });
+  const staleEventCutoffMs = Date.now();
   printSuccess(result, context.globalOptions.format);
   if (result.status === "three_ds_required" && result.redirectUrl) {
-    await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication");
+    await maybeWatchEvents(context, result.redirectUrl, "3-D Secure authentication", {
+      staleEventCutoffMs
+    });
     return EXIT_CODES.THREE_DS;
   }
   if (result.status === "payment_unknown") {
@@ -13704,7 +13762,7 @@ async function eventsPoll(context) {
   const flags = context.args.flags;
   const maxWaitSeconds = parseIntFlag(getStringFlag(flags, "max-wait"), "invalid --max-wait", 1);
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
-  const type = getStringFlag(flags, "type");
+  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
   const ack = !getBooleanFlag(flags, "no-ack");
   if (context.globalOptions.dryRun) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
@@ -13747,6 +13805,16 @@ function parseIntFlag(value, message, min) {
     throw validationError(message);
   }
   return parsed;
+}
+function parseEventTypeFlag(value) {
+  if (value === void 0) {
+    return void 0;
+  }
+  const types = value.split(",").map((type) => type.trim());
+  if (types.some((type) => type.length === 0)) {
+    throw validationError("invalid --type: expected one or more comma-separated event types");
+  }
+  return [...new Set(types)].join(",");
 }
 function buildResumeCommand(type, ack, format, baseUrlOverride) {
   const parts = ["clink events poll"];
@@ -14016,8 +14084,9 @@ async function cardBindingLink(context) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
+  const staleEventCutoffMs = Date.now();
   printSuccess(prepared.data, context.globalOptions.format);
-  await maybeWatchEvents(context, prepared.url, "card binding");
+  await maybeWatchEvents(context, prepared.url, "card binding", { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
 async function cardRedirectLink(context, label) {
@@ -14026,12 +14095,13 @@ async function cardRedirectLink(context, label) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
+  const staleEventCutoffMs = Date.now();
   maybeOpenBrowser(context.globalOptions.open, prepared.url);
   printSuccess({
     url: prepared.url,
     paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
   }, context.globalOptions.format);
-  await maybeWatchEvents(context, prepared.url, label);
+  await maybeWatchEvents(context, prepared.url, label, { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
 async function resolveBindingLink(context) {
@@ -14093,9 +14163,10 @@ async function handleRiskRuleCommand(subcommand, context) {
 async function riskRuleLink(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
   const url = new URL("/risk-rules-setup", agentBaseUrl).toString();
+  const staleEventCutoffMs = Date.now();
   maybeOpenBrowser(context.globalOptions.open, url);
   printSuccess({ url }, context.globalOptions.format);
-  await maybeWatchEvents(context, url, "risk rule configuration");
+  await maybeWatchEvents(context, url, "risk rule configuration", { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
 async function riskRuleGet(context) {
@@ -14172,9 +14243,12 @@ async function handlePayCommand(context) {
     printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
+  const staleEventCutoffMs = Date.now();
   printSuccess(addPaymentMethodsRefreshWarning(execution.data, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
   if (execution.requires3ds && execution.redirectUrl) {
-    await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication");
+    await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication", {
+      staleEventCutoffMs
+    });
     return EXIT_CODES.THREE_DS;
   }
   return EXIT_CODES.OK;
@@ -14343,13 +14417,11 @@ async function catalogSearch(context) {
   if ("merchant-id" in flags) {
     throw validationError("--merchant-id is not supported by catalog search; use ucp-catalog search");
   }
-  const query = requireNonBlankFlag(flags, "query", "missing --query");
-  const limit = parseIntFlag(getStringFlag(flags, "limit"), "--limit must be an integer between 1 and 100", 1);
-  if (limit !== void 0 && limit > 100) {
-    throw validationError("--limit must be an integer between 1 and 100");
+  const unsupportedPaginationFlag = ["limit", "cursor"].find((name) => name in flags);
+  if (unsupportedPaginationFlag) {
+    throw validationError(`--${unsupportedPaginationFlag} is not supported by catalog search; broad discovery currently has no pagination`);
   }
-  const cursor = getStringFlag(flags, "cursor")?.trim() || void 0;
-  const pagination = compact3({ cursor, limit });
+  const query = requireNonBlankFlag(flags, "query", "missing --query");
   const body = compact3({
     query,
     context: optionalJsonObjectFlag(flags, "context"),
@@ -14358,8 +14430,7 @@ async function catalogSearch(context) {
     filters: optionalJsonObjectFlag(flags, "filters"),
     channel_type: getStringFlag(flags, "channel-type")?.trim() || void 0,
     form_type: getStringFlag(flags, "form-type")?.trim() || void 0,
-    ext: optionalJsonObjectFlag(flags, "ext"),
-    pagination: Object.keys(pagination).length > 0 ? pagination : void 0
+    ext: optionalJsonObjectFlag(flags, "ext")
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
@@ -14813,6 +14884,7 @@ function requireJsonArrayFlag(flags, name) {
 async function instructionCreate(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
   const body = instructionBody(context);
+  const staleEventCutoffMs = Date.now();
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
     method: "POST",
@@ -14831,7 +14903,7 @@ async function instructionCreate(context) {
   const instructionId = asRequiredString(data.instructionId, "missing instructionId in instruction create response");
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
   const mandateIds = extractMandateIds(data);
-  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId);
+  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, context.runtimeConfig.email);
   maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
   printSuccess({
     ...data,
@@ -14844,7 +14916,8 @@ async function instructionCreate(context) {
   }, context.globalOptions.format);
   await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+    expectedResource: { instructionId, purchaseInstructionId: instructionId },
+    staleEventCutoffMs
   });
   return EXIT_CODES.OK;
 }
@@ -14864,12 +14937,14 @@ async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId);
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId, context.runtimeConfig.email);
+  const staleEventCutoffMs = Date.now();
   maybeOpenBrowser(context.globalOptions.open, url);
   printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId }
+    expectedResource: { instructionId, purchaseInstructionId: instructionId },
+    staleEventCutoffMs
   });
   return EXIT_CODES.OK;
 }
@@ -14952,9 +15027,10 @@ function normalizedString(value) {
 }
 async function instructionAgentPageUrl(context) {
   const url = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
+  const staleEventCutoffMs = Date.now();
   maybeOpenBrowser(context.globalOptions.open, url);
   printSuccess({ url }, context.globalOptions.format);
-  await maybeWatchEvents(context, url, "purchase instruction change");
+  await maybeWatchEvents(context, url, "purchase instruction change", { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
 async function handleConfigCommand(subcommand, context) {

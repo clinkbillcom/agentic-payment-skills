@@ -6,7 +6,7 @@ Read this before waiting for card binding/change, risk-rule update, refund lifec
 
 Clink async operations complete through webhook events from the Clink event hub. Completion is not proven by re-running the initiating command or by guessing from time elapsed.
 
-The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot; `risk_rule.updated` upserts local risk-rule state. Other events are returned to the caller and acknowledged by the event path.
+The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot; `risk_rule.updated` upserts local risk-rule state. A typed poll returns only selected event types. Every record it reads is still processed, but non-selected records are acknowledged and skipped rather than returned.
 
 ## Built-In Link Watch
 
@@ -26,16 +26,16 @@ The first JSON envelope contains the URL or immediate command result. If the wat
 
 Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch.
 
-For the authorization FSM in this Skill, `instruction create` and `instruction sign-url` are the deliberate exception: invoke them with `--no-watch`, then start exactly one correlated `events poll` from the generated waitSpec. This avoids duplicate watchers and multiple competing JSON envelopes.
+`instruction create` and `instruction sign-url` are no exception: they use their built-in watch too. The draft envelope carries the Passkey URL, and the same process then blocks watching for `purchase_instruction.activated` correlated to that instruction. Send the URL as soon as the first envelope lands — the listener is already running behind it — and do not start an `events poll` alongside, which would put two watchers on one event.
 
-Those two commands print the handoff on stderr rather than leaving the gap silent:
+If either command is invoked with `--no-watch` anyway, the CLI prints the handoff on stderr rather than leaving the gap silent:
 
 ```
 Watch not started (--no-watch). This link needs a listener before the user acts on it.
 Run now: clink-cli events poll --type purchase_instruction.activated --no-ack --format json
 ```
 
-Run that command before sending the Passkey URL. Skipping it sends the user a link nothing is listening for, and the only way the flow learns authorization finished is by asking the user — which this Skill forbids.
+That line means the Passkey URL is about to go out with nothing listening. Run the printed command before sending the URL.
 
 ## Start Monitoring At Emit Time
 
@@ -63,10 +63,10 @@ Options:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--type <eventType>` | none | Return early when an event of this type is present. |
+| `--type <type[,type...]>` | none | Return when any listed exact type is present; process, acknowledge, and skip other types. |
 | `--max-wait <seconds>` | 60 | Bounded wait window. |
 | `--limit <n>` | 20 | Page size per poll. |
-| `--no-ack` | false | Peek without consuming events. |
+| `--no-ack` | false | Keep selected typed events queued. Without `--type`, peek the whole batch without acknowledging it. |
 
 The result shape is:
 
@@ -74,11 +74,13 @@ The result shape is:
 { "ready": true, "timedOut": false, "events": [], "ackedEventIds": [] }
 ```
 
-Always filter returned events by `type` and `resourceId` to find the specific change you triggered. The `--type` flag controls readiness, not business correctness.
+With `--type`, `events` contains only listed types. By default the CLI acknowledges both selected and skipped records; with typed `--no-ack`, it acknowledges only skipped records and keeps selected records queued. Therefore `ackedEventIds` may contain IDs that are absent from `events`, and a typed timeout can have `events=[]` with non-empty `ackedEventIds`. Untyped `--no-ack` is the only form that acknowledges nothing.
 
-When a flow has more than one valid readiness event, do not gate on a single restrictive `--type`. Poll without `--type` (or poll each valid type in turn) so you cannot miss the alternate event, and re-check authoritative status with a `get`/status command (`card binding-link --no-watch`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`.
+Always correlate returned events by `resourceId` and the flow-specific identifiers below. Type selection controls queue progress, not business correctness.
 
-While a concurrent watch is still running for the same flow, poll with `--no-ack` so a readiness event is not consumed before it can be correlated. Acknowledge only once you own the event and have correlated it to the resource.
+When a flow has more than one valid readiness event, use one any-of poll such as `--type type-a,type-b`; never start separate typed polls, because either poll can acknowledge the other type as unrelated. If existing FSMs use one wait spec per type, feed the same any-of result through each wait spec. Re-check authoritative status with a `get`/status command (`card binding-link --no-watch`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`.
+
+Do not start an on-demand poll beside a built-in watch for the same flow. Typed `--no-ack` preserves only the selected type set and still consumes every other type, so it is not a passive observer for another watcher.
 
 ## FSM Wait Specs
 
@@ -98,7 +100,7 @@ Instruction activation waitSpec:
 }
 ```
 
-Start that poll immediately after the Passkey URL is emitted. If the poll returns the right event type for a different `instructionId` or `purchaseInstructionId`, keep waiting or return a resumable pending state; do not resume the payment or checkout.
+Start that poll immediately after the Passkey URL is emitted. If it returns the right type for a different `instructionId` or `purchaseInstructionId`, do not resume the payment or checkout. A type-only `--no-ack` poll cannot skip that same-type wrong-resource record; verify the intended instruction with `instruction get` before deciding whether another event wait is useful.
 
 ## Resource Correlation
 
@@ -127,7 +129,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or `payment_method.updated` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
-| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --format json` after checkout complete returns `completed` |
+| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |
@@ -138,9 +140,9 @@ If the right event type appears for a different resource, keep the current workf
 - Do not cache, acknowledge, or correlate an event after the CLI reports a changed login or customer mismatch; preserve the newer wallet and re-observe status first.
 - Start listening at URL-emit time; do not wait for the user to report completion before you begin.
 - Do not busy-retry the initiating link command to check status.
-- Do not acknowledge events with `--no-ack` unless you intentionally only want to peek.
+- Remember that typed `--no-ack` still acknowledges types outside its selected set; only an untyped `--no-ack` poll is a full peek.
 - A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
-- A synchronous successful Agent Pay is already `PAID`. Run both optional polls immediately and use `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.
+- A synchronous successful Agent Pay is already `PAID`. Run one `account-created,account-reloaded` any-of poll immediately, then classify the same result for both wait specs with `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.
 - For Agent Pay, timeout, poll error, and `AMBIGUOUS` attribution all preserve `PAID`; do not retry payment or claim merchant-order confirmation. Amount/currency are mandatory correlation fields, while `customerEmail`, `webSite`, and `userId` are optional conflict checks and tie-breakers.
 - On timeout, return the timeout state and resume command; do not claim success.
 - A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.

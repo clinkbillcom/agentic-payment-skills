@@ -227,7 +227,7 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 
 If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink-cli instruction create` and, when needed, `clink-cli instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation`, send the Passkey URL, and immediately launch the activation waitSpec, normally `clink-cli events poll --type purchase_instruction.activated --no-ack --format json`. After the activation event is observed and correlated to the created instruction, run `clink-cli instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
+When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink-cli instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
 
 ## Step 3: Select One Instruction And Mandate
 
@@ -331,13 +331,26 @@ clink-cli ucp-checkout complete \
 
 ## Step 7: Poll Payment Success Event
 
-Parse the complete response. When complete returns `completed`, immediately start the payment success event poll:
+Parse the complete response. Per UCP convention, complete returns the session with `status: "completed"` and a nested `order` object — `order.id` is the OMS order id, distinct from the Clink pay `orderId` that appears in `agent_order` events. `order.permalink_url` may carry the merchant order page (filled from ext_info `success_url` on synchronous success); pass it through as-is when present and treat its absence as normal — never gate any step on it. The FSM also accepts flat aliases (`omsOrderId` / `oms_order_id` / `merchantOrderId`) for backends that have not adopted the nested shape. When complete returns `completed`, immediately start the payment success event poll:
 
 ```bash
-clink-cli events poll --type agent_order.succeeded --format json
+clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json
 ```
 
-Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Correlate the returned `agent_order.succeeded` event to the current `checkoutId`, `orderId`, or `sessionId` when those identifiers are available. Once matched, return or surface the success event/message to the caller. Do not claim merchant fulfillment, delivery, or entitlement.
+The 900-second window matches the 15-minute built-in watch used elsewhere; async order success can take minutes, so do not shorten it.
+
+Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Pass `expectedResource: { checkoutId, omsOrderId }` (omit fields that are absent):
+
+- Correlate by `checkoutId` — it is the only id that is known at complete time and also carried in the event. Do not use `orderId` or `sessionId` alone as the primary anchor; they can collide across concurrent orders.
+- The `omsOrderId` is not used for correlation — it is forwarded so the next step can fetch the order without re-parsing the complete response.
+
+Once the event is matched and `omsOrderId` is present, the FSM returns `FETCH_OMS_ORDER` with the ready-to-run `orderCommand`. Run it and surface both the payment event and the order to the caller. If `ucp-order get` fails, the payment is still confirmed — surface the success event and report the order fetch error separately; never reclassify a confirmed payment as failed.
+
+```bash
+clink-cli ucp-order get --order-id <omsOrderId> --format json
+```
+
+Do not claim merchant fulfillment, delivery, or entitlement.
 
 If complete is not clearly terminal, verify state first:
 
@@ -349,7 +362,7 @@ Status handling:
 
 | Status | Action |
 | --- | --- |
-| `completed` | Immediately run `clink-cli events poll --type agent_order.succeeded --format json`, then return the matched payment success event/message. |
+| `completed` | Immediately run `clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json`, then return the matched payment success event/message. |
 | `complete_in_progress` | Tell the user automation is in progress; poll `ucp-checkout get` with bounded retries or leave a resumable pending state. |
 | `ready_for_complete` | Complete did not start or was rejected before processing; inspect error output and do not retry blindly. |
 | `requires_escalation` | Authorization did not cover the order; ask the user to create/update the instruction. |
@@ -410,6 +423,6 @@ clink-cli ucp-checkout complete \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \
   --format json
-clink-cli events poll --type agent_order.succeeded --format json
+clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json
 clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
 ```

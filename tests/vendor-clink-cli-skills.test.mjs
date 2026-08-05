@@ -395,13 +395,37 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   const crossMerchantHelp = runBundle(['catalog', 'search', '--help']);
   assert.match(crossMerchantHelp, /Takes no --merchant-id/u);
   assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
+  assert.match(crossMerchantHelp, /address_country is a discovery hint, not a strict filter/u);
+  assert.match(crossMerchantHelp, /Published external-store mappings\s+currently cover HK and SG/u);
+  assert.match(crossMerchantHelp, /other ISO codes may leave results un-narrowed/u);
+  assert.match(crossMerchantHelp, /bounded, non-exhaustive result window and currently exposes no pagination/u);
+  assert.doesNotMatch(crossMerchantHelp, /--cursor <cursor>|--limit <n>/u);
+});
+
+test('vendored CLI exposes the complete instruction status set', () => {
+  const instructionListHelp = runBundle(['instruction', 'list', '--help']);
+  assert.match(
+    instructionListHelp,
+    /CREATED, ACTIVE, PENDING, INPROGRESS, COMPLETED,\s+CANCELLED, EXPIRED, DECLINED/u,
+  );
+});
+
+test('vendored CLI documents typed polling as a draining any-of filter', () => {
+  const eventsHelp = runBundle(['events', 'poll', '--help']);
+  assert.match(eventsHelp, /--type <type\[,type\.\.\.\]>/u);
+  assert.match(eventsHelp, /comma-separated list waits for any listed type/u);
+  assert.match(eventsHelp, /Unrelated records\s+are acknowledged and skipped/u);
+  assert.match(eventsHelp, /With both --type and --no-ack[\s\S]*unrelated records are still\s+acknowledged/u);
+  assert.match(eventsHelp, /Without --type[\s\S]*--no-ack acknowledges none/u);
+  assert.doesNotMatch(eventsHelp, /unrelated events\s+stay on the queue|without acknowledging anything/iu);
+  assert.match(bundleSource, /requestedTypes/u);
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.3');
+  assert.equal(vendorPackage.version, '0.2.4');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'f258c141551699aba7a7d93e1bd0e8ebaaf4e1f0',
+    'eb8e32f27931b1d642d8d3977289dfb0687d185b',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
@@ -411,6 +435,8 @@ test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.match(bundleSource, /Authentication changed while the command was in progress/u);
   assert.match(bundleSource, /Wallet login changed while webhook events were in progress/u);
   assert.match(bundleSource, /Webhook event customer does not match the authenticated wallet/u);
+  assert.match(bundleSource, /staleEventCutoffMs/u);
+  assert.match(bundleSource, /eventTimePrecisionMs/u);
   assert.match(bundleSource, /customer-api-key cannot be set in local config/u);
   assert.doesNotMatch(bundleSource, /\/agent\/cwallet\/customer\/bootstrap/u);
 });
@@ -422,9 +448,16 @@ test('vendored CLI embeds the .dev test API, agent, and dashboard domains', () =
   assert.doesNotMatch(runBundle(['skills', 'list', '--help']), /--sandbox|--test|--base-url/u);
 });
 
-test('vendored instruction sign-url exposes identifiers for correlated activation watches', async () => {
+test('vendored instruction sign-url exposes correlation identifiers and carries configured email', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-instruction-sign-url-'));
   try {
+    const configDir = join(home, '.clink-cli');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'config.json'), JSON.stringify({
+      baseUrl: 'https://uat-api.clinkbill.com',
+      defaultOpenLinks: false,
+      email: 'buyer@example.com',
+    }));
     const execution = await runBundleAsync([
       'instruction', 'sign-url',
       '--payment-instrument-id', 'pi_contract',
@@ -437,6 +470,10 @@ test('vendored instruction sign-url exposes identifiers for correlated activatio
     assert.equal(result.ok, true);
     assert.equal(result.data.instructionId, 'ins_contract');
     assert.equal(result.data.paymentInstrumentId, 'pi_contract');
+    assert.equal(
+      result.data.url,
+      'https://uat-agent.clinkbill.com/passkey-auth/pi_contract?type=visa&instructionId=ins_contract&email=buyer%40example.com',
+    );
   } finally {
     await rm(home, { recursive: true, force: true });
   }

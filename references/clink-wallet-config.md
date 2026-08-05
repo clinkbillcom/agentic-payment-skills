@@ -94,7 +94,7 @@ Every authenticated request, OAuth refresh/retry, payment-method cache write, ev
 
 Never inspect `authorization.accessToken` or `authorization.refreshToken` directly. Use `wallet status` or `config get`, which return only redacted readiness metadata. The config should contain the latest known payment-method snapshot, risk-rule state, and user display data; it should not grow as an append-only log of events.
 
-When event processing sees payment-method changes, the CLI updates the cached payment-method snapshot. `risk_rule.updated` upserts local risk-rule state. Non-wallet business events are returned to the caller and acknowledged by the event path; they are not configuration history.
+When event processing sees payment-method changes, the CLI updates the cached payment-method snapshot. `risk_rule.updated` upserts local risk-rule state. Non-wallet business events are not configuration history: selected events are returned, while a typed poll processes and acknowledges non-selected events without returning them.
 
 ## Card Readiness
 

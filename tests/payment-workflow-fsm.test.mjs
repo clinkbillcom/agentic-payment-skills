@@ -31,8 +31,7 @@ test('Agent Pay synchronous success starts optional account event monitoring', (
   assert.equal(result.accountEventStatus, 'PENDING');
   assert.equal(result.terminal, false);
   assert.deepEqual(result.pollCommands, [
-    'clink-cli events poll --type account-created --max-wait 60 --format json',
-    'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
+    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
   assert.deepEqual(result.currentPayment, paymentContext);
   assert.deepEqual(
@@ -56,6 +55,10 @@ test('Agent Pay synchronous success starts optional account event monitoring', (
         purpose: 'AGENT_PAY_ACCOUNT',
       },
     ],
+  );
+  assert.deepEqual(
+    result.accountWaitSpecs.map(({ pollCommand }) => pollCommand),
+    result.pollCommands.concat(result.pollCommands),
   );
 });
 
@@ -233,7 +236,7 @@ test('Agent Pay account aggregation omits absent core fields instead of inventin
   assert.equal(Object.hasOwn(result.coreInfo, 'userId'), false);
 });
 
-test('optional Agent Pay account aggregation waits for the sibling poll', () => {
+test('optional Agent Pay account aggregation waits for both any-of type classifications', () => {
   const result = classifyPaymentAccountEventObservation({
     paymentStatus: 'PAID',
     pollObservations: [{ eventType: 'account-created', timedOut: true }],

@@ -18,10 +18,10 @@ If the selected Visa card is not registered, send the Passkey registration URL:
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 ```
 
-This URL is hand-built, not CLI command output, so it has **no built-in watch**. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so poll without gating on one type:
+This URL is hand-built, not CLI command output, so it has **no built-in watch**. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so use one any-of poll:
 
 ```bash
-clink-cli events poll --no-ack --max-wait 60 --format json
+clink-cli events poll --type vic_device.binding_succeeded,payment_method.updated --no-ack --max-wait 60 --format json
 ```
 
 Then confirm authoritatively by refreshing the card and checking `visaRegistrationSucceeded === true` before proceeding:
@@ -73,7 +73,6 @@ clink-cli instruction create \
   --effective-until-time "2026-06-30 23:59:59" \
   --mandates '[{"title":"Hotel","description":"Hotel booking","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-30 23:59:59"}]' \
   --shipping-address '{"name":"Clink User","line1":"One Apple Park Way","city":"Cupertino","state":"CA","zip":"95014","countryCode":"US","deliveryContactDetails":{}}' \
-  --no-watch \
   --format json
 ```
 
@@ -135,7 +134,6 @@ Print the Passkey URL for an existing draft:
 clink-cli instruction sign-url \
   --payment-instrument-id <visa_pi> \
   --purchase-instruction-id <instructionId> \
-  --no-watch \
   --format json
 ```
 
@@ -150,16 +148,20 @@ Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fi
 
 ## Activation
 
-This Skill deliberately passes `--no-watch` to `create` and `sign-url` so one Event FSM owns correlation and output parsing. Do not run those commands with their built-in watch and then start a second poll. Run `classifyAuthorizationDraftObservation` on the immediate CLI output, send the returned `passkeyUrl`, and start the returned activation waitSpec at once. `update` and `cancel` may continue using the built-in link watch because they are not authorization-draft activation flows.
+`create` and `sign-url` use their built-in watch. Omit `--no-watch` and keep that same process alive: the CLI prints the draft envelope, then blocks polling `purchase_instruction.activated` filtered to this instruction's `instructionId` / `purchaseInstructionId`, and prints a second envelope when the event arrives. Do not start an `events poll` beside it — two watchers compete for the same event and ack it out from under each other.
+
+Run `classifyAuthorizationDraftObservation` on the draft envelope and send the returned `passkeyUrl` immediately; the watch is already listening behind it. When the second envelope arrives, pass it back through the same classifier as `watchStdout`.
+
+The watch runs at most 15 minutes. If it times out, the runtime kills the foreground command, or only an unrelated instruction's event arrives, the classifier answers `VERIFY_AUTHORIZATION_AFTER_WATCH_GAP` — **not** a failure. The user may have completed the Passkey regardless, so ask the instruction itself before concluding anything; restart `events poll` only if it is still pending:
 
 ```bash
 clink-cli events poll --type purchase_instruction.activated --no-ack --format json
 ```
 
-The activation event must correlate by the same `instructionId` / `purchaseInstructionId`. After `classifyEventPollObservation` returns `EVENT_STATUS_VERIFY_REQUIRED`, run:
+Either way the activation must correlate by the same `instructionId` / `purchaseInstructionId`. Then run:
 
 ```bash
 clink-cli instruction get --purchase-instruction-id <instructionId> --format json
 ```
 
-Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed.
+Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed. If `instruction get` exits nonzero or returns an explicit error envelope, surface that error and stop. Only a successful `CREATED`, `PENDING`, or `INPROGRESS` response is still activatable and may restart the event poll. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are verification errors, not pending states.

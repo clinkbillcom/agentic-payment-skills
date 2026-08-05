@@ -59,12 +59,10 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
 
   assert.match(
     paymentRefund,
-    /clink-cli events poll --type account-created --max-wait 60 --format json/u,
+    /clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
   );
-  assert.match(
-    paymentRefund,
-    /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u,
-  );
+  assert.match(paymentRefund, /execute the any-of command only once/iu);
+  assert.match(paymentRefund, /same poll result[\s\S]*each wait spec/iu);
   assert.match(paymentRefund, /账户创建和商户订单确认成功/u);
   assert.match(paymentRefund, /商户订单确认成功/u);
   assert.match(
@@ -154,6 +152,17 @@ test('latest CLI identity continuity and effective wallet status are documented'
   assert.match(skill, /webhook event customer does not match/u);
 });
 
+test('typed event polling skips unrelated records without hiding any-of alternatives', () => {
+  assert.match(asyncEvents, /With `--type`, `events` contains only listed types/u);
+  assert.match(asyncEvents, /acknowledges both selected and skipped records/u);
+  assert.match(asyncEvents, /typed `--no-ack`[\s\S]*acknowledges only skipped records/iu);
+  assert.match(asyncEvents, /Untyped `--no-ack`[\s\S]*acknowledges nothing/iu);
+  assert.match(asyncEvents, /`ackedEventIds` may contain IDs that are absent from `events`/u);
+  assert.match(asyncEvents, /use one any-of poll/u);
+  assert.doesNotMatch(asyncEvents, /poll each valid type in turn/iu);
+  assert.match(walletConfig, /typed poll processes and acknowledges non-selected events without returning them/u);
+});
+
 test('latest CLI config mutation boundaries are documented', () => {
   assert.match(walletConfig, /always rejects `config set customer-api-key`/u);
   assert.match(walletConfig, /`config unset customer-api-key` remains available/u);
@@ -167,26 +176,46 @@ test('latest CLI config mutation boundaries are documented', () => {
   assert.match(walletConfig, /config set base-url[\s\S]*clears the stored OAuth authorization/iu);
 });
 
-test('instruction activation uses one explicit Event FSM watcher', () => {
-  assert.match(instruction, /instruction create[\s\S]*--no-watch[\s\S]*--format json/u);
-  assert.match(instruction, /instruction sign-url[\s\S]*--no-watch[\s\S]*--format json/u);
-  assert.match(instruction, /one Event FSM owns correlation/u);
-  assert.match(asyncEvents, /avoids duplicate watchers/u);
+test('instruction activation runs on the command own built-in watch', () => {
+  assert.match(instruction, /`create` and `sign-url` use their built-in watch/u);
+  assert.match(instruction, /Omit `--no-watch` and keep that same process alive/u);
+  assert.match(instruction, /Do not start an `events poll` beside it/u);
+  // The draft examples must not teach --no-watch, or the copied command silences the watch.
+  // Scoped to each command's own fenced block so an unrelated `card binding-link --no-watch`
+  // elsewhere in the file cannot satisfy or break this.
+  const fencedBlocks = instruction.match(/```bash\n[\s\S]*?```/gu) ?? [];
+  for (const block of fencedBlocks) {
+    if (!/clink-cli instruction (create|sign-url)/u.test(block)) continue;
+    assert.doesNotMatch(block, /--no-watch/u);
+  }
+  assert.match(asyncEvents, /are no exception: they use their built-in watch too/u);
   assert.match(asyncEvents, /Without `eventType` or `expectedResource`[\s\S]*first non-stale event batch/iu);
   assert.match(asyncEvents, /With either target[\s\S]*acknowledges unrelated events[\s\S]*matching event/iu);
 });
 
+// A 15-minute timeout or a runtime-killed foreground command leaves the activation unobserved
+// while the user may already have completed the Passkey. Reporting failure there would strand a
+// live authorization, so both the action contract and the reference must send it to instruction get.
+test('a watch that ends without the activation verifies rather than fails', () => {
+  assert.match(skill, /VERIFY_AUTHORIZATION_AFTER_WATCH_GAP/u);
+  assert.match(skill, /never report failure here/u);
+  assert.match(skill, /VERIFY_AUTHORIZATION_ACTIVATION/u);
+  assert.match(instruction, /VERIFY_AUTHORIZATION_AFTER_WATCH_GAP/u);
+  assert.match(instruction, /\*\*not\*\* a failure/u);
+  assert.match(instruction, /at most 15 minutes/u);
+});
+
 // The Passkey URL once went out with no listener behind it, and the flow then asked the user to
-// report completion by hand. The CLI now prints the poll to run; the docs must point at that line
-// so it reads as the handoff it is rather than a notice.
+// report completion by hand. --no-watch is no longer the Skill's path, but the CLI still prints
+// the poll to run when someone passes it, and the docs must keep pointing at that line.
 test('the --no-watch handoff is documented as the next command to run', () => {
   assert.match(asyncEvents, /Watch not started \(--no-watch\)/u);
   assert.match(
     asyncEvents,
     /Run now: clink-cli events poll --type purchase_instruction\.activated --no-ack --format json/u,
   );
-  assert.match(asyncEvents, /Run that command before sending the Passkey URL/u);
-  assert.match(skill, /`Watch not started \(--no-watch\)`[\s\S]*that line is the handoff/u);
+  assert.match(asyncEvents, /Run the printed command before sending the URL/u);
+  assert.match(skill, /Do not pass `--no-watch`, do not start an `events poll` alongside it/u);
 });
 
 test('wallet init proactively returns and surfaces the card binding URL', () => {
@@ -251,8 +280,11 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /Never retry exit code 6/iu);
   assert.match(skillTip, /code `402`.*Credit 余额不足，请先绑定银行卡/isu);
   assert.match(skillTip, /Do not run `card binding-link`.*binding\/payment listener.*retry the Tip/isu);
-  assert.match(skillTip, /clink-cli events poll --type account-created --max-wait 60 --format json/u);
-  assert.match(skillTip, /clink-cli events poll --type account-reloaded --max-wait 60 --format json/u);
+  assert.match(
+    skillTip,
+    /clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
+  );
+  assert.match(skillTip, /same poll result through the `account-created` and `account-reloaded` wait specs/u);
 });
 
 test('skill tip reference requires a localized three-column table', () => {
@@ -406,14 +438,17 @@ test('instruction activation waits are FSM-driven and correlated before resume',
   assert.match(skill, /classifyAuthorizationActiveVerification/u);
   assert.match(skill, /classifyEventWaitRequest/u);
   assert.match(skill, /classifyEventPollObservation/u);
-  assert.match(skill, /clink-cli events poll --type purchase_instruction\.activated --no-ack --format json/u);
+  assert.match(skill, /SEND_PASSKEY_URL_AND_AWAIT_BUILT_IN_WATCH/u);
   assert.match(skill, /instruction get --purchase-instruction-id/u);
   assert.match(skill, /do not wait for the user to report completion/u);
   assert.match(asyncEvents, /waitSpec/u);
   assert.match(asyncEvents, /instructionId.*purchaseInstructionId/u);
   assert.match(instruction, /ACTIVE/u);
   assert.match(instruction, /classifyAuthorizationDraftObservation/u);
-  assert.match(ucpCheckout, /activation waitSpec/u);
+  assert.match(instruction, /instruction get` exits nonzero or returns an explicit error envelope/u);
+  assert.match(instruction, /`CREATED`, `PENDING`, or `INPROGRESS`/u);
+  assert.match(instruction, /`COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`/u);
+  assert.match(ucpCheckout, /built-in watch/u);
 });
 
 test('catalog discovery loads the merchant list before matching intent on descriptions', () => {
@@ -434,25 +469,35 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
   assert.match(skill, /never takes `--merchant-id`/u);
 
   assert.match(catalogDiscovery, /clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
-  assert.match(catalogDiscovery, /clink-cli catalog search --query <text> \[--ext <json>\] --format json/u);
+  assert.match(
+    catalogDiscovery,
+    /clink-cli catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
+  );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
 });
 
-test('catalog ext narrowing pins the eats365 channel and supported region', () => {
-  assert.match(skill, /channel_type/u);
+test('catalog search uses the channel selector and location hint plus exact local store filtering', () => {
+  assert.match(skill, /--channel-type eats365/u);
   assert.match(skill, /eats365/u);
   assert.match(skill, /normalize the `eat365` spelling/u);
-  assert.match(skill, /`region` `hk` only/u);
-  assert.match(skill, /never send `region` or `store_id` without `channel_type`/u);
+  assert.match(skill, /context\.address_country` only for established HK\/SG/u);
+  assert.match(skill, /US, JP, and other countries mean unknown catalog location/u);
+  assert.match(skill, /locally keep only exact matching `store_id` groups and recompute `productCount`/u);
 
-  assert.match(catalogDiscovery, /"channel_type":"eats365","region":"hk","store_id":"arabica_cheklapkok"/u);
+  assert.match(catalogDiscovery, /--channel-type eats365 --context '\{"address_country":"HK"\}'/u);
+  assert.match(catalogDiscovery, /does not apply it as a search predicate/u);
+  assert.match(catalogDiscovery, /store_id` exactly matches the target[\s\S]*recompute the count/u);
+  assert.match(catalogDiscovery, /US, JP[\s\S]*unknown catalog location/u);
+  assert.match(catalogDiscovery, /legacy pending input `region=hk` or `region=sg`/u);
+  assert.match(catalogDiscovery, /Skip this inference step when `channelType` or `storeId` is already established/u);
+  assert.match(catalogDiscovery, /merchant-scoped endpoint accepts neither the channel selector nor store identity/u);
   // Real eats365 store ids are lowercase slugs, not numeric store codes; a fabricated-looking
   // example invites the agent to invent one instead of taking it from context.
   assert.doesNotMatch(catalogDiscovery, /store_id":"[A-Z]{2}\d+/u);
-  assert.match(catalogDiscovery, /unsupported_catalog_region/u);
   assert.match(catalogDiscovery, /catalog_channel_type_missing/u);
   assert.match(catalogDiscovery, /Never invent one/u);
+  assert.doesNotMatch(catalogDiscovery, /--ext '\{"channel_type"/u);
 });
 
 // A platform-store item has no product detail page. When the docs did not say so, the agent read

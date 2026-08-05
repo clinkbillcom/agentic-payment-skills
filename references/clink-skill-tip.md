@@ -253,19 +253,15 @@ Never retry exit code 6 or a client timeout automatically; payment may already h
 
 ## Optional Merchant Account Events
 
-Merchant account events enrich a successful tip but are not required. A merchant may emit neither event. After synchronous success, keep payment terminal `PAID` and immediately start both bounded polls in parallel:
+Merchant account events enrich a successful tip but are not required. A merchant may emit neither event. After synchronous success, keep payment terminal `PAID` and immediately start one bounded any-of poll:
 
 ~~~bash
-clink-cli events poll --type account-created --max-wait 60 --format json
+clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json
 ~~~
 
-~~~bash
-clink-cli events poll --type account-reloaded --max-wait 60 --format json
-~~~
+The events are mutually exclusive for one tip and use ANY_OF semantics. Feed the same poll result through the `account-created` and `account-reloaded` wait specs. Correlate by matching order ID, otherwise by a compound identity with at least two stable values such as `customerId + merchantId` or `customerId + skillId`. Pass known `expectedResource` values including `customerId`, `merchantId`, and `skillId`.
 
-The events are mutually exclusive for one tip and use ANY_OF semantics. Correlate by matching order ID, otherwise by a compound identity with at least two stable values such as `customerId + merchantId` or `customerId + skillId`. Pass known `expectedResource` values including `customerId`, `merchantId`, and `skillId`.
-
-An explicit conflicting orderId must be rejected even when compound fields match. Never accept an event-type-only match. Stop the sibling listener after one correlated event. Wait for both listeners to settle before returning `NOT_OBSERVED`; timeout or poll error never downgrades `PAID`.
+An explicit conflicting orderId must be rejected even when compound fields match. Never accept an event-type-only match. Return `NOT_OBSERVED` only after the single any-of poll settles; timeout or poll error never downgrades `PAID`.
 
 If both `account-created` and `account-reloaded` are reported as correlated for the same tip, preserve `PAID` but return a warning with `accountEventStatus=POLL_ERROR`; the mutually exclusive evidence is inconsistent.
 

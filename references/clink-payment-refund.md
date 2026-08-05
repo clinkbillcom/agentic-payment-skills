@@ -106,7 +106,7 @@ clink-cli pay \
   --format json
 ```
 
-If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. Run `classifyAuthorizationDraftObservation` on the create/sign-url output, send the Passkey URL, and immediately launch the returned activation waitSpec (`clink-cli events poll --type purchase_instruction.activated --no-ack --format json`). For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
+If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink-cli instruction create`, then the Passkey authorization URL / activation wait) and stop. Run `classifyAuthorizationDraftObservation` on the create/sign-url draft envelope and send the Passkey URL at once; that command's own built-in watch is the listener, so do not start a separate `events poll`. Feed its second envelope back through the same classifier as `watchStdout`. For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
 
 ```text
 Payment Intent ID: payint_xxx
@@ -148,19 +148,15 @@ Exit 5:
 
 ### Optional Account Confirmation After Agent Pay Success
 
-Agent Pay `status=1` is synchronous payment success. Do not wait for a merchant account event before returning `PAID`. Immediately start both bounded polls in parallel under the same environment lock used by `pay`:
+Agent Pay `status=1` is synchronous payment success. Do not wait for a merchant account event before returning `PAID`. Immediately start one bounded any-of poll under the same environment lock used by `pay`:
 
 ```bash
-clink-cli events poll --type account-created --max-wait 60 --format json
+clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json
 ```
 
-```bash
-clink-cli events poll --type account-reloaded --max-wait 60 --format json
-```
+The CLI filter uses `account-created` and `account-reloaded`; event bodies may contain `account.created` and `account.reloaded`. Treat each pair as the same semantic type. The events are mutually exclusive for one payment, and a merchant may emit neither.
 
-The CLI filters use `account-created` and `account-reloaded`; event bodies may contain `account.created` and `account.reloaded`. Treat each pair as the same semantic type. The events are mutually exclusive for one payment, and a merchant may emit neither.
-
-Build the wait specs with `purpose=AGENT_PAY_ACCOUNT`. Pass each poll result, the current payment watch, and all active watches in the same environment/wallet scope to `classifyEventPollObservation`; it invokes `classifyAgentPayAccountEventCandidate`. Then pass both classified poll observations to `classifyPaymentAccountEventObservation`.
+Build one wait spec per account type with `purpose=AGENT_PAY_ACCOUNT`, but execute the any-of command only once. Pass the same poll result, the current payment watch, and all active watches in the same environment/wallet scope through `classifyEventPollObservation` for each wait spec; it invokes `classifyAgentPayAccountEventCandidate`. Then pass both classified observations to `classifyPaymentAccountEventObservation`.
 
 Every watch must have a stable `accountWatchId`. Reuse the upstream payment identity when one exists; when `paymentId` is absent, the Payment FSM generates a local UUID `accountWatchId`. Preserve that identifier in the active-watch snapshot and both wait specs so serialization does not duplicate the current payment or collapse two distinct payments.
 
@@ -201,7 +197,7 @@ Do not invent missing fields or copy fallback values from the payment context in
 Account monitoring outcomes remain separate from payment outcome:
 
 - `CONFIRMED_CREATED` or `CONFIRMED_RELOADED`: show the matching confirmation and core information.
-- `NOT_OBSERVED`: both polls settled without a uniquely attributed event; keep `PAID`.
+- `NOT_OBSERVED`: the any-of poll settled without a uniquely attributed event; keep `PAID`.
 - `POLL_ERROR`: polling failed or both mutually exclusive event types appeared; keep `PAID` with a warning.
 - `AMBIGUOUS`: more than one active payment remains a valid candidate; keep `PAID` and do not claim merchant-order confirmation.
 - `PENDING`: only one poll has settled; keep waiting for the sibling optional poll.
@@ -223,10 +219,10 @@ On success, extract `refundOrderId` or `refundId` from the response. A successfu
 Event-driven option:
 
 ```bash
-clink-cli events poll --type agent_refund.succeeded --format json
+clink-cli events poll --type agent_refund.succeeded,agent_refund.failed,agent_refund.rejected --format json
 ```
 
-Also inspect returned events for `agent_refund.failed` and `agent_refund.rejected`, filtered to the target refund.
+Correlate the returned terminal event to the target refund before classifying success, failure, or rejection.
 
 Direct status option:
 

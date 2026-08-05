@@ -492,9 +492,12 @@ test('a synchronously paid item advances and exposes non-blocking optional accou
   assert.equal(result.progress.results[0].paymentStatus, 'PAID');
   assert.equal(result.progress.currentIndex, 1);
   assert.deepEqual(result.optionalAccountWatch.pollCommands, [
-    'clink-cli events poll --type account-created --max-wait 60 --format json',
-    'clink-cli events poll --type account-reloaded --max-wait 60 --format json',
+    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
+  assert.deepEqual(
+    result.optionalAccountWatch.accountWaitSpecs.map(({ eventType }) => eventType),
+    ['account-created', 'account-reloaded'],
+  );
   assert.equal(result.optionalAccountWatch.expectedResource.orderId, 'order_1');
   assert.match(result.command, /--name ModelMax/u);
 });
