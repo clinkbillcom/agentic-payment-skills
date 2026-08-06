@@ -422,10 +422,10 @@ test('vendored CLI documents typed polling as a draining any-of filter', () => {
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.4');
+  assert.equal(vendorPackage.version, '0.2.5');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '6796cdccd1f2efbf2f5626c770b63513b872cbac',
+    'e2a9eb0d2b2cd29e715d851bf158987683886dff',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);

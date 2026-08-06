@@ -346,10 +346,61 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
   assert.match(cliInvocation, /\| 8 \| Install error/u);
 });
 
-test('skill and package versions are bumped for OAuth wallet routing', () => {
-  assert.match(skill, /version:\s*"1\.8\.2"/u);
-  assert.equal(packageJson.version, '1.8.2');
+test('skill and package versions stay bumped and in sync', () => {
+  assert.match(skill, /version:\s*"1\.9\.1"/u);
+  assert.equal(packageJson.version, '1.9.1');
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+// The Passkey signature that activates an instruction needs the user. A scheduled task runs when
+// they are gone, so the authorization has to exist and be pinned before the schedule does — and a
+// run that finds it missing must stop rather than ask for a signature nobody can give.
+test('scheduled purchase tasks authorize before the schedule and pin the ids', () => {
+  assert.match(skill, /classifyScheduledAuthorizationScope/u);
+  assert.match(skill, /classifyScheduledAuthorizationReuse/u);
+  assert.match(skill, /classifyUnattendedAuthorization/u);
+  assert.match(skill, /`ASK_FOR_SCHEDULE_SCOPE`/u);
+  assert.match(skill, /`CREATE_SCHEDULED_AUTHORIZATION_DRAFT`/u);
+  assert.match(skill, /`PIN_SCHEDULED_AUTHORIZATION`/u);
+  assert.match(skill, /`SURFACE_UNATTENDED_AUTHORIZATION_GAP`/u);
+  assert.match(skill, /never by re-listing and re-matching/u);
+
+  assert.match(instruction, /Scheduled-Task Pre-Authorization/u);
+  assert.match(instruction, /There is no `DAILY` frequency/u);
+  assert.match(instruction, /`WEEKLY`, `MONTHLY`, and `YEARLY`/u);
+  assert.match(instruction, /resets to its full value at the start of every cycle/u);
+  assert.match(instruction, /consumed as purchases draw it down/u);
+  assert.match(instruction, /perRunCap x 7/u);
+  assert.match(instruction, /recurringFrequency":"WEEKLY"/u);
+  assert.match(instruction, /entire schedule horizon, never against the next single purchase/u);
+  assert.match(instruction, /merchantScopeCovered/u);
+  assert.match(instruction, /total_budget_below_projected_spend|exhaustsAfterRuns/u);
+
+  assert.match(ucpCheckout, /Scheduled and unattended checkouts/u);
+  assert.match(ucpCheckout, /classifyUnattendedAuthorization/u);
+  assert.match(ucpCheckout, /Never create a draft, never re-run `instruction list` to find a substitute/u);
+});
+
+// --valid-only keeps reserved mandates on recurring instructions on purpose, because a recurring
+// mandate is reusable by design. A blanket reservation filter would drop the one mandate a
+// scheduled task depends on and report a false no-match.
+test('the reservation filter is scoped to one-time instructions', () => {
+  assert.match(ucpCheckout, /\*\*only on one-time instructions\*\*/u);
+  assert.match(ucpCheckout, /recurring mandate is reusable by design/u);
+  assert.match(ucpCheckout, /false no-match/u);
+  assert.match(instruction, /only for one-time instructions/u);
+  assert.doesNotMatch(
+    ucpCheckout,
+    /filter out reserve \/ reserved \/ locked \/ in-use instruction or mandate entries when any returned field/u,
+  );
+});
+
+// A recurring mandate's amountLimit is the cycle budget. Reading it as the per-order ceiling would
+// let one run spend the whole week's budget in a single order.
+test('the per-run cap is distinguished from the recurring cycle budget', () => {
+  assert.match(ucpCheckout, /cycle budget, not the per-order ceiling/u);
+  assert.match(ucpCheckout, /Do not select a broad mandate merely because the backend might accept/u);
+  assert.match(instruction, /cycle budget, not the per-order cap/u);
 });
 
 test('skill documents atomic sequential batch tipping with itemized outcomes', () => {

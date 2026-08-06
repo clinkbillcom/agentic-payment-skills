@@ -50,6 +50,7 @@ DISCOVER_PRODUCT
   -> IF_VISA_VIC_READY_LIST_AUTHORIZATIONS
   -> IF_VISA_VIC_READY_SELECT_INSTRUCTION_MANDATE
   -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
+  -> IF_UNATTENDED_USE_PINNED_AUTHORIZATION_OR_SURFACE_GAP
   -> RESOLVE_CHECKOUT_ROUTE_WITH classifyUcpCheckoutRoute
   -> RUN_INTERNAL_UCP_GET_ENDPOINT
   -> IF_NOT_IN_INTERNAL_UCP_LIST_CHECK_STANDARD_UCP_PROFILE
@@ -221,13 +222,24 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 
 - filter out inactive instructions whose `status` is absent from the active set or is not `ACTIVE` / `active`
 - filter out inactive mandates whose mandate-level status is not active when the backend exposes such a field
-- filter out reserve / reserved / locked / in-use instruction or mandate entries when any returned field indicates reservation or a usage lock
+- filter out reserve / reserved / locked / in-use mandate entries **only on one-time instructions**. A recurring instruction (`isRecurring` truthy) keeps its mandates regardless of `reserveStatus`, because a recurring mandate is reusable by design; `--valid-only` deliberately leaves them in place. Applying the reservation filter there discards the exact mandate a scheduled task depends on and produces a false no-match.
 - filter out entries for a different `paymentInstrumentId`
 - filter out entries with missing `instructionId`, `mandateId`, `currencyCode`, or amount limit
 
 If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink-cli instruction create` and, when needed, `clink-cli instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
 When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink-cli instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
+
+### Scheduled and unattended checkouts
+
+A checkout started by a scheduled task has no user present, so it can neither collect a Passkey signature nor safely substitute a different mandate. It skips the list-and-match path entirely and uses the `instructionId` + `mandateId` pinned when the schedule was created (see `references/clink-instruction.md`):
+
+```bash
+clink-cli instruction get --purchase-instruction-id <pinned_instruction_id> --format json
+```
+
+Pass that result plus the pinned ids to `classifyUnattendedAuthorization`. Only an `ACTIVE` instruction carrying the pinned mandate on the same `paymentInstrumentId` may proceed to Step 3. Anything else — expired, cancelled, exhausted, mandate missing, card changed — returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP`: stop this run, report the reason, and ask the user to authorize a new instruction. Passing `unattended: true` to `classifyAuthorizationSelection` enforces the same rule: it returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP` instead of `START_AUTHORIZATION_DRAFT_AND_WAIT` when no pinned authorization is present. Never create a draft, never re-run `instruction list` to find a substitute, and never report a checkout as merely pending when the authorization is the thing that failed.
+
 
 ## Step 3: Select One Instruction And Mandate
 
@@ -242,6 +254,8 @@ Normalize the product total and mandate amount to the same currency scale. A UCP
 - product total is within an explicitly authorized cap only when the user or mandate text clearly authorizes a limit-style scope for this merchant/product
 
 For this product-order flow, prefer exact amount matches. Do not select a broad mandate merely because the backend might accept `amount < amountLimit`.
+
+For a pinned scheduled authorization, the limit-style scope is the per-run cap written into the mandate `description` at creation, and the order total must be within it. A recurring mandate's `amountLimit` is the cycle budget, not the per-order ceiling, so never treat `amountLimit` as the per-order cap. This does not relax the rule above for any other flow: a mandate that was not pinned by this schedule is still matched by the ordinary exact/authorized-cap rules.
 
 ### Merchant semantic match
 
@@ -373,6 +387,7 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 ## Failure And Recovery Rules
 
 - No matching instruction and mandate: start the instruction creation workflow, then stop checkout until instruction activation event proves a matching instruction+mandate is ACTIVE.
+- No matching instruction and mandate on an unattended/scheduled run: `SURFACE_UNATTENDED_AUTHORIZATION_GAP`. Stop the run and report it; do not create a draft, because no user is present to sign the Passkey.
 - Partial authorization match: do not select it.
 - More than one equally specific match: ask the user to choose.
 - `ucp-checkout create` idempotency conflict: use the original response if the cart is identical; otherwise create a new checkout with a new key.
@@ -397,6 +412,10 @@ clink-cli tool parse-item --url <item_url> --format json
 #   2. match amount, reusability, merchantCategoryCode, and merchant/product semantics
 #   3. if no match, create/sign instruction and wait for purchase_instruction.activated
 #   4. restart from card refresh + instruction list after activation
+# If this run is unattended/scheduled:
+#   1. clink-cli instruction get --purchase-instruction-id <pinned_instruction_id> --format json
+#   2. classifyUnattendedAuthorization with the pinned instructionId + mandateId
+#   3. anything other than ACTIVE with that mandate -> SURFACE_UNATTENDED_AUTHORIZATION_GAP and stop
 
 # Resolve checkout route:
 #   clink-cli tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
