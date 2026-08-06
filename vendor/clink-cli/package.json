@@ -1,7 +1,7 @@
 {
   "name": "clink-cli-vendored",
   "version": "0.2.4",
-  "upstreamCommit": "eb8e32f27931b1d642d8d3977289dfb0687d185b",
+  "upstreamCommit": "6796cdccd1f2efbf2f5626c770b63513b872cbac",
   "private": true,
   "type": "module",
   "bin": { "clink-cli": "clink-cli.bundle.mjs" },

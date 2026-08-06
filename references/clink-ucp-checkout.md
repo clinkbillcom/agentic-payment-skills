@@ -424,5 +424,6 @@ clink-cli ucp-checkout complete \
   --idempotency-key <stable_complete_key> \
   --format json
 clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json
+clink-cli ucp-order get --order-id <omsOrderId> --format json
 clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
 ```

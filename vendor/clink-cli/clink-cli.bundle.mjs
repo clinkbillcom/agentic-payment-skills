@@ -8185,13 +8185,19 @@ function getHelpText(command, subcommand, nestedCommand) {
 // public/uat/ucp-merchants.json
 var ucp_merchants_default = {
   version: 1,
-  updated_at: "2026-07-29T00:00:00Z",
+  updated_at: "2026-08-06T00:00:00Z",
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "uat-magento.clinkpay.team",
+      merchant_id: "mcht_f5d0rys1hjxe",
+      enabled: true,
+      description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     }
   ]
 };

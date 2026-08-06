@@ -425,7 +425,7 @@ test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.equal(vendorPackage.version, '0.2.4');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'eb8e32f27931b1d642d8d3977289dfb0687d185b',
+    '6796cdccd1f2efbf2f5626c770b63513b872cbac',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
