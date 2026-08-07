@@ -4,10 +4,10 @@ Read this before wallet setup, local config work, card readiness checks, payment
 
 ## Wallet Setup
 
-Select and lock the `clink-cli` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init requires the email; the display name is optional:
+Select and lock the `clink` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init requires the email; the display name is optional:
 
 ```bash
-clink-cli wallet init --email <email> --no-open --format json
+clink wallet init --email <email> --no-open --format json
 ```
 
 The CLI derives the display name from the email text before `@`. There is no `--name` flag on `wallet init`; passing it exits 2. Use `config set name` to change the local name afterwards.
@@ -32,7 +32,7 @@ Classify live stderr and final init output with `classifyWalletInitObservation` 
 ## Wallet Logout
 
 ```bash
-clink-cli wallet logout --format json
+clink wallet logout --format json
 ```
 
 Logout best-effort revokes the current Refresh Token, then removes OAuth authorization and any legacy customer API key. It retains customer metadata, caches, and the existing credential policy: `oauthRequired=true` remains true after OAuth, while a never-OAuth legacy wallet remains false. The logout result no longer echoes `oauthRequired`; run `wallet status` when the post-logout policy matters. If another login replaces the original identity while logout is running, the CLI preserves the newer login and fails the stale logout. Do not implement token revocation yourself.
@@ -40,7 +40,7 @@ Logout best-effort revokes the current Refresh Token, then removes OAuth authori
 ## Wallet Status
 
 ```bash
-clink-cli wallet status --format json
+clink wallet status --format json
 ```
 
 This is a local readiness check with no network request. It resolves the effective base URL and allowed environment/flag credentials for a never-OAuth legacy wallet while continuing to ignore them when `oauthRequired=true`. Key fields include `customerId`, `email`, `name`, `hasAuthorization`, `hasStoredAuthorization`, `authorizationEnvironmentMatches`, `authorizationType`, `oauthRequired`, `accessTokenExpiresAt`, `refreshTokenExpiresAt`, and legacy `hasCustomerApiKey`. It never returns raw tokens or API keys.
@@ -61,17 +61,17 @@ New `wallet init` always creates OAuth and does not issue a new CSK. Existing CS
 Read current config:
 
 ```bash
-clink-cli config get --format json
+clink config get --format json
 ```
 
 Set non-secret values:
 
 ```bash
-clink-cli config set base-url <url> --format json
-clink-cli config set customer-id <id> --format json
-clink-cli config set email <email> --format json
-clink-cli config set name <name> --format json
-clink-cli config set default-open-links false --format json
+clink config set base-url <url> --format json
+clink config set customer-id <id> --format json
+clink config set email <email> --format json
+clink config set name <name> --format json
+clink config set default-open-links false --format json
 ```
 
 Do not add a new legacy customer API key through this Skill. Existing never-OAuth users may retain an already stored key or provide `CLINK_CUSTOMER_API_KEY` through the execution environment. The CLI always rejects `config set customer-api-key`; `config unset customer-api-key` remains available to remove an existing saved legacy key.
@@ -81,14 +81,14 @@ Do not add a new legacy customer API key through this Skill. Existing never-OAut
 Unset values:
 
 ```bash
-clink-cli config unset <key> --format json
+clink config unset <key> --format json
 ```
 
 ## Config State Model
 
 The local config is a latest wallet state cache. OAuth authorization is bound to its issuer origin and a request never sends both OAuth and CSK. Successful OAuth stores sticky `oauthRequired=true`. Logout, Refresh Token expiry, and a terminal refresh rejection such as `invalid_grant` clear active credentials but retain that marker. Transient refresh failures such as network or service errors leave the current credentials intact; surface the error without falling back to CSK. Legacy CSK is considered only when the marker is absent or exactly false.
 
-Pointing a command at another origin through `CLINK_BASE_URL` leaves the stored authorization in the config but makes it ineffective for that command. `wallet status` then reports `hasStoredAuthorization=true` with `authorizationEnvironmentMatches=false`, and authenticated commands require `wallet init` for the selected origin. Persisting a different origin with `clink-cli config set base-url <url>` instead clears the stored OAuth authorization, any legacy customer API key, payment-method cache, and risk rules. It preserves the existing credential policy: `oauthRequired=true` remains sticky after OAuth, while a never-OAuth wallet remains false. Run `wallet init` for the new origin.
+Pointing a command at another origin through `CLINK_BASE_URL` leaves the stored authorization in the config but makes it ineffective for that command. `wallet status` then reports `hasStoredAuthorization=true` with `authorizationEnvironmentMatches=false`, and authenticated commands require `wallet init` for the selected origin. Persisting a different origin with `clink config set base-url <url>` instead clears the stored OAuth authorization, any legacy customer API key, payment-method cache, and risk rules. It preserves the existing credential policy: `oauthRequired=true` remains sticky after OAuth, while a never-OAuth wallet remains false. Run `wallet init` for the new origin.
 
 Every authenticated request, OAuth refresh/retry, payment-method cache write, event poll, and event ACK reloads and checks the current authorization identity. If another process replaces the login, changes the customer/device/session, or a webhook names a different customer, the stale operation fails without overwriting the newer wallet, caching the stale response, or acknowledging the mismatched event. Re-run `wallet status`; never automatically retry a state-changing payment, Tip, checkout, refund, or logout from that error.
 
@@ -101,13 +101,13 @@ When event processing sees payment-method changes, the CLI updates the cached pa
 Refresh current payment methods without waiting for a browser action:
 
 ```bash
-clink-cli card binding-link --no-watch --format json
+clink card binding-link --no-watch --format json
 ```
 
 Then inspect `data.paymentMethodsVoList`, or read the local cache:
 
 ```bash
-clink-cli card list --format json
+clink card list --format json
 ```
 
 `card list` is cache-only. Do not use it alone when current card state matters; refresh first with `card binding-link --no-watch`.
@@ -117,19 +117,19 @@ clink-cli card list --format json
 First card binding:
 
 ```bash
-clink-cli card binding-link --format json
+clink card binding-link --format json
 ```
 
 Add another payment method:
 
 ```bash
-clink-cli card setup-link --format json
+clink card setup-link --format json
 ```
 
 Manage existing payment methods:
 
 ```bash
-clink-cli card modify-link --format json
+clink card modify-link --format json
 ```
 
 These commands print a URL for the user. Without `--no-watch`, they also wait for the relevant completion event and then emit a second JSON envelope.
@@ -137,7 +137,7 @@ These commands print a URL for the user. Without `--no-watch`, they also wait fo
 Get one cached method:
 
 ```bash
-clink-cli card get --payment-instrument-id <id> --format json
+clink card get --payment-instrument-id <id> --format json
 ```
 
 ## Risk Rules
@@ -145,13 +145,13 @@ clink-cli card get --payment-instrument-id <id> --format json
 View current risk rules:
 
 ```bash
-clink-cli risk get --format json
+clink risk get --format json
 ```
 
 Generate risk-rule management URL:
 
 ```bash
-clink-cli risk link --format json
+clink risk link --format json
 ```
 
 `risk link` is an async browser flow. Wait for `risk_rule.updated` through the built-in watch or `events poll` before claiming the change took effect.

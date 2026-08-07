@@ -29,7 +29,7 @@ If both a Skill Tip and Skill Install confirmation are pending, a bare confirmat
 The only execution grammar is:
 
 ```text
-clink-cli skills install <publisher>/<skillName>[@<version>] --format json
+clink skills install <publisher>/<skillName>[@<version>] --format json
 ```
 
 For `publisher/name` without a version, omit the version entirely so Marketplace selects latest. Never write a literal latest version. For an exact version request, append it to the single package operand with `@`.

@@ -43,7 +43,7 @@ test('loads the supported merchant list before any catalog search', () => {
   assert.equal(result.state, CatalogDiscoveryState.MERCHANT_LIST_REQUIRED);
   assert.equal(result.action, CatalogDiscoveryAction.GET_MERCHANT_LIST);
   assert.equal(result.reason, 'merchant_list_required');
-  assert.equal(result.command, 'clink-cli tool internal-ucp get-merchant-list --format json');
+  assert.equal(result.command, 'clink tool internal-ucp get-merchant-list --format json');
 });
 
 test('hands merchant descriptions to intent matching instead of guessing', () => {
@@ -100,7 +100,7 @@ test('runs a merchant-scoped search when intent matches one merchant', () => {
   assert.equal(result.matchReason, 'description names licensed apparel');
   assert.equal(
     result.command,
-    "clink-cli ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --format json",
+    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --format json",
   );
 });
 
@@ -150,7 +150,7 @@ test('falls back to broad search when the merchant-scoped search is empty', () =
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink-cli catalog search --query 'bruce lee t-shirt' --format json",
+    "clink catalog search --query 'bruce lee t-shirt' --format json",
   );
 });
 
@@ -166,7 +166,7 @@ test('runs an unscoped broad search when intent matches no merchant', () => {
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink-cli catalog search --query 'iced matcha latte' --format json",
+    "clink catalog search --query 'iced matcha latte' --format json",
   );
 });
 
@@ -197,7 +197,7 @@ test('uses the top-level channel selector and keeps a store id for response filt
   assert.equal(result.country, 'HK');
   assert.equal(
     result.command,
-    'clink-cli catalog search --query \'iced matcha latte\''
+    'clink catalog search --query \'iced matcha latte\''
       + ' --channel-type eats365'
       + ' --context \'{"address_country":"HK"}\' --format json',
   );
@@ -229,7 +229,7 @@ test('treats countries without catalog location mappings as unknown location', (
 
     assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
     assert.equal(result.country, null);
-    assert.equal(result.command, "clink-cli catalog search --query croissant --format json");
+    assert.equal(result.command, "clink catalog search --query croissant --format json");
     assert.doesNotMatch(result.command, /--context/u);
   }
 });

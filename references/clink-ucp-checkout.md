@@ -1,8 +1,8 @@
 # UCP Checkout Product Order Flow
 
-Read this before ordering a discovered product through `clink-cli ucp-checkout`.
+Read this before ordering a discovered product through `clink ucp-checkout`.
 
-This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing. First run `clink-cli tool internal-ucp get-endpoint --product-url <item_url> --format json`. A resolved endpoint uses internal UCP checkout. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `https://domain/.well-known/ucp-clink`; a successful parseable JSON profile must then run `clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json`. Fallback provider `clinkbill` uses internal checkout, while other providers and discovery failures use external checkout. The external path aligns with `clink-ucp` external checkout:
+This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing. First run `clink tool internal-ucp get-endpoint --product-url <item_url> --format json`. A resolved endpoint uses internal UCP checkout. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `https://domain/.well-known/ucp-clink`; a successful parseable JSON profile must then run `clink tool get-rest-endpoint --url <standard_ucp_url> --format json`. Fallback provider `clinkbill` uses internal checkout, while other providers and discovery failures use external checkout. The external path aligns with `clink-ucp` external checkout:
 
 - create path: `/agent/ucp/external/checkout-sessions`
 - create binds `instruction_id` and `mandate_id`
@@ -14,7 +14,7 @@ This flow is for product orders discovered by an agent, such as a Shopify storef
 
 Product discovery and price truth belong to the merchant/product tool. Agent owns product exploration for product URL checkout: use browser tools, page extraction, or a page request to read product details before asking the user for fields that the page can expose. This skill only runs the payment-side control flow after the target product is clear.
 
-Do not use plain `clink-cli pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, instruction binding, and external automation context.
+Do not use plain `clink pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, instruction binding, and external automation context.
 
 UCP checkout completion is not merchant fulfillment. A `completed` checkout proves only the checkout/order-side action returned terminal success; fulfillment, delivery, entitlement, or merchant receipt confirmation still belongs to the merchant/product runtime.
 
@@ -27,7 +27,7 @@ Before the first checkout command, have all of these in the current request:
 - merchant category code when known
 - currency
 - user-facing unit price, quantity, and total amount, plus normalized `amountMinor` / `unitPriceMinor` as minor-unit long values for matching and the external UCP request
-- one selected available item from `clink-cli tool parse-item --url <item_url> --format json`
+- one selected available item from `clink tool parse-item --url <item_url> --format json`
 - product title or description from the selected parsed item
 - fulfillment classification: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`
 - payment instrument ID
@@ -74,8 +74,8 @@ Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent,
 When a merchant is already known by `merchantId` and the user is browsing rather than naming a URL, the merchant's registered UCP Catalog can be queried directly instead of scraping storefront pages:
 
 ```bash
-clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --limit <n> --format json
-clink-cli ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --limit <n> --format json
+clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --format json
 ```
 
 Both send `POST /agent/ucp/{merchantId}/catalog/{search,product}` using the environment saved by `wallet init`. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID and stays stable across an OAuth refresh retry; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
@@ -85,7 +85,7 @@ Catalog access is merchant-scoped and optional. A merchant without Catalog enabl
 When a product detail URL is available, run:
 
 ```bash
-clink-cli tool parse-item --url <item_url> --format json
+clink tool parse-item --url <item_url> --format json
 ```
 
 parse-item returns product-page facts only. It does not return user intent fields or payment fields.
@@ -128,7 +128,7 @@ quantity comes from the user intent. merchantCategoryCode comes from agent class
 
 Classify the `parse-item` output with `classifyUcpParseItemObservation`. If there is one available item, select it. If there are multiple available items and the user is present, ask the user to choose. If there are multiple available items in a long task where the user is absent, select by frozen user intent and record the reason. Stop if no available item exists or required fields are missing.
 
-Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching, idempotency, and checkout validation. The external UCP API receives a long minor-unit amount; when using `clink-cli ucp-checkout create`, its create path converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit values into that external UCP long before the API request. Do not treat a different product total as "close enough".
+Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching, idempotency, and checkout validation. The external UCP API receives a long minor-unit amount; when using `clink ucp-checkout create`, its create path converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit values into that external UCP long before the API request. Do not treat a different product total as "close enough".
 
 ## Step 0.5: Classify Fulfillment And Shipping
 
@@ -166,8 +166,8 @@ For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address for instru
 
 For physical goods, collect one standard complete shipping address but serialize it differently for each downstream command:
 
-- CWallet instruction creation (`clink-cli instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country.
-- External UCP checkout creation (`clink-cli ucp-checkout create --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be ISO 3166-1 alpha-2 for the destination country. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
+- CWallet instruction creation (`clink instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country.
+- External UCP checkout creation (`clink ucp-checkout create --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be ISO 3166-1 alpha-2 for the destination country. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
 
 ```json
 {
@@ -196,10 +196,10 @@ For physical goods, collect one standard complete shipping address but serialize
 
 ## Step 1: Refresh Payment Instrument
 
-Use the `clink-cli` prefix defined for this workflow (see `references/clink-cli-invocation.md`); the prefix already fixes the environment, so do not add environment flags here.
+Use the `clink` prefix defined for this workflow (see `references/clink-cli-invocation.md`); the prefix already fixes the environment, so do not add environment flags here.
 
 ```bash
-clink-cli card binding-link --no-watch --format json
+clink card binding-link --no-watch --format json
 ```
 
 Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Carry this exact `paymentInstrumentId` through the rest of the checkout workflow, including `ucp-checkout complete`. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
@@ -212,7 +212,7 @@ After `parse-item` and item selection freeze the product facts, run the authoriz
 - If the selected/default card is Visa + VIC ready, list candidate instructions before creating or checking out:
 
 ```bash
-clink-cli instruction list \
+clink instruction list \
   --valid-only \
   --payment-instrument-id <payment_instrument_id> \
   --format json
@@ -226,16 +226,16 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 - filter out entries for a different `paymentInstrumentId`
 - filter out entries with missing `instructionId`, `mandateId`, `currencyCode`, or amount limit
 
-If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink-cli instruction create` and, when needed, `clink-cli instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
+If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink-cli instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
+When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
 
 ### Scheduled and unattended checkouts
 
 A checkout started by a scheduled task has no user present, so it can neither collect a Passkey signature nor safely substitute a different mandate. It skips the list-and-match path entirely and uses the `instructionId` + `mandateId` pinned when the schedule was created (see `references/clink-instruction.md`):
 
 ```bash
-clink-cli instruction get --purchase-instruction-id <pinned_instruction_id> --format json
+clink instruction get --purchase-instruction-id <pinned_instruction_id> --format json
 ```
 
 Pass that result plus the pinned ids to `classifyUnattendedAuthorization`. Only an `ACTIVE` instruction carrying the pinned mandate on the same `paymentInstrumentId` may proceed to Step 3. Anything else — expired, cancelled, exhausted, mandate missing, card changed — returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP`: stop this run, report the reason, and ask the user to authorize a new instruction. Passing `unattended: true` to `classifyAuthorizationSelection` enforces the same rule: it returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP` instead of `START_AUTHORIZATION_DRAFT_AND_WAIT` when no pinned authorization is present. Never create a draft, never re-run `instruction list` to find a substitute, and never report a checkout as merely pending when the authorization is the thing that failed.
@@ -265,12 +265,12 @@ Reject a candidate when the merchant semantics point to another merchant, anothe
 
 ## Step 4: Resolve Checkout Route
 
-Resolve internal vs external checkout with `lib/ucp-checkout-route-fsm.mjs` `classifyUcpCheckoutRoute`. Merchant configuration and exact hostname matching belong to `clink-cli`, not prompt logic or the skill FSM.
+Resolve internal vs external checkout with `lib/ucp-checkout-route-fsm.mjs` `classifyUcpCheckoutRoute`. Merchant configuration and exact hostname matching belong to the CLI, not prompt logic or the skill FSM.
 
 First run the `GET_INTERNAL_UCP_ENDPOINT` action returned by the FSM. Use the exact selected product/item URL; the CLI uses the environment persisted by `wallet init`:
 
 ```bash
-clink-cli tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
+clink tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
 ```
 
 - A result containing `endpoint`, `provider=clinkbill`, and `merchantId` selects `INTERNAL_UCP_CHECKOUT`. Carry the returned endpoint through checkout create/get/complete.
@@ -290,7 +290,7 @@ curl -fsSL -XGET -H 'Accept: application/json' https://<domain>/.well-known/ucp-
 For a successful profile, the `<standard_ucp_url>` must come from the profile shopping service endpoint (`services.*.endpoint`) when present; otherwise use the selected item/product URL:
 
 ```bash
-clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json
+clink tool get-rest-endpoint --url <standard_ucp_url> --format json
 ```
 
 Reclassify with the `provider` and `endpoint` from that output. If `provider` is `clinkbill`, route to internal UCP checkout and carry `rest_endpoint` through create/get/complete. If provider is not `clinkbill`, route to external UCP checkout. If endpoint discovery returns `NO_UCP_REST_ENDPOINT` or another failure payload, route to external UCP checkout.
@@ -302,7 +302,7 @@ Route resolution must not mutate the selected item, amount, authorization, or me
 Create the checkout with the selected item:
 
 ```bash
-clink-cli ucp-checkout create \
+clink ucp-checkout create \
   [--endpoint <rest_endpoint>] \
   --merchant-url <selected_item_url> \
   --merchant-category-code <mcc> \
@@ -314,7 +314,7 @@ clink-cli ucp-checkout create \
   --format json
 ```
 
-For external checkout, the current `clink-cli ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For internal checkout, use the same `ucp-checkout create` command and selected item payload, but pass `--endpoint <rest_endpoint>` from either `internal-ucp get-endpoint` or fallback `get-rest-endpoint`. If provider is not `clinkbill`, use the external UCP checkout path without `--endpoint`.
+For external checkout, the current `clink ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For internal checkout, use the same `ucp-checkout create` command and selected item payload, but pass `--endpoint <rest_endpoint>` from either `internal-ucp get-endpoint` or fallback `get-rest-endpoint`. If provider is not `clinkbill`, use the external UCP checkout path without `--endpoint`.
 
 For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
@@ -323,7 +323,7 @@ For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical g
 This is a continuous create then complete handoff. After create, parse `data.id` / `data.checkout_id` / `data.checkoutId` as `checkoutId`; do not ask the user to provide it. A normal create response should be `ready_for_complete` (or equivalent ready state). If it is not ready, run:
 
 ```bash
-clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
+clink ucp-checkout get --checkout-id <checkout_id> --format json
 ```
 
 Stop on `requires_escalation`, `canceled`, or errors.
@@ -333,7 +333,7 @@ Stop on `requires_escalation`, `canceled`, or errors.
 Complete uses the current/default paymentInstrumentId resolved in Step 1. Complete uses that `checkoutId`, the resolved payment instrument, and the same optional `--endpoint <rest_endpoint>` selected by route resolution. Do not pass instruction, mandate, or credential-token fields to complete; create binds instruction and mandate.
 
 ```bash
-clink-cli ucp-checkout complete \
+clink ucp-checkout complete \
   [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
@@ -348,7 +348,7 @@ clink-cli ucp-checkout complete \
 Parse the complete response. Per UCP convention, complete returns the session with `status: "completed"` and a nested `order` object — `order.id` is the OMS order id, distinct from the Clink pay `orderId` that appears in `agent_order` events. `order.permalink_url` may carry the merchant order page (filled from ext_info `success_url` on synchronous success); pass it through as-is when present and treat its absence as normal — never gate any step on it. The FSM also accepts flat aliases (`omsOrderId` / `oms_order_id` / `merchantOrderId`) for backends that have not adopted the nested shape. When complete returns `completed`, immediately start the payment success event poll:
 
 ```bash
-clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json
+clink events poll --type agent_order.succeeded --max-wait 900 --format json
 ```
 
 The 900-second window matches the 15-minute built-in watch used elsewhere; async order success can take minutes, so do not shorten it.
@@ -361,7 +361,7 @@ Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Pass 
 Once the event is matched and `omsOrderId` is present, the FSM returns `FETCH_OMS_ORDER` with the ready-to-run `orderCommand`. Run it and surface both the payment event and the order to the caller. If `ucp-order get` fails, the payment is still confirmed — surface the success event and report the order fetch error separately; never reclassify a confirmed payment as failed.
 
 ```bash
-clink-cli ucp-order get --order-id <omsOrderId> --format json
+clink ucp-order get --order-id <omsOrderId> --format json
 ```
 
 Do not claim merchant fulfillment, delivery, or entitlement.
@@ -369,14 +369,14 @@ Do not claim merchant fulfillment, delivery, or entitlement.
 If complete is not clearly terminal, verify state first:
 
 ```bash
-clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
+clink ucp-checkout get --checkout-id <checkout_id> --format json
 ```
 
 Status handling:
 
 | Status | Action |
 | --- | --- |
-| `completed` | Immediately run `clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json`, then return the matched payment success event/message. |
+| `completed` | Immediately run `clink events poll --type agent_order.succeeded --max-wait 900 --format json`, then return the matched payment success event/message. |
 | `complete_in_progress` | Tell the user automation is in progress; poll `ucp-checkout get` with bounded retries or leave a resumable pending state. |
 | `ready_for_complete` | Complete did not start or was rejected before processing; inspect error output and do not retry blindly. |
 | `requires_escalation` | Authorization did not cover the order; ask the user to create/update the instruction. |
@@ -398,8 +398,8 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 ## Minimal End-To-End Skeleton
 
 ```bash
-clink-cli card binding-link --no-watch --format json
-clink-cli tool parse-item --url <item_url> --format json
+clink card binding-link --no-watch --format json
+clink tool parse-item --url <item_url> --format json
 
 # Select one available parsed item.
 # Agent/FSM supplies quantity, merchantCategoryCode, fulfillmentType, and shipping when required.
@@ -408,25 +408,25 @@ clink-cli tool parse-item --url <item_url> --format json
 # If selected/default card is non-Visa or Visa without VIC readiness:
 #   skip instruction matching.
 # If selected/default card is Visa + VIC ready:
-#   1. clink-cli instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json
+#   1. clink instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json
 #   2. match amount, reusability, merchantCategoryCode, and merchant/product semantics
 #   3. if no match, create/sign instruction and wait for purchase_instruction.activated
 #   4. restart from card refresh + instruction list after activation
 # If this run is unattended/scheduled:
-#   1. clink-cli instruction get --purchase-instruction-id <pinned_instruction_id> --format json
+#   1. clink instruction get --purchase-instruction-id <pinned_instruction_id> --format json
 #   2. classifyUnattendedAuthorization with the pinned instructionId + mandateId
 #   3. anything other than ACTIVE with that mandate -> SURFACE_UNATTENDED_AUTHORIZATION_GAP and stop
 
 # Resolve checkout route:
-#   clink-cli tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
+#   clink tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
 #   endpoint result -> internal UCP checkout with --endpoint <rest_endpoint>
 #   NOT_IN_INTERNAL_UCP_LIST -> curl https://domain/.well-known/ucp-clink
-#   successful parseable JSON profile -> clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json
+#   successful parseable JSON profile -> clink tool get-rest-endpoint --url <standard_ucp_url> --format json
 #   fallback provider=clinkbill -> internal UCP checkout with optional --endpoint <rest_endpoint>
 #   fallback provider not clinkbill or standard_ucp_profile_absent -> external UCP checkout
 #   any other internal endpoint error -> stop and surface the error
 
-clink-cli ucp-checkout create \
+clink ucp-checkout create \
   [--endpoint <rest_endpoint>] \
   --merchant-url <selected_item_url> \
   --merchant-category-code <mcc> \
@@ -436,13 +436,13 @@ clink-cli ucp-checkout create \
   --shipping-address '<ucp_postal_address_json_if_required>' \
   --idempotency-key <stable_create_key> \
   --format json
-clink-cli ucp-checkout complete \
+clink ucp-checkout complete \
   [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \
   --format json
-clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json
-clink-cli ucp-order get --order-id <omsOrderId> --format json
-clink-cli ucp-checkout get --checkout-id <checkout_id> --format json
+clink events poll --type agent_order.succeeded --max-wait 900 --format json
+clink ucp-order get --order-id <omsOrderId> --format json
+clink ucp-checkout get --checkout-id <checkout_id> --format json
 ```

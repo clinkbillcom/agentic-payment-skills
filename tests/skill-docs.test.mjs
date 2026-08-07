@@ -14,8 +14,24 @@ const instruction = await readFile(new URL('../references/clink-instruction.md',
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
 const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
 const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
-const cliWrapper = await readFile(new URL('../bin/clink-cli', import.meta.url), 'utf8');
+const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+/** Every doc shipped to the agent, keyed by the path a failure message should name. */
+const shippedDocs = {
+  'SKILL.md': skill,
+  'README.md': readme,
+  'README.zh.md': readmeZh,
+  'references/clink-wallet-config.md': walletConfig,
+  'references/clink-payment-refund.md': paymentRefund,
+  'references/clink-ucp-checkout.md': ucpCheckout,
+  'references/clink-async-events.md': asyncEvents,
+  'references/clink-cli-invocation.md': cliInvocation,
+  'references/clink-instruction.md': instruction,
+  'references/clink-skill-tip.md': skillTip,
+  'references/clink-skill-install.md': skillInstall,
+  'references/clink-catalog-discovery.md': catalogDiscovery,
+};
 
 test('skill frontmatter stays compact and trigger-focused', () => {
   const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
@@ -40,7 +56,7 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(skill, /Direct\/session payment is explicitly authorized/u);
   assert.match(skill, /Visa \+ VIC ready/u);
   assert.match(skill, /non-Visa or Visa without VIC readiness/u);
-  assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink-cli pay`/u);
+  assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
 
 test('payment reference documents Visa VIC resolver bypass branch', () => {
@@ -59,7 +75,7 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
 
   assert.match(
     paymentRefund,
-    /clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
+    /clink events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
   );
   assert.match(paymentRefund, /execute the any-of command only once/iu);
   assert.match(paymentRefund, /same poll result[\s\S]*each wait spec/iu);
@@ -81,7 +97,7 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /OAuth Device Authorization/u);
   assert.match(
     walletConfig,
-    /clink-cli wallet init --email <email> --no-open --format json/u,
+    /clink wallet init --email <email> --no-open --format json/u,
   );
   assert.match(walletConfig, /derives the display name from the email text before `@`/u);
   assert.match(walletConfig, /There is no `--name` flag on `wallet init`/u);
@@ -93,7 +109,7 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /hasAuthorization=true/u);
   assert.match(walletConfig, /authorizationType=oauth/u);
   assert.match(walletConfig, /init output[\s\S]*no longer echoes `oauthRequired`/u);
-  assert.match(walletConfig, /clink-cli wallet logout --format json/u);
+  assert.match(walletConfig, /clink wallet logout --format json/u);
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
@@ -136,7 +152,7 @@ test('legacy CSK readiness remains compatible without weakening OAuth fail-close
   assert.match(skill, /Do not force[\s\S]*to migrate/u);
   assert.match(skill, /New `wallet init` always creates OAuth/u);
   assert.match(skill, /Once OAuth succeeds, `oauthRequired=true` is permanent/u);
-  assert.doesNotMatch(skill, /printenv CLINK_CUSTOMER_API_KEY \| clink-cli config set customer-api-key/u);
+  assert.doesNotMatch(skill, /printenv CLINK_CUSTOMER_API_KEY \| clink config set customer-api-key/u);
 });
 
 test('latest CLI identity continuity and effective wallet status are documented', () => {
@@ -185,7 +201,7 @@ test('instruction activation runs on the command own built-in watch', () => {
   // elsewhere in the file cannot satisfy or break this.
   const fencedBlocks = instruction.match(/```bash\n[\s\S]*?```/gu) ?? [];
   for (const block of fencedBlocks) {
-    if (!/clink-cli instruction (create|sign-url)/u.test(block)) continue;
+    if (!/clink instruction (create|sign-url)/u.test(block)) continue;
     assert.doesNotMatch(block, /--no-watch/u);
   }
   assert.match(asyncEvents, /are no exception: they use their built-in watch too/u);
@@ -212,7 +228,7 @@ test('the --no-watch handoff is documented as the next command to run', () => {
   assert.match(asyncEvents, /Watch not started \(--no-watch\)/u);
   assert.match(
     asyncEvents,
-    /Run now: clink-cli events poll --type purchase_instruction\.activated --no-ack --format json/u,
+    /Run now: clink events poll --type purchase_instruction\.activated --no-ack --format json/u,
   );
   assert.match(asyncEvents, /Run the printed command before sending the URL/u);
   assert.match(skill, /Do not pass `--no-watch`, do not start an `events poll` alongside it/u);
@@ -227,13 +243,13 @@ test('wallet init proactively returns and surfaces the card binding URL', () => 
 });
 
 test('UCP checkout workflow uses parse-item as the product analysis command', () => {
-  assert.match(skill, /clink-cli tool parse-item --url <item_url>/u);
-  assert.match(ucpCheckout, /clink-cli tool parse-item --url <item_url>/u);
+  assert.match(skill, /clink tool parse-item --url <item_url>/u);
+  assert.match(ucpCheckout, /clink tool parse-item --url <item_url>/u);
   assert.match(ucpCheckout, /parse-item returns product-page facts/u);
   assert.match(ucpCheckout, /quantity comes from the user intent/u);
   assert.match(ucpCheckout, /merchantCategoryCode comes from agent classification/u);
-  assert.doesNotMatch(skill, /clink-cli tool item-id/u);
-  assert.doesNotMatch(ucpCheckout, /clink-cli tool item-id/u);
+  assert.doesNotMatch(skill, /clink tool item-id/u);
+  assert.doesNotMatch(ucpCheckout, /clink tool item-id/u);
 });
 
 test('skill documents intent routing and checkout route FSMs', () => {
@@ -248,11 +264,11 @@ test('skill documents public skill listing and explicitly authorized tip routing
   assert.match(skill, /references\/clink-skill-tip\.md/u);
   assert.match(skill, /lib\/skill-tip-workflow-fsm\.mjs/u);
   assert.match(skill, /SKILL_TIP/u);
-  assert.match(skill, /clink-cli skills list --all --tippable --format json/u);
-  assert.match(skill, /clink-cli skills tip --publisher/u);
+  assert.match(skill, /clink skills list --all --tippable --format json/u);
+  assert.match(skill, /clink skills tip --publisher/u);
   assert.doesNotMatch(
     skill,
-    /clink-cli skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
+    /clink skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
   );
   assert.match(skill, /synchronous agent pay.*payment success/isu);
   assert.match(skill, /account-created.*account-reloaded/isu);
@@ -270,7 +286,7 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /confirmation|确认/iu);
   assert.doesNotMatch(
     skillTip,
-    /clink-cli skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
+    /clink skills tip[^\n]*(?:--version|--number|--expected-skill-id)/iu,
   );
   assert.match(skillTip, /status.*paid.*status.*1.*payment success/isu);
   assert.match(skillTip, /expectedTip.*required.*publisher.*skillName.*amount.*currency/isu);
@@ -282,7 +298,7 @@ test('skill tip reference binds Number through recent context and optional accou
   assert.match(skillTip, /Do not run `card binding-link`.*binding\/payment listener.*retry the Tip/isu);
   assert.match(
     skillTip,
-    /clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
+    /clink events poll --type account-created,account-reloaded --max-wait 60 --format json/u,
   );
   assert.match(skillTip, /same poll result through the `account-created` and `account-reloaded` wait specs/u);
 });
@@ -308,12 +324,12 @@ test('skill documents context-bound Skill installation routing', () => {
   assert.match(skill, /references\/clink-skill-install\.md/u);
   assert.match(skill, /lib\/skill-install-workflow-fsm\.mjs/u);
   assert.match(skill, /classifySkillInstallPrerequisites/u);
-  assert.match(skill, /clink-cli skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
+  assert.match(skill, /clink skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
   assert.match(skill, /omit.*version.*latest/isu);
   assert.match(skill, /Number.*confirmation/isu);
-  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*--version/iu);
-  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*--number/iu);
-  assert.doesNotMatch(skill, /clink-cli skills install[^\n]*@latest/iu);
+  assert.doesNotMatch(skill, /clink skills install[^\n]*--version/iu);
+  assert.doesNotMatch(skill, /clink skills install[^\n]*--number/iu);
+  assert.doesNotMatch(skill, /clink skills install[^\n]*@latest/iu);
 });
 
 test('FSM markers are internal diagnostics and never user-visible output', () => {
@@ -334,7 +350,7 @@ test('Skill install reference freezes Number context before atomic confirmation'
   assert.match(skillInstall, /newest valid displayed snapshot.*not fall back/isu);
   assert.match(skillInstall, /publisher.*skillName.*versionNo.*skillId/isu);
   assert.match(skillInstall, /AWAITING_CONFIRMATION.*EXECUTING/isu);
-  assert.match(skillInstall, /clink-cli skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
+  assert.match(skillInstall, /clink skills install <publisher>\/<skillName>\[@<version>\] --format json/u);
   assert.match(skillInstall, /omit.*version.*latest/isu);
   assert.match(skillInstall, /planned.*not.*installed/isu);
   assert.match(skillInstall, /--force.*explicit/isu);
@@ -347,9 +363,56 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.9\.1"/u);
-  assert.equal(packageJson.version, '1.9.1');
+  assert.match(skill, /version:\s*"1\.9\.2"/u);
+  assert.equal(packageJson.version, '1.9.2');
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+// The command was renamed clink-cli -> clink across every doc. A rename verified only by positive
+// assertions passes while half of it is still stale, which is exactly what happened here: three
+// shipped references kept telling the agent to use a `clink-cli` prefix that no longer existed.
+// These two assertions are the negative half.
+//
+// Split deliberately, because the two failure modes look nothing alike in text. A stale COMMAND
+// (`clink-cli pay ...`) is followed by whitespace and a verb; a stale PROSE MENTION
+// (the `clink-cli` prefix) is a bare backticked token. One regex cannot see both without also
+// matching every path that legitimately keeps the old spelling.
+test('no shipped doc hands the agent a clink-cli command line', () => {
+  // Paths keep the old spelling legitimately (vendor/clink-cli/clink-cli.bundle.mjs,
+  // ~/.clink-cli/config.json, references/clink-cli-invocation.md) but none is followed by
+  // whitespace, so this pattern never sees them.
+  const commandLine = /clink-cli\s+[a-z][a-z-]*(?:\s+[a-z][a-z-]*)?/gu;
+  // The bundled CLI still prints its former name in the --no-watch handoff; that quote is real.
+  const allowed = ['clink-cli events poll'];
+
+  for (const [name, body] of Object.entries(shippedDocs)) {
+    const stale = (body.match(commandLine) ?? [])
+      .map(hit => hit.replace(/\s+/gu, ' '))
+      .filter(hit => !allowed.includes(hit));
+    assert.deepEqual(stale, [], `${name} still tells the agent to run: ${stale.join(', ')}`);
+  }
+});
+
+test('no shipped doc names clink-cli as the command in prose', () => {
+  // `clink-cli` alone in backticks is how prose names the binary — the exact shape of the three
+  // leftovers this rename missed. Paths and filenames carry a slash or dot inside the backticks,
+  // so they do not match.
+  const proseMention = /`clink-cli`/gu;
+  const expected = {
+    // Contrasts the two names on purpose: this is the line telling the agent not to use PATH.
+    'references/clink-cli-invocation.md': 1,
+    // Documents the --ucp-agent header default, which is a server-visible value, not a command.
+    'references/clink-ucp-checkout.md': 1,
+    // Warn that a PATH-resolved build of either name is a different, unpinned binary.
+    'README.md': 1,
+    'README.zh.md': 1,
+  };
+
+  for (const [name, body] of Object.entries(shippedDocs)) {
+    const count = (body.match(proseMention) ?? []).length;
+    assert.equal(count, expected[name] ?? 0,
+      `${name} names \`clink-cli\` ${count} time(s) in prose; expected ${expected[name] ?? 0}`);
+  }
 });
 
 // The Passkey signature that activates an instruction needs the user. A scheduled task runs when
@@ -409,7 +472,7 @@ test('skill documents atomic sequential batch tipping with itemized outcomes', (
     assert.match(document, /one confirmation|一次确认/iu);
     assert.match(document, /first occurrence|首次出现/iu);
     assert.match(document, /sequential|串行/iu);
-    assert.match(document, /one.*clink-cli skills tip.*(?:call|invocation).*distinct Skill/isu);
+    assert.match(document, /one.*clink skills tip.*(?:call|invocation).*distinct Skill/isu);
     assert.match(document, /fail(?:ed|ure).*unknown.*(?:continue|do not stop|不阻断)/isu);
     assert.match(document, /never.*(?:automatically )?retry|不.*自动重试/isu);
     assert.match(document, /COMPLETED.*does not mean.*all.*paid|COMPLETED.*不代表.*全部/isu);
@@ -426,7 +489,7 @@ test('README summaries advertise both skill tip intents', () => {
   assert.match(readme, /Number, publisher, and Skill name/iu);
   assert.match(readme, /tips.*publisher\/name.*without.*version/iu);
   assert.doesNotMatch(readme, /tips[^\n]*optional version/iu);
-  assert.doesNotMatch(readme, /clink-cli skills tip[^\n]*--number|expected-skill-id/iu);
+  assert.doesNotMatch(readme, /clink skills tip[^\n]*--number|expected-skill-id/iu);
   assert.match(readme, /account-created.*account-reloaded/isu);
   assert.match(readmeZh, /skills list --all --tippable/u);
   assert.match(readmeZh, /skills tip/u);
@@ -434,7 +497,7 @@ test('README summaries advertise both skill tip intents', () => {
   assert.match(readmeZh, /编号、发布者、技能名称/u);
   assert.match(readmeZh, /打赏.*publisher\/name.*不传.*version/iu);
   assert.doesNotMatch(readmeZh, /打赏[^\n]*可选 version/iu);
-  assert.doesNotMatch(readmeZh, /clink-cli skills tip[^\n]*--number|expected-skill-id/iu);
+  assert.doesNotMatch(readmeZh, /clink skills tip[^\n]*--number|expected-skill-id/iu);
   assert.match(readmeZh, /account-created.*account-reloaded/isu);
 });
 
@@ -448,16 +511,16 @@ test('README summaries advertise latest, exact-version, and Number Skill install
   }
 });
 
-test('UCP checkout route delegates internal detection to clink-cli before profile fallback', () => {
-  assert.match(skill, /clink-cli tool internal-ucp get-endpoint/u);
+test('UCP checkout route delegates internal detection to clink before profile fallback', () => {
+  assert.match(skill, /clink tool internal-ucp get-endpoint/u);
   assert.match(skill, /NOT_IN_INTERNAL_UCP_LIST/u);
   assert.match(skill, /INTERNAL_UCP_CHECKOUT/u);
-  assert.match(ucpCheckout, /clink-cli tool internal-ucp get-endpoint/u);
+  assert.match(ucpCheckout, /clink tool internal-ucp get-endpoint/u);
   assert.match(ucpCheckout, /NOT_IN_INTERNAL_UCP_LIST/u);
   assert.match(ucpCheckout, /internal UCP checkout/iu);
   assert.match(ucpCheckout, /\.well-known\/ucp-clink/u);
   assert.match(ucpCheckout, /parseable JSON/u);
-  assert.match(ucpCheckout, /clink-cli tool get-rest-endpoint --url <standard_ucp_url> --format json/u);
+  assert.match(ucpCheckout, /clink tool get-rest-endpoint --url <standard_ucp_url> --format json/u);
   assert.match(ucpCheckout, /services\.\*\.endpoint/u);
   assert.match(ucpCheckout, /provider.*clinkbill/u);
   assert.match(ucpCheckout, /provider.*not.*clinkbill.*external/u);
@@ -506,23 +569,23 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink-cli tool internal-ucp get-merchant-list --format json/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list --format json/u);
 
-  assert.match(catalogDiscovery, /clink-cli tool internal-ucp get-merchant-list --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink-cli ucp-catalog search --merchant-id <id> --query <text> --format json/u);
-  assert.match(skill, /clink-cli catalog search --query <text> --format json/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text> --format json/u);
+  assert.match(skill, /clink catalog search --query <text> --format json/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
   assert.match(
     catalogDiscovery,
-    /clink-cli catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);

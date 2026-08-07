@@ -139,7 +139,7 @@ test('authorization draft observation sends the Passkey URL under the built-in w
   assert.equal(result.pollCommand, undefined);
   assert.equal(
     result.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
+    'clink instruction get --purchase-instruction-id ins_123 --format json',
   );
 });
 
@@ -170,7 +170,7 @@ test('authorization draft observation verifies once the built-in watch delivers 
   assert.equal(result.instructionId, 'ins_watched');
   assert.equal(
     result.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id ins_watched --format json',
+    'clink instruction get --purchase-instruction-id ins_watched --format json',
   );
 });
 
@@ -196,12 +196,12 @@ test('authorization draft observation verifies instead of failing when the watch
   assert.equal(timedOut.reason, 'authorization_watch_timed_out');
   assert.equal(
     timedOut.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id ins_gap --format json',
+    'clink instruction get --purchase-instruction-id ins_gap --format json',
   );
   // A gap is recoverable, so the caller also gets a poll it can restart.
   assert.equal(
     timedOut.pollCommand,
-    'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+    'clink events poll --type purchase_instruction.activated --no-ack --format json',
   );
 
   // An activation for a different instruction must never resume this payment.
@@ -338,7 +338,7 @@ test('authorization draft observation extracts the instruction id from sign-url 
   assert.equal(result.instructionId, 'inst_123');
   assert.equal(
     result.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id inst_123 --format json',
+    'clink instruction get --purchase-instruction-id inst_123 --format json',
   );
 });
 
@@ -429,7 +429,7 @@ test('authorization active verification waits only for activatable instruction s
     assert.equal(result.reason, 'authorization_not_active');
     assert.equal(
       result.pollCommand,
-      'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+      'clink events poll --type purchase_instruction.activated --no-ack --format json',
     );
   }
 });

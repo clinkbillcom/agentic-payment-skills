@@ -51,6 +51,22 @@ test('routes a Chinese Skill install command without whitespace before the ident
   assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
 });
 
+// The install prefix accepts both CLI names on purpose. `clink` is the current command, but users
+// who learned the tool as `clink-cli` keep typing it, and dropping the old spelling would route
+// their install to INPUT_REQUIRED instead of installing anything — silently, since the identity
+// still parses. Both spellings stay pinned so the rename cannot regress one of them.
+for (const command of ['clink', 'clink-cli']) {
+  test(`routes a Chinese Skill install command naming the ${command} binary`, () => {
+    const result = classifyPaymentIntent({ text: `用 ${command} 安装 clinkpay/pollyreach` });
+
+    assert.equal(result.route, PaymentIntentRoute.SKILL_INSTALL);
+    assert.equal(result.action, PaymentIntentAction.RUN_SKILL_INSTALL_WORKFLOW);
+    assert.deepEqual(result.install.target, {
+      kind: 'identity', publisher: 'clinkpay', skillName: 'pollyreach',
+    });
+  });
+}
+
 test('routes an explicitly authorized exact-version Skill install by identity', () => {
   const result = classifyPaymentIntent({ text: '安装 clinkpay/pollyreach@v1.2.3' });
 

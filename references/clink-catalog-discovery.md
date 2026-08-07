@@ -12,7 +12,7 @@ Catalog search covers merchants Clink has onboarded. It is not a web search. Whe
 
 ## Described Product Purchase Route
 
-When the user wants to buy a product they described but gave no link, `classifyPaymentIntent` routes to `CATALOG_PURCHASE` rather than `UCP_CHECKOUT`. UCP checkout begins at `clink-cli tool parse-item`, which needs a product detail URL, so discovery has to resolve one first.
+When the user wants to buy a product they described but gave no link, `classifyPaymentIntent` routes to `CATALOG_PURCHASE` rather than `UCP_CHECKOUT`. UCP checkout begins at `clink tool parse-item`, which needs a product detail URL, so discovery has to resolve one first.
 
 ```text
 PURCHASE_INTENT_WITHOUT_PRODUCT_URL
@@ -76,7 +76,7 @@ CATALOG_QUERY
 ## Step 1 - Load Supported Merchants
 
 ```bash
-clink-cli tool internal-ucp get-merchant-list --format json
+clink tool internal-ucp get-merchant-list --format json
 ```
 
 The document is environment-locked; the saved `wallet init` environment selects which merchant list is returned. Each entry carries `merchant_id`, `domain_name`, `enabled`, and `description`.
@@ -96,7 +96,7 @@ Match only when the description genuinely covers the request. A weak match that 
 ## Step 3 - Merchant-Scoped Search
 
 ```bash
-clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format json
 ```
 
 `--merchant-id` is required: this path is merchant-scoped by contract. Products come back as a flat `products` array. A non-empty array is terminal for discovery; an empty array falls through to the broad search rather than reporting the product as unavailable.
@@ -104,12 +104,12 @@ clink-cli ucp-catalog search --merchant-id <merchant_id> --query <text> --format
 ## Step 4 - Broad Search Across Merchants And Stores
 
 ```bash
-clink-cli catalog search --query <text> [--channel-type <channel>] [--context <json>] --format json
+clink catalog search --query <text> [--channel-type <channel>] [--context <json>] --format json
 ```
 
 This path is not merchant-scoped and takes no `--merchant-id`. Results come back grouped by target, where each group identifies either an internal merchant (`merchant_id`) or an external platform store (`store_id` plus `region`); the two are mutually exclusive. The response `region` and `store_id` remain candidate identity and must survive into product selection and checkout.
 
-Broad discovery is a bounded, non-exhaustive result window. It does not return pagination metadata, and `clink-cli catalog search` therefore rejects `--cursor` and `--limit` instead of pretending they can page the merged cross-target result. If a merchant is already known and real cursor pagination is required, use `clink-cli ucp-catalog search --merchant-id ...`.
+Broad discovery is a bounded, non-exhaustive result window. It does not return pagination metadata, and `clink catalog search` therefore rejects `--cursor` and `--limit` instead of pretending they can page the merged cross-target result. If a merchant is already known and real cursor pagination is required, use `clink ucp-catalog search --merchant-id ...`.
 
 For an unscoped response, read the cross-target count from `total_products`, falling back to the sum of per-group `products` when it is absent. For an established store target, first keep only groups whose returned `store_id` exactly matches the target, then recompute the count from those groups. Never use the server's cross-target `total_products` after this local filter.
 
@@ -136,7 +136,7 @@ Rules for channel, country, and store context:
 
 ## Step 5 - Delegate Product Discovery
 
-An empty broad search means Clink's catalogs do not carry the product, not that the product does not exist. Continue discovery with the agent's own tools: a browser, another MCP server, or a product Skill. When that produces a product detail URL, purchase continues through `references/clink-ucp-checkout.md`, which starts at `clink-cli tool parse-item`.
+An empty broad search means Clink's catalogs do not carry the product, not that the product does not exist. Continue discovery with the agent's own tools: a browser, another MCP server, or a product Skill. When that produces a product detail URL, purchase continues through `references/clink-ucp-checkout.md`, which starts at `clink tool parse-item`.
 
 Tell the user the Clink catalogs had no match and that discovery is continuing elsewhere. Do not report the product as unavailable, and do not retry the same query against the same catalogs.
 

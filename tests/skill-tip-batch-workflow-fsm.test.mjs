@@ -366,7 +366,7 @@ test('claimed confirmation freezes commands and returns only the first payment c
   assert.equal(result.action, SkillTipBatchAction.RUN_NEXT_SKILL_TIP);
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
   assert.equal(result.progress.currentIndex, 0);
   assert.equal(result.progress.executionItems.length, 2);
@@ -462,7 +462,7 @@ test('a failed item is recorded and the next frozen payment command still runs',
   assert.equal(result.progress.results[0].itemId, 'batch_1:1');
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name ModelMax --amount 5 --format json',
+    'clink skills tip --publisher clinkpay --name ModelMax --amount 5 --format json',
   );
 });
 
@@ -492,7 +492,7 @@ test('a synchronously paid item advances and exposes non-blocking optional accou
   assert.equal(result.progress.results[0].paymentStatus, 'PAID');
   assert.equal(result.progress.currentIndex, 1);
   assert.deepEqual(result.optionalAccountWatch.pollCommands, [
-    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
+    'clink events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
   assert.deepEqual(
     result.optionalAccountWatch.accountWaitSpecs.map(({ eventType }) => eventType),
@@ -639,7 +639,7 @@ test('invalid or replayed progress never emits another payment command', () => {
 test('tampered progress cannot replace a frozen future command or expected binding', () => {
   for (const tamper of [
     (progress) => {
-      progress.executionItems[1].command = 'clink-cli skills tip --publisher attacker --name Other --amount 5 --format json';
+      progress.executionItems[1].command = 'clink skills tip --publisher attacker --name Other --amount 5 --format json';
     },
     (progress) => {
       progress.executionItems[1].expectedTip = {

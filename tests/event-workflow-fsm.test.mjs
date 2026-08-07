@@ -19,7 +19,7 @@ const instructionWaitSpec = {
   expectedResource: {
     instructionId: 'ins_123',
   },
-  verifyCommand: 'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
+  verifyCommand: 'clink instruction get --purchase-instruction-id ins_123 --format json',
 };
 
 test('normalizes CLI and body account event type aliases', () => {
@@ -435,7 +435,7 @@ test('event wait request starts a typed no-ack poll with resource correlation me
   assert.equal(result.eventType, 'purchase_instruction.activated');
   assert.equal(
     result.pollCommand,
-    'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+    'clink events poll --type purchase_instruction.activated --no-ack --format json',
   );
   assert.deepEqual(result.expectedResource, {
     instructionId: 'ins_123',
@@ -443,14 +443,14 @@ test('event wait request starts a typed no-ack poll with resource correlation me
   });
   assert.equal(
     result.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
+    'clink instruction get --purchase-instruction-id ins_123 --format json',
   );
 });
 
 test('poll command builder uses no-ack to preserve the selected type before correlation', () => {
   assert.equal(
     pollCommandForWaitSpec(instructionWaitSpec),
-    'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+    'clink events poll --type purchase_instruction.activated --no-ack --format json',
   );
 });
 
@@ -480,7 +480,7 @@ test('event poll observation requires authoritative verification after matched i
   assert.equal(result.event.eventType, 'purchase_instruction.activated');
   assert.equal(
     result.verifyCommand,
-    'clink-cli instruction get --purchase-instruction-id ins_123 --format json',
+    'clink instruction get --purchase-instruction-id ins_123 --format json',
   );
 });
 
@@ -503,7 +503,7 @@ test('event poll observation stays pending when activation belongs to a differen
   assert.equal(result.state, EventWorkflowState.EVENT_NOT_CORRELATED);
   assert.equal(result.action, EventWorkflowAction.WAIT_EVENT);
   assert.equal(result.matched, false);
-  assert.equal(result.pollCommand, 'clink-cli events poll --type purchase_instruction.activated --no-ack --format json');
+  assert.equal(result.pollCommand, 'clink events poll --type purchase_instruction.activated --no-ack --format json');
 });
 
 test('event poll observation returns resumable timeout without claiming success', () => {
@@ -511,7 +511,7 @@ test('event poll observation returns resumable timeout without claiming success'
     {
       ready: false,
       timedOut: true,
-      resumeCommand: 'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+      resumeCommand: 'clink events poll --type purchase_instruction.activated --no-ack --format json',
     },
     instructionWaitSpec,
   );
@@ -521,7 +521,7 @@ test('event poll observation returns resumable timeout without claiming success'
   assert.equal(result.terminal, false);
   assert.equal(
     result.resumeCommand,
-    'clink-cli events poll --type purchase_instruction.activated --no-ack --format json',
+    'clink events poll --type purchase_instruction.activated --no-ack --format json',
   );
 });
 
@@ -571,7 +571,7 @@ test('event poll observation normalizes snake_case instruction ids in wait specs
       expected_resource: {
         purchase_instruction_id: 'ins_snake',
       },
-      verify_command: 'clink-cli instruction get --purchase-instruction-id ins_snake --format json',
+      verify_command: 'clink instruction get --purchase-instruction-id ins_snake --format json',
     },
   );
 
@@ -613,7 +613,7 @@ test('event poll observation reads the last JSON envelope from built-in watch st
     {
       eventType: 'purchase_instruction.activated',
       expectedResource: { instructionId: 'ins_watch' },
-      verifyCommand: 'clink-cli instruction get --purchase-instruction-id ins_watch --format json',
+      verifyCommand: 'clink instruction get --purchase-instruction-id ins_watch --format json',
     },
   );
 

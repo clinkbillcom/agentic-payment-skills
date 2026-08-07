@@ -31,7 +31,7 @@ test('Agent Pay synchronous success starts optional account event monitoring', (
   assert.equal(result.accountEventStatus, 'PENDING');
   assert.equal(result.terminal, false);
   assert.deepEqual(result.pollCommands, [
-    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
+    'clink events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
   assert.deepEqual(result.currentPayment, paymentContext);
   assert.deepEqual(

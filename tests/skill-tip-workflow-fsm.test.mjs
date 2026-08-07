@@ -184,7 +184,7 @@ test('identity tip prerequisites build the identity command', () => {
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP);
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name pollyreach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name pollyreach --amount 2 --format json',
   );
   assert.deepEqual(result.expectedTip, {
     publisher: 'clinkpay',
@@ -204,7 +204,7 @@ test('identity tip prerequisites ignore an optional version for execution', () =
 
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name pollyreach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name pollyreach --amount 2 --format json',
   );
   assert.equal(result.resolvedTarget.versionNo, undefined);
   assert.deepEqual(result.expectedTip, {
@@ -223,7 +223,7 @@ test('Number tip without a recent displayed snapshot requests the list workflow'
 
   assert.equal(result.state, SkillTipState.TIP_LIST_REQUIRED);
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP_LIST_WORKFLOW);
-  assert.equal(result.command, 'clink-cli skills list --all --tippable --format json');
+  assert.equal(result.command, 'clink skills list --all --tippable --format json');
   assert.deepEqual(result.tipDraft, {
     ...numberedTip,
     confirmationRequired: true,
@@ -286,7 +286,7 @@ test('Number tip resolves a versioned context row to a versionless identity comm
   assert.equal(result.action, SkillTipAction.RUN_SKILL_TIP);
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
   assert.equal(result.resolvedTarget.skillId, 'skill_2');
   assert.equal(result.resolvedTarget.versionNo, undefined);
@@ -425,7 +425,7 @@ test('Number tip uses the newest valid displayed snapshot regardless of array or
   assert.equal(result.resolvedTarget.publisher, 'new-publisher');
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher new-publisher --name NewSkill --amount 2 --format json',
+    'clink skills tip --publisher new-publisher --name NewSkill --amount 2 --format json',
   );
 });
 
@@ -447,7 +447,7 @@ test('Number tip does not fall back when the newest valid snapshot lacks Number'
 
   assert.equal(result.state, SkillTipState.TIP_LIST_REQUIRED);
   assert.equal(result.reason, 'skill_number_not_in_recent_snapshot');
-  assert.equal(result.command, 'clink-cli skills list --all --tippable --format json');
+  assert.equal(result.command, 'clink skills list --all --tippable --format json');
 });
 
 test('Number tip does not fall back when the newest displayed snapshot is malformed', () => {
@@ -562,7 +562,7 @@ test('confirmation consumes the frozen identity and never re-resolves Number', (
   assert.equal(claimed.action, SkillTipAction.RUN_SKILL_TIP);
   assert.equal(
     claimed.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
   assert.equal(claimed.resolvedTarget.versionNo, undefined);
   assert.deepEqual(claimed.expectedTip, {
@@ -751,7 +751,7 @@ test('Number tip omits version when the context row has none', () => {
 
   assert.equal(
     result.command,
-    'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
+    'clink skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
   );
 });
 
@@ -812,7 +812,7 @@ test('synchronous paid agent pay starts optional account event monitoring', () =
     skillId: 'skill_1',
   });
   assert.deepEqual(result.pollCommands, [
-    'clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json',
+    'clink events poll --type account-created,account-reloaded --max-wait 60 --format json',
   ]);
   assert.deepEqual(
     result.accountWaitSpecs.map(({ eventType, pollCommand }) => ({ eventType, pollCommand })),
@@ -883,7 +883,7 @@ test('authorization pending returns the Passkey continuation without polling acc
         status: 'authorization_pending',
         instructionId: 'ins_1',
         passkeyUrl: 'https://agent.example/passkey',
-        resumeCommand: 'clink-cli skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
+        resumeCommand: 'clink skills tip --publisher clinkpay --name PollyReach --amount 2 --format json',
       },
     }),
   });

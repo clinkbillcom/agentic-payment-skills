@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const wrapper = new URL('../bin/clink-cli', import.meta.url).pathname;
+const wrapper = new URL('../bin/clink', import.meta.url).pathname;
 const expectedUrl = 'https://api.clinkbill.com/agent/cwallet/oauth/device/authorization';
 
 test('wrapper pins wallet init to production regardless of option ordering', async (context) => {

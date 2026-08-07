@@ -32,10 +32,10 @@ If either command is invoked with `--no-watch` anyway, the CLI prints the handof
 
 ```
 Watch not started (--no-watch). This link needs a listener before the user acts on it.
-Run now: clink-cli events poll --type purchase_instruction.activated --no-ack --format json
+Run now: clink events poll --type purchase_instruction.activated --no-ack --format json
 ```
 
-That line means the Passkey URL is about to go out with nothing listening. Run the printed command before sending the URL.
+That line means the Passkey URL is about to go out with nothing listening. Run the printed command before sending the URL. The bundled CLI still spells that suggestion with its former name (`clink-cli events poll ...`); run it under this skill's `clink` entrypoint, which is the same binary.
 
 ## Start Monitoring At Emit Time
 
@@ -50,7 +50,7 @@ Prefer a non-blocking/background watch over a single blocking foreground call. A
 Use `events poll` when you need to wait for a state change without printing a new link, or when a previous watch timed out:
 
 ```bash
-clink-cli events poll --type <eventType> --format json
+clink events poll --type <eventType> --format json
 ```
 
 Pass the process exit code into `classifyEventPollObservation`. A nonzero CLI exit becomes `EVENT_INVALID` with `SURFACE_EVENT_ERROR`; optional Agent Pay and Skill Tip aggregation convert that monitoring failure to `POLL_ERROR` without changing `PAID`.
@@ -95,8 +95,8 @@ Instruction activation waitSpec:
     "instructionId": "ins_xxx",
     "purchaseInstructionId": "ins_xxx"
   },
-  "pollCommand": "clink-cli events poll --type purchase_instruction.activated --no-ack --format json",
-  "verifyCommand": "clink-cli instruction get --purchase-instruction-id ins_xxx --format json"
+  "pollCommand": "clink events poll --type purchase_instruction.activated --no-ack --format json",
+  "verifyCommand": "clink instruction get --purchase-instruction-id ins_xxx --format json"
 }
 ```
 
@@ -129,7 +129,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or `payment_method.updated` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
-| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink-cli events poll --type agent_order.succeeded --max-wait 900 --format json` after checkout complete returns `completed` |
+| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink events poll --type agent_order.succeeded --max-wait 900 --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |

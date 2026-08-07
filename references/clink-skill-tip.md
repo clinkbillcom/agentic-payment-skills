@@ -22,7 +22,7 @@ Use `lib/skill-tip-batch-workflow-fsm.mjs` for batch normalization, de-duplicati
 Execute through the environment-locked wrapper:
 
 ~~~bash
-clink-cli skills list --all --tippable --format json
+clink skills list --all --tippable --format json
 ~~~
 
 Inspect the exit code before parsing the JSON envelope. Require `data` to be an array. Every normalized row requires a positive CLI `Number`, nonempty `publisher`, `name`, and `skillId`. Preserve optional `versionNo` and `skillId` only as hidden snapshot metadata. Do not renumber rows.
@@ -140,10 +140,10 @@ Freeze this information with `batchId`, user, conversation, exact environment lo
 
 ## Sequential Batch Execution
 
-Run one `clink-cli skills tip` call per distinct Skill. Payment calls are sequential in frozen order and every item retains its own `expectedTip` binding:
+Run one `clink skills tip` call per distinct Skill. Payment calls are sequential in frozen order and every item retains its own `expectedTip` binding:
 
 ~~~bash
-clink-cli skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json
+clink skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json
 ~~~
 
 Never add a combined target list, aggregate amount, version, Number, or batch flag to the CLI. An interactive authorization or 3DS continuation remains the active item and blocks later payment submission until the single-tip workflow reaches a terminal payment classification.
@@ -216,7 +216,7 @@ After a terminal CLI result, the runtime changes `EXECUTING` to `CONSUMED`. Neve
 Execute Skill Tip by publisher/name without a version:
 
 ~~~bash
-clink-cli skills tip \
+clink skills tip \
   --publisher <publisher> \
   --name <skill_name> \
   --amount <amount> \
@@ -256,7 +256,7 @@ Never retry exit code 6 or a client timeout automatically; payment may already h
 Merchant account events enrich a successful tip but are not required. A merchant may emit neither event. After synchronous success, keep payment terminal `PAID` and immediately start one bounded any-of poll:
 
 ~~~bash
-clink-cli events poll --type account-created,account-reloaded --max-wait 60 --format json
+clink events poll --type account-created,account-reloaded --max-wait 60 --format json
 ~~~
 
 The events are mutually exclusive for one tip and use ANY_OF semantics. Feed the same poll result through the `account-created` and `account-reloaded` wait specs. Correlate by matching order ID, otherwise by a compound identity with at least two stable values such as `customerId + merchantId` or `customerId + skillId`. Pass known `expectedResource` values including `customerId`, `merchantId`, and `skillId`.

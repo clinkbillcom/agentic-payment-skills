@@ -1,6 +1,6 @@
 # VIC Instruction Flow
 
-Read this before using Visa agentic authorization or any `clink-cli instruction` command.
+Read this before using Visa agentic authorization or any `clink instruction` command.
 
 ## Boundary
 
@@ -21,20 +21,20 @@ https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 This URL is hand-built, not CLI command output, so it has **no built-in watch**. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so use one any-of poll:
 
 ```bash
-clink-cli events poll --type vic_device.binding_succeeded,payment_method.updated --no-ack --max-wait 60 --format json
+clink events poll --type vic_device.binding_succeeded,payment_method.updated --no-ack --max-wait 60 --format json
 ```
 
 Then confirm authoritatively by refreshing the card and checking `visaRegistrationSucceeded === true` before proceeding:
 
 ```bash
-clink-cli card get --payment-instrument-id <visa_pi> --format json
+clink card get --payment-instrument-id <visa_pi> --format json
 ```
 
 The agent page environment follows the base URL persisted by `wallet init` (see `references/clink-cli-invocation.md`); run instruction commands without environment flags and do not re-initialize into another environment during the workflow.
 
 ## Preparation Steps
 
-1. Refresh cards with `clink-cli card binding-link --no-watch --format json`.
+1. Refresh cards with `clink card binding-link --no-watch --format json`.
 2. Select the user-specified Visa card, otherwise the default card, otherwise the first usable Visa card.
 3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.updated` showing readiness, then confirm `visaRegistrationSucceeded === true` with `card get` before continuing.
 4. List reusable ACTIVE instructions before creating anything.
@@ -46,7 +46,7 @@ The agent page environment follows the base URL persisted by `wallet init` (see 
 List active reusable instructions:
 
 ```bash
-clink-cli instruction list \
+clink instruction list \
   --valid-only \
   --payment-instrument-id <visa_pi> \
   --format json
@@ -57,7 +57,7 @@ clink-cli instruction list \
 Get one instruction:
 
 ```bash
-clink-cli instruction get \
+clink instruction get \
   --purchase-instruction-id <instructionId> \
   --format json
 ```
@@ -69,7 +69,7 @@ The CLI and backend use UTC datetime strings in `yyyy-MM-dd HH:mm:ss` format for
 Example:
 
 ```bash
-clink-cli instruction create \
+clink instruction create \
   --payment-instrument-id <visa_pi> \
   --title "Hotel booking" \
   --effective-until-time "2026-06-30 23:59:59" \
@@ -148,7 +148,7 @@ An open-ended schedule reusing a bounded instruction returns the `authorization_
 ### Example: a daily lunch order capped at 40 CNY per run
 
 ```bash
-clink-cli instruction create \
+clink instruction create \
   --payment-instrument-id <visa_pi> \
   --title "Daily lunch order" \
   --is-recurring \
@@ -164,7 +164,7 @@ State the per-run ceiling in the mandate `description`. The weekly `amountLimit`
 A scheduled run matches by the pinned `instructionId` + `mandateId` frozen at setup. It does not re-run `instruction list` and does not semantically re-match, so a run cannot drift onto another mandate that merely happens to fit:
 
 ```bash
-clink-cli instruction get --purchase-instruction-id <pinned_instruction_id> --format json
+clink instruction get --purchase-instruction-id <pinned_instruction_id> --format json
 ```
 
 Pass the result to `classifyUnattendedAuthorization` with the pinned ids and the expected `paymentInstrumentId`. Anything other than an `ACTIVE` instruction carrying the pinned mandate on the same card returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP`: stop this run, report the reason, and ask the user to authorize a new instruction. Never fall back to creating a draft or to picking another mandate during an unattended run.
@@ -211,7 +211,7 @@ For shipped physical goods, collect a real standard complete address in this sha
 Print the Passkey URL for an existing draft:
 
 ```bash
-clink-cli instruction sign-url \
+clink instruction sign-url \
   --payment-instrument-id <visa_pi> \
   --purchase-instruction-id <instructionId> \
   --format json
@@ -220,8 +220,8 @@ clink-cli instruction sign-url \
 Update or cancel flows print the agent page URL for page-driven completion:
 
 ```bash
-clink-cli instruction update --format json
-clink-cli instruction cancel --format json
+clink instruction update --format json
+clink instruction cancel --format json
 ```
 
 Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`.
@@ -235,13 +235,13 @@ Run `classifyAuthorizationDraftObservation` on the draft envelope and send the r
 The watch runs at most 15 minutes. If it times out, the runtime kills the foreground command, or only an unrelated instruction's event arrives, the classifier answers `VERIFY_AUTHORIZATION_AFTER_WATCH_GAP` — **not** a failure. The user may have completed the Passkey regardless, so ask the instruction itself before concluding anything; restart `events poll` only if it is still pending:
 
 ```bash
-clink-cli events poll --type purchase_instruction.activated --no-ack --format json
+clink events poll --type purchase_instruction.activated --no-ack --format json
 ```
 
 Either way the activation must correlate by the same `instructionId` / `purchaseInstructionId`. Then run:
 
 ```bash
-clink-cli instruction get --purchase-instruction-id <instructionId> --format json
+clink instruction get --purchase-instruction-id <instructionId> --format json
 ```
 
 Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed. If `instruction get` exits nonzero or returns an explicit error envelope, surface that error and stop. Only a successful `CREATED`, `PENDING`, or `INPROGRESS` response is still activatable and may restart the event poll. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are verification errors, not pending states.

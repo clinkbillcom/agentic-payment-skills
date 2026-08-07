@@ -1,17 +1,19 @@
 # Clink CLI Invocation
 
-Read this before running any `clink-cli` command from this skill.
+Read this before running any `clink` command from this skill.
 
 Command examples are execution recipes for the agent. Run them through the available runtime when the workflow has the required inputs and authorization; do not present them as routine user-run instructions. Only provide a command instead of executing it when the user explicitly asks for a preview/manual fallback or the runtime cannot execute local commands.
 
 ## Command Resolution
 
-Every example in this skill uses `clink-cli` as the stable command name. This repository provides that command through package.json `bin.clink-cli`, which points to `bin/clink-cli`. Use that single entrypoint for every operation instead of repeating the bundle path.
+Every example in this skill uses `clink` as the stable command name. This repository provides it through package.json `bin.clink`, which points to `bin/clink`. Use that single entrypoint for every operation instead of repeating the bundle path.
+
+**Resolve `clink` to this repository's `bin/clink` by absolute path, once, at the start of every workflow. Never invoke a bare `clink` (or `clink-cli`) resolved from `PATH`.** The name on `PATH` may belong to a different build — a globally installed or `npm link`ed CLI from another checkout — and that build does not carry this distribution's production pin. Every build on the machine shares one global config file, `~/.clink-cli/config.json`, so a different build is not merely a different binary: it is a different environment writing the same state.
 
 **Environment selection belongs to `wallet init`, not to per-command flags.** This distribution pins `wallet init` to production through `CLINK_WALLET_INIT_ENVIRONMENT`, so `wallet init --sandbox` and `wallet init --test` exit 2 with `wallet init environment is fixed to production by this CLI distribution`. Other distributions pin sandbox/UAT or test the same way. Every command other than `wallet init` rejects `--sandbox`/`--test` with exit code 2, and there is no `--base-url` flag. Initialize with the plain wrapper:
 
 ```bash
-bin/clink-cli wallet init --email <email> --no-open --format json
+bin/clink wallet init --email <email> --no-open --format json
 ```
 
 A successful initialization saves the selected environment, so every later command reuses it with no environment flag. `CLINK_BASE_URL` remains an advanced process-level override for custom endpoints; keep one fixed value for the whole workflow if used at all.
@@ -19,12 +21,16 @@ A successful initialization saves the selected environment, so every later comma
 The wrapper is:
 
 ```bash
-bin/clink-cli
+bin/clink
 ```
 
 OAuth authorization is bound to its issuer origin. Initialize under the environment this distribution pins. Never send credentials across environments.
 
-Resolve `clink-cli` to `bin/clink-cli` at the start of a workflow and verify `wallet status.data.baseUrl` before proceeding. Reuse the plain wrapper for every follow-up command, keeping the persisted base URL (and any `CLINK_BASE_URL`) unchanged; this is the environment lock. Direct local execution can use `./bin/clink-cli ...`. A locally linked executable may be used only after confirming that it points to this repository wrapper.
+**The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every other command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for every later command run through this production wrapper, including `pay`, `ucp-checkout complete`, `skills tip`, and `refund create`.
+
+That state is not self-announcing. `wallet status` reports `authorizationEnvironmentMatches: true` whenever the stored `issuerOrigin` agrees with the effective `baseUrl`, which is exactly what a consistently-UAT wallet looks like. A wallet can therefore report fully OAuth-ready while pointed at the wrong environment.
+
+So after resolving the wrapper, read `wallet status --format json` and compare `data.baseUrl` against this distribution's pinned origin, `https://api.clinkbill.com`, before running any operation that moves money or mutates remote state. On a mismatch, tell the user which origin is actually in effect and get an explicit decision; do not silently continue, and do not silently re-initialize — `wallet init` against a different origin replaces their current login.
 
 For Agent-run wallet initialization, pass only `--email` and `--no-open`. There is no `--name` flag: `wallet init --name` exits 2, the initial name comes from the email text before `@`, and `config set name` changes it later. The per-invocation `--no-open` opt-out overrides both `--open` and the stored `default-open-links` setting. Do not rely on the stored default: the Agent must stream the original process's live stderr, send the verification URL once, and leave that same process running while the user authorizes in their browser.
 

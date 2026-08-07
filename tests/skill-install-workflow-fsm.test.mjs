@@ -80,7 +80,7 @@ test('identity install without a version builds the latest command by omission',
 
   assert.equal(result.state, SkillInstallState.INSTALL_EXECUTION_READY);
   assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
-  assert.equal(result.command, 'clink-cli skills install clinkpay/PollyReach --format json');
+  assert.equal(result.command, 'clink skills install clinkpay/PollyReach --format json');
   assert.doesNotMatch(result.command, /@latest|--version/u);
   assert.deepEqual(result.expectedInstall, {
     publisher: 'clinkpay',
@@ -101,7 +101,7 @@ test('identity install with a version builds one exact package operand', () => {
 
   assert.equal(
     result.command,
-    'clink-cli skills install clinkpay/PollyReach@v1.2.3 --format json',
+    'clink skills install clinkpay/PollyReach@v1.2.3 --format json',
   );
   assert.doesNotMatch(result.command, /--version/u);
   assert.equal(result.expectedInstall.requestedVersion, 'v1.2.3');
@@ -121,7 +121,7 @@ test('identity install quotes a human-readable Skill name containing spaces', ()
   assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
   assert.equal(
     result.command,
-    'clink-cli skills install "Jeff/SEO Deep Audit@v1.0.0" --format json',
+    'clink skills install "Jeff/SEO Deep Audit@v1.0.0" --format json',
   );
   assert.deepEqual(result.expectedInstall, {
     publisher: 'Jeff',
@@ -144,7 +144,7 @@ test('identity install supports Chinese publisher and Skill names', () => {
   assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
   assert.equal(
     result.command,
-    'clink-cli skills install "艺术家/跨境数据分析套件@v1.0.0" --format json',
+    'clink skills install "艺术家/跨境数据分析套件@v1.0.0" --format json',
   );
   assert.deepEqual(result.expectedInstall, {
     publisher: '艺术家',
@@ -165,7 +165,7 @@ test('identity install protects a leading-hyphen publisher from CLI option parsi
   assert.equal(result.state, SkillInstallState.INSTALL_EXECUTION_READY);
   assert.equal(
     result.command,
-    'clink-cli skills install --format json -- -publisher/PollyReach',
+    'clink skills install --format json -- -publisher/PollyReach',
   );
 });
 
@@ -490,7 +490,7 @@ test('only a claimed executing confirmation runs the frozen exact install', () =
   assert.equal(result.action, SkillInstallAction.RUN_SKILL_INSTALL);
   assert.equal(
     result.command,
-    'clink-cli skills install clinkpay/PollyReach@v1.2.3 --format json',
+    'clink skills install clinkpay/PollyReach@v1.2.3 --format json',
   );
   assert.equal(result.pendingId, 'install_pending_1');
 });
