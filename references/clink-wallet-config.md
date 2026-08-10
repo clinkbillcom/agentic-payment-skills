@@ -16,7 +16,7 @@ This distribution pins `wallet init` to production, so `--sandbox` and `--test` 
 
 `wallet init` starts OAuth Device Authorization and polls until authorization completes. In Agent workflows, always pass `--no-open`; it prevents browser launch for this invocation even if stored configuration enables link opening. The original process prints the verification URL to live stderr. Stream that stderr while the process is running.
 
-Read the verification URL only from the original process's live stderr. When `Complete authorization in your browser:` appears, send the following URL to the user exactly once and keep that same process alive. Do not open the URL from the Agent runtime, start a second `wallet init`, or reconstruct the URL from final stdout. Do not navigate to, preview, or prefetch the URL with an Agent browser: that request can overlap with the user's page load and trigger duplicate verification-code sends or resend throttling. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`. The URL keeps `user_code` in its query and carries the email and derived name in its fragment. It is intended for the current user, but do not copy it into unrelated logs or handoffs.
+Read the verification URL only from the original process's live stderr. When `Complete authorization in your browser:` appears, send the following URL to the user exactly once and keep that same process alive. Do not open the URL from the Agent runtime, start a second `wallet init`, or reconstruct the URL from final stdout. Do not navigate to, preview, or prefetch the URL with an Agent browser — built-in, headless, CDP/Playwright/Puppeteer, a browser MCP server, computer-use, an embedded webview, or link unfurling all count: that request can overlap with the user's page load and trigger duplicate verification-code sends or resend throttling. This is a `USER_DEVICE_ONLY` single-load page, so emit it exactly once and never re-send it as a nudge. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`. The URL keeps `user_code` in its query and carries the email and derived name in its fragment. It is intended for the current user, but do not copy it into unrelated logs or handoffs.
 
 Successful initialization stores `customerId`, `email`, `name`, an environment-bound OAuth authorization, and sticky `oauthRequired=true` in the single local config. Final init output requires `hasAuthorization=true`, `authorizationType=oauth`, `hasCustomerApiKey=false`, and a non-empty `customerId`; it no longer echoes `oauthRequired`. Use `wallet status` to classify the persisted credential policy. The CLI refreshes expiring Access Tokens and atomically rotates Refresh Tokens. Never read, print, copy, or refresh either token directly.
 
@@ -74,6 +74,8 @@ clink config set name <name> --format json
 clink config set default-open-links false --format json
 ```
 
+`defaultOpenLinks` is machine-wide state in `~/.clink-cli/config.json`, shared by every build on the machine. Read it once per workflow with `config get`; when it is `true`, either set it `false` as above or pass `--no-open` on every link-producing command for the rest of the workflow.
+
 Do not add a new legacy customer API key through this Skill. Existing never-OAuth users may retain an already stored key or provide `CLINK_CUSTOMER_API_KEY` through the execution environment. The CLI always rejects `config set customer-api-key`; `config unset customer-api-key` remains available to remove an existing saved legacy key.
 
 `config set customer-id` is allowed only for a never-OAuth wallet. Changing it clears cached payment methods and risk rules. For an OAuth-managed wallet, change identities through `wallet init`; do not set or unset `customer-id` directly.
@@ -101,7 +103,7 @@ When event processing sees payment-method changes, the CLI updates the cached pa
 Refresh current payment methods without waiting for a browser action:
 
 ```bash
-clink card binding-link --no-watch --format json
+clink card binding-link --no-watch --no-open --format json
 ```
 
 Then inspect `data.paymentMethodsVoList`, or read the local cache:
@@ -110,29 +112,31 @@ Then inspect `data.paymentMethodsVoList`, or read the local cache:
 clink card list --format json
 ```
 
-`card list` is cache-only. Do not use it alone when current card state matters; refresh first with `card binding-link --no-watch`.
+`card list` is cache-only. Do not use it alone when current card state matters; refresh first with `card binding-link --no-watch --no-open`.
 
 ## Binding Or Managing Cards
 
 First card binding:
 
 ```bash
-clink card binding-link --format json
+clink card binding-link --no-open --format json
 ```
 
 Add another payment method:
 
 ```bash
-clink card setup-link --format json
+clink card setup-link --no-open --format json
 ```
 
 Manage existing payment methods:
 
 ```bash
-clink card modify-link --format json
+clink card modify-link --no-open --format json
 ```
 
 These commands print a URL for the user. Without `--no-watch`, they also wait for the relevant completion event and then emit a second JSON envelope.
+
+Every one of them is a `USER_DEVICE_ONLY` page: it collects or exposes a card number, so the user must open it in their own browser and the agent runtime must not open, navigate, preview, screenshot, read, or fill it by any channel. Pass `--no-open` so the CLI does not launch a browser on its own host either, and keep `--no-watch` off so the built-in listener stays running. See `references/clink-browser-handoff.md`.
 
 Get one cached method:
 
@@ -151,7 +155,7 @@ clink risk get --format json
 Generate risk-rule management URL:
 
 ```bash
-clink risk link --format json
+clink risk link --no-open --format json
 ```
 
-`risk link` is an async browser flow. Wait for `risk_rule.updated` through the built-in watch or `events poll` before claiming the change took effect.
+`risk link` is an async browser flow. Wait for `risk_rule.updated` through the built-in watch or `events poll` before claiming the change took effect. The page sets the user's own spending limits, so it is `USER_PREFERRED`: hand the URL to the user rather than choosing their rules for them in an agent browser.

@@ -14,6 +14,7 @@ const instruction = await readFile(new URL('../references/clink-instruction.md',
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
 const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
 const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
+const browserHandoff = await readFile(new URL('../references/clink-browser-handoff.md', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -31,6 +32,7 @@ const shippedDocs = {
   'references/clink-skill-tip.md': skillTip,
   'references/clink-skill-install.md': skillInstall,
   'references/clink-catalog-discovery.md': catalogDiscovery,
+  'references/clink-browser-handoff.md': browserHandoff,
 };
 
 test('skill frontmatter stays compact and trigger-focused', () => {
@@ -363,8 +365,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.9\.2"/u);
-  assert.equal(packageJson.version, '1.9.2');
+  assert.match(skill, /version:\s*"1\.10\.0"/u);
+  assert.equal(packageJson.version, '1.10.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -685,4 +687,134 @@ test('catalog selection does not bypass UCP checkout guards', () => {
   assert.match(catalogDiscovery, /clink-ucp-checkout\.md/u);
   assert.match(catalogDiscovery, /Selecting a product does not skip any of them/u);
   assert.match(catalogDiscovery, /Selection is not authorization to skip/u);
+});
+
+// This skill is installed by many host agents, and some drive a browser of their own. A Passkey page
+// cannot succeed in an agent browser at all, a 3DS challenge is fingerprinted and soft-declined, a
+// card page would move the PAN into model context, and an OAuth page re-sends its verification code
+// on a second load. The prohibition therefore has to be in SKILL.md itself — a host agent that never
+// opens a reference must still see it — and it has to enumerate the channels, because an agent
+// calling navigate through a browser MCP does not think it is "opening a browser".
+test('SKILL.md itself bars the agent runtime from pages a person must complete', () => {
+  assert.match(skill, /it does not own the browser pages those commands produce/u);
+  assert.match(skill, /## Browser Page Handoff/u);
+  assert.match(skill, /classifyPageHandoff/u);
+  assert.match(skill, /lib\/page-handoff\.mjs/u);
+  assert.match(skill, /references\/clink-browser-handoff\.md/u);
+  assert.match(skill, /requiresHumanBrowser/u);
+
+  for (const channel of [
+    /built-in browser/u,
+    /headless browser/u,
+    /CDP\/Playwright\/Puppeteer/u,
+    /browser MCP server/u,
+    /computer-use/u,
+    /embedded webview/u,
+    /link preview/u,
+  ]) {
+    assert.match(skill, channel, `SKILL.md must name the ${channel} channel`);
+  }
+
+  // "Do not open it" reads as permission to navigate; the verbs have to be spelled out.
+  assert.match(skill, /not even to check that the page loads/u);
+  assert.match(skill, /prefetch/u);
+  assert.match(skill, /unfurl/u);
+});
+
+test('the per-page actor table stays in SKILL.md and the handoff reference', () => {
+  for (const body of [skill, browserHandoff]) {
+    assert.match(body, /USER_DEVICE_ONLY/u);
+    assert.match(body, /USER_PREFERRED/u);
+    assert.match(body, /AGENT_ALLOWED/u);
+  }
+
+  assert.match(browserHandoff, /OAUTH_DEVICE_VERIFICATION/u);
+  assert.match(browserHandoff, /CARD_BINDING/u);
+  assert.match(browserHandoff, /VIC_PASSKEY_REGISTRATION/u);
+  assert.match(browserHandoff, /INSTRUCTION_PASSKEY_SIGNING/u);
+  assert.match(browserHandoff, /THREE_DS_CHALLENGE/u);
+  assert.match(browserHandoff, /RISK_RULE_CONFIG/u);
+  assert.match(browserHandoff, /MERCHANT_PRODUCT_PAGE/u);
+});
+
+// The narrow rule was already right for wallet init and only for wallet init. Every other link
+// command could still launch a browser on the CLI host, which in a container or CI is a window
+// nobody can see.
+test('--no-open covers every link command, not only wallet init', () => {
+  for (const body of [skill, cliInvocation, browserHandoff]) {
+    for (const command of [
+      /card binding-link/u,
+      /card setup-link/u,
+      /card modify-link/u,
+      /risk link/u,
+      /instruction create/u,
+      /instruction sign-url/u,
+    ]) {
+      assert.match(body, command);
+    }
+  }
+
+  assert.match(skill, /card binding-link --no-open --format json/u);
+  assert.match(skill, /card setup-link --no-open --format json/u);
+  assert.match(skill, /card modify-link --no-open --format json/u);
+  assert.match(skill, /risk link --no-open --format json/u);
+  assert.match(walletConfig, /card binding-link --no-open --format json/u);
+  assert.match(walletConfig, /risk link --no-open --format json/u);
+  assert.match(instruction, /--no-open/u);
+
+  assert.match(cliInvocation, /belongs on every link-producing command, not only `wallet init`/u);
+  // --no-open must not be confused with --no-watch: killing the watch loses the completion event.
+  assert.match(cliInvocation, /suppresses launch only/u);
+  assert.match(browserHandoff, /does not touch the built-in event watch/u);
+});
+
+// defaultOpenLinks lives in the machine-wide config every build shares, so its default being false
+// proves nothing about the machine this skill is running on.
+test('stored default-open-links is verified rather than assumed', () => {
+  for (const body of [skill, cliInvocation, browserHandoff]) {
+    assert.match(body, /defaultOpenLinks|default-open-links/u);
+  }
+  assert.match(cliInvocation, /not safe to assume/u);
+  assert.match(cliInvocation, /machine-wide/u);
+  assert.match(browserHandoff, /config get --format json/u);
+});
+
+test('Passkey pages refuse virtual authenticators as well as fabricated payloads', () => {
+  assert.match(instruction, /virtual authenticator/u);
+  assert.match(instruction, /authResult/u);
+  assert.match(instruction, /fidoBlob/u);
+  assert.match(browserHandoff, /virtual authenticator/u);
+  assert.match(skill, /virtual authenticator/u);
+  assert.match(instruction, /platform authenticator/u);
+});
+
+test('the 3DS challenge is handed to the user rather than loaded by the agent', () => {
+  assert.match(paymentRefund, /USER_DEVICE_ONLY/u);
+  assert.match(paymentRefund, /fingerprints the device/u);
+  assert.match(paymentRefund, /single-load page/u);
+  assert.match(paymentRefund, /clink-browser-handoff\.md/u);
+});
+
+// The event, not the browser, is what proves completion — which is exactly why the flow survives the
+// user finishing on a phone, a second machine, or an hour later. Verifying by loading the page is
+// both unnecessary and the failure mode.
+test('the event stays the proof and no page is verified by loading it', () => {
+  assert.match(browserHandoff, /proven by a webhook event, never by anything a browser reports/u);
+  assert.match(browserHandoff, /looking is the failure mode/u);
+  assert.match(skill, /Never add browser-side verification that a page opened/u);
+  assert.match(asyncEvents, /never verify a page by loading it from the Agent runtime/u);
+});
+
+test('an unattended run reports a browser-handoff gap instead of waiting', () => {
+  assert.match(skill, /SURFACE_BROWSER_HANDOFF_GAP/u);
+  assert.match(skill, /is a reported gap, not a wait/u);
+  assert.match(browserHandoff, /SURFACE_BROWSER_HANDOFF_GAP/u);
+  assert.match(browserHandoff, /Do not emit the URL into an empty room/u);
+});
+
+// Blanket "no browser" guidance would break parse-item and the catalog fallback, which require it.
+test('the prohibition never spills onto merchant product pages', () => {
+  assert.match(skill, /Merchant product pages are the opposite case and stay agent work/u);
+  assert.match(skill, /ALLOW_AGENT_BROWSER/u);
+  assert.match(browserHandoff, /`AGENT_ALLOWED` is not weakened by any of this/u);
 });

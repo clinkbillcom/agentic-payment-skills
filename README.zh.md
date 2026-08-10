@@ -40,6 +40,12 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 风控规则查看与配置
 - 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
 
+## 必须由用户自己打开的页面
+
+这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
+
+由于完成与否只由 webhook 事件证明，而不是由浏览器回报，用户可以在任意浏览器或设备上完成（包括手机），流程照样收敛。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
+
 ## Skill 结构
 
 `SKILL.md` 只保留路由和安全规则；命令级细节放在 `references/` 下，沿用飞书/Lark skills 的“执行前读取对应操作 reference”模式。

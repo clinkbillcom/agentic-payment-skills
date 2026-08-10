@@ -18,7 +18,9 @@ If the selected Visa card is not registered, send the Passkey registration URL:
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 ```
 
-This URL is hand-built, not CLI command output, so it has **no built-in watch**. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so use one any-of poll:
+This URL is hand-built, not CLI command output, so it has **no built-in watch**.
+
+It is also the page an agent browser can never complete. WebAuthn requires a platform authenticator bound to the user's own device keychain and scoped to the relying-party origin: a headless or embedded browser has none, and a CDP virtual authenticator would forge exactly the proof this page exists to collect. A credential registered in an agent browser profile also does not exist in the user's own browser, so later signing fails there regardless. Hand the URL to the user and let them approve with Face ID, Touch ID, Windows Hello, or a security key; their phone is often the right device. See `references/clink-browser-handoff.md`. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so use one any-of poll:
 
 ```bash
 clink events poll --type vic_device.binding_succeeded,payment_method.updated --no-ack --max-wait 60 --format json
@@ -214,17 +216,20 @@ Print the Passkey URL for an existing draft:
 clink instruction sign-url \
   --payment-instrument-id <visa_pi> \
   --purchase-instruction-id <instructionId> \
+  --no-open \
   --format json
 ```
 
 Update or cancel flows print the agent page URL for page-driven completion:
 
 ```bash
-clink instruction update --format json
-clink instruction cancel --format json
+clink instruction update --no-open --format json
+clink instruction cancel --no-open --format json
 ```
 
-Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`.
+Both print an agent page URL the user completes; they change what may be spent later, so they are `USER_DEVICE_ONLY` too.
+
+Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fidoBlob`, or `dfpSessionId`, and never satisfy the page with a CDP virtual authenticator. A forged signature is worse than a stalled authorization.
 
 ## Activation
 

@@ -123,16 +123,18 @@ Never invent amount, currency, merchant ID, session ID, order ID, payment method
 Exit 0:
 
 - `data.status === 1`: payment succeeded. Save `data.orderId` when present, return `paymentStatus=PAID` immediately, and start the optional account-event flow below.
-- `data.status === 3`: card declined. Offer `card setup-link` and ask before retry.
-- `data.status === 4`: risk rule blocked. Show `risk get`, generate `risk link`, ask before retry.
+- `data.status === 3`: card declined. Offer `card setup-link --no-open` and ask before retry.
+- `data.status === 4`: risk rule blocked. Show `risk get`, generate `risk link --no-open`, ask before retry.
 - `data.status === 6`: other failure. Show the API message.
 
 Exit 7:
 
 - Payment requires 3DS.
 - Extract `data.channelPaymentResponse.action.redirectUrl`.
-- Send the redirect URL to the user.
+- Send the redirect URL to the user, exactly once, for their own browser.
 - Wait for `agent_order.succeeded` or `agent_order.failed` for the order before declaring success or failure.
+
+The challenge page is `USER_DEVICE_ONLY`. The issuer ACS fingerprints the device and scores automation, and the one-time code reaches the user's phone, not the agent — so an agent browser is soft-declined or stepped up rather than helped. Do not open, navigate, preview, screenshot, or fill it from the Agent runtime by any channel, and do not re-send the URL as a nudge: it is a single-load page. Completion is proven only by the order event. See `references/clink-browser-handoff.md`.
 
 Exit 3 or 4:
 

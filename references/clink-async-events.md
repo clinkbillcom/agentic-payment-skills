@@ -24,7 +24,7 @@ When a command prints a URL for user action, the CLI normally keeps running and 
 
 The first JSON envelope contains the URL or immediate command result. If the watch observes events, the CLI emits a second JSON envelope on stdout with the processed events.
 
-Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch.
+Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch. `--no-open` is unrelated and does not affect the watch: pass it on all of these commands so the CLI never launches a browser on its own host.
 
 `instruction create` and `instruction sign-url` are no exception: they use their built-in watch too. The draft envelope carries the Passkey URL, and the same process then blocks watching for `purchase_instruction.activated` correlated to that instruction. Send the URL as soon as the first envelope lands — the listener is already running behind it — and do not start an `events poll` alongside, which would put two watchers on one event.
 
@@ -39,7 +39,7 @@ That line means the Passkey URL is about to go out with nothing listening. Run t
 
 ## Start Monitoring At Emit Time
 
-Start the event listener the moment a browser-action URL is emitted, concurrently with sending that URL to the user. Do not wait for the user to report "done" before you begin listening; the completion event can arrive before, during, or after the user's message. Start a non-blocking watch through the available runtime and keep working while it listens, then correlate the event when it arrives.
+Start the event listener the moment a browser-action URL is emitted, concurrently with sending that URL to the user. Who may open that URL is a separate question with its own contract in `references/clink-browser-handoff.md`: the event is the proof of completion, so never verify a page by loading it from the Agent runtime. Do not wait for the user to report "done" before you begin listening; the completion event can arrive before, during, or after the user's message. Start a non-blocking watch through the available runtime and keep working while it listens, then correlate the event when it arrives.
 
 This applies to every browser-action URL, including hand-built URLs that are not CLI command output. In particular, the **Visa Passkey registration URL** (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) is not one of the built-in-watch commands above, so it has **no built-in watch**. Cover it with a concurrently-started `events poll` beginning when you send the URL.
 
