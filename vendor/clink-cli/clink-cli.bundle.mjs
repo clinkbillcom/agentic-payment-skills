@@ -8185,7 +8185,7 @@ function getHelpText(command, subcommand, nestedCommand) {
 // public/uat/ucp-merchants.json
 var ucp_merchants_default = {
   version: 1,
-  updated_at: "2026-08-06T00:00:00Z",
+  updated_at: "2026-08-10T00:00:00Z",
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
@@ -8198,6 +8198,12 @@ var ucp_merchants_default = {
       merchant_id: "mcht_f5d0rys1hjxe",
       enabled: true,
       description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     }
   ]
 };
@@ -14633,6 +14639,7 @@ async function ucpCheckoutComplete(context) {
   }
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink wallet init` or run `clink config set customer-id <customerId>`");
   const paymentMethodApi = createPaymentMethodApi(context);
+  const card = await resolveUcpCheckoutCardContext(context, paymentMethodApi, paymentInstrumentId);
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`);
   const idempotencyKey = randomUUID4();
   const refreshed = await executePaymentRequestWithRefresh({
@@ -14640,7 +14647,7 @@ async function ucpCheckoutComplete(context) {
       ...target,
       method: "POST",
       headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
-      body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId),
+      body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card),
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: context.globalOptions.dryRun
     })),
@@ -14649,7 +14656,32 @@ async function ucpCheckoutComplete(context) {
   });
   return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
 }
-function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
+async function resolveUcpCheckoutCardContext(context, paymentMethodApi, paymentInstrumentId) {
+  const cached = getStoredPaymentMethods(context).map((item) => ({ ...item }));
+  if (context.globalOptions.dryRun) {
+    return toUcpCheckoutCardContext(findPaymentMethodById(cached, paymentInstrumentId));
+  }
+  try {
+    const refreshedMethods = await paymentMethodApi.refreshPaymentMethods();
+    return toUcpCheckoutCardContext(findPaymentMethodById(refreshedMethods, paymentInstrumentId) ?? findPaymentMethodById(cached, paymentInstrumentId));
+  } catch {
+    return toUcpCheckoutCardContext(findPaymentMethodById(cached, paymentInstrumentId));
+  }
+}
+function findPaymentMethodById(items, paymentInstrumentId) {
+  return items.find((item) => item.paymentInstrumentId === paymentInstrumentId);
+}
+function toUcpCheckoutCardContext(method) {
+  if (!method) {
+    return {};
+  }
+  const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
+  return {
+    ...typeof brand === "string" && brand.trim() ? { cardScheme: brand.trim() } : {},
+    ...typeof method.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: method.visaRegistrationSucceeded } : {}
+  };
+}
+function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card) {
   return {
     payment: {
       instruments: [
@@ -14660,7 +14692,9 @@ function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId) {
           selected: true,
           credential: {
             type: "PAYMENT_GATEWAY",
-            token: paymentInstrumentId
+            token: paymentInstrumentId,
+            ...card.cardScheme ? { card_scheme: card.cardScheme } : {},
+            ...card.visaRegistrationSucceeded === void 0 ? {} : { visa_registration_succeeded: card.visaRegistrationSucceeded }
           }
         }
       ]
