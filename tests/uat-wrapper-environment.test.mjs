@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -76,6 +76,34 @@ test('wallet init rejects --name and derives the name from the email', async (co
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /--name is no longer used by wallet init/u);
+});
+
+test('TRAE wrapper isolates wallet config in a sandbox-writable directory', async (context) => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-payment-trae-wrapper-'));
+  context.after(() => rm(home, { recursive: true, force: true }));
+  const env = {
+    ...process.env,
+    HOME: home,
+    TRAE_SANDBOX_SBOX_ID: 'test-sandbox',
+  };
+
+  const setResult = spawnSync(wrapper, ['config', 'set', 'name', 'trae-probe', '--format', 'json'], {
+    encoding: 'utf8',
+    env,
+  });
+  assert.equal(setResult.status, 0, setResult.stderr);
+
+  const configDir = join(home, '.local', 'share', 'clink-cli', 'trae-work-cn');
+  const configPath = join(configDir, 'config.json');
+  assert.equal((await stat(configDir)).mode & 0o777, 0o700);
+  assert.equal((await stat(configPath)).mode & 0o777, 0o600);
+
+  const statusResult = spawnSync(wrapper, ['wallet', 'status', '--format', 'json'], {
+    encoding: 'utf8',
+    env,
+  });
+  assert.equal(statusResult.status, 0, statusResult.stderr);
+  assert.equal(JSON.parse(statusResult.stdout).data.configPath, configPath);
 });
 
 test('wrapper accepts zero arguments', () => {

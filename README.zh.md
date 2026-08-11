@@ -21,7 +21,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
 2. 否则向用户询问邮箱地址（唯一必填项；显示名取邮箱 `@` 前的部分，无需询问姓名）。
-3. 执行 `clink wallet init --email <email> --no-open --format json`，从该进程的实时 stderr 读取验证 URL 并原样发送给用户一次，保持同一进程运行，等待用户在浏览器中完成授权。
+3. 执行 `clink wallet init --email <email> --open --format json`。CLI 打开系统浏览器后，提示用户在其中完成授权并保持同一进程运行；仅当浏览器拉起失败时才展示验证 URL。
 4. 初始化成功且返回非空 `bindingUrl` 时，主动发送该绑卡 URL 作为下一步。
 
 ## 功能说明

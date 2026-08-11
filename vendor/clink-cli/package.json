@@ -2,6 +2,7 @@
   "name": "clink-cli-vendored",
   "version": "0.2.5",
   "upstreamCommit": "e2a9eb0d2b2cd29e715d851bf158987683886dff",
+  "upstreamPatch": "trae-config-dir-hotfix",
   "private": true,
   "type": "module",
   "bin": { "clink-cli": "clink-cli.bundle.mjs" },

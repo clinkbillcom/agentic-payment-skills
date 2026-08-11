@@ -5147,9 +5147,14 @@ var MERCHANT_LIST_URLS = {
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
-var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
+var CONFIG_OVERRIDE_DIR = process.env.CLINK_CONFIG_DIR?.trim();
+if (CONFIG_OVERRIDE_DIR && !path.isAbsolute(CONFIG_OVERRIDE_DIR)) {
+  throw configError("CLINK_CONFIG_DIR must be an absolute path");
+}
+var CONFIG_DIR = CONFIG_OVERRIDE_DIR ? path.normalize(CONFIG_OVERRIDE_DIR) : path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
+var CONFIG_DISPLAY_PATH = CONFIG_OVERRIDE_DIR ? CONFIG_PATH : "~/.clink-cli/config.json";
 var CONFIG_LOCK_TIMEOUT_MS = 1e4;
 var CONFIG_LOCK_STALE_MS = 5 * 6e4;
 function defaultConfig() {
@@ -13943,7 +13948,7 @@ ${verificationUrl}
     paymentMethodsCached: paymentMethodsCache.cached,
     paymentMethodCount: paymentMethodsCache.count,
     ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-    configPath: "~/.clink-cli/config.json"
+    configPath: CONFIG_DISPLAY_PATH
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -14043,7 +14048,7 @@ async function walletLogout(context) {
     serverRevocation,
     authorizationRemoved: Boolean(authorization),
     customerApiKeyRemoved: hadCustomerApiKey,
-    configPath: "~/.clink-cli/config.json"
+    configPath: CONFIG_DISPLAY_PATH
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -14066,7 +14071,7 @@ async function walletStatus(context) {
     hasCustomerApiKey: hasEffectiveCustomerApiKey,
     oauthRequired: Boolean(context.storedConfig.oauthRequired || storedAuthorization),
     defaultOpenLinks: context.runtimeConfig.defaultOpenLinks,
-    configPath: "~/.clink-cli/config.json"
+    configPath: CONFIG_DISPLAY_PATH
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -15209,7 +15214,7 @@ function buildConfigView(config) {
     hasCustomerApiKey: Boolean(config.customerApiKey),
     oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
-    configPath: "~/.clink-cli/config.json"
+    configPath: CONFIG_DISPLAY_PATH
   };
 }
 async function cachePaymentMethods(context, value) {

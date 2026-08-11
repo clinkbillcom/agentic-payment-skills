@@ -10,7 +10,7 @@ This skill is installed by many different host agents. Some drive a browser them
 - **3DS challenge.** The issuer ACS fingerprints the device and scores automation; the one-time code reaches the user's phone. An agent browser gets soft-declined or stepped up.
 - **Card binding/setup/modify.** The page collects a card number. An agent that reads or fills it moves the PAN into model context and agent logs.
 - **OAuth device verification.** An agent load races the user's page load and triggers duplicate verification-code sends or resend throttling.
-- **Any of them, opened by the CLI.** Browser launch happens on the host where `clink` runs. In a container, remote sandbox, or CI that is either a failed launch or a window on a machine the user cannot see.
+- **Any of them, opened by the CLI.** Browser launch happens on the host where `clink` runs. `wallet init --open` is an explicit system-browser handoff; all other link commands remain suppressed with `--no-open`.
 
 The fix is not to support every browser. It is to label each URL with who must act on it, and to keep every automatic-open path closed.
 
@@ -55,9 +55,9 @@ Never satisfy a Passkey page with a CDP virtual authenticator, and never fabrica
 
 ## CLI-Side Suppression
 
-Pass `--no-open` on every link-producing command, not only `wallet init`:
+Pass `--open` on every `wallet init` invocation. Pass `--no-open` on every other link-producing command:
 
-`wallet init`, `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
+`card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
 
 `--no-open` is a global flag and overrides both `--open` and the stored `default-open-links`. It suppresses browser launch only; it does not touch the built-in event watch, which `--no-watch` controls separately and which must stay on.
 
@@ -67,7 +67,7 @@ Do not rely on the stored default being `false`. It lives in the machine-wide co
 clink config get --format json
 ```
 
-If `defaultOpenLinks` is `true`, either turn it off or treat `--no-open` as mandatory on every link command for the rest of the workflow:
+If `defaultOpenLinks` is `true`, either turn it off or treat `--no-open` as mandatory on every link command other than `wallet init` for the rest of the workflow:
 
 ```bash
 clink config set default-open-links false --format json
@@ -105,7 +105,7 @@ This is why VIC authorization is collected before a schedule exists (`references
 ## Rules
 
 - Label the URL before sending it; an unlabeled URL is not sendable.
-- `--no-open` on every link command, and verify `defaultOpenLinks` once per workflow.
+- `--open` on `wallet init`, `--no-open` on every other link command, and verify `defaultOpenLinks` once per workflow.
 - Never automate a `USER_DEVICE_ONLY` page through any channel, including "just checking that it loads".
 - Never use a virtual authenticator or fabricated Passkey payload.
 - Emit single-load URLs exactly once.

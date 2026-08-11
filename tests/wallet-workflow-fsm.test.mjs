@@ -8,7 +8,7 @@ import {
   classifyWalletStatusObservation,
 } from '../lib/wallet-workflow-fsm.mjs';
 
-test('wallet init classifier returns a live OAuth authorization step without browser launch', () => {
+test('wallet init classifier returns a validated live OAuth URL without browser launch', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
@@ -26,21 +26,66 @@ test('wallet init classifier returns a live OAuth authorization step without bro
     result.authorizationUrl,
     'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
   );
+  assert.equal(result.browserOpened, false);
   assert.equal(result.browserOpenFailed, false);
 });
 
-test('wallet init classifier remains compatible with a legacy browser launch warning', () => {
+test('wallet init classifier tells users the system browser opened without exposing the URL', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
       'Complete authorization in your browser:',
-      'https://agent.example.com/oauth?user_code=ABCD',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
+      'Opening your browser...',
+      'Waiting for authorization...',
+    ].join('\n'),
+  });
+
+  assert.equal(result.state, WalletWorkflowState.OAUTH_AUTHORIZATION_REQUIRED);
+  assert.equal(result.action, WalletWorkflowAction.TELL_USER_BROWSER_OPENED_AND_WAIT);
+  assert.equal(result.terminal, false);
+  assert.equal(result.reason, 'wallet_init_oauth_browser_opened');
+  assert.equal(result.authorizationUrl, undefined);
+  assert.equal(result.browserOpened, true);
+  assert.equal(result.browserOpenFailed, false);
+});
+
+test('wallet init classifier falls back to the complete URL when browser launch fails', () => {
+  const result = classifyWalletInitObservation({
+    running: true,
+    stderr: [
+      'Complete authorization in your browser:',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
+      'Opening your browser...',
       'Could not open a browser automatically. Open the URL above in any browser.',
     ].join('\n'),
   });
 
   assert.equal(result.state, WalletWorkflowState.OAUTH_AUTHORIZATION_REQUIRED);
+  assert.equal(result.action, WalletWorkflowAction.SHOW_OAUTH_VERIFICATION_URL_AND_WAIT);
+  assert.equal(
+    result.authorizationUrl,
+    'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
+  );
+  assert.equal(result.browserOpened, false);
   assert.equal(result.browserOpenFailed, true);
+});
+
+test('wallet init classifier rejects a truncated OAuth URL instead of surfacing it', () => {
+  const result = classifyWalletInitObservation({
+    running: true,
+    stderr: [
+      'Complete authorization in your browser:',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH',
+      'Waiting for authorization...',
+    ].join('\n'),
+  });
+
+  assert.equal(result.state, WalletWorkflowState.WALLET_INIT_FAILED);
+  assert.equal(result.action, WalletWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.terminal, true);
+  assert.equal(result.reason, 'wallet_init_verification_url_incomplete');
+  assert.equal(result.authorizationUrl, undefined);
 });
 
 test('wallet init classifier returns success for ok wallet init output', () => {
