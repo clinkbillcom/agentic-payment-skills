@@ -5148,15 +5148,18 @@ var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
 var CONFIG_OVERRIDE_DIR = process.env.CLINK_CONFIG_DIR?.trim();
-if (CONFIG_OVERRIDE_DIR && !path.isAbsolute(CONFIG_OVERRIDE_DIR)) {
-  throw configError("CLINK_CONFIG_DIR must be an absolute path");
-}
-var CONFIG_DIR = CONFIG_OVERRIDE_DIR ? path.normalize(CONFIG_OVERRIDE_DIR) : path.join(os.homedir(), ".clink-cli");
+var CONFIG_OVERRIDE_IS_VALID = !CONFIG_OVERRIDE_DIR || path.isAbsolute(CONFIG_OVERRIDE_DIR);
+var CONFIG_DIR = CONFIG_OVERRIDE_DIR && CONFIG_OVERRIDE_IS_VALID ? path.normalize(CONFIG_OVERRIDE_DIR) : path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
-var CONFIG_DISPLAY_PATH = CONFIG_OVERRIDE_DIR ? CONFIG_PATH : "~/.clink-cli/config.json";
+var CONFIG_DISPLAY_PATH = CONFIG_OVERRIDE_DIR && CONFIG_OVERRIDE_IS_VALID ? CONFIG_PATH : "~/.clink-cli/config.json";
 var CONFIG_LOCK_TIMEOUT_MS = 1e4;
 var CONFIG_LOCK_STALE_MS = 5 * 6e4;
+function assertConfigOverrideDirectory() {
+  if (!CONFIG_OVERRIDE_IS_VALID) {
+    throw configError("CLINK_CONFIG_DIR must be an absolute path");
+  }
+}
 function defaultConfig() {
   return {
     baseUrl: DEFAULT_BASE_URL,
@@ -5164,6 +5167,7 @@ function defaultConfig() {
   };
 }
 async function readStoredConfig() {
+  assertConfigOverrideDirectory();
   try {
     const content = await readFile(CONFIG_PATH, "utf8");
     return normalizeStoredConfig(JSON.parse(content));
@@ -5449,6 +5453,7 @@ ${Date.now()}
   }
 }
 async function ensureConfigDirectory() {
+  assertConfigOverrideDirectory();
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
   if (process.platform !== "win32") {
     await chmod(CONFIG_DIR, 448);

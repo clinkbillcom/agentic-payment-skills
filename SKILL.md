@@ -131,6 +131,7 @@ FSM action contract:
 | `STOP_PAYMENT_FAILURE` | Stop the payment path or offer an explicit recovery; do not retry automatically. |
 | `VERIFY_BEFORE_RETRY` | Treat payment state as unknown and verify through a safe status/idempotency path before retry. |
 | `START_WALLET_SETUP` | Start wallet/config recovery before any new payment attempt. |
+| `WAIT_FOR_WALLET_INIT_PROGRESS` | Keep the original `wallet init --open` process running without showing its URL or claiming the browser opened until stderr reports either the browser-open attempt or its failure. |
 | `TELL_USER_BROWSER_OPENED_AND_WAIT` | For `wallet init --open`, do not show the verification URL. Tell the user the Clink page opened in the system browser, ask them to finish email verification and click Confirm, and keep the same process waiting. |
 | `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT` | Use only when `--open` reports browser-launch failure. Read the exact verification URL only from that original process's live stderr, then output the complete value of `authorizationUrl` verbatim on its own line. Do not add, remove, parse, encode, decode, rebuild, reduce to an origin, or truncate any character; preserve the query after `?` and the fragment after `#`. Send it once and keep that same process running. |
 | `RETURN_WALLET_PLAN` | Report a `--dry-run` Device Authorization request as planned, not initialized. |

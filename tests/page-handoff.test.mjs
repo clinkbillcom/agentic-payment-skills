@@ -5,6 +5,7 @@ import {
   AGENT_BROWSER_CHANNELS,
   AGENT_BROWSER_VERBS,
   LINK_COMMANDS_REQUIRING_NO_OPEN,
+  LINK_COMMANDS_REQUIRING_OPEN,
   PAGE_HANDOFF_CONTRACTS,
   PageHandoffAction,
   PageHandoffActor,
@@ -43,7 +44,11 @@ test('Clink and Visa pages that need a person route to the user own device', () 
     assert.equal(result.agentBrowserAllowed, false, kind);
     assert.equal(result.terminal, false, kind);
     assert.ok(result.doNotAutomateReason, `${kind} must say why it cannot be automated`);
-    assert.deepEqual(result.cliFlags, ['--no-open'], kind);
+    assert.deepEqual(
+      result.cliFlags,
+      kind === PageHandoffKind.OAUTH_DEVICE_VERIFICATION ? ['--open'] : ['--no-open'],
+      kind,
+    );
     assert.equal(result.verbatimUrl, true, kind);
   }
 });
@@ -189,9 +194,11 @@ test('the prohibition enumerates channels and verbs, not just opening', () => {
   assert.deepEqual(result.doNotAutomateVerbs, AGENT_BROWSER_VERBS);
 });
 
-test('every command that can launch a browser is listed for --no-open', () => {
+test('wallet init requires --open and every other link command requires --no-open', () => {
+  assert.deepEqual(LINK_COMMANDS_REQUIRING_OPEN, ['wallet init']);
+  assert.equal(LINK_COMMANDS_REQUIRING_NO_OPEN.includes('wallet init'), false);
+
   for (const command of [
-    'wallet init',
     'card binding-link',
     'card setup-link',
     'card modify-link',

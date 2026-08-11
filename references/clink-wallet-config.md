@@ -24,6 +24,7 @@ After OAuth succeeds, `wallet init` calls the card binding-link endpoint to refr
 
 Classify live stderr and final init output with `classifyWalletInitObservation` from `lib/wallet-workflow-fsm.mjs`:
 
+- `WAIT_FOR_WALLET_INIT_PROGRESS`: keep the original process running and do not show the URL while stderr is incomplete or the browser-open result has not been reported.
 - `TELL_USER_BROWSER_OPENED_AND_WAIT`: system-browser handoff succeeded. Do not show the URL; tell the user the page opened, ask them to complete email verification and click Confirm, and keep waiting on the same process.
 - `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`: use only after browser-launch failure. Read the URL only from live stderr, send it once, and keep waiting on the same `wallet init --open` process.
 - `RETURN_WALLET_PLAN`: report `--dry-run` as planned, not initialized.

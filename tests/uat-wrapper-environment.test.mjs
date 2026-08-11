@@ -106,6 +106,28 @@ test('TRAE wrapper isolates wallet config in a sandbox-writable directory', asyn
   assert.equal(JSON.parse(statusResult.stdout).data.configPath, configPath);
 });
 
+test('wrapper reports a relative CLINK_CONFIG_DIR as a structured config error', () => {
+  const result = spawnSync(wrapper, ['wallet', 'status', '--format', 'json'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      CLINK_CONFIG_DIR: 'relative/config',
+    },
+  });
+
+  assert.equal(result.status, 3);
+  assert.equal(result.stdout, '');
+  assert.deepEqual(JSON.parse(result.stderr), {
+    ok: false,
+    error: {
+      type: 'config_error',
+      code: 3,
+      message: 'CLINK_CONFIG_DIR must be an absolute path',
+    },
+  });
+  assert.doesNotMatch(result.stderr, /CliError|node:internal|clink-cli\.bundle\.mjs/u);
+});
+
 test('wrapper accepts zero arguments', () => {
   const result = spawnSync(wrapper, [], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);

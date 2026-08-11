@@ -114,6 +114,7 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /clink wallet logout --format json/u);
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
+  assert.match(skill, /WAIT_FOR_WALLET_INIT_PROGRESS/u);
   assert.match(skill, /TELL_USER_BROWSER_OPENED_AND_WAIT/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
   assert.match(
@@ -738,9 +739,8 @@ test('the per-page actor table stays in SKILL.md and the handoff reference', () 
   assert.match(browserHandoff, /MERCHANT_PRODUCT_PAGE/u);
 });
 
-// The narrow rule was already right for wallet init and only for wallet init. Every other link
-// command could still launch a browser on the CLI host, which in a container or CI is a window
-// nobody can see.
+// Wallet init deliberately opens the user's system browser. Every other link-producing command
+// must keep host-side browser launch suppressed.
 test('--no-open covers every link command other than wallet init', () => {
   for (const body of [skill, cliInvocation, browserHandoff]) {
     for (const command of [
