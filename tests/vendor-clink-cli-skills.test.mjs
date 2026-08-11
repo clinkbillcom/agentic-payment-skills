@@ -422,10 +422,10 @@ test('vendored CLI documents typed polling as a draining any-of filter', () => {
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.5');
+  assert.equal(vendorPackage.version, '0.2.8');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'e2a9eb0d2b2cd29e715d851bf158987683886dff',
+    '26e088bbe438a0f4f667fbae4e3943dc245f6e93',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
@@ -439,6 +439,32 @@ test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.match(bundleSource, /eventTimePrecisionMs/u);
   assert.match(bundleSource, /customer-api-key cannot be set in local config/u);
   assert.doesNotMatch(bundleSource, /\/agent\/cwallet\/customer\/bootstrap/u);
+});
+
+test('vendored CLI converts decimal checkout update amounts to minor units', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-checkout-update-'));
+  try {
+    const execution = await runBundleAsync([
+      'ucp-checkout',
+      'update',
+      '--checkout-id',
+      'chk_contract',
+      '--currency',
+      'HKD',
+      '--line-items',
+      '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"349.90"},"quantity":1}]',
+      '--dry-run',
+      '--format',
+      'json',
+    ], { HOME: home });
+
+    assert.equal(execution.status, 0, execution.stderr);
+    const output = JSON.parse(execution.stdout);
+    assert.equal(output.data.request.method, 'PUT');
+    assert.equal(output.data.request.body.line_items[0].item.price, 34990);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test('vendored CLI embeds the .dev test API, agent, and dashboard domains', () => {

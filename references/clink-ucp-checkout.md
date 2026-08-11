@@ -128,7 +128,7 @@ quantity comes from the user intent. merchantCategoryCode comes from agent class
 
 Classify the `parse-item` output with `classifyUcpParseItemObservation`. If there is one available item, select it. If there are multiple available items and the user is present, ask the user to choose. If there are multiple available items in a long task where the user is absent, select by frozen user intent and record the reason. Stop if no available item exists or required fields are missing.
 
-Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching, idempotency, and checkout validation. The external UCP API receives a long minor-unit amount; when using `clink ucp-checkout create`, its create path converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit values into that external UCP long before the API request. Do not treat a different product total as "close enough".
+Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching, idempotency, and checkout validation. The external UCP API receives long minor-unit amounts. `clink ucp-checkout create` converts `line_items` money fields such as `price` / `amount` from user-facing decimal major-unit strings by `--currency`; live `ucp-checkout update` reads the checkout currency and performs the same conversion before PUT, while update `--dry-run` requires `--currency`. JSON integer money values remain legacy minor-unit update inputs. Do not treat a different product total as "close enough".
 
 ## Step 0.5: Classify Fulfillment And Shipping
 
