@@ -115,12 +115,14 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
   assert.match(skill, /WAIT_FOR_WALLET_INIT_PROGRESS/u);
-  assert.match(skill, /TELL_USER_BROWSER_OPENED_AND_WAIT/u);
+  assert.match(skill, /TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
+  assert.match(skill, /DEFER_OAUTH_TO_WALLET_WORKFLOW/u);
   assert.match(
     skill,
     /For `wallet init --open`, do not show the verification URL/u,
   );
+  assert.match(skill, /claim that a visible window was confirmed/iu);
   assert.match(skill, /wallet init --email <email> --open --format json/u);
   assert.doesNotMatch(skill, /wallet init --email <email> \[--name/u);
   assert.match(skill, /there is no `--name` flag/u);

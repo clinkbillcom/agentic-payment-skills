@@ -21,7 +21,7 @@ After installation, the agent must immediately continue with wallet initializati
 
 1. Run `clink wallet status --format json`. If the wallet is already ready (OAuth or complete legacy CSK), report readiness and stop.
 2. Otherwise ask the user for their email address (the only required input; the display name is derived from the email text before `@`).
-3. Run `clink wallet init --email <email> --open --format json`. When the CLI opens the system browser, tell the user to complete authorization there and keep the same process running; show the URL only if browser launch fails.
+3. Run `clink wallet init --email <email> --open --format json`. When the CLI requests a system-browser launch, tell the user to complete authorization in the requested browser window and keep the same process running; show the URL only if browser launch fails.
 4. When init succeeds with a non-empty `bindingUrl`, proactively send that card-binding URL as the next step.
 
 ## What It Does

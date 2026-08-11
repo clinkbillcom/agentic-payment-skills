@@ -24,7 +24,7 @@ test('wallet init classifier waits when the URL arrives before the browser-open 
   assert.equal(result.terminal, false);
   assert.equal(result.reason, 'wallet_init_progress_pending');
   assert.equal(result.authorizationUrl, undefined);
-  assert.equal(result.browserOpened, false);
+  assert.equal(result.browserOpenRequested, false);
   assert.equal(result.browserOpenFailed, false);
 });
 
@@ -43,7 +43,7 @@ test('wallet init classifier waits for a split verification URL line to finish',
   assert.equal(result.authorizationUrl, undefined);
 });
 
-test('wallet init classifier tells users the system browser opened without exposing the URL', () => {
+test('wallet init classifier reports a system-browser launch request without claiming success', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
@@ -55,11 +55,12 @@ test('wallet init classifier tells users the system browser opened without expos
   });
 
   assert.equal(result.state, WalletWorkflowState.OAUTH_AUTHORIZATION_REQUIRED);
-  assert.equal(result.action, WalletWorkflowAction.TELL_USER_BROWSER_OPENED_AND_WAIT);
+  assert.equal(result.action, WalletWorkflowAction.TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT);
   assert.equal(result.terminal, false);
-  assert.equal(result.reason, 'wallet_init_oauth_browser_opened');
+  assert.equal(result.reason, 'wallet_init_oauth_browser_open_requested');
   assert.equal(result.authorizationUrl, undefined);
-  assert.equal(result.browserOpened, true);
+  assert.equal(result.browserOpenRequested, true);
+  assert.equal(result.browserOpened, undefined);
   assert.equal(result.browserOpenFailed, false);
 });
 
@@ -80,7 +81,7 @@ test('wallet init classifier falls back to the complete URL when browser launch 
   assert.equal(result.action, WalletWorkflowAction.SHOW_OAUTH_VERIFICATION_URL_AND_WAIT);
   assert.equal(result.reason, 'wallet_init_oauth_browser_open_failed');
   assert.equal(result.authorizationUrl, authorizationUrl);
-  assert.equal(result.browserOpened, false);
+  assert.equal(result.browserOpenRequested, true);
   assert.equal(result.browserOpenFailed, true);
 });
 
@@ -231,6 +232,30 @@ test('wallet init classifier surfaces terminal errors', () => {
   assert.equal(result.action, WalletWorkflowAction.SURFACE_ERROR);
   assert.equal(result.terminal, true);
   assert.equal(result.reason, 'wallet_init_failed');
+});
+
+test('wallet init classifier keeps the final JSON error after live progress', () => {
+  const error = {
+    type: 'auth_error',
+    code: 409,
+    message: 'A newer wallet init started; this login attempt has been cancelled.',
+  };
+  const result = classifyWalletInitObservation({
+    exitCode: 4,
+    stderr: [
+      'Starting wallet login; this attempt takes precedence over any earlier one.',
+      'Complete authorization in your browser:',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%40example.com&name=User',
+      'Opening your browser...',
+      'Waiting for authorization...',
+      JSON.stringify({ ok: false, error }),
+    ].join('\n'),
+  });
+
+  assert.equal(result.state, WalletWorkflowState.WALLET_INIT_FAILED);
+  assert.equal(result.action, WalletWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.terminal, true);
+  assert.deepEqual(result.error, error);
 });
 
 test('wallet status classifier accepts effective OAuth and rejects legacy override visibility', () => {

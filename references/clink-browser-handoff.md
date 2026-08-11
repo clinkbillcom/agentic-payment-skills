@@ -75,7 +75,7 @@ clink config set default-open-links false --format json
 
 ## Handoff Payload
 
-The skill cannot know whether the host renders clickable links, runs in a terminal, posts to a chat surface, or is read on a phone. So for every `USER_DEVICE_ONLY` and `USER_PREFERRED` page, emit:
+The skill cannot know whether the host renders clickable links, runs in a terminal, posts to a chat surface, or is read on a phone. For every `USER_DEVICE_ONLY` and `USER_PREFERRED` page other than OAuth while `wallet init --open` manages the system-browser request, emit:
 
 1. The URL **verbatim on its own line** — no shortening, re-encoding, origin reduction, or dropped query/fragment.
 2. One line telling the user to open it in **their own browser, not this agent's browser**.
@@ -84,7 +84,7 @@ The skill cannot know whether the host renders clickable links, runs in a termin
 
 Offering to continue on a phone is often right rather than a fallback: Passkey approval and 3DS codes usually live there. A QR rendering of the same URL is a legitimate transfer channel when the host can display one.
 
-`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages: emit the URL exactly once and never re-send it as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
+`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages. For OAuth, `DEFER_OAUTH_TO_WALLET_WORKFLOW` keeps the URL hidden unless the browser launch reports failure; then emit it once through `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. Emit the other single-load URLs exactly once and never re-send any of them as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
 
 ## Unattended Runs
 
@@ -96,7 +96,8 @@ This is why VIC authorization is collected before a schedule exists (`references
 
 | Action | Required behavior |
 | --- | --- |
-| `HANDOFF_TO_USER_DEVICE` | Emit the verbatim URL once with the handoff payload above, keep the built-in watch or `events poll` running, and do not touch the page from the agent runtime by any channel. |
+| `DEFER_OAUTH_TO_WALLET_WORKFLOW` | Do not emit the OAuth URL. Let `classifyWalletInitObservation` keep it hidden after a system-browser request or surface it once after a reported launch failure. |
+| `HANDOFF_TO_USER_DEVICE` | Emit the non-OAuth verbatim URL once with the handoff payload above, keep the built-in watch or `events poll` running, and do not touch the page from the agent runtime by any channel. |
 | `HANDOFF_TO_USER_BROWSER` | Same handoff and same listener; the page holds no secret entry, but the agent still must not complete it on the user's behalf. |
 | `ALLOW_AGENT_BROWSER` | Merchant/product page. Use browser, MCP, or page extraction normally; no handoff and no event watch. |
 | `SURFACE_BROWSER_HANDOFF_GAP` | No human can act — unattended run or no user channel. Report the missing authorization and stop. Do not emit the URL, do not create a draft, do not substitute another mandate. |
@@ -108,6 +109,6 @@ This is why VIC authorization is collected before a schedule exists (`references
 - `--open` on `wallet init`, `--no-open` on every other link command, and verify `defaultOpenLinks` once per workflow.
 - Never automate a `USER_DEVICE_ONLY` page through any channel, including "just checking that it loads".
 - Never use a virtual authenticator or fabricated Passkey payload.
-- Emit single-load URLs exactly once.
+- Emit non-OAuth single-load URLs exactly once; emit OAuth only once after a reported system-browser launch failure.
 - Proof of completion is the event, never the browser.
 - An unattended run that needs a browser page is a reported gap, not a wait.

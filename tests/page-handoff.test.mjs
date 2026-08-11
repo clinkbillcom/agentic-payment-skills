@@ -26,9 +26,8 @@ test('every declared kind has a contract and every contract is declared', () => 
   assert.deepEqual([...contracted].filter((k) => !declared.has(k)), []);
 });
 
-test('Clink and Visa pages that need a person route to the user own device', () => {
+test('non-OAuth Clink and Visa pages that need a person route to the user own device', () => {
   for (const kind of [
-    PageHandoffKind.OAUTH_DEVICE_VERIFICATION,
     PageHandoffKind.CARD_BINDING,
     PageHandoffKind.CARD_SETUP,
     PageHandoffKind.CARD_MODIFY,
@@ -44,13 +43,24 @@ test('Clink and Visa pages that need a person route to the user own device', () 
     assert.equal(result.agentBrowserAllowed, false, kind);
     assert.equal(result.terminal, false, kind);
     assert.ok(result.doNotAutomateReason, `${kind} must say why it cannot be automated`);
-    assert.deepEqual(
-      result.cliFlags,
-      kind === PageHandoffKind.OAUTH_DEVICE_VERIFICATION ? ['--open'] : ['--no-open'],
-      kind,
-    );
+    assert.deepEqual(result.cliFlags, ['--no-open'], kind);
     assert.equal(result.verbatimUrl, true, kind);
+    assert.equal(result.emitUrl, true, kind);
   }
+});
+
+test('OAuth delegates URL exposure to the wallet workflow', () => {
+  const result = classifyPageHandoff({
+    kind: PageHandoffKind.OAUTH_DEVICE_VERIFICATION,
+    url: 'https://agent.example.test/oauth?user_code=ABCD',
+  });
+
+  assert.equal(result.actor, PageHandoffActor.USER_DEVICE_ONLY);
+  assert.equal(result.state, PageHandoffState.OAUTH_BROWSER_HANDOFF_MANAGED);
+  assert.equal(result.action, PageHandoffAction.DEFER_OAUTH_TO_WALLET_WORKFLOW);
+  assert.equal(result.terminal, false);
+  assert.deepEqual(result.cliFlags, ['--open']);
+  assert.equal(result.emitUrl, false);
 });
 
 test('the risk page stays the user decision without claiming secret entry', () => {
@@ -75,6 +85,7 @@ test('merchant product pages stay agent work', () => {
   assert.equal(result.agentBrowserAllowed, true);
   assert.equal(result.doNotAutomateReason, null);
   assert.deepEqual(result.cliFlags, []);
+  assert.equal(result.emitUrl, false);
   assert.equal(result.watch, 'none');
 });
 
@@ -86,6 +97,7 @@ test('an unattended run never emits a page only a human can finish', () => {
     assert.equal(result.terminal, true, kind);
     assert.equal(result.reason, 'browser_handoff_required_on_unattended_run', kind);
     assert.equal(result.agentBrowserAllowed, false, kind);
+    assert.equal(result.emitUrl, false, kind);
   }
 });
 
