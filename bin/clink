@@ -4,10 +4,6 @@ set -eu
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 BUNDLE="$SCRIPT_DIR/../vendor/clink-cli/clink-cli.bundle.mjs"
 
-if [ -n "${TRAE_SANDBOX_SBOX_ID:-}" ] && [ -z "${CLINK_CONFIG_DIR:-}" ]; then
-  export CLINK_CONFIG_DIR="$HOME/.local/share/clink-cli/trae-work-cn"
-fi
-
 CLINK_WALLET_INIT_ENVIRONMENT=production
 export CLINK_WALLET_INIT_ENVIRONMENT
 exec node "$BUNDLE" "$@"

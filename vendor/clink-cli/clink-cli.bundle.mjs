@@ -13,11 +13,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -4808,6 +4804,7 @@ var require_yauzl = __commonJS({
 // dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir } from "node:os";
+import { performance } from "node:perf_hooks";
 
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -5147,19 +5144,12 @@ var MERCHANT_LIST_URLS = {
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
-var CONFIG_OVERRIDE_DIR = process.env.CLINK_CONFIG_DIR?.trim();
-var CONFIG_OVERRIDE_IS_VALID = !CONFIG_OVERRIDE_DIR || path.isAbsolute(CONFIG_OVERRIDE_DIR);
-var CONFIG_DIR = CONFIG_OVERRIDE_DIR && CONFIG_OVERRIDE_IS_VALID ? path.normalize(CONFIG_OVERRIDE_DIR) : path.join(os.homedir(), ".clink-cli");
+var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
-var CONFIG_DISPLAY_PATH = CONFIG_OVERRIDE_DIR && CONFIG_OVERRIDE_IS_VALID ? CONFIG_PATH : "~/.clink-cli/config.json";
+var WALLET_INIT_GENERATION_PATH = path.join(CONFIG_DIR, "wallet-init-generation");
 var CONFIG_LOCK_TIMEOUT_MS = 1e4;
 var CONFIG_LOCK_STALE_MS = 5 * 6e4;
-function assertConfigOverrideDirectory() {
-  if (!CONFIG_OVERRIDE_IS_VALID) {
-    throw configError("CLINK_CONFIG_DIR must be an absolute path");
-  }
-}
 function defaultConfig() {
   return {
     baseUrl: DEFAULT_BASE_URL,
@@ -5167,7 +5157,6 @@ function defaultConfig() {
   };
 }
 async function readStoredConfig() {
-  assertConfigOverrideDirectory();
   try {
     const content = await readFile(CONFIG_PATH, "utf8");
     return normalizeStoredConfig(JSON.parse(content));
@@ -5186,6 +5175,24 @@ async function updateStoredConfig(update) {
     await writeStoredConfigUnlocked(next);
     return next;
   });
+}
+async function beginWalletInit(startedAt = Date.now()) {
+  if (!Number.isFinite(startedAt) || startedAt < 0) {
+    throw configError("wallet init start time is invalid");
+  }
+  return withConfigLock(async () => {
+    const current = await readWalletInitState();
+    if (current?.startedAt !== void 0 && current.startedAt > startedAt) {
+      return void 0;
+    }
+    const generation = randomUUID();
+    await writeAtomicTextFile(WALLET_INIT_GENERATION_PATH, `${JSON.stringify({ generation, startedAt })}
+`, 384);
+    return generation;
+  });
+}
+async function isWalletInitCurrent(generation) {
+  return (await readWalletInitState())?.generation === generation;
 }
 function enforceCredentialInvariant(current, next) {
   if (current.oauthRequired || current.authorization || next.oauthRequired || next.authorization) {
@@ -5423,6 +5430,52 @@ async function writeStoredConfigUnlocked(config) {
     await rm(tempPath, { force: true });
   }
 }
+async function writeAtomicTextFile(filePath, content, mode) {
+  await ensureConfigDirectory();
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, content, {
+      encoding: "utf8",
+      flag: "wx",
+      mode
+    });
+    if (process.platform !== "win32") {
+      await chmod(tempPath, mode);
+    }
+    await rename(tempPath, filePath);
+    if (process.platform !== "win32") {
+      await chmod(filePath, mode);
+    }
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
+async function readWalletInitState() {
+  try {
+    const content = (await readFile(WALLET_INIT_GENERATION_PATH, "utf8")).trim();
+    if (!content) {
+      return void 0;
+    }
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const record = parsed;
+        const generation = nonEmptyString(record.generation);
+        const startedAt = finiteNumber(record.startedAt);
+        if (generation && startedAt !== void 0 && startedAt >= 0) {
+          return { generation, startedAt };
+        }
+      }
+    } catch {
+    }
+    return { generation: content };
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return void 0;
+    }
+    throw configError(`failed to read wallet init generation: ${error.message}`);
+  }
+}
 async function withConfigLock(operation) {
   await ensureConfigDirectory();
   const deadline = Date.now() + CONFIG_LOCK_TIMEOUT_MS;
@@ -5453,7 +5506,6 @@ ${Date.now()}
   }
 }
 async function ensureConfigDirectory() {
-  assertConfigOverrideDirectory();
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
   if (process.platform !== "win32") {
     await chmod(CONFIG_DIR, 448);
@@ -7316,7 +7368,7 @@ Arguments:
   --merchant-name <name>          Optional merchant display name override for create
   --merchant-category-code <code> Merchant category code for create
   --order-channel-id <id>         Optional advanced override; backend derives it from merchant-url
-  --currency <currency>           Checkout currency for create, for example USD
+  --currency <currency>           Checkout currency for create; update validation/dry-run hint
   --line-items <json>             UCP line_items JSON array for create/update
   --buyer <json>                  UCP buyer JSON object for create/update
   --shipping-address <json>       Shipping address JSON object for create/update
@@ -7334,8 +7386,10 @@ Notes:
   create sends merchant_url, customer_id, buyer.email, and context.currency.
   customer_id and buyer.email come from the local clink config JSON.
   Idempotency-Key is generated by clink for create/update/complete; callers do not pass it.
-  create treats line_items price/amount fields as decimal major-unit values and converts them by
-  --currency before calling the external checkout API; --currency is sent as context.currency.
+  create treats line_items price/amount fields as decimal major-unit values and converts them to
+  minor units by --currency. Live update reads the existing checkout currency and converts decimal
+  strings such as "12.00"; integer JSON numbers remain accepted as minor units for compatibility.
+  update --dry-run requires --currency because it performs no read request.
   complete sends a standard UCP payment object with payment.instruments[0].id as local
   config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
   omitted, it uses the local cached default card.
@@ -7347,7 +7401,7 @@ Examples:
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
   clink ucp-checkout get --checkout-id chk_xxx --format json
-  clink ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' --format json
+  clink ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' --format json
   clink ucp-checkout complete --checkout-id chk_xxx --format json
   clink ucp-checkout cancel --checkout-id chk_xxx --format json
 `;
@@ -7635,6 +7689,7 @@ Required Arguments:
   --line-items <json>             Replacement UCP line_items JSON array
 
 Optional Arguments:
+  --currency <currency>           Expected checkout currency; required only with --dry-run
   --buyer <json>                  Replacement UCP buyer JSON object
   --shipping-address <json>       Replacement shipping address JSON object
   --metadata <json>               Replacement metadata JSON object
@@ -7649,12 +7704,16 @@ Endpoint:
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Idempotency-Key is generated by clink.
-  update sends line_items JSON unchanged.
+  Live update fetches the existing checkout first and converts line_items price/amount decimal
+  strings such as "12.00" to minor-unit integers using its currency. Existing integer JSON numbers
+  remain minor-unit values for backward compatibility. --currency, when supplied, must match the
+  fetched checkout and is not sent in the PUT body. --dry-run performs no fetch, so it requires
+  --currency as the conversion hint.
 
 Examples:
   clink ucp-checkout update \\
     --checkout-id chk_xxx \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":1200},"quantity":1}]' \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' \\
     --format json
 `;
 var UCP_CHECKOUT_CANCEL_HELP = `clink ucp-checkout cancel
@@ -8415,6 +8474,7 @@ var DEFAULT_SERVER_POLL_INTERVAL_SECONDS = 5;
 var CLIENT_POLL_PADDING_SECONDS = 1;
 var SLOW_DOWN_INCREMENT_SECONDS = 5;
 var ACCESS_TOKEN_REFRESH_WINDOW_MS = 6e4;
+var WALLET_INIT_SUPERSEDED_MESSAGE = "A newer wallet init started; this login attempt has been cancelled.";
 var OAuthProtocolError = class extends Error {
   errorCode;
   status;
@@ -8471,11 +8531,12 @@ async function pollDeviceToken(options2) {
   const deadline = Date.now() + options2.expiresIn * 1e3;
   let intervalSeconds = (nonNegativeNumber(options2.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS) + CLIENT_POLL_PADDING_SECONDS;
   for (; ; ) {
+    await assertWalletInitIsCurrent(options2.isCurrent);
     if (Date.now() >= deadline) {
       throw authError("Authorization expired; run `clink wallet init` again.");
     }
     try {
-      return await requestToken({
+      const token = await requestToken({
         baseUrl: options2.baseUrl,
         timeoutMs: options2.timeoutMs,
         body: {
@@ -8485,6 +8546,7 @@ async function pollDeviceToken(options2) {
           device_code: options2.deviceCode
         }
       });
+      return token;
     } catch (error) {
       if (!(error instanceof OAuthProtocolError)) {
         throw error;
@@ -8726,6 +8788,11 @@ async function sleepUntilNextPoll(intervalSeconds, deadline, pause) {
     throw authError("Authorization expired; run `clink wallet init` again.");
   }
   await pause(Math.min(intervalSeconds * 1e3, remaining));
+}
+async function assertWalletInitIsCurrent(isCurrent) {
+  if (isCurrent && !await isCurrent()) {
+    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+  }
 }
 function requiredString(value, message) {
   if (typeof value !== "string" || value.length === 0) {
@@ -13308,7 +13375,7 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-async function runCli(argv) {
+async function runCli(argv, startedAt = performance.timeOrigin + performance.now()) {
   const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
   validateEnvironmentFlagScope(command, subcommand, args.flags);
@@ -13328,7 +13395,8 @@ async function runCli(argv) {
     storedConfig,
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
-    globalOptions
+    globalOptions,
+    startedAt
   };
   await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
@@ -13916,6 +13984,12 @@ async function walletInit(context) {
     return EXIT_CODES.OK;
   }
   const verificationUrl = buildVerificationUrl(authorization, email, name);
+  const walletInitGeneration = await beginWalletInit(context.startedAt);
+  if (!walletInitGeneration) {
+    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+  }
+  const isCurrent = () => isWalletInitCurrent(walletInitGeneration);
+  process.stderr.write("Starting wallet login; this attempt takes precedence over any earlier one.\n");
   process.stderr.write(`Complete authorization in your browser:
 ${verificationUrl}
 `);
@@ -13931,16 +14005,26 @@ ${verificationUrl}
     expiresIn: authorization.expiresIn,
     interval: authorization.interval,
     timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: false
+    dryRun: false,
+    isCurrent
   });
   const storedAuthorization = toStoredAuthorization(deviceId, token, baseUrl);
-  const nextConfig = await updateStoredConfig((current) => mergeOAuthLoginConfig(current, {
-    baseUrl,
-    email,
-    name,
-    customerId: token.customerId,
-    authorization: storedAuthorization
-  }));
+  let nextConfig;
+  try {
+    nextConfig = await updateStoredConfig(async (current) => {
+      await assertWalletInitCurrent(isCurrent);
+      return mergeOAuthLoginConfig(current, {
+        baseUrl,
+        email,
+        name,
+        customerId: token.customerId,
+        authorization: storedAuthorization
+      });
+    });
+  } catch (error) {
+    await revokeUncommittedWalletAuthorization(storedAuthorization, context.globalOptions.timeoutMs);
+    throw error;
+  }
   const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
   printSuccess({
     customerId: token.customerId,
@@ -13953,9 +14037,37 @@ ${verificationUrl}
     paymentMethodsCached: paymentMethodsCache.cached,
     paymentMethodCount: paymentMethodsCache.count,
     ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-    configPath: CONFIG_DISPLAY_PATH
+    configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function assertWalletInitCurrent(isCurrent) {
+  if (!await isCurrent()) {
+    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+  }
+}
+async function revokeUncommittedWalletAuthorization(authorization, timeoutMs) {
+  let storedConfig;
+  try {
+    storedConfig = await readStoredConfig();
+  } catch {
+    process.stderr.write("Warning: could not verify whether the wallet authorization was stored; skipping revoke to avoid invalidating a committed login.\n");
+    return;
+  }
+  const storedAuthorization = storedConfig.authorization;
+  const committed = storedAuthorization !== void 0 && (authorization.sessionId !== void 0 && storedAuthorization.sessionId === authorization.sessionId || storedAuthorization.accessToken === authorization.accessToken && storedAuthorization.refreshToken === authorization.refreshToken);
+  if (committed) {
+    return;
+  }
+  try {
+    await revokeStoredAuthorization({
+      authorization,
+      timeoutMs,
+      dryRun: false
+    });
+  } catch {
+    process.stderr.write("Warning: failed to revoke an uncommitted wallet authorization; it will expire automatically.\n");
+  }
 }
 async function refreshPaymentMethodsAfterWalletInit(context, config) {
   if (!config.customerId || !config.authorization && !config.customerApiKey) {
@@ -14053,7 +14165,7 @@ async function walletLogout(context) {
     serverRevocation,
     authorizationRemoved: Boolean(authorization),
     customerApiKeyRemoved: hadCustomerApiKey,
-    configPath: CONFIG_DISPLAY_PATH
+    configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -14076,7 +14188,7 @@ async function walletStatus(context) {
     hasCustomerApiKey: hasEffectiveCustomerApiKey,
     oauthRequired: Boolean(context.storedConfig.oauthRequired || storedAuthorization),
     defaultOpenLinks: context.runtimeConfig.defaultOpenLinks,
-    configPath: CONFIG_DISPLAY_PATH
+    configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -14578,7 +14690,7 @@ async function ucpCheckoutCreate(context) {
     customer_id: customerId,
     context: { currency },
     buyer,
-    line_items: normalizeExternalCheckoutCreateLineItems(requireJsonArrayFlag(flags, "line-items"), currency),
+    line_items: normalizeUcpCheckoutCreateLineItems(requireJsonArrayFlag(flags, "line-items"), currency),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
@@ -14618,13 +14730,16 @@ async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   const checkoutId = requireCheckoutId(flags);
+  const lineItems = requireJsonArrayFlag(flags, "line-items");
+  const currencyHint = "currency" in flags ? requireNonBlankFlag(flags, "currency", "missing --currency") : void 0;
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
+  const currency = await resolveUcpCheckoutUpdateCurrency(context, target, currencyHint);
   const body = compact3({
-    line_items: requireJsonArrayFlag(flags, "line-items"),
+    line_items: normalizeUcpCheckoutUpdateLineItems(lineItems, currency),
     buyer: optionalJsonFlag(flags, "buyer"),
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
-  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
   const idempotencyKey = randomUUID4();
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     ...target,
@@ -14635,6 +14750,49 @@ async function ucpCheckoutUpdate(context) {
     dryRun: context.globalOptions.dryRun
   }));
   return finishApiCommand(result, context);
+}
+async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
+  if (context.globalOptions.dryRun) {
+    if (!currencyHint) {
+      throw validationError("ucp-checkout update --dry-run requires --currency because it does not fetch the checkout");
+    }
+    return currencyHint;
+  }
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    ...target,
+    method: "GET",
+    headers: buildCustomerApiKeyHeaders(runtimeConfig, target.baseUrl),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("ucp-checkout get unexpectedly returned a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  const currency = extractUcpCheckoutCurrency(result.body);
+  if (!currency) {
+    throw apiError("ucp-checkout get response is missing currency");
+  }
+  if (currencyHint && currencyHint.toUpperCase() !== currency.toUpperCase()) {
+    throw validationError(`--currency ${currencyHint} does not match checkout currency ${currency}`);
+  }
+  return currency;
+}
+function extractUcpCheckoutCurrency(body) {
+  const checkout = unwrapApiData(body);
+  if (!isRecord6(checkout)) {
+    return void 0;
+  }
+  const direct = asOptionalString(checkout.currency)?.trim();
+  if (direct) {
+    return direct;
+  }
+  const checkoutContext = checkout.context;
+  if (!isRecord6(checkoutContext)) {
+    return void 0;
+  }
+  const contextual = asOptionalString(checkoutContext.currency)?.trim();
+  return contextual || void 0;
 }
 async function ucpCheckoutComplete(context) {
   const flags = context.args.flags;
@@ -14757,29 +14915,49 @@ function parseAbsoluteHttpUrl(value, flagName) {
 }
 var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
 var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
-function normalizeExternalCheckoutCreateLineItems(lineItems, currency) {
-  return lineItems.map((lineItem, index) => normalizeExternalCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`));
+function normalizeUcpCheckoutCreateLineItems(lineItems, currency) {
+  return lineItems.map((lineItem, index) => normalizeUcpCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`, false));
 }
-function normalizeExternalCheckoutMoneyFields(value, currency, path3) {
+function normalizeUcpCheckoutUpdateLineItems(lineItems, currency) {
+  return lineItems.map((lineItem, index) => normalizeUcpCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`, true));
+}
+function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveIntegerMinorUnits) {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeExternalCheckoutMoneyFields(item, currency, `${path3}[${index}]`));
+    return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path3}[${index}]`, preserveIntegerMinorUnits));
   }
   if (!isRecord6(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
     const fieldPath = `${path3}.${key}`;
-    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && isDecimalInput(fieldValue)) {
+    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && shouldNormalizeUcpCheckoutMoneyInput(fieldValue, preserveIntegerMinorUnits)) {
       return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
     }
-    return [key, normalizeExternalCheckoutMoneyFields(fieldValue, currency, fieldPath)];
+    if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && preserveIntegerMinorUnits && typeof fieldValue === "number" && Number.isInteger(fieldValue)) {
+      validateMinorUnitInteger(fieldValue, fieldPath);
+    }
+    return [
+      key,
+      normalizeUcpCheckoutMoneyFields(fieldValue, currency, fieldPath, preserveIntegerMinorUnits)
+    ];
   }));
 }
 function isRecord6(value) {
   return typeof value === "object" && value !== null;
 }
-function isDecimalInput(value) {
-  return typeof value === "number" || typeof value === "string";
+function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
+  if (typeof value === "string") {
+    return true;
+  }
+  return typeof value === "number" && (!preserveIntegerMinorUnits || !Number.isInteger(value));
+}
+function validateMinorUnitInteger(value, fieldPath) {
+  if (!Number.isSafeInteger(value)) {
+    throw validationError(`${fieldPath} is too large`);
+  }
+  if (value < 0) {
+    throw validationError(`${fieldPath} must be a non-negative amount`);
+  }
 }
 function majorAmountToMinorUnits(value, currency, fieldPath) {
   const normalizedCurrency = currency.trim().toUpperCase();
@@ -15219,7 +15397,7 @@ function buildConfigView(config) {
     hasCustomerApiKey: Boolean(config.customerApiKey),
     oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
-    configPath: CONFIG_DISPLAY_PATH
+    configPath: "~/.clink-cli/config.json"
   };
 }
 async function cachePaymentMethods(context, value) {

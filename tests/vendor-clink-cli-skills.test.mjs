@@ -422,13 +422,13 @@ test('vendored CLI documents typed polling as a draining any-of filter', () => {
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.5');
+  assert.equal(vendorPackage.version, '0.2.8');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'e2a9eb0d2b2cd29e715d851bf158987683886dff',
+    '26e088bbe438a0f4f667fbae4e3943dc245f6e93',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
-  assert.equal(vendorPackage.upstreamPatch, 'trae-config-dir-hotfix');
+  assert.equal('upstreamPatch' in vendorPackage, false);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
@@ -438,7 +438,9 @@ test('vendored CLI metadata tracks the latest upstream package version', () => {
   assert.match(bundleSource, /staleEventCutoffMs/u);
   assert.match(bundleSource, /eventTimePrecisionMs/u);
   assert.match(bundleSource, /customer-api-key cannot be set in local config/u);
-  assert.match(bundleSource, /CLINK_CONFIG_DIR must be an absolute path/u);
+  assert.match(bundleSource, /A newer wallet init started/u);
+  assert.match(bundleSource, /Starting wallet login/u);
+  assert.doesNotMatch(bundleSource, /CLINK_CONFIG_DIR/u);
   assert.doesNotMatch(bundleSource, /\/agent\/cwallet\/customer\/bootstrap/u);
 });
 

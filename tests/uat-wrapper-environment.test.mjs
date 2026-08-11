@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -76,56 +76,6 @@ test('wallet init rejects --name and derives the name from the email', async (co
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /--name is no longer used by wallet init/u);
-});
-
-test('TRAE wrapper isolates wallet config in a sandbox-writable directory', async (context) => {
-  const home = await mkdtemp(join(tmpdir(), 'clink-payment-trae-wrapper-'));
-  context.after(() => rm(home, { recursive: true, force: true }));
-  const env = {
-    ...process.env,
-    HOME: home,
-    TRAE_SANDBOX_SBOX_ID: 'test-sandbox',
-  };
-
-  const setResult = spawnSync(wrapper, ['config', 'set', 'name', 'trae-probe', '--format', 'json'], {
-    encoding: 'utf8',
-    env,
-  });
-  assert.equal(setResult.status, 0, setResult.stderr);
-
-  const configDir = join(home, '.local', 'share', 'clink-cli', 'trae-work-cn');
-  const configPath = join(configDir, 'config.json');
-  assert.equal((await stat(configDir)).mode & 0o777, 0o700);
-  assert.equal((await stat(configPath)).mode & 0o777, 0o600);
-
-  const statusResult = spawnSync(wrapper, ['wallet', 'status', '--format', 'json'], {
-    encoding: 'utf8',
-    env,
-  });
-  assert.equal(statusResult.status, 0, statusResult.stderr);
-  assert.equal(JSON.parse(statusResult.stdout).data.configPath, configPath);
-});
-
-test('wrapper reports a relative CLINK_CONFIG_DIR as a structured config error', () => {
-  const result = spawnSync(wrapper, ['wallet', 'status', '--format', 'json'], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      CLINK_CONFIG_DIR: 'relative/config',
-    },
-  });
-
-  assert.equal(result.status, 3);
-  assert.equal(result.stdout, '');
-  assert.deepEqual(JSON.parse(result.stderr), {
-    ok: false,
-    error: {
-      type: 'config_error',
-      code: 3,
-      message: 'CLINK_CONFIG_DIR must be an absolute path',
-    },
-  });
-  assert.doesNotMatch(result.stderr, /CliError|node:internal|clink-cli\.bundle\.mjs/u);
 });
 
 test('wrapper accepts zero arguments', () => {

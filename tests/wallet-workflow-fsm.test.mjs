@@ -12,6 +12,7 @@ test('wallet init classifier waits when the URL arrives before the browser-open 
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
+      'Starting wallet login; this attempt takes precedence over any earlier one.',
       'Complete authorization in your browser:',
       'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
       '',

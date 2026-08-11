@@ -26,8 +26,6 @@ bin/clink
 
 OAuth authorization is bound to its issuer origin. Initialize under the environment this distribution pins. Never send credentials across environments.
 
-In TRAE Work or TRAE Work CN, the wrapper uses `$HOME/.local/share/clink-cli/trae-work-cn` when `TRAE_SANDBOX_SBOX_ID` is present and `CLINK_CONFIG_DIR` is unset. Use the same wrapper for the whole workflow; never place wallet credentials under `.trae-cn/memory`.
-
 **The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every other command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for every later command run through this production wrapper, including `pay`, `ucp-checkout complete`, `skills tip`, and `refund create`.
 
 That state is not self-announcing. `wallet status` reports `authorizationEnvironmentMatches: true` whenever the stored `issuerOrigin` agrees with the effective `baseUrl`, which is exactly what a consistently-UAT wallet looks like. A wallet can therefore report fully OAuth-ready while pointed at the wrong environment.
