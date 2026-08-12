@@ -13,7 +13,7 @@ Every example in this skill uses `clink` as the stable command name. This reposi
 **Environment selection belongs to `wallet init`, not to per-command flags.** This distribution pins `wallet init` to production through `CLINK_WALLET_INIT_ENVIRONMENT`, so `wallet init --sandbox` and `wallet init --test` exit 2 with `wallet init environment is fixed to production by this CLI distribution`. Other distributions pin sandbox/UAT or test the same way. Every command other than `wallet init` rejects `--sandbox`/`--test` with exit code 2, and there is no `--base-url` flag. Initialize with the plain wrapper:
 
 ```bash
-bin/clink wallet init --email <email> --no-open --format json
+bin/clink wallet init --email <email> --open --format json
 ```
 
 A successful initialization saves the selected environment, so every later command reuses it with no environment flag. `CLINK_BASE_URL` remains an advanced process-level override for custom endpoints; keep one fixed value for the whole workflow if used at all.
@@ -32,9 +32,11 @@ That state is not self-announcing. `wallet status` reports `authorizationEnviron
 
 So after resolving the wrapper, read `wallet status --format json` and compare `data.baseUrl` against this distribution's pinned origin, `https://api.clinkbill.com`, before running any operation that moves money or mutates remote state. On a mismatch, tell the user which origin is actually in effect and get an explicit decision; do not silently continue, and do not silently re-initialize — `wallet init` against a different origin replaces their current login.
 
-For Agent-run wallet initialization, pass only `--email` and `--no-open`. There is no `--name` flag: `wallet init --name` exits 2, the initial name comes from the email text before `@`, and `config set name` changes it later. The per-invocation `--no-open` opt-out overrides both `--open` and the stored `default-open-links` setting. Do not rely on the stored default: the Agent must stream the original process's live stderr, send the verification URL once, and leave that same process running while the user authorizes in their browser.
+For every wallet initialization, pass `--email` and `--open`. There is no `--name` flag: `wallet init --name` exits 2, the initial name comes from the email text before `@`, and `config set name` changes it later. When live stderr prints `Opening your browser...`, the CLI has requested that the system browser handle the complete URL; the line does not prove that a visible window opened. Do not repeat the URL or claim success; tell the user to complete email verification and click Confirm in the resulting window, and leave that same process running. If browser launch fails, read the URL only from the current process's latest wallet-init attempt segment.
 
-**`--no-open` belongs on every link-producing command, not only `wallet init`.** `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, and `instruction cancel` all launch a browser when `--open` or a stored `default-open-links` says so. That launch happens on the host where this CLI runs, which in a container, remote sandbox, or CI is either a failed launch or a window on a machine the user cannot see. `--no-open` suppresses launch only; the built-in event watch is controlled separately by `--no-watch` and must stay on.
+An affirmative fresh-login request is different from asking for the same URL again. `重新登录`, `再登录一次`, `重新授权钱包`, an expired/missed login link, `log in again`, and `fresh login link` start exactly one new `wallet init` process. The CLI generation makes the new process authoritative and causes the older attempt to stop. Resolve email from the current request before wallet status, and never let an already-ready status suppress explicit re-login. Do not use chat history, terminal scrollback, or an older child process as the URL source.
+
+**`--no-open` belongs on every other link-producing command, not `wallet init`.** `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, and `instruction cancel` all launch a browser when `--open` or a stored `default-open-links` says so. `--no-open` suppresses launch only; the built-in event watch is controlled separately by `--no-watch` and must stay on.
 
 `defaultOpenLinks` is not safe to assume. It lives in the same machine-wide `~/.clink-cli/config.json` that every build shares, so one earlier `config set default-open-links true` — from this skill's host or any other build on the machine — re-arms auto-open for all of those commands. Read it once per workflow, then either turn it off or treat `--no-open` as mandatory for the rest of the workflow:
 
@@ -43,7 +45,7 @@ clink config get --format json
 clink config set default-open-links false --format json
 ```
 
-Which pages the user must complete in their own browser, and which the agent may open, is in `references/clink-browser-handoff.md`. An agent that opens a Passkey, 3DS, card, or OAuth page itself breaks that flow even when the launch succeeds.
+Which pages the user must complete in their own browser, and which the agent may open, is in `references/clink-browser-handoff.md`. The `wallet init --open` system-browser handoff is the only exception to CLI-side suppression; an agent browser must not navigate a Passkey, 3DS, card, or OAuth page.
 
 To inspect help without installing a global binary, call the bundle directly:
 
@@ -75,7 +77,7 @@ Error envelope on stderr when JSON format is explicit:
 
 Inspect the process exit code first, then parse the stream that contains the envelope. Do not scrape human text when JSON is available.
 
-The OAuth verification URL from `wallet init --no-open` is the narrow exception: it is a live progress message on stderr, not the final JSON envelope. Read it only from the original process's live stderr, send it once, and do not start another init process to obtain it.
+The OAuth verification URL is a live progress message on stderr, not the final JSON envelope. With `wallet init --open`, do not expose it after CLI browser handoff. After a reported browser-launch failure, read it only from the current process's latest attempt segment and send it once. Do not start another init merely to obtain or repeat the URL for the same active attempt; start a new attempt only for explicit re-login or after the current attempt expires or terminates.
 
 ## Exit Codes
 
@@ -98,7 +100,8 @@ The OAuth verification URL from `wallet init --no-open` is the narrow exception:
 | `--sandbox` / `--test` | false | Accepted only by `wallet init`, and rejected there too when the distribution pins an environment (this one pins production). Mutually exclusive. Every other command rejects them with exit code 2. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
-| `--no-open` | false | Force-disable browser launch for this invocation, overriding `--open` and stored `default-open-links`. Required on every link-producing command, not only `wallet init`. Suppresses launch only; it does not disable the built-in watch. |
+| `--open` | false | Open the generated link in the system browser. Required for every `wallet init` invocation. |
+| `--no-open` | false | Force-disable browser launch for this invocation, overriding `--open` and stored `default-open-links`. Required on link-producing commands other than `wallet init`. Suppresses launch only; it does not disable the built-in watch. |
 | `--no-watch` | false | Skip the built-in link watch after a URL is printed. |
 
 `wallet init` resolves its distribution-pinned environment first, then `CLINK_BASE_URL`, then production. Later commands resolve `CLINK_BASE_URL` and then the saved base URL. There is no `--base-url` option; passing it returns `unknown option: --base-url`. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.

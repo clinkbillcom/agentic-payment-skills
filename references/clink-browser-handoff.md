@@ -10,7 +10,7 @@ This skill is installed by many different host agents. Some drive a browser them
 - **3DS challenge.** The issuer ACS fingerprints the device and scores automation; the one-time code reaches the user's phone. An agent browser gets soft-declined or stepped up.
 - **Card binding/setup/modify.** The page collects a card number. An agent that reads or fills it moves the PAN into model context and agent logs.
 - **OAuth device verification.** An agent load races the user's page load and triggers duplicate verification-code sends or resend throttling.
-- **Any of them, opened by the CLI.** Browser launch happens on the host where `clink` runs. In a container, remote sandbox, or CI that is either a failed launch or a window on a machine the user cannot see.
+- **Any of them, opened by the CLI.** Browser launch happens on the host where `clink` runs. `wallet init --open` is an explicit system-browser handoff; all other link commands remain suppressed with `--no-open`.
 
 The fix is not to support every browser. It is to label each URL with who must act on it, and to keep every automatic-open path closed.
 
@@ -55,9 +55,9 @@ Never satisfy a Passkey page with a CDP virtual authenticator, and never fabrica
 
 ## CLI-Side Suppression
 
-Pass `--no-open` on every link-producing command, not only `wallet init`:
+Pass `--open` on every `wallet init` invocation. Pass `--no-open` on every other link-producing command:
 
-`wallet init`, `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
+`card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
 
 `--no-open` is a global flag and overrides both `--open` and the stored `default-open-links`. It suppresses browser launch only; it does not touch the built-in event watch, which `--no-watch` controls separately and which must stay on.
 
@@ -67,7 +67,7 @@ Do not rely on the stored default being `false`. It lives in the machine-wide co
 clink config get --format json
 ```
 
-If `defaultOpenLinks` is `true`, either turn it off or treat `--no-open` as mandatory on every link command for the rest of the workflow:
+If `defaultOpenLinks` is `true`, either turn it off or treat `--no-open` as mandatory on every link command other than `wallet init` for the rest of the workflow:
 
 ```bash
 clink config set default-open-links false --format json
@@ -75,7 +75,7 @@ clink config set default-open-links false --format json
 
 ## Handoff Payload
 
-The skill cannot know whether the host renders clickable links, runs in a terminal, posts to a chat surface, or is read on a phone. So for every `USER_DEVICE_ONLY` and `USER_PREFERRED` page, emit:
+The skill cannot know whether the host renders clickable links, runs in a terminal, posts to a chat surface, or is read on a phone. For every `USER_DEVICE_ONLY` and `USER_PREFERRED` page other than OAuth while `wallet init --open` manages the system-browser request, emit:
 
 1. The URL **verbatim on its own line** — no shortening, re-encoding, origin reduction, or dropped query/fragment.
 2. One line telling the user to open it in **their own browser, not this agent's browser**.
@@ -84,7 +84,7 @@ The skill cannot know whether the host renders clickable links, runs in a termin
 
 Offering to continue on a phone is often right rather than a fallback: Passkey approval and 3DS codes usually live there. A QR rendering of the same URL is a legitimate transfer channel when the host can display one.
 
-`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages: emit the URL exactly once and never re-send it as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
+`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages. For OAuth, `DEFER_OAUTH_TO_WALLET_WORKFLOW` keeps the URL hidden unless the browser launch reports failure; then emit it once through `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. Emit the other single-load URLs exactly once and never re-send any of them as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
 
 ## Unattended Runs
 
@@ -96,7 +96,8 @@ This is why VIC authorization is collected before a schedule exists (`references
 
 | Action | Required behavior |
 | --- | --- |
-| `HANDOFF_TO_USER_DEVICE` | Emit the verbatim URL once with the handoff payload above, keep the built-in watch or `events poll` running, and do not touch the page from the agent runtime by any channel. |
+| `DEFER_OAUTH_TO_WALLET_WORKFLOW` | Do not emit the OAuth URL. Let `classifyWalletInitObservation` keep it hidden after a system-browser request or surface it once after a reported launch failure. |
+| `HANDOFF_TO_USER_DEVICE` | Emit the non-OAuth verbatim URL once with the handoff payload above, keep the built-in watch or `events poll` running, and do not touch the page from the agent runtime by any channel. |
 | `HANDOFF_TO_USER_BROWSER` | Same handoff and same listener; the page holds no secret entry, but the agent still must not complete it on the user's behalf. |
 | `ALLOW_AGENT_BROWSER` | Merchant/product page. Use browser, MCP, or page extraction normally; no handoff and no event watch. |
 | `SURFACE_BROWSER_HANDOFF_GAP` | No human can act — unattended run or no user channel. Report the missing authorization and stop. Do not emit the URL, do not create a draft, do not substitute another mandate. |
@@ -105,9 +106,9 @@ This is why VIC authorization is collected before a schedule exists (`references
 ## Rules
 
 - Label the URL before sending it; an unlabeled URL is not sendable.
-- `--no-open` on every link command, and verify `defaultOpenLinks` once per workflow.
+- `--open` on `wallet init`, `--no-open` on every other link command, and verify `defaultOpenLinks` once per workflow.
 - Never automate a `USER_DEVICE_ONLY` page through any channel, including "just checking that it loads".
 - Never use a virtual authenticator or fabricated Passkey payload.
-- Emit single-load URLs exactly once.
+- Emit non-OAuth single-load URLs exactly once; emit OAuth only once after a reported system-browser launch failure.
 - Proof of completion is the event, never the browser.
 - An unattended run that needs a browser page is a reported gap, not a wait.

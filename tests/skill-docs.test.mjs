@@ -99,12 +99,12 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /OAuth Device Authorization/u);
   assert.match(
     walletConfig,
-    /clink wallet init --email <email> --no-open --format json/u,
+    /clink wallet init --email <email> --open --format json/u,
   );
   assert.match(walletConfig, /derives the display name from the email text before `@`/u);
   assert.match(walletConfig, /There is no `--name` flag on `wallet init`/u);
   assert.match(walletConfig, /Complete authorization in your browser/u);
-  assert.match(walletConfig, /only from the original process's live stderr/u);
+  assert.match(walletConfig, /only from the latest .* segment of that process's live stderr/u);
   assert.match(walletConfig, /keep that same process alive/u);
   assert.match(walletConfig, /Do not navigate to, preview, or prefetch the URL/u);
   assert.match(walletConfig, /duplicate verification-code sends or resend throttling/u);
@@ -114,16 +114,20 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /clink wallet logout --format json/u);
   assert.match(skill, /lib\/wallet-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyWalletStatusObservation/u);
+  assert.match(skill, /WAIT_FOR_WALLET_INIT_PROGRESS/u);
+  assert.match(skill, /TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT/u);
   assert.match(skill, /SHOW_OAUTH_VERIFICATION_URL_AND_WAIT/u);
+  assert.match(skill, /DEFER_OAUTH_TO_WALLET_WORKFLOW/u);
   assert.match(
     skill,
-    /complete value of `authorizationUrl` verbatim on its own line[\s\S]*Do not add, remove, parse, encode, decode, rebuild, reduce to an origin, or truncate any character[\s\S]*preserve the query after `\?` and the fragment after `#`/u,
+    /For `wallet init --open`, do not show the verification URL/u,
   );
-  assert.match(skill, /wallet init --email <email> --no-open --format json/u);
+  assert.match(skill, /claim that a visible window was confirmed/iu);
+  assert.match(skill, /wallet init --email <email> --open --format json/u);
   assert.doesNotMatch(skill, /wallet init --email <email> \[--name/u);
   assert.match(skill, /there is no `--name` flag/u);
-  assert.match(skill, /verification URL only from the original process's live stderr/u);
-  assert.match(cliInvocation, /`--no-open`[\s\S]*overrid/iu);
+  assert.match(skill, /Only after a browser-launch failure/u);
+  assert.match(cliInvocation, /pass `--email` and `--open`/u);
   assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
   assert.doesNotMatch(walletConfig, /attempts to open it|Automatic browser launch may fail/u);
   assert.doesNotMatch(skill, /Automatic browser-open failure/u);
@@ -133,6 +137,27 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(readme, /derives the name from the email text before `@`/u);
   assert.match(readmeZh, /新的钱包初始化使用 OAuth Device Authorization/u);
   assert.match(readmeZh, /默认取邮箱 `@` 前部分作为姓名/u);
+});
+
+test('explicit wallet relogin starts a fresh attempt and never reuses an old URL', () => {
+  assert.match(skill, /lib\/wallet-intent-fsm\.mjs/u);
+  assert.match(skill, /classifyWalletIntent/u);
+  assert.match(skill, /explicit wallet re-login is a high-priority route/iu);
+  assert.match(skill, /`START_FRESH_WALLET_INIT`[\s\S]*wallet is ready[\s\S]*older init/iu);
+  assert.match(skill, /`ASK_FOR_WALLET_EMAIL`/u);
+  assert.match(skill, /`DO_NOT_START_WALLET_INIT`/u);
+  assert.match(skill, /explicit `WALLET_RELOGIN`[\s\S]*fresh init/iu);
+  assert.match(skill, /Never reuse a URL from prior chat messages, terminal scrollback, logs, or another process/iu);
+
+  assert.match(walletConfig, /重新登录[\s\S]*log in again[\s\S]*fresh login link/iu);
+  assert.match(walletConfig, /Prefer an email stated in the current request, then the current wallet-status email/iu);
+  assert.match(walletConfig, /Capture stderr from the new child process rather than terminal scrollback or chat history/iu);
+  assert.match(walletConfig, /latest `Starting wallet login;/u);
+
+  assert.match(cliInvocation, /new process authoritative[\s\S]*older attempt to stop/iu);
+  assert.match(cliInvocation, /Do not use chat history, terminal scrollback, or an older child process/iu);
+  assert.match(readme, /explicit request to log in again[\s\S]*fresh `wallet init`/iu);
+  assert.match(readmeZh, /明确要求重新登录[\s\S]*新的 `wallet init`/u);
 });
 
 test('OAuth authentication guidance distinguishes 401 from 403 and keeps CSK legacy-only', () => {
@@ -365,8 +390,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.10\.0"/u);
-  assert.equal(packageJson.version, '1.10.0');
+  assert.match(skill, /version:\s*"1\.10\.1"/u);
+  assert.equal(packageJson.version, '1.10.1');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -737,10 +762,9 @@ test('the per-page actor table stays in SKILL.md and the handoff reference', () 
   assert.match(browserHandoff, /MERCHANT_PRODUCT_PAGE/u);
 });
 
-// The narrow rule was already right for wallet init and only for wallet init. Every other link
-// command could still launch a browser on the CLI host, which in a container or CI is a window
-// nobody can see.
-test('--no-open covers every link command, not only wallet init', () => {
+// Wallet init deliberately opens the user's system browser. Every other link-producing command
+// must keep host-side browser launch suppressed.
+test('--no-open covers every link command other than wallet init', () => {
   for (const body of [skill, cliInvocation, browserHandoff]) {
     for (const command of [
       /card binding-link/u,
@@ -762,7 +786,7 @@ test('--no-open covers every link command, not only wallet init', () => {
   assert.match(walletConfig, /risk link --no-open --format json/u);
   assert.match(instruction, /--no-open/u);
 
-  assert.match(cliInvocation, /belongs on every link-producing command, not only `wallet init`/u);
+  assert.match(cliInvocation, /belongs on every other link-producing command, not `wallet init`/u);
   // --no-open must not be confused with --no-watch: killing the watch loses the completion event.
   assert.match(cliInvocation, /suppresses launch only/u);
   assert.match(browserHandoff, /does not touch the built-in event watch/u);
