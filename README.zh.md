@@ -24,11 +24,14 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 3. 执行 `clink wallet init --email <email> --open --format json`。CLI 发起系统浏览器打开请求后，提示用户在出现的窗口中完成授权并保持同一进程运行；仅当浏览器拉起失败时才展示验证 URL。
 4. 初始化成功且返回非空 `bindingUrl` 时，主动发送该绑卡 URL 作为下一步。
 
+用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
+
 ## 功能说明
 
 安装后，Claude 可以代你执行以下 Clink 支付操作：
 
 - 钱包状态检查
+- 钱包重新登录与重新授权
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致

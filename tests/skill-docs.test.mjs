@@ -104,7 +104,7 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /derives the display name from the email text before `@`/u);
   assert.match(walletConfig, /There is no `--name` flag on `wallet init`/u);
   assert.match(walletConfig, /Complete authorization in your browser/u);
-  assert.match(walletConfig, /only from the original process's live stderr/u);
+  assert.match(walletConfig, /only from the latest .* segment of that process's live stderr/u);
   assert.match(walletConfig, /keep that same process alive/u);
   assert.match(walletConfig, /Do not navigate to, preview, or prefetch the URL/u);
   assert.match(walletConfig, /duplicate verification-code sends or resend throttling/u);
@@ -137,6 +137,27 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(readme, /derives the name from the email text before `@`/u);
   assert.match(readmeZh, /新的钱包初始化使用 OAuth Device Authorization/u);
   assert.match(readmeZh, /默认取邮箱 `@` 前部分作为姓名/u);
+});
+
+test('explicit wallet relogin starts a fresh attempt and never reuses an old URL', () => {
+  assert.match(skill, /lib\/wallet-intent-fsm\.mjs/u);
+  assert.match(skill, /classifyWalletIntent/u);
+  assert.match(skill, /explicit wallet re-login is a high-priority route/iu);
+  assert.match(skill, /`START_FRESH_WALLET_INIT`[\s\S]*wallet is ready[\s\S]*older init/iu);
+  assert.match(skill, /`ASK_FOR_WALLET_EMAIL`/u);
+  assert.match(skill, /`DO_NOT_START_WALLET_INIT`/u);
+  assert.match(skill, /explicit `WALLET_RELOGIN`[\s\S]*fresh init/iu);
+  assert.match(skill, /Never reuse a URL from prior chat messages, terminal scrollback, logs, or another process/iu);
+
+  assert.match(walletConfig, /重新登录[\s\S]*log in again[\s\S]*fresh login link/iu);
+  assert.match(walletConfig, /Prefer an email stated in the current request, then the current wallet-status email/iu);
+  assert.match(walletConfig, /Capture stderr from the new child process rather than terminal scrollback or chat history/iu);
+  assert.match(walletConfig, /latest `Starting wallet login;/u);
+
+  assert.match(cliInvocation, /new process authoritative[\s\S]*older attempt to stop/iu);
+  assert.match(cliInvocation, /Do not use chat history, terminal scrollback, or an older child process/iu);
+  assert.match(readme, /explicit request to log in again[\s\S]*fresh `wallet init`/iu);
+  assert.match(readmeZh, /明确要求重新登录[\s\S]*新的 `wallet init`/u);
 });
 
 test('OAuth authentication guidance distinguishes 401 from 403 and keeps CSK legacy-only', () => {

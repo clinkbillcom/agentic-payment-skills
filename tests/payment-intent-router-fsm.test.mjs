@@ -8,6 +8,64 @@ import {
   classifyPaymentIntent,
 } from '../lib/payment-intent-router-fsm.mjs';
 
+test('routes explicit wallet relogin before payment-target classification', () => {
+  const result = classifyPaymentIntent({
+    text: '重新登录',
+    currentEmail: 'user@example.com',
+  });
+
+  assert.equal(result.state, PaymentIntentState.WALLET_RELOGIN_SELECTED);
+  assert.equal(result.route, PaymentIntentRoute.WALLET_RELOGIN);
+  assert.equal(result.action, PaymentIntentAction.START_FRESH_WALLET_INIT);
+  assert.equal(result.email, 'user@example.com');
+});
+
+test('wallet relogin asks for email instead of a merchant or product', () => {
+  const result = classifyPaymentIntent({ text: '登录链接过期了，给我一个新的' });
+
+  assert.equal(result.state, PaymentIntentState.WALLET_RELOGIN_INPUT_MISSING);
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_WALLET_EMAIL);
+  assert.deepEqual(result.missing, ['email']);
+});
+
+test('wallet relogin bug discussion starts no command', () => {
+  const result = classifyPaymentIntent({
+    text: '这个 bug 是用户说重新登录时拿旧链接',
+    merchantId: 'merchant_1',
+  });
+
+  assert.equal(result.state, PaymentIntentState.WALLET_RELOGIN_NOT_AUTHORIZED);
+  assert.equal(result.route, PaymentIntentRoute.NO_ACTION);
+  assert.equal(result.action, PaymentIntentAction.DO_NOT_START_WALLET_INIT);
+});
+
+test('incidental payment fields cannot turn wallet relogin into a payment', () => {
+  const result = classifyPaymentIntent({
+    text: 'log in again',
+    currentEmail: 'user@example.com',
+    merchantId: 'merchant_1',
+    amount: '10',
+    currency: 'USD',
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.WALLET_RELOGIN);
+  assert.equal(result.action, PaymentIntentAction.START_FRESH_WALLET_INIT);
+  assert.notEqual(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+});
+
+for (const text of ['重新授权这笔支付', 'reauthorize this purchase']) {
+  test(`purchase reauthorization stays on the payment route: ${text}`, () => {
+    const result = classifyPaymentIntent({
+      text,
+      merchantId: 'merchant_1',
+    });
+
+    assert.equal(result.route, PaymentIntentRoute.DIRECT_PAY);
+    assert.equal(result.action, PaymentIntentAction.RUN_DIRECT_PAY_WORKFLOW);
+  });
+}
+
 test('routes a tippable skill list question before tip execution', () => {
   const result = classifyPaymentIntent({
     text: '目前clink payment skill 支持打赏哪些skill',

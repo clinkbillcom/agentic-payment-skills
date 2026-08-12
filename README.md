@@ -24,11 +24,14 @@ After installation, the agent must immediately continue with wallet initializati
 3. Run `clink wallet init --email <email> --open --format json`. When the CLI requests a system-browser launch, tell the user to complete authorization in the requested browser window and keep the same process running; show the URL only if browser launch fails.
 4. When init succeeds with a non-empty `bindingUrl`, proactively send that card-binding URL as the next step.
 
+An explicit request to log in again, reauthorize, replace an expired link, or recover after missing the earlier login always starts a fresh `wallet init`. The new attempt supersedes the old one, and the agent must never reuse a login URL from chat history or earlier terminal output.
+
 ## What It Does
 
 Once installed, Claude can handle Clink payment operations on your behalf:
 
 - Wallet readiness checks
+- Explicit fresh wallet login and reauthorization
 - Card binding and management
 - Payment execution (direct and session mode)
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language

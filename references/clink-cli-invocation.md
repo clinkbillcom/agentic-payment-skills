@@ -32,7 +32,9 @@ That state is not self-announcing. `wallet status` reports `authorizationEnviron
 
 So after resolving the wrapper, read `wallet status --format json` and compare `data.baseUrl` against this distribution's pinned origin, `https://api.clinkbill.com`, before running any operation that moves money or mutates remote state. On a mismatch, tell the user which origin is actually in effect and get an explicit decision; do not silently continue, and do not silently re-initialize — `wallet init` against a different origin replaces their current login.
 
-For every wallet initialization, pass `--email` and `--open`. There is no `--name` flag: `wallet init --name` exits 2, the initial name comes from the email text before `@`, and `config set name` changes it later. When live stderr prints `Opening your browser...`, the CLI has requested that the system browser handle the complete URL; the line does not prove that a visible window opened. Do not repeat the URL or claim success; tell the user to complete email verification and click Confirm in the resulting window, and leave that same process running. If browser launch fails, read the URL only from the original process's live stderr.
+For every wallet initialization, pass `--email` and `--open`. There is no `--name` flag: `wallet init --name` exits 2, the initial name comes from the email text before `@`, and `config set name` changes it later. When live stderr prints `Opening your browser...`, the CLI has requested that the system browser handle the complete URL; the line does not prove that a visible window opened. Do not repeat the URL or claim success; tell the user to complete email verification and click Confirm in the resulting window, and leave that same process running. If browser launch fails, read the URL only from the current process's latest wallet-init attempt segment.
+
+An affirmative fresh-login request is different from asking for the same URL again. `重新登录`, `再登录一次`, `重新授权钱包`, an expired/missed login link, `log in again`, and `fresh login link` start exactly one new `wallet init` process. The CLI generation makes the new process authoritative and causes the older attempt to stop. Resolve email from the current request before wallet status, and never let an already-ready status suppress explicit re-login. Do not use chat history, terminal scrollback, or an older child process as the URL source.
 
 **`--no-open` belongs on every other link-producing command, not `wallet init`.** `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, and `instruction cancel` all launch a browser when `--open` or a stored `default-open-links` says so. `--no-open` suppresses launch only; the built-in event watch is controlled separately by `--no-watch` and must stay on.
 
@@ -75,7 +77,7 @@ Error envelope on stderr when JSON format is explicit:
 
 Inspect the process exit code first, then parse the stream that contains the envelope. Do not scrape human text when JSON is available.
 
-The OAuth verification URL is a live progress message on stderr, not the final JSON envelope. With `wallet init --open`, do not expose it after CLI browser handoff. After a reported browser-launch failure, read it only from the original process's live stderr, send it once, and do not start another init process to obtain it.
+The OAuth verification URL is a live progress message on stderr, not the final JSON envelope. With `wallet init --open`, do not expose it after CLI browser handoff. After a reported browser-launch failure, read it only from the current process's latest attempt segment and send it once. Do not start another init merely to obtain or repeat the URL for the same active attempt; start a new attempt only for explicit re-login or after the current attempt expires or terminates.
 
 ## Exit Codes
 
