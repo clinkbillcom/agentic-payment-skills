@@ -122,6 +122,7 @@ test('wallet init classifier waits when the URL arrives before the browser-open 
   assert.equal(result.authorizationUrl, undefined);
   assert.equal(result.browserOpenRequested, false);
   assert.equal(result.browserOpenFailed, false);
+  assert.equal(result.oauthDevicePollActive, false);
 });
 
 test('wallet init classifier waits for a split verification URL line to finish', () => {
@@ -158,6 +159,24 @@ test('wallet init classifier reports a system-browser launch request without cla
   assert.equal(result.browserOpenRequested, true);
   assert.equal(result.browserOpened, undefined);
   assert.equal(result.browserOpenFailed, false);
+  assert.equal(result.oauthDevicePollActive, true);
+});
+
+test('wallet init classifier does not claim OAuth polling before its wait marker arrives', () => {
+  const result = classifyWalletInitObservation({
+    running: true,
+    stderr: [
+      'Complete authorization in your browser:',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
+      'Opening your browser...',
+    ].join('\n'),
+  });
+
+  assert.equal(result.action, WalletWorkflowAction.WAIT_FOR_WALLET_INIT_PROGRESS);
+  assert.equal(result.authorizationUrl, undefined);
+  assert.equal(result.browserOpenRequested, true);
+  assert.equal(result.browserOpenFailed, false);
+  assert.equal(result.oauthDevicePollActive, false);
 });
 
 test('wallet init classifier falls back to the complete URL when browser launch fails', () => {
@@ -170,6 +189,7 @@ test('wallet init classifier falls back to the complete URL when browser launch 
       authorizationUrl,
       'Opening your browser...',
       'Could not open a browser automatically. Open the URL above in any browser.',
+      'Waiting for authorization...',
     ].join('\n'),
   });
 
@@ -179,6 +199,25 @@ test('wallet init classifier falls back to the complete URL when browser launch 
   assert.equal(result.authorizationUrl, authorizationUrl);
   assert.equal(result.browserOpenRequested, true);
   assert.equal(result.browserOpenFailed, true);
+  assert.equal(result.oauthDevicePollActive, true);
+});
+
+test('wallet init classifier keeps a browser-open failure private until OAuth polling starts', () => {
+  const result = classifyWalletInitObservation({
+    running: true,
+    stderr: [
+      'Complete authorization in your browser:',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH&flow=wallet#email=user%2Bwallet%40example.com&name=Alice%20%26%20Bob',
+      'Opening your browser...',
+      'Could not open a browser automatically. Open the URL above in any browser.',
+    ].join('\n'),
+  });
+
+  assert.equal(result.action, WalletWorkflowAction.WAIT_FOR_WALLET_INIT_PROGRESS);
+  assert.equal(result.authorizationUrl, undefined);
+  assert.equal(result.browserOpenRequested, true);
+  assert.equal(result.browserOpenFailed, true);
+  assert.equal(result.oauthDevicePollActive, false);
 });
 
 test('wallet init classifier ignores an older URL in cumulative terminal output', () => {
@@ -293,7 +332,7 @@ test('wallet init classifier rejects a truncated OAuth URL instead of surfacing 
   assert.equal(result.authorizationUrl, undefined);
 });
 
-test('wallet init classifier returns success for ok wallet init output', () => {
+test('wallet init classifier starts a watched binding command before exposing the next URL', () => {
   const result = classifyWalletInitObservation({
     exitCode: 0,
     stdout: {
@@ -306,6 +345,45 @@ test('wallet init classifier returns success for ok wallet init output', () => {
         authorizationType: 'oauth',
         hasCustomerApiKey: false,
         bindingUrl: 'https://agent.clinkbill.com',
+        paymentMethodsCached: true,
+        paymentMethodCount: 0,
+      },
+    },
+  });
+
+  assert.equal(result.state, WalletWorkflowState.WALLET_INITIALIZED);
+  assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
+  assert.equal(result.terminal, false);
+  assert.equal(result.reason, 'wallet_init_succeeded_card_binding_watch_required');
+  assert.equal(result.walletReady, true);
+  assert.equal(result.bindingUrlRequired, true);
+  assert.equal(result.emitUrl, false);
+  assert.equal(result.command, 'clink card binding-link --no-open --format json');
+  assert.deepEqual(result.handoffRequirements, {
+    watchReady: true,
+    watchEventType: 'payment_method.added',
+    processRunning: true,
+    bindingUrl: 'required',
+  });
+  assert.doesNotMatch(result.command, /--no-watch/u);
+  assert.equal(result.data.bindingUrl, 'https://agent.clinkbill.com');
+});
+
+test('wallet init classifier returns wallet ready when a payment method already exists', () => {
+  const result = classifyWalletInitObservation({
+    exitCode: 0,
+    stdout: {
+      ok: true,
+      data: {
+        customerId: 'cus_123',
+        email: 'user@example.com',
+        name: 'Alice',
+        hasAuthorization: true,
+        authorizationType: 'oauth',
+        hasCustomerApiKey: false,
+        bindingUrl: 'https://agent.clinkbill.com',
+        paymentMethodsCached: true,
+        paymentMethodCount: 1,
       },
     },
   });
@@ -314,8 +392,60 @@ test('wallet init classifier returns success for ok wallet init output', () => {
   assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
   assert.equal(result.terminal, true);
   assert.equal(result.reason, 'wallet_init_succeeded');
-  assert.equal(result.data.bindingUrl, 'https://agent.clinkbill.com');
+  assert.equal(result.walletReady, true);
+  assert.equal(result.cardReadiness, 'ready');
+  assert.equal(result.emitUrl, undefined);
 });
+
+test('wallet init classifier keeps OAuth ready when the card cache refresh failed', () => {
+  const result = classifyWalletInitObservation({
+    exitCode: 0,
+    stdout: {
+      ok: true,
+      data: {
+        customerId: 'cus_123',
+        email: 'user@example.com',
+        name: 'Alice',
+        hasAuthorization: true,
+        authorizationType: 'oauth',
+        hasCustomerApiKey: false,
+        bindingUrl: null,
+        paymentMethodsCached: false,
+        paymentMethodCount: 0,
+        paymentMethodsCacheError: 'temporary refresh failure',
+      },
+    },
+  });
+
+  assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+  assert.equal(result.terminal, true);
+  assert.equal(result.walletReady, true);
+  assert.equal(result.cardReadiness, 'unknown');
+  assert.equal(result.data.paymentMethodsCacheError, 'temporary refresh failure');
+});
+
+for (const paymentMethodCount of [undefined, -1, 0.5, false, true, 'not-a-count']) {
+  test(`wallet init classifier never infers first-card binding from invalid count ${String(paymentMethodCount)}`, () => {
+    const data = {
+      customerId: 'cus_123',
+      hasAuthorization: true,
+      authorizationType: 'oauth',
+      hasCustomerApiKey: false,
+      bindingUrl: 'https://agent.clinkbill.com',
+      paymentMethodsCached: true,
+    };
+    if (paymentMethodCount !== undefined) data.paymentMethodCount = paymentMethodCount;
+
+    const result = classifyWalletInitObservation({
+      exitCode: 0,
+      stdout: { ok: true, data },
+    });
+
+    assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+    assert.equal(result.cardReadiness, 'unknown');
+    assert.equal(result.emitUrl, undefined);
+  });
+}
 
 test('wallet init classifier returns dry-run output as a plan', () => {
   const result = classifyWalletInitObservation({

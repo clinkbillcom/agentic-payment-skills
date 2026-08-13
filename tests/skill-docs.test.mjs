@@ -16,6 +16,7 @@ const skillInstall = await readFile(new URL('../references/clink-skill-install.m
 const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
 const browserHandoff = await readFile(new URL('../references/clink-browser-handoff.md', import.meta.url), 'utf8');
 const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
+const networkPreflight = await readFile(new URL('../scripts/network-preflight.mjs', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -52,6 +53,38 @@ test('environment guidance matches the production wallet-init distribution wrapp
   assert.match(cliInvocation, /pins `wallet init` to production/u);
   assert.match(cliInvocation, /there is no `--base-url` flag/u);
   assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
+});
+
+test('network execution contract distinguishes host sandbox failures and protects mutations', () => {
+  assert.match(skill, /Network Execution Contract/u);
+  assert.match(skill, /node <absolute_skill_path>\/scripts\/network-preflight\.mjs <origin>/u);
+  assert.match(skill, /Never resolve the script relative to the user's current working directory/u);
+  assert.match(skill, /cannot elevate the host sandbox through `SKILL\.md` or `agents\/openai\.yaml`/u);
+  assert.match(skill, /`CODEX_SANDBOX_NETWORK_DISABLED=1` is only a diagnostic hint/u);
+  assert.match(skill, /Never skip the preflight or label the host blocked from that variable alone/u);
+  assert.match(skill, /Codex execution sandbox is unrelated to Clink's `--sandbox`\/`--test`/u);
+  assert.match(skill, /Exit code 6 alone is inconclusive/u);
+
+  assert.match(cliInvocation, /Before the first remote-capable command in each workflow/u);
+  assert.match(cliInvocation, /scripts\/network-preflight\.mjs` by absolute path/u);
+  assert.match(cliInvocation, /`CODEX_SANDBOX_NETWORK_DISABLED=1` is a non-authoritative hint/u);
+  assert.match(cliInvocation, /Never skip the probe or claim the host blocked it from the variable alone/u);
+  assert.match(cliInvocation, /sandbox_workspace_write[\s\S]*network_access = true/u);
+  assert.match(cliInvocation, /sanitized full `origin` \(including a non-default port\)/u);
+  assert.match(cliInvocation, /Any HTTP response[\s\S]*proves DNS\/TCP\/TLS\/HTTP reachability/u);
+  assert.match(cliInvocation, /ENOTFOUND[\s\S]*EAI_AGAIN[\s\S]*ETIMEDOUT[\s\S]*TLS/u);
+  assert.match(cliInvocation, /Exit status 6[\s\S]*cannot distinguish host sandbox denial/u);
+  assert.match(cliInvocation, /Never blindly resubmit `clink pay`[\s\S]*`clink skills tip`[\s\S]*`clink refund create`[\s\S]*`clink ucp-checkout complete`/u);
+  assert.match(cliInvocation, /s3\.us-west-2\.amazonaws\.com/u);
+  assert.match(cliInvocation, /workflow-resolved merchant origins/u);
+  assert.match(cliInvocation, /cannot intercept a destination that one CLI invocation resolves and immediately fetches internally/u);
+  assert.doesNotMatch(cliInvocation, /(?:only|solely).*\*\*?\.clinkbill\.com/iu);
+
+  assert.match(paymentRefund, /refund create` exits 6 or times out[\s\S]*Never resubmit automatically/u);
+  assert.match(ucpCheckout, /never resubmit complete merely because that GET is inconclusive/u);
+  assert.match(networkPreflight, /method: 'HEAD'/u);
+  assert.match(networkPreflight, /redirect: 'manual'/u);
+  assert.doesNotMatch(networkPreflight, /Authorization|Cookie|api[_-]?key/iu);
 });
 
 test('main skill routes direct and session pay through authorization resolver before pay', () => {
@@ -106,8 +139,8 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(walletConfig, /derives the display name from the email text before `@`/u);
   assert.match(walletConfig, /There is no `--name` flag on `wallet init`/u);
   assert.match(walletConfig, /Complete authorization in your browser/u);
-  assert.match(walletConfig, /only from the latest .* segment of that process's live stderr/u);
-  assert.match(walletConfig, /keep that same process alive/u);
+  assert.match(walletConfig, /only from the latest .* segment of the process's live stderr/u);
+  assert.match(walletConfig, /keeping that same token-polling process alive/u);
   assert.match(walletConfig, /Do not navigate to, preview, or prefetch the URL/u);
   assert.match(walletConfig, /duplicate verification-code sends or resend throttling/u);
   assert.match(walletConfig, /hasAuthorization=true/u);
@@ -122,13 +155,13 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /DEFER_OAUTH_TO_WALLET_WORKFLOW/u);
   assert.match(
     skill,
-    /For `wallet init --open`, do not show the verification URL/u,
+    /`wallet init --open`[\s\S]*Do not show the verification URL/u,
   );
   assert.match(skill, /claim that a visible window was confirmed/iu);
   assert.match(skill, /wallet init --email <email> --open --format json/u);
   assert.doesNotMatch(skill, /wallet init --email <email> \[--name/u);
   assert.match(skill, /there is no `--name` flag/u);
-  assert.match(skill, /Only after a browser-launch failure/u);
+  assert.match(skill, /Only after both browser-launch failure and that wait marker/u);
   assert.match(cliInvocation, /pass `--email` and `--open`/u);
   assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
   assert.doesNotMatch(walletConfig, /attempts to open it|Automatic browser launch may fail/u);
@@ -263,12 +296,44 @@ test('the --no-watch handoff is documented as the next command to run', () => {
   assert.match(skill, /Do not pass `--no-watch`, do not start an `events poll` alongside it/u);
 });
 
-test('wallet init proactively returns and surfaces the card binding URL', () => {
+test('wallet init starts the watch and then requires returning the binding URL', () => {
   assert.match(walletConfig, /strips the returned URL to its HTTPS origin/u);
-  assert.match(walletConfig, /Proactively send a non-empty `data\.bindingUrl`/u);
-  assert.match(walletConfig, /never expose its original path, query string, or encoded email/u);
-  assert.match(skill, /`RETURN_WALLET_READY`[\s\S]*`data\.bindingUrl`/u);
-  assert.match(skill, /proactively send the returned origin-only card-binding URL/u);
+  assert.match(walletConfig, /Never emit that unprotected init copy/u);
+  assert.match(walletConfig, /paymentMethodsCached=true[\s\S]*paymentMethodCount=0/u);
+  assert.match(
+    walletConfig,
+    /clink card binding-link --no-open --format json[\s\S]*without `--no-watch`/u,
+  );
+  assert.match(walletConfig, /first JSON envelope[\s\S]*`data\.watchReady=true`[\s\S]*process remains alive/u);
+  assert.match(walletConfig, /scopes a watch to `payment_method\.added`/u);
+  assert.match(walletConfig, /first Event Hub poll succeeds/u);
+  assert.match(walletConfig, /`data\.watchEventType=payment_method\.added`/u);
+  assert.match(walletConfig, /positive count[\s\S]*return ready/u);
+  assert.match(walletConfig, /do not start a competing `events poll`/u);
+  assert.match(skill, /`START_WATCHED_CARD_BINDING`/u);
+  assert.match(skill, /Do not return the unprotected init copy/u);
+  assert.match(skill, /`bindingUrlRequired=true`/u);
+  assert.match(skill, /must return that command's sanitized origin-only `data\.bindingUrl` to the user/u);
+  assert.match(skill, /`paymentMethodsCached=true`, `paymentMethodCount=0`/u);
+  assert.match(skill, /`data\.watchReady=true`/u);
+  assert.match(
+    skill,
+    /clink card binding-link --no-open --format json[\s\S]*without `--no-watch`/u,
+  );
+  assert.doesNotMatch(skill, /proactively send (?:its|the returned) origin-only card-binding URL/iu);
+  assert.match(readme, /Start `clink card binding-link --no-open --format json`/u);
+  assert.match(readme, /must return that watched `bindingUrl` to the user/u);
+  assert.match(readmeZh, /先启动带内置监听的 `clink card binding-link --no-open --format json`/u);
+  assert.match(readmeZh, /必须把这份已受监听保护的 `bindingUrl` 返回给用户/u);
+  assert.match(asyncEvents, /polls the OAuth device-token endpoint; it does not poll the Event Hub/u);
+  assert.match(browserHandoff, /must hand that watched URL to the user/u);
+});
+
+test('wallet OAuth polling is distinguished from Event Hub listening', () => {
+  assert.match(skill, /`oauthDevicePollActive=true` means that same process is polling the OAuth device-token endpoint/u);
+  assert.match(skill, /never start `events poll` for OAuth/u);
+  assert.match(walletConfig, /`Waiting for authorization\.\.\.`[\s\S]*`oauthDevicePollActive=true`/u);
+  assert.match(asyncEvents, /Consider that poll active only after[\s\S]*`Waiting for authorization\.\.\.`/u);
 });
 
 test('UCP checkout workflow uses parse-item as the product analysis command', () => {
@@ -279,6 +344,30 @@ test('UCP checkout workflow uses parse-item as the product analysis command', ()
   assert.match(ucpCheckout, /merchantCategoryCode comes from agent classification/u);
   assert.doesNotMatch(skill, /clink tool item-id/u);
   assert.doesNotMatch(ucpCheckout, /clink tool item-id/u);
+});
+
+test('UCP order lookup keeps payment and UCP order identifiers type-safe', () => {
+  assert.match(skill, /checkout complete\/get `data\.order\.id` is `ucpOrderId`/u);
+  assert.match(skill, /agent_order\.succeeded\.data\.orderId\/resourceId` is `paymentOrderId`/u);
+  assert.match(skill, /never pass `paymentOrderId` to `ucp-order get`/u);
+  assert.match(skill, /classifyUcpOrderResolutionObservation/u);
+  assert.match(skill, /classifyUcpOrderFetchObservation/u);
+  assert.match(skill, /original internal endpoint/u);
+  assert.match(skill, /data\.ucp\.success_info/u);
+  assert.match(skill, /events poll --type agent_order\.succeeded --checkout-id <checkoutId>/u);
+
+  assert.match(ucpCheckout, /`ucpOrderId`[\s\S]*data\.order\.id/u);
+  assert.match(ucpCheckout, /`paymentOrderId`[\s\S]*agent_order\.succeeded/u);
+  assert.match(ucpCheckout, /clink ucp-checkout get[\s\S]*original_rest_endpoint/u);
+  assert.match(ucpCheckout, /clink ucp-order get --order-id <ucpOrderId>/u);
+  assert.match(ucpCheckout, /Do not re-poll the acknowledged event, re-run complete, or retry payment/u);
+  assert.match(ucpCheckout, /data\.ucp\.success_info/u);
+  assert.match(ucpCheckout, /same-type event for another checkout stays queued/u);
+  assert.match(ucpCheckout, /`merchantOrderId` is an external merchant reference, never a UCP ID alias/u);
+
+  assert.match(asyncEvents, /Event `orderId`\/`resourceId` is the Clink Payment `paymentOrderId`/u);
+  assert.match(asyncEvents, /Only `ucpOrderId` may be passed to `ucp-order get`/u);
+  assert.match(asyncEvents, /filtering happens before ACK/u);
 });
 
 test('skill documents intent routing and checkout route FSMs', () => {

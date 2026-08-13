@@ -2,6 +2,7 @@
   "name": "clink-cli-vendored",
   "version": "0.2.8",
   "upstreamCommit": "26e088bbe438a0f4f667fbae4e3943dc245f6e93",
+  "upstreamPatch": "card-binding-watch-ready-and-checkout-event-selector-v1",
   "private": true,
   "type": "module",
   "bin": { "clink-cli": "clink-cli.bundle.mjs" },

@@ -21,8 +21,8 @@ After installation, the agent must immediately continue with wallet initializati
 
 1. Run `clink wallet status --format json`. If the wallet is already ready (OAuth or complete legacy CSK), report readiness and stop.
 2. Otherwise ask the user for their email address (the only required input; the display name is derived from the email text before `@`).
-3. Run `clink wallet init --email <email> --open --format json`. When the CLI requests a system-browser launch, tell the user to complete authorization in the requested browser window and keep the same process running; show the URL only if browser launch fails.
-4. When init succeeds with a non-empty `bindingUrl`, proactively send that card-binding URL as the next step.
+3. Run `clink wallet init --email <email> --open --format json`. Keep reading the same process until it prints `Waiting for authorization...`; this activates OAuth device-token polling, not Event Hub listening. If the CLI requested a system-browser launch, tell the user to complete authorization there; show the URL only after both browser-launch failure and the wait marker. Never start `events poll` for OAuth.
+4. When init succeeds with `paymentMethodsCached=true`, `paymentMethodCount=0`, and a non-empty `bindingUrl`, treat the init URL only as a signal that first-card binding is next. Start `clink card binding-link --no-open --format json` with its built-in watch enabled. Its first envelope is delayed until the scoped watch's first poll succeeds and contains an origin-only `bindingUrl`, `watchReady=true`, and `watchEventType=payment_method.added`; then you **must return that watched `bindingUrl` to the user** while keeping the same process waiting for the matching event. Do not end the flow at OAuth-ready or omit the link. A positive count means the wallet is already card-ready; a cache-refresh error does not undo successful OAuth login.
 
 An explicit request to log in again, reauthorize, replace an expired link, or recover after missing the earlier login always starts a fresh `wallet init`. The new attempt supersedes the old one, and the agent must never reuse a login URL from chat history or earlier terminal output.
 

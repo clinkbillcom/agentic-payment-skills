@@ -216,6 +216,8 @@ clink refund create --order-id <order_id> --format json
 
 On success, extract `refundOrderId` or `refundId` from the response. A successful submission is not a final result.
 
+If `refund create` exits 6 or times out, submission state is unknown. Never resubmit automatically. Only when a trusted source provides the exact `refundId` / `refundOrderId` may you verify with `refund get` or an event carrying that same ID. Otherwise, do not consume or accept a type-only refund event as evidence for this attempt; use the original `orderId` for an operator/merchant-side authoritative lookup before deciding whether any new create is safe.
+
 ## Refund Completion
 
 Event-driven option:

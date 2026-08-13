@@ -22,7 +22,9 @@ When a command prints a URL for user action, the CLI normally keeps running and 
 - `instruction cancel`
 - `pay` when it returns a 3DS redirect
 
-The first JSON envelope contains the URL or immediate command result. If the watch observes events, the CLI emits a second JSON envelope on stdout with the processed events.
+For most commands, the first JSON envelope contains the URL or immediate command result. Watched `card binding-link` is the deliberate exception: it waits for the first successful Event Hub poll, then emits the URL with `watchReady=true`. If a built-in watch observes its matching event, the CLI emits a second JSON envelope on stdout with the processed event.
+
+`wallet init` is deliberately different. Before OAuth completes, its original process polls the OAuth device-token endpoint; it does not poll the Event Hub and needs no completion event. Consider that poll active only after the current attempt prints the complete `Waiting for authorization...` marker. After OAuth completes, init performs an internal payment-method refresh with watching disabled and may return `data.bindingUrl`; never emit that unprotected init copy. If the refresh proves `paymentMethodCount=0`, start `card binding-link --no-open --format json` without `--no-watch`. The command scopes its watch to `payment_method.added`, waits for its first Event Hub poll to succeed, then emits a sanitized origin-only URL with `data.watchReady=true` and `data.watchEventType=payment_method.added`. You must return that watched URL to the user while the same process remains alive, and keep it running for the matching second envelope; do not stop at OAuth-ready or add an `events poll` beside it. A positive count needs no first-card watch, while a refresh error leaves OAuth ready but card readiness unknown.
 
 Use `--no-watch` only when you want the URL or cache refresh without waiting. `--dry-run` also skips the watch. `--no-open` is unrelated and does not affect the watch: pass it on all of these commands so the CLI never launches a browser on its own host.
 
@@ -76,7 +78,7 @@ The result shape is:
 
 With `--type`, `events` contains only listed types. By default the CLI acknowledges both selected and skipped records; with typed `--no-ack`, it acknowledges only skipped records and keeps selected records queued. Therefore `ackedEventIds` may contain IDs that are absent from `events`, and a typed timeout can have `events=[]` with non-empty `ackedEventIds`. Untyped `--no-ack` is the only form that acknowledges nothing.
 
-Always correlate returned events by `resourceId` and the flow-specific identifiers below. Type selection controls queue progress, not business correctness.
+Always correlate returned events by the flow-specific identifiers below. Use `resourceId` only where that flow declares it valid; for UCP it is a payment order ID, not the checkout correlation key. Type selection controls queue progress, not business correctness.
 
 When a flow has more than one valid readiness event, use one any-of poll such as `--type type-a,type-b`; never start separate typed polls, because either poll can acknowledge the other type as unrelated. If existing FSMs use one wait spec per type, feed the same any-of result through each wait spec. Re-check authoritative status with a `get`/status command (`card binding-link --no-watch`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`.
 
@@ -110,7 +112,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | --- | --- |
 | Card binding/update/default change | same customer and, when known, same `paymentInstrumentId` |
 | 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
-| UCP checkout payment success | same `checkoutId`, `orderId`, or `sessionId` returned by checkout create/complete |
+| UCP checkout payment success | exact `checkoutId` carried by both checkout and event. Event `orderId`/`resourceId` is the Clink Payment `paymentOrderId`, not the UCP order ID, and cannot substitute for checkout correlation or order lookup. |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
 | VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
@@ -129,7 +131,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or `payment_method.updated` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
-| UCP checkout payment success | `agent_order.succeeded` for the checkout/order; poll with `clink events poll --type agent_order.succeeded --max-wait 900 --format json` after checkout complete returns `completed` |
+| UCP checkout payment success | `agent_order.succeeded` with exact matching `checkoutId`; poll with `clink events poll --type agent_order.succeeded --checkout-id <checkoutId> --max-wait 900 --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |
@@ -144,6 +146,9 @@ If the right event type appears for a different resource, keep the current workf
 - A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
 - A synchronous successful Agent Pay is already `PAID`. Run one `account-created,account-reloaded` any-of poll immediately, then classify the same result for both wait specs with `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.
 - For Agent Pay, timeout, poll error, and `AMBIGUOUS` attribution all preserve `PAID`; do not retry payment or claim merchant-order confirmation. Amount/currency are mandatory correlation fields, while `customerEmail`, `webSite`, and `userId` are optional conflict checks and tie-breakers.
+- For UCP, keep `paymentOrderId` from `agent_order.succeeded.data.orderId/resourceId` separate from `ucpOrderId` from checkout complete/get `data.order.id`. Prefixes may look identical. Only `ucpOrderId` may be passed to `ucp-order get`.
+- Use `--checkout-id <checkoutId>` for the UCP success poll so filtering happens before ACK. Same-type events for other checkouts remain queued; never use a generic type-only UCP success poll.
+- After a correlated UCP success event, a missing `ucpOrderId` is resolved by bounded, read-only `ucp-checkout get` against the original endpoint. Do not poll the acknowledged event again, retry complete/payment, or downgrade confirmed payment when order projection/fetch is unavailable.
 - On timeout, return the timeout state and resume command; do not claim success.
 - A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.
 - For refund status, direct `refund get` polling is also acceptable.

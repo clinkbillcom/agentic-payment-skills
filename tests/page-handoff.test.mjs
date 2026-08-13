@@ -28,7 +28,6 @@ test('every declared kind has a contract and every contract is declared', () => 
 
 test('non-OAuth Clink and Visa pages that need a person route to the user own device', () => {
   for (const kind of [
-    PageHandoffKind.CARD_BINDING,
     PageHandoffKind.CARD_SETUP,
     PageHandoffKind.CARD_MODIFY,
     PageHandoffKind.VIC_PASSKEY_REGISTRATION,
@@ -60,7 +59,107 @@ test('OAuth delegates URL exposure to the wallet workflow', () => {
   assert.equal(result.action, PageHandoffAction.DEFER_OAUTH_TO_WALLET_WORKFLOW);
   assert.equal(result.terminal, false);
   assert.deepEqual(result.cliFlags, ['--open']);
+  assert.deepEqual(result.completionEvents, []);
+  assert.equal(result.watch, 'oauth-device-token-poll');
   assert.equal(result.emitUrl, false);
+});
+
+test('card binding hands off only with the built-in payment-method watch', () => {
+  const result = classifyPageHandoff({
+    kind: PageHandoffKind.CARD_BINDING,
+    url: 'https://agent.example.test',
+    watchReady: true,
+    watchEventType: 'payment_method.added',
+    processRunning: true,
+  });
+
+  assert.equal(result.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
+  assert.deepEqual(result.cliFlags, ['--no-open']);
+  assert.deepEqual(result.completionEvents, ['payment_method.added']);
+  assert.equal(result.watch, 'built-in');
+  assert.equal(result.emitUrl, true);
+  assert.equal(result.bindingUrlRequired, true);
+  assert.equal(result.url, 'https://agent.example.test');
+});
+
+test('card binding accepts only a sanitized HTTPS origin', () => {
+  for (const url of [
+    'http://agent.example.test',
+    'https://user:pass@agent.example.test',
+    'https://agent.example.test/card-binding',
+    'https://agent.example.test/?token=secret',
+    'https://agent.example.test/#fragment',
+    'javascript:alert(1)',
+    'not-a-url',
+  ]) {
+    const result = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url,
+      watchReady: true,
+      watchEventType: 'payment_method.added',
+      processRunning: true,
+    });
+    assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID, url);
+    assert.equal(result.reason, 'card_binding_url_not_https_origin', url);
+    assert.equal(result.emitUrl, false, url);
+    assert.equal(result.detail, null, 'the rejected URL must not be copied into diagnostics');
+  }
+});
+
+test('unattended card binding rejects unsafe URLs before constructing diagnostics', () => {
+  for (const availability of [
+    { unattended: true },
+    { userReachable: false },
+  ]) {
+    const result = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url: 'https://agent.example.test/card-binding?token=secret',
+      watchReady: true,
+      watchEventType: 'payment_method.added',
+      processRunning: true,
+      ...availability,
+    });
+
+    assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
+    assert.equal(result.reason, 'card_binding_url_not_https_origin');
+    assert.equal(result.emitUrl, false);
+    assert.equal(result.url, undefined);
+    assert.equal(result.detail, null);
+    assert.doesNotMatch(JSON.stringify(result), /card-binding|token|secret/u);
+  }
+});
+
+test('card binding cannot report a handoff without returning the watched URL', () => {
+  const result = classifyPageHandoff({
+    kind: PageHandoffKind.CARD_BINDING,
+    watchReady: true,
+    watchEventType: 'payment_method.added',
+    processRunning: true,
+  });
+
+  assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
+  assert.equal(result.action, PageHandoffAction.SURFACE_PAGE_HANDOFF_ERROR);
+  assert.equal(result.reason, 'card_binding_url_missing');
+  assert.equal(result.emitUrl, false);
+});
+
+test('card binding never emits before its scoped watch is ready and still running', () => {
+  for (const request of [
+    {},
+    { watchReady: false, watchEventType: 'payment_method.added', processRunning: true },
+    { watchReady: true, watchEventType: 'payment_method.updated', processRunning: true },
+    { watchReady: true, watchEventType: 'payment_method.added', processRunning: false },
+  ]) {
+    const result = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url: 'https://agent.example.test',
+      ...request,
+    });
+    assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
+    assert.equal(result.action, PageHandoffAction.SURFACE_PAGE_HANDOFF_ERROR);
+    assert.equal(result.reason, 'card_binding_watch_not_ready');
+    assert.equal(result.emitUrl, false);
+  }
 });
 
 test('the risk page stays the user decision without claiming secret entry', () => {
@@ -91,7 +190,17 @@ test('merchant product pages stay agent work', () => {
 
 test('an unattended run never emits a page only a human can finish', () => {
   for (const kind of HUMAN_KINDS) {
-    const result = classifyPageHandoff({ kind, unattended: true });
+    const request = kind === PageHandoffKind.CARD_BINDING
+      ? {
+        kind,
+        url: 'https://agent.example.test',
+        watchReady: true,
+        watchEventType: 'payment_method.added',
+        processRunning: true,
+        unattended: true,
+      }
+      : { kind, unattended: true };
+    const result = classifyPageHandoff(request);
     assert.equal(result.state, PageHandoffState.BROWSER_HANDOFF_UNREACHABLE, kind);
     assert.equal(result.action, PageHandoffAction.SURFACE_BROWSER_HANDOFF_GAP, kind);
     assert.equal(result.terminal, true, kind);
@@ -168,7 +277,16 @@ test('single-load pages are marked so they are never re-sent as a nudge', () => 
     PageHandoffKind.CARD_MODIFY,
     PageHandoffKind.THREE_DS_CHALLENGE,
   ]) {
-    assert.equal(classifyPageHandoff({ kind }).singleLoad, true, kind);
+    const request = kind === PageHandoffKind.CARD_BINDING
+      ? {
+        kind,
+        url: 'https://agent.example.test',
+        watchReady: true,
+        watchEventType: 'payment_method.added',
+        processRunning: true,
+      }
+      : { kind };
+    assert.equal(classifyPageHandoff(request).singleLoad, true, kind);
   }
 });
 
@@ -186,7 +304,13 @@ test('completion events match the flows that prove them', () => {
     ['vic_device.binding_succeeded', 'payment_method.updated'],
   );
   assert.deepEqual(
-    classifyPageHandoff({ kind: PageHandoffKind.CARD_BINDING }).completionEvents,
+    classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url: 'https://agent.example.test',
+      watchReady: true,
+      watchEventType: 'payment_method.added',
+      processRunning: true,
+    }).completionEvents,
     ['payment_method.added'],
   );
 });
@@ -201,7 +325,13 @@ test('the prohibition enumerates channels and verbs, not just opening', () => {
     assert.ok(AGENT_BROWSER_VERBS.includes(verb), verb);
   }
 
-  const result = classifyPageHandoff({ kind: PageHandoffKind.CARD_BINDING });
+  const result = classifyPageHandoff({
+    kind: PageHandoffKind.CARD_BINDING,
+    url: 'https://agent.example.test',
+    watchReady: true,
+    watchEventType: 'payment_method.added',
+    processRunning: true,
+  });
   assert.deepEqual(result.doNotAutomateChannels, AGENT_BROWSER_CHANNELS);
   assert.deepEqual(result.doNotAutomateVerbs, AGENT_BROWSER_VERBS);
 });

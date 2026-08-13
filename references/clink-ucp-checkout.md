@@ -60,7 +60,9 @@ DISCOVER_PRODUCT
   -> VERIFY_READY_FOR_COMPLETE
   -> COMPLETE_CHECKOUT
   -> POLL_PAYMENT_SUCCESS_EVENT
-  -> RETURN_PAYMENT_SUCCESS_EVENT
+  -> IF_UCP_ORDER_ID_MISSING_GET_CHECKOUT_WITH_ORIGINAL_ENDPOINT
+  -> FETCH_UCP_ORDER_WITH_CHECKOUT_ORDER_ID
+  -> RETURN_PAYMENT_SUCCESS_AND_ORDER_OR_SEPARATE_ORDER_WARNING
 ```
 
 Every transition has a guard. If the guard fails, stop and report the exact missing or invalid condition instead of guessing. The feedback loop is the parsed JSON response from each CLI command plus a follow-up `ucp-checkout get` when the checkout state is not terminal.
@@ -345,44 +347,60 @@ clink ucp-checkout complete \
 
 ## Step 7: Poll Payment Success Event
 
-Parse the complete response. Per UCP convention, complete returns the session with `status: "completed"` and a nested `order` object — `order.id` is the OMS order id, distinct from the Clink pay `orderId` that appears in `agent_order` events. `order.permalink_url` may carry the merchant order page (filled from ext_info `success_url` on synchronous success); pass it through as-is when present and treat its absence as normal — never gate any step on it. The FSM also accepts flat aliases (`omsOrderId` / `oms_order_id` / `merchantOrderId`) for backends that have not adopted the nested shape. When complete returns `completed`, immediately start the payment success event poll:
+Parse the complete response. There are two distinct identifiers and their string prefixes are not a type system:
+
+- `ucpOrderId`: checkout complete/get `data.order.id`. This is the only value allowed in `clink ucp-order get --order-id`.
+- `paymentOrderId`: `agent_order.succeeded` `data.orderId` or `resourceId`. This is Clink Payment success evidence and must never be used for UCP order lookup.
+
+Complete may return `complete_in_progress` without `order`; a later checkout GET exposes `order.id` after projection reaches `completed`. `order.permalink_url` may carry the merchant order page; pass it through as-is and treat absence as normal. The FSM accepts only the trusted legacy checkout-response aliases `omsOrderId` / `oms_order_id` and canonicalizes them to `ucpOrderId`; `merchantOrderId` is an external merchant reference, never a UCP ID alias. Freeze `checkoutId`, the route, and the original internal `endpoint`. Classify only explicit `{ok:true,data:{...}}` checkout and event-poll envelopes; an error or malformed envelope fails closed even if its error payload resembles completed checkout or success-event data. Bind every complete/get response with `expectedCheckoutId` or `expectedResource.checkoutId`; every present `id`, `checkoutId`, and `checkout_id` alias must agree with each other and with that frozen ID, and every present checkout/context UCP-order-ID alias must agree before order lookup. A missing frozen binding, conflicting aliases, or a response for another checkout fails closed. When complete returns `completed`, immediately start the payment success event poll:
 
 ```bash
-clink events poll --type agent_order.succeeded --max-wait 900 --format json
+clink events poll --type agent_order.succeeded --checkout-id <checkoutId> --max-wait 900 --format json
 ```
 
 The 900-second window matches the 15-minute built-in watch used elsewhere; async order success can take minutes, so do not shorten it.
 
-Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Pass `expectedResource: { checkoutId, omsOrderId }` (omit fields that are absent):
+Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Pass `expectedResource: { checkoutId, ucpOrderId, checkoutEndpoint }` (omit absent fields; `omsOrderId` remains a compatibility alias):
 
-- Correlate by `checkoutId` — it is the only id that is known at complete time and also carried in the event. Do not use `orderId` or `sessionId` alone as the primary anchor; they can collide across concurrent orders.
-- The `omsOrderId` is not used for correlation — it is forwarded so the next step can fetch the order without re-parsing the complete response.
+- Let the CLI filter and ACK only exact `checkoutId`. A same-type event for another checkout stays queued for its own concurrent workflow. A generic event `orderId` is the payment ID and cannot substitute. Type-only UCP matching is unsafe and remains pending.
+- Require every checkout-ID alias on the event to match the frozen checkout ID and every payment-order alias to agree. Store the matched event ID as `paymentOrderId`; do not overwrite `ucpOrderId`.
 
-Once the event is matched and `omsOrderId` is present, the FSM returns `FETCH_OMS_ORDER` with the ready-to-run `orderCommand`. Run it and surface both the payment event and the order to the caller. If `ucp-order get` fails, the payment is still confirmed — surface the success event and report the order fetch error separately; never reclassify a confirmed payment as failed.
+If `ucpOrderId` is already present, the FSM returns `FETCH_UCP_ORDER`. Otherwise it returns `GET_CHECKOUT_FOR_UCP_ORDER`; execute the exact `checkoutCommand` it provides:
 
 ```bash
-clink ucp-order get --order-id <omsOrderId> --format json
+clink ucp-checkout get \
+  [--endpoint <original_rest_endpoint>] \
+  --checkout-id <checkoutId> \
+  --format json
 ```
 
-Do not claim merchant fulfillment, delivery, or entitlement.
+Pass the exact event-bearing output from `classifyUcpPaymentSuccessEventObservation` plus that response to `classifyUcpOrderResolutionObservation`; never reconstruct post-payment context from `checkoutId` and `paymentOrderId`. The resolution and fetch classifiers require the original `agent_order.succeeded` event, its exact checkout correlation, and a matching supplied `paymentOrderId` when one is present. Missing or inconsistent evidence fails closed with `paymentConfirmed=false` and cannot emit a payment-success warning. On `complete_in_progress`, `processing`, or `completed` without `order.id`, retry only this read-only checkout GET with the returned bounded schedule (immediate, then 1/2/4/8 seconds). Network errors, HTTP 429, and HTTP 5xx use the same bound; validation, authentication/authorization, identifier conflicts, and malformed responses do not retry automatically. Do not re-poll the acknowledged event, re-run complete, or retry payment. After the bound is exhausted, return confirmed payment plus the resumable checkout GET warning.
+
+Only after checkout complete/get yields `ucpOrderId` run:
+
+```bash
+clink ucp-order get --order-id <ucpOrderId> --format json
+```
+
+Classify `ucp-order get` with `classifyUcpOrderFetchObservation`, carrying forward the exact correlated event context returned by the preceding classifier. `message`, `orderPermalinkUrl`, and `checkoutEndpoint` stay attached across resolution retries, resolution success, fetch success, and fetch warnings. A successful result includes OMS success-page data at `data.ucp.success_info` when OMS stored it. If UCP ID resolution or order fetch fails after valid event correlation, the classifier returns confirmed payment with a separate order warning; never retry payment or claim merchant fulfillment, delivery, or entitlement.
 
 If complete is not clearly terminal, verify state first:
 
 ```bash
-clink ucp-checkout get --checkout-id <checkout_id> --format json
+clink ucp-checkout get [--endpoint <original_rest_endpoint>] --checkout-id <checkout_id> --format json
 ```
 
 Status handling:
 
 | Status | Action |
 | --- | --- |
-| `completed` | Immediately run `clink events poll --type agent_order.succeeded --max-wait 900 --format json`, then return the matched payment success event/message. |
-| `complete_in_progress` | Tell the user automation is in progress; poll `ucp-checkout get` with bounded retries or leave a resumable pending state. |
+| `completed` | Poll the success event. After it matches, fetch with `ucpOrderId` or resolve it from this checkout; never use event `paymentOrderId`. |
+| `complete_in_progress` | Keep checkoutId + original endpoint, poll the success event as the active workflow requires, then use bounded checkout GET recovery for `data.order.id`. |
 | `ready_for_complete` | Complete did not start or was rejected before processing; inspect error output and do not retry blindly. |
 | `requires_escalation` | Authorization did not cover the order; ask the user to create/update the instruction. |
 | `canceled` | Stop; do not retry without a new checkout or explicit recovery path. |
 
-If the CLI exits with a network or timeout error, treat the checkout state as unknown. Check by `ucp-checkout get` before retrying complete.
+If complete/get exits with a network or timeout error, treat the checkout state as unknown and execute only the FSM's returned read-only `resumeCommand`, which binds `ucp-checkout get` to the frozen checkout ID and original endpoint. A create exit 6 has no synthesized resume command when no trusted checkout ID exists. Treat checkout GET as recovery-only: never resubmit complete merely because that GET is inconclusive, and never resubmit create without a trusted checkout ID and an authoritative idempotency contract. Reuse the frozen mutation request only when an authoritative checkout state or idempotency contract proves that doing so is safe.
 
 ## Failure And Recovery Rules
 
@@ -393,6 +411,8 @@ If the CLI exits with a network or timeout error, treat the checkout state as un
 - `ucp-checkout create` idempotency conflict: use the original response if the cart is identical; otherwise create a new checkout with a new key.
 - `ucp-checkout complete` already has a payment in progress: recover with `ucp-checkout get`.
 - Payment success event poll timeout: return the pending state and `resumeCommand`; do not claim payment success until a matching `agent_order.succeeded` event is observed.
+- Payment event matched but checkout has not exposed `order.id`: pass the exact event-bearing classifier output forward, keep payment confirmed, and retry only original-route `ucp-checkout get`; never reconstruct context from IDs, use event `paymentOrderId` for lookup, re-poll the event, or retry payment.
+- UCP order lookup fails after valid correlated event context: return payment success with a separate order warning and preserve the message, order permalink, and checkout endpoint; payment status must not be downgraded. Missing or inconsistent event context is an input error with `paymentConfirmed=false`, not a payment-success warning.
 - Backend `NO_AUTHORIZATION` or `UCP_AUTHORIZATION_BINDING_INVALID`: the instruction/mandate is not valid for this checkout. Stop and request a corrected instruction.
 
 ## Minimal End-To-End Skeleton
@@ -443,7 +463,8 @@ clink ucp-checkout complete \
   --payment-instrument-id <payment_instrument_id> \
   --idempotency-key <stable_complete_key> \
   --format json
-clink events poll --type agent_order.succeeded --max-wait 900 --format json
-clink ucp-order get --order-id <omsOrderId> --format json
-clink ucp-checkout get --checkout-id <checkout_id> --format json
+clink events poll --type agent_order.succeeded --checkout-id <checkout_id> --max-wait 900 --format json
+# If complete had no data.order.id, resolve it after the event from the same checkout route.
+clink ucp-checkout get [--endpoint <rest_endpoint>] --checkout-id <checkout_id> --format json
+clink ucp-order get --order-id <ucpOrderId_from_checkout_order_id> --format json
 ```

@@ -13,7 +13,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -6030,7 +6034,11 @@ async function pollWebhookEvents(options2) {
     method: "POST",
     path: EVENT_POLL_PATH,
     headers: buildInstructionHeaders(runtimeConfig),
-    body: { pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE },
+    body: {
+      pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE,
+      ...options2.eventTypes && options2.eventTypes.length > 0 ? { eventTypes: options2.eventTypes } : {},
+      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {}
+    },
     timeoutMs: options2.timeoutMs,
     dryRun: false
   }));
@@ -6041,7 +6049,7 @@ async function pollWebhookEvents(options2) {
   const data = unwrapApiData(result.body);
   const records = data?.records;
   if (!Array.isArray(records)) {
-    return [];
+    throw apiError("missing or invalid records in Event Hub poll response", 502);
   }
   return records.filter(isWebhookEventRecord);
 }
@@ -6095,10 +6103,28 @@ async function watchEvents(options2) {
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
-  log(`Open this link in your browser to complete the ${options2.label}:`);
-  log(`  ${options2.url}`);
-  log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
-  const deadline = startedAtMs + maxDurationMs;
+  const watchIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+  const logHandoff = () => {
+    log(`Open this link in your browser to complete the ${options2.label}:`);
+    log(`  ${options2.url}`);
+    log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
+  };
+  if (options2.deferHandoffUntilReady !== true) {
+    logHandoff();
+  }
+  let ready = false;
+  let deadline = startedAtMs + maxDurationMs;
+  const markReady = () => {
+    if (ready) {
+      return;
+    }
+    ready = true;
+    if (options2.deferHandoffUntilReady === true) {
+      deadline = now() + maxDurationMs;
+      logHandoff();
+    }
+    options2.onReady?.();
+  };
   for (; ; ) {
     let records;
     let polledIdentity = { type: "none" };
@@ -6111,6 +6137,18 @@ async function watchEvents(options2) {
         ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
       });
       polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+      if (!authorizationIdentityCanContinue(watchIdentity, polledIdentity)) {
+        throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+      }
+      if (getRuntimeConfig) {
+        const currentRuntimeConfig = await getRuntimeConfig();
+        assertRuntimeIdentity(currentRuntimeConfig, watchIdentity);
+        polledIdentity = runtimeAuthorizationIdentity(currentRuntimeConfig);
+      }
+      if (records.length > 0) {
+        assertEventCustomersMatchIdentity(records.map(toProcessedEvent), polledIdentity);
+      }
+      markReady();
     } catch (error) {
       if (!isRecoverableWatchPollError(error)) {
         throw error;
@@ -6316,6 +6354,15 @@ async function collectWebhookEvents(options2) {
   const requestedTypes = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
   const hasTypeFilter = requestedTypes.size > 0;
   const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
+  const checkoutId = normalizedValue(options2.checkoutId);
+  const hasCheckoutFilter = checkoutId !== void 0;
+  const checkoutEventType = [...requestedTypes][0];
+  if (hasCheckoutFilter && (requestedTypes.size !== 1 || checkoutEventType !== "agent_order.succeeded" && checkoutEventType !== "agent_order.failed")) {
+    throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
+  }
+  const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
+  const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
+  const matchesTarget = (event) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || eventMatchesCheckoutId(event, checkoutId)) && matchesExpectedResource(event);
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
@@ -6329,14 +6376,15 @@ async function collectWebhookEvents(options2) {
       ...getRuntimeConfig ? { getRuntimeConfig } : {},
       ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
       timeoutMs: options2.timeoutMs,
-      ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
+      ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
+      ...hasCheckoutFilter ? { eventTypes: [...requestedTypes], checkoutId } : {}
     });
     const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
     if (records.length > 0) {
       const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-      const matchingEvents = hasTypeFilter ? events.filter(matchesRequestedType) : events;
+      const matchingEvents = events.filter(matchesTarget);
       collected.push(...matchingEvents);
-      const ackable = hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+      const ackable = hasCheckoutFilter ? events.filter((event) => !matchesRequestedType(event) || ack && matchesTarget(event)) : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
       const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
       await ackWebhookEvents({
         runtimeConfig: runtimeState.value,
@@ -6357,6 +6405,20 @@ async function collectWebhookEvents(options2) {
   }
   return { ready: false, timedOut: true, events: collected, ackedEventIds };
 }
+function eventMatchesCheckoutId(event, expectedCheckoutId) {
+  const checkoutIds = compactValues([
+    event.data.checkoutId,
+    event.data.checkout_id
+  ]);
+  return checkoutIds.length > 0 && checkoutIds.every((candidate) => candidate === expectedCheckoutId);
+}
+function eventMatchesExpectedResource(event, expectedResource) {
+  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
+  if (expectedEntries.length === 0) {
+    return true;
+  }
+  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
+}
 async function processEvents(records, expectedIdentity, resolveStoredRuntimeConfig = storedRuntimeConfig) {
   const events = records.map(toProcessedEvent);
   await updateStoredConfig((current) => {
@@ -6375,6 +6437,9 @@ function assertEventCacheIdentity(current, events, expectedIdentity, resolveStor
   if (expectedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, expectedIdentity) || !authorizationIdentityCanContinue(expectedIdentity, currentIdentity)) {
     throw authError("Wallet login changed while webhook events were in progress; retry the command.");
   }
+  assertEventCustomersMatchIdentity(events, expectedIdentity);
+}
+function assertEventCustomersMatchIdentity(events, expectedIdentity) {
   const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
   const mismatchedEvent = events.find((event) => eventCustomerIds(event).some((customerId) => expectedCustomerId !== void 0 && customerId !== expectedCustomerId) || eventCustomerIds(event).length > 1);
   if (mismatchedEvent) {
@@ -7142,14 +7207,16 @@ Usage:
   clink card binding-link [options]
 
 Options:
-  --no-watch                   Skip polling for webhook events after printing the link
+  --no-watch                   Return the link without starting or waiting for an Event Hub watch
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   Calls /agent/cwallet/card/bindingLink.
   Refreshes local cached payment methods from paymentMethodsVoList.
-  After printing the link, polls for webhook events until one arrives (max 15 min);
-  pass --no-watch when you only need to refresh the cached card list.
+  With watch enabled, initializes a payment_method.added watcher, then prints an origin-only
+  bindingUrl with watchReady=true and waits for that matching event (max 15 min).
+  Pass --no-watch when you only need to refresh the cached card list; it does not poll and returns
+  watchReady=false plus watchEventType=null while stderr identifies the missing listener.
 
 Examples:
   clink card binding-link
@@ -8059,6 +8126,8 @@ Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
   --limit <n>                  Max events per poll (pageSize, default 20)
   --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
+  --checkout-id <id>           Match one agent_order event by data.checkoutId; keep same-type
+                               events for other checkouts queued
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
@@ -8075,11 +8144,14 @@ Notes:
   records are also acknowledged by default.
   With both --type and --no-ack, matching records stay queued but unrelated records are still
   acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
+  --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The selector is sent
+  to Event Hub before pagination, then checked again locally before only exact matches are ACKed.
 
 Examples:
   clink events poll --format json
   clink events poll --type payment_method.updated --format json
   clink events poll --type account-created,account-reloaded --format json
+  clink events poll --type agent_order.succeeded --checkout-id checkout_123 --format json
   clink events poll --no-ack --format json
 `;
 function printHelp(command, subcommand, nestedCommand) {
@@ -9026,7 +9098,7 @@ function unwrapResponse(result, invalidMessage) {
 }
 function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
-    return [];
+    throw apiError("missing or invalid paymentMethodsVoList in card binding response", 502);
   }
   return value.filter((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0).map((item) => ({ ...item }));
 }
@@ -13379,6 +13451,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
   validateEnvironmentFlagScope(command, subcommand, args.flags);
+  const validatedEventPoll = validateEventPollFlags(command, subcommand, args.flags);
   if (getBooleanFlag(args.flags, "help")) {
     printHelp(command, subcommand, nestedCommand);
     return EXIT_CODES.OK;
@@ -13396,7 +13469,8 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
     globalOptions,
-    startedAt
+    startedAt,
+    ...validatedEventPoll ? { validatedEventPoll } : {}
   };
   await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
@@ -13431,6 +13505,20 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     default:
       throw validationError(`unsupported command: ${command}`);
   }
+}
+function validateEventPollFlags(command, subcommand, flags) {
+  if (command !== "events" || subcommand !== "poll") {
+    return void 0;
+  }
+  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
+  const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
+  if ("checkout-id" in flags && !checkoutId) {
+    throw validationError("invalid --checkout-id: expected a non-blank id");
+  }
+  if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
+    throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
+  return { type, checkoutId };
 }
 function validateEnvironmentFlagScope(command, subcommand, flags) {
   const isWalletInit = command === "wallet" && subcommand === "init";
@@ -13804,7 +13892,7 @@ function resolveWatchFlag(flags) {
   }
   return true;
 }
-async function maybeWatchEvents(context, url, label, watchTarget = {}) {
+async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady, watchOptions = {}) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
       printPendingWatchHandoff(url, watchTarget.eventType);
@@ -13824,7 +13912,9 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}) {
     timeoutMs: context.globalOptions.timeoutMs,
     url,
     label,
-    ...watchTarget
+    ...watchTarget,
+    ...watchOptions,
+    ...onReady ? { onReady } : {}
   });
   printSuccess(result, context.globalOptions.format);
 }
@@ -13852,7 +13942,7 @@ async function eventsPoll(context) {
   const flags = context.args.flags;
   const maxWaitSeconds = parseIntFlag(getStringFlag(flags, "max-wait"), "invalid --max-wait", 1);
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
-  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
+  const { type, checkoutId } = context.validatedEventPoll ?? {};
   const ack = !getBooleanFlag(flags, "no-ack");
   if (context.globalOptions.dryRun) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
@@ -13873,7 +13963,8 @@ async function eventsPoll(context) {
     ack,
     maxDurationMs,
     ...pageSize !== void 0 ? { pageSize } : {},
-    ...type ? { type } : {}
+    ...type ? { type } : {},
+    ...checkoutId ? { checkoutId } : {}
   });
   printSuccess({
     ready: result.ready,
@@ -13881,7 +13972,7 @@ async function eventsPoll(context) {
     events: result.events,
     ackedEventIds: result.ackedEventIds,
     ...result.timedOut ? {
-      resumeCommand: buildResumeCommand(type, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
+      resumeCommand: buildResumeCommand(type, checkoutId, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
     } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -13906,10 +13997,13 @@ function parseEventTypeFlag(value) {
   }
   return [...new Set(types)].join(",");
 }
-function buildResumeCommand(type, ack, format, baseUrlOverride) {
+function buildResumeCommand(type, checkoutId, ack, format, baseUrlOverride) {
   const parts = ["clink events poll"];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
+  }
+  if (checkoutId) {
+    parts.push(`--checkout-id ${quoteShellArgument(checkoutId)}`);
   }
   if (!ack) {
     parts.push("--no-ack");
@@ -14026,7 +14120,7 @@ ${verificationUrl}
     throw error;
   }
   const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
-  printSuccess({
+  const successData = {
     customerId: token.customerId,
     email,
     name,
@@ -14038,7 +14132,15 @@ ${verificationUrl}
     paymentMethodCount: paymentMethodsCache.count,
     ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
     configPath: "~/.clink-cli/config.json"
-  }, context.globalOptions.format);
+  };
+  await withConfigLock(async () => {
+    await assertWalletInitCurrent(isCurrent);
+    const current = await readStoredConfig();
+    if (!matchesAuthorizationIdentity(current, storedAuthorization)) {
+      throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+    }
+    printSuccess(successData, context.globalOptions.format);
+  });
   return EXIT_CODES.OK;
 }
 async function assertWalletInitCurrent(isCurrent) {
@@ -14104,10 +14206,16 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
+    if (!Array.isArray(data.paymentMethodsVoList)) {
+      throw apiError("missing or invalid paymentMethodsVoList in card binding response", 502);
+    }
     const bindingUrl = buildBareDomainUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"));
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
+    if (error instanceof CliError && error.type === "auth_error") {
+      throw error;
+    }
     return {
       bindingUrl: null,
       cached: false,
@@ -14219,8 +14327,20 @@ async function cardBindingLink(context) {
     return EXIT_CODES.OK;
   }
   const staleEventCutoffMs = Date.now();
-  printSuccess(prepared.data, context.globalOptions.format);
-  await maybeWatchEvents(context, prepared.url, "card binding", { staleEventCutoffMs });
+  const printBindingHandoff = (watchReady) => printSuccess({
+    ...prepared.data,
+    bindingUrl: prepared.url,
+    paymentMethodsVoList: Array.isArray(prepared.data.paymentMethodsVoList) ? prepared.data.paymentMethodsVoList : [],
+    watchReady,
+    watchEventType: watchReady ? "payment_method.added" : null
+  }, context.globalOptions.format);
+  if (!context.globalOptions.watch) {
+    printBindingHandoff(false);
+  }
+  await maybeWatchEvents(context, prepared.url, "card binding", {
+    staleEventCutoffMs,
+    eventType: "payment_method.added"
+  }, () => printBindingHandoff(true), { deferHandoffUntilReady: true });
   return EXIT_CODES.OK;
 }
 async function cardRedirectLink(context, label) {
@@ -15402,7 +15522,7 @@ function buildConfigView(config) {
 }
 async function cachePaymentMethods(context, value) {
   const requestedIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
-  const paymentMethods = Array.isArray(value) ? value.filter((item) => typeof item === "object" && item !== null && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.length > 0) : [];
+  const paymentMethods = normalizePaymentMethods(value);
   const nextConfig = await updateStoredConfig((current) => {
     const currentIdentity = runtimeAuthorizationIdentity(resolveRuntimeConfig(current, context.args.flags));
     if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
