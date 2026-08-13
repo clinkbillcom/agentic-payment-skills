@@ -13,11 +13,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -5198,6 +5194,15 @@ async function beginWalletInit(startedAt = Date.now()) {
 async function isWalletInitCurrent(generation) {
   return (await readWalletInitState())?.generation === generation;
 }
+async function runIfWalletInitCurrent(generation, operation) {
+  return withConfigLock(async () => {
+    if ((await readWalletInitState())?.generation !== generation) {
+      return false;
+    }
+    operation();
+    return true;
+  });
+}
 function enforceCredentialInvariant(current, next) {
   if (current.oauthRequired || current.authorization || next.oauthRequired || next.authorization) {
     next.oauthRequired = true;
@@ -5386,6 +5391,7 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
   const issuerOrigin = httpOrigin(nonEmptyString(record.issuerOrigin) ?? "");
   const accessToken = nonEmptyString(record.accessToken);
   const refreshToken = nonEmptyString(record.refreshToken);
+  const agentClientId = nonEmptyString(record.agentClientId);
   const scope = nonEmptyString(record.scope);
   const accessTokenExpiresAt = finiteNumber(record.accessTokenExpiresAt);
   const refreshTokenExpiresAt = finiteNumber(record.refreshTokenExpiresAt);
@@ -5404,6 +5410,7 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
     accessTokenExpiresAt,
     refreshToken,
     refreshTokenExpiresAt,
+    ...agentClientId ? { agentClientId } : {},
     scope
   };
 }
@@ -5574,6 +5581,131 @@ function assignRiskRules(target, value) {
   }
 }
 
+// dist/device-identity.js
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile as readFile2 } from "node:fs/promises";
+import os2 from "node:os";
+
+// dist/version.js
+var CLI_VERSION = "0.2.9";
+
+// dist/device-identity.js
+var DEFAULT_RUNTIME = {
+  platform: process.platform,
+  architecture: process.arch,
+  readTextFile: (filePath) => readFile2(filePath, "utf8"),
+  executeFile: execute,
+  hostname: os2.hostname,
+  osRelease: os2.release
+};
+async function resolveAgentClientBootstrap(installationId, options2 = {}) {
+  const runtime = { ...DEFAULT_RUNTIME, ...options2.runtime };
+  const platform = requireSupportedPlatform(runtime.platform);
+  const nativeDeviceId = await readNativeDeviceId(platform, runtime);
+  const metadata = {
+    installationId,
+    deviceId: deriveDeviceId(platform, nativeDeviceId),
+    clientVersion: CLI_VERSION,
+    platform,
+    architecture: runtime.architecture
+  };
+  const hostname = optionalMetadata(runtime.hostname, 255);
+  const osRelease = optionalMetadata(runtime.osRelease, 128);
+  if (hostname) {
+    metadata.hostname = hostname;
+  }
+  if (osRelease) {
+    metadata.osRelease = osRelease;
+  }
+  return metadata;
+}
+function deriveDeviceId(platform, nativeDeviceId) {
+  const normalized = normalizeNativeDeviceId(nativeDeviceId);
+  return createHash("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
+}
+async function readNativeDeviceId(platform, runtime) {
+  try {
+    switch (platform) {
+      case "darwin":
+        return parseMacDeviceId(await runtime.executeFile("/usr/sbin/ioreg", ["-rd1", "-c", "IOPlatformExpertDevice"]));
+      case "win32":
+        return parseWindowsDeviceId(await runtime.executeFile("reg.exe", [
+          "query",
+          "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
+          "/v",
+          "MachineGuid",
+          "/reg:64"
+        ]));
+      case "linux":
+        return readLinuxDeviceId(runtime);
+    }
+  } catch (error) {
+    throw configError(`failed to read the ${platform} native device ID: ${error.message}`);
+  }
+}
+async function readLinuxDeviceId(runtime) {
+  const failures = [];
+  for (const filePath of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) {
+    try {
+      const value = (await runtime.readTextFile(filePath)).trim().toLowerCase();
+      if (value && value !== "uninitialized") {
+        return value;
+      }
+      failures.push(`${filePath} is blank or uninitialized`);
+    } catch (error) {
+      failures.push(`${filePath}: ${error.message}`);
+    }
+  }
+  throw new Error(`no usable Linux machine ID (${failures.join("; ")})`);
+}
+function parseMacDeviceId(output) {
+  const value = output.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/i)?.[1];
+  if (!value) {
+    throw new Error("ioreg did not return IOPlatformUUID");
+  }
+  return value;
+}
+function parseWindowsDeviceId(output) {
+  const value = output.match(/MachineGuid\s+REG_SZ\s+([^\r\n]+)/i)?.[1];
+  if (!value) {
+    throw new Error("registry query did not return MachineGuid");
+  }
+  return value;
+}
+function normalizeNativeDeviceId(value) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    throw configError("native device ID must not be blank");
+  }
+  return normalized;
+}
+function requireSupportedPlatform(platform) {
+  if (platform === "darwin" || platform === "win32" || platform === "linux") {
+    return platform;
+  }
+  throw configError(`Agent Client registration is not supported on ${platform}`);
+}
+function optionalMetadata(read, maxLength) {
+  try {
+    const value = read().trim();
+    return value ? value.slice(0, maxLength) : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function execute(filePath, args) {
+  return new Promise((resolve4, reject) => {
+    execFile(filePath, args, { encoding: "utf8", windowsHide: true }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve4(stdout);
+    });
+  });
+}
+
 // dist/http.js
 async function requestJson(options2) {
   const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
@@ -5644,6 +5776,10 @@ var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
   "refreshToken",
   "device_code",
   "deviceCode",
+  "device_id",
+  "deviceId",
+  "installationId",
+  "hostname",
   "customerApiKey",
   "customerAPIKey"
 ]);
@@ -6016,8 +6152,15 @@ var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   "purchase_instruction.cancelled"
 ]);
 function eventMatchesInstruction(event, instructionId) {
-  const candidate = event.data.instructionId ?? event.data.purchaseInstructionId ?? event.resourceId;
-  return event.eventType === "purchase_instruction.activated" && candidate === instructionId;
+  const expectedInstructionId = resolvedTypedIdentifierAliases([instructionId]);
+  const candidate = resolvedTypedIdentifierAliases([
+    event.data.instructionId,
+    event.data.instruction_id,
+    event.data.purchaseInstructionId,
+    event.data.purchase_instruction_id,
+    event.resourceId
+  ]);
+  return event.eventType === "purchase_instruction.activated" && expectedInstructionId !== void 0 && candidate === expectedInstructionId;
 }
 var realSleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 var stderrLog = (message) => {
@@ -6047,15 +6190,19 @@ async function pollWebhookEvents(options2) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  const records = data?.records;
+  const records = typeof data === "object" && data !== null ? data.records : void 0;
   if (!Array.isArray(records)) {
-    throw apiError("missing or invalid records in Event Hub poll response", 502);
+    throw apiError("invalid Event Hub poll response: expected data.records to be an array", 502);
   }
-  return records.filter(isWebhookEventRecord);
+  if (!records.every(isWebhookEventRecord)) {
+    throw apiError("invalid Event Hub poll response: expected every record to contain non-empty eventId and eventType", 502);
+  }
+  return records;
 }
 async function ackWebhookEvents(options2, eventIds) {
-  if (eventIds.length === 0) {
-    return;
+  const requestedEventIds = [...new Set(eventIds)];
+  if (requestedEventIds.length === 0) {
+    return [];
   }
   const refreshRuntimeConfig = options2.refreshRuntimeConfig;
   const result = await requestJsonWithOAuthRetry({
@@ -6083,16 +6230,36 @@ async function ackWebhookEvents(options2, eventIds) {
     method: "POST",
     path: EVENT_ACK_PATH,
     headers: buildInstructionHeaders(runtimeConfig),
-    body: { eventIds },
+    body: { eventIds: requestedEventIds },
     timeoutMs: options2.timeoutMs,
     dryRun: false
   }));
   if ("dryRun" in result) {
-    return;
+    return [];
   }
   assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (typeof data !== "object" || data === null) {
+    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
+  }
+  const deletedCount = data.deletedCount;
+  const notFoundEventIds = data.notFoundEventIds;
+  if (!Number.isInteger(deletedCount) || deletedCount < 0 || !Array.isArray(notFoundEventIds) || !notFoundEventIds.every((eventId) => typeof eventId === "string")) {
+    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
+  }
+  const requestedEventIdSet = new Set(requestedEventIds);
+  const notFoundEventIdSet = new Set(notFoundEventIds);
+  if (notFoundEventIdSet.size !== notFoundEventIds.length || notFoundEventIds.some((eventId) => !requestedEventIdSet.has(eventId))) {
+    throw apiError("invalid Event Hub ack response: unexpected notFoundEventIds", 502);
+  }
+  const ackedEventIds = requestedEventIds.filter((eventId) => !notFoundEventIdSet.has(eventId));
+  if (ackedEventIds.length !== deletedCount) {
+    throw apiError("invalid Event Hub ack response: deletedCount does not match event IDs", 502);
+  }
+  return ackedEventIds;
 }
 async function watchEvents(options2) {
+  assertValidWatchTarget(options2);
   const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_WATCH_DURATION_MS;
   const sleep3 = options2.sleep ?? realSleep;
@@ -6100,30 +6267,33 @@ async function watchEvents(options2) {
   const log = options2.log ?? stderrLog;
   const startedAtMs = now();
   const staleEventCutoffMs = options2.staleEventCutoffMs ?? startedAtMs;
+  const ackUnmatchedEvents = options2.ackUnmatchedEvents ?? true;
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
-  const watchIdentity = runtimeAuthorizationIdentity(runtimeState.value);
   const logHandoff = () => {
     log(`Open this link in your browser to complete the ${options2.label}:`);
     log(`  ${options2.url}`);
     log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
   };
-  if (options2.deferHandoffUntilReady !== true) {
+  if (!options2.onReady) {
     logHandoff();
   }
   let ready = false;
+  let lastRecoverablePollError;
   let deadline = startedAtMs + maxDurationMs;
   const markReady = () => {
     if (ready) {
       return;
     }
     ready = true;
-    if (options2.deferHandoffUntilReady === true) {
+    if (options2.onReady) {
       deadline = now() + maxDurationMs;
-      logHandoff();
     }
     options2.onReady?.();
+    if (options2.onReady) {
+      logHandoff();
+    }
   };
   for (; ; ) {
     let records;
@@ -6134,25 +6304,21 @@ async function watchEvents(options2) {
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         timeoutMs: options2.timeoutMs,
-        ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {}
+        ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
+        ...options2.eventType && !ackUnmatchedEvents ? { eventTypes: [options2.eventType] } : {}
       });
       polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-      if (!authorizationIdentityCanContinue(watchIdentity, polledIdentity)) {
-        throw authError("Wallet login changed while webhook events were in progress; retry the command.");
-      }
       if (getRuntimeConfig) {
         const currentRuntimeConfig = await getRuntimeConfig();
-        assertRuntimeIdentity(currentRuntimeConfig, watchIdentity);
-        polledIdentity = runtimeAuthorizationIdentity(currentRuntimeConfig);
+        assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
       }
-      if (records.length > 0) {
-        assertEventCustomersMatchIdentity(records.map(toProcessedEvent), polledIdentity);
-      }
+      assertPolledEventCustomers(records, polledIdentity);
       markReady();
     } catch (error) {
       if (!isRecoverableWatchPollError(error)) {
         throw error;
       }
+      lastRecoverablePollError = error;
       if (now() + pollIntervalMs >= deadline) {
         break;
       }
@@ -6162,16 +6328,21 @@ async function watchEvents(options2) {
     if (records.length > 0) {
       const staleRecords = records.filter((record) => isStaleForWatch(record, staleEventCutoffMs));
       const currentRecords = records.filter((record) => !isStaleForWatch(record, staleEventCutoffMs));
-      const staleEventIds = staleRecords.map((record) => record.eventId).filter((id) => id.length > 0);
+      const watchTargetEnabled = hasWatchTarget(options2);
+      const staleEvents = staleRecords.map(toProcessedEvent);
+      const staleAckableEvents = watchTargetEnabled && !ackUnmatchedEvents ? staleEvents.filter((event) => eventMatchesWatchTarget(event, options2)) : staleEvents;
+      const staleEventIds = staleAckableEvents.map((event) => event.eventId).filter((id) => id.length > 0);
       if (staleEventIds.length > 0) {
-        await ackWebhookEvents({
+        const ackedStaleEventIds = await ackWebhookEvents({
           runtimeConfig: runtimeState.value,
           ...getRuntimeConfig ? { getRuntimeConfig } : {},
           ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
           expectedIdentity: polledIdentity,
           timeoutMs: options2.timeoutMs
         }, staleEventIds);
-        log(`Ignored ${staleEventIds.length} stale event(s) from before the watch started.`);
+        if (ackedStaleEventIds.length > 0) {
+          log(`Ignored ${ackedStaleEventIds.length} stale event(s) from before the watch started.`);
+        }
       }
       if (currentRecords.length === 0) {
         if (now() + pollIntervalMs >= deadline) {
@@ -6185,39 +6356,61 @@ async function watchEvents(options2) {
       for (const event of events) {
         log(`  ${event.summary}`);
       }
-      const watchTargetEnabled = hasWatchTarget(options2);
       const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
       if (watchTargetEnabled && matchedEvents.length === 0) {
         const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        await ackWebhookEvents({
-          runtimeConfig: runtimeState.value,
-          ...getRuntimeConfig ? { getRuntimeConfig } : {},
-          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-          expectedIdentity: polledIdentity,
-          timeoutMs: options2.timeoutMs
-        }, ignoredEventIds);
-        log(`No event matched the watched resource yet; acknowledged ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        if (ackUnmatchedEvents) {
+          const ackedIgnoredEventIds = await ackWebhookEvents({
+            runtimeConfig: runtimeState.value,
+            ...getRuntimeConfig ? { getRuntimeConfig } : {},
+            ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+            expectedIdentity: polledIdentity,
+            timeoutMs: options2.timeoutMs
+          }, ignoredEventIds);
+          log(`No event matched the watched resource yet; acknowledged ${ackedIgnoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        } else {
+          log(`No event matched the watched resource yet; preserved ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        }
         if (now() + pollIntervalMs >= deadline) {
           break;
         }
         await sleep3(pollIntervalMs);
         continue;
       }
-      const ackedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
-      await ackWebhookEvents({
+      const matchedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
+      const ackedEventIds = await ackWebhookEvents({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         expectedIdentity: polledIdentity,
         timeoutMs: options2.timeoutMs
-      }, ackedEventIds);
+      }, matchedEventIds);
+      const ackedEventIdSet = new Set(ackedEventIds);
+      const acknowledgedEvents = matchedEvents.filter((event) => ackedEventIdSet.has(event.eventId));
+      if (acknowledgedEvents.length === 0) {
+        log("The matching event was already acknowledged by another watcher; continuing to poll.");
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
       log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return { watched: true, url: options2.url, timedOut: false, events: matchedEvents, ackedEventIds };
+      return {
+        watched: true,
+        url: options2.url,
+        timedOut: false,
+        events: acknowledgedEvents,
+        ackedEventIds
+      };
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
     }
     await sleep3(pollIntervalMs);
+  }
+  if (options2.onReady && !ready && lastRecoverablePollError !== void 0) {
+    throw lastRecoverablePollError;
   }
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
   return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
@@ -6262,40 +6455,91 @@ function eventMatchesWatchTarget(event, options2) {
   if (expectedEntries.length === 0) {
     return true;
   }
-  const instructionExpectedValues = [
+  const instructionExpectedAliases = [
     expectedResource.instructionId,
     expectedResource.instruction_id,
     expectedResource.purchaseInstructionId,
     expectedResource.purchase_instruction_id
-  ].map(normalizedValue).filter((value) => value !== void 0);
-  if (instructionExpectedValues.length > 0) {
-    const eventValues = compactValues([
+  ];
+  if (instructionExpectedAliases.some((value) => value !== void 0)) {
+    const expectedInstructionId = resolvedTypedIdentifierAliases(instructionExpectedAliases);
+    const eventInstructionId = resolvedTypedIdentifierAliases([
       event.resourceId,
       event.data.instructionId,
       event.data.instruction_id,
       event.data.purchaseInstructionId,
       event.data.purchase_instruction_id
     ]);
-    return instructionExpectedValues.some((value) => eventValues.includes(value));
+    if (expectedInstructionId === void 0 || eventInstructionId !== expectedInstructionId) {
+      return false;
+    }
+    return expectedEntries.filter(([key]) => !isInstructionIdentifierKey(key)).every(([key, value]) => eventFieldValues(event, key).includes(value));
   }
   return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
 }
 function eventFieldValues(event, key) {
   const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
-  return compactValues([
+  const identifier = resolvedTypedIdentifierAliases([
     event.data[key],
     event.data[snakeKey],
     key.toLowerCase().endsWith("id") ? event.resourceId : void 0
   ]);
-}
-function compactValues(values) {
-  return values.map(normalizedValue).filter((value) => value !== void 0);
+  return identifier === void 0 ? [] : [identifier];
 }
 function normalizedValue(value) {
-  if (value === void 0 || value === null || value === "") {
+  if (typeof value !== "string") {
     return void 0;
   }
-  return String(value);
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : void 0;
+}
+function resolvedTypedIdentifierAliases(values) {
+  let resolved;
+  for (const value of values) {
+    if (value === void 0) {
+      continue;
+    }
+    if (typeof value !== "string") {
+      return void 0;
+    }
+    const candidate = value.trim();
+    if (!candidate) {
+      return void 0;
+    }
+    if (resolved !== void 0 && resolved !== candidate) {
+      return void 0;
+    }
+    resolved = candidate;
+  }
+  return resolved;
+}
+function isInstructionIdentifierKey(key) {
+  return key === "instructionId" || key === "instruction_id" || key === "purchaseInstructionId" || key === "purchase_instruction_id";
+}
+function assertValidWatchTarget(options2) {
+  if (options2.eventType !== void 0 && normalizedValue(options2.eventType) === void 0) {
+    throw validationError("eventType must be a non-blank string when provided");
+  }
+  assertValidExpectedResource(options2.expectedResource);
+}
+function assertValidCollectTarget(options2) {
+  if (options2.checkoutId !== void 0 && normalizedValue(options2.checkoutId) === void 0) {
+    throw validationError("checkoutId must be a non-blank string when provided");
+  }
+  assertValidExpectedResource(options2.expectedResource);
+}
+function assertValidExpectedResource(expectedResource) {
+  if (expectedResource === void 0) {
+    return;
+  }
+  const entries = Object.entries(expectedResource);
+  if (entries.length === 0 || entries.some(([, value]) => normalizedValue(value) === void 0)) {
+    throw validationError("expectedResource must contain only non-blank string identifiers when provided");
+  }
+  const instructionAliases = entries.filter(([key]) => isInstructionIdentifierKey(key)).map(([, value]) => value);
+  if (instructionAliases.length > 0 && resolvedTypedIdentifierAliases(instructionAliases) === void 0) {
+    throw validationError("expectedResource contains conflicting instruction identifiers");
+  }
 }
 function parseEventTimeMs(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -6346,6 +6590,7 @@ function trackRuntimeConfigRefresher(runtimeState, refreshRuntimeConfig) {
   };
 }
 async function collectWebhookEvents(options2) {
+  assertValidCollectTarget(options2);
   const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
   const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_COLLECT_DURATION_MS;
   const ack = options2.ack ?? true;
@@ -6362,7 +6607,7 @@ async function collectWebhookEvents(options2) {
   }
   const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
   const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
-  const matchesTarget = (event) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || eventMatchesCheckoutId(event, checkoutId)) && matchesExpectedResource(event);
+  const matchesTarget = (event, sourceRecord) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || recordMatchesCheckoutId(sourceRecord, checkoutId)) && matchesExpectedResource(event);
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
@@ -6382,18 +6627,23 @@ async function collectWebhookEvents(options2) {
     const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
     if (records.length > 0) {
       const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-      const matchingEvents = events.filter(matchesTarget);
-      collected.push(...matchingEvents);
-      const ackable = hasCheckoutFilter ? events.filter((event) => !matchesRequestedType(event) || ack && matchesTarget(event)) : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+      const matchingEvents = events.filter((event, index) => matchesTarget(event, records[index]));
+      const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
       const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-      await ackWebhookEvents({
+      const confirmedAckedEventIds = await ackWebhookEvents({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         expectedIdentity: polledIdentity,
         timeoutMs: options2.timeoutMs
       }, ids);
-      ackedEventIds.push(...ids);
+      ackedEventIds.push(...confirmedAckedEventIds);
+      if (ack) {
+        const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
+        collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
+      } else {
+        collected.push(...matchingEvents);
+      }
       if (targetReached()) {
         return { ready: true, timedOut: false, events: collected, ackedEventIds };
       }
@@ -6405,12 +6655,27 @@ async function collectWebhookEvents(options2) {
   }
   return { ready: false, timedOut: true, events: collected, ackedEventIds };
 }
-function eventMatchesCheckoutId(event, expectedCheckoutId) {
-  const checkoutIds = compactValues([
-    event.data.checkoutId,
-    event.data.checkout_id
-  ]);
-  return checkoutIds.length > 0 && checkoutIds.every((candidate) => candidate === expectedCheckoutId);
+function recordMatchesCheckoutId(record, expectedCheckoutId) {
+  const data = strictPayloadData(record?.payload);
+  if (!data) {
+    return false;
+  }
+  return resolvedTypedIdentifierAliases([data.checkoutId, data.checkout_id]) === expectedCheckoutId;
+}
+function strictPayloadData(payload) {
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const data = parsed.data;
+    return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
+  } catch {
+    return null;
+  }
 }
 function eventMatchesExpectedResource(event, expectedResource) {
   const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
@@ -6437,9 +6702,6 @@ function assertEventCacheIdentity(current, events, expectedIdentity, resolveStor
   if (expectedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, expectedIdentity) || !authorizationIdentityCanContinue(expectedIdentity, currentIdentity)) {
     throw authError("Wallet login changed while webhook events were in progress; retry the command.");
   }
-  assertEventCustomersMatchIdentity(events, expectedIdentity);
-}
-function assertEventCustomersMatchIdentity(events, expectedIdentity) {
   const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
   const mismatchedEvent = events.find((event) => eventCustomerIds(event).some((customerId) => expectedCustomerId !== void 0 && customerId !== expectedCustomerId) || eventCustomerIds(event).length > 1);
   if (mismatchedEvent) {
@@ -6452,6 +6714,19 @@ function assertRuntimeIdentity(runtimeConfig, expectedIdentity) {
   }
   if (!authorizationIdentityCanContinue(expectedIdentity, runtimeAuthorizationIdentity(runtimeConfig))) {
     throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+  }
+}
+function assertPolledEventCustomers(records, expectedIdentity) {
+  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
+  if (!expectedCustomerId) {
+    return;
+  }
+  const mismatchedEvent = records.map(toProcessedEvent).find((event) => {
+    const customerIds = eventCustomerIds(event);
+    return customerIds.length > 1 || customerIds.some((customerId) => customerId !== expectedCustomerId);
+  });
+  if (mismatchedEvent) {
+    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
   }
 }
 function eventCustomerIds(event) {
@@ -6626,7 +6901,7 @@ function parsePayloadData(payload) {
   return record;
 }
 function isWebhookEventRecord(value) {
-  return typeof value === "object" && value !== null && typeof value.eventId === "string" && typeof value.eventType === "string";
+  return typeof value === "object" && value !== null && typeof value.eventId === "string" && value.eventId.trim().length > 0 && typeof value.eventType === "string" && value.eventType.trim().length > 0;
 }
 function str(data, key, fallback) {
   return asString(data[key]) ?? fallback ?? "unknown";
@@ -6699,12 +6974,13 @@ Wallet Environment:
   later commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced process override.
 
 Event Watching:
-  After printing a link for the user to open in a browser, the CLI polls
+  Link commands normally print the browser handoff and then poll
   /agent/event-hub/webhook-events/poll (pageSize=20, every 5s up to 15 min),
-  processes the first batch of events (logs to stderr, updates the local cache),
-  acknowledges them via /agent/event-hub/webhook-events/ack ({eventIds}), and
-  prints the events to stdout. Progress is written to stderr; the events envelope
-  is written to stdout. Pass --no-watch to skip polling (for scripted or
+  process events (logging progress to stderr and updating the local cache), ACK
+  the records consumed by that workflow, and print a watch envelope to stdout.
+  card binding-link is readiness-gated: it first starts a server-side
+  payment_method.added selector, then prints its origin-only handoff, and ACKs only
+  the matching event. Pass --no-watch to skip polling (for scripted or
   non-interactive use, including card binding-link refreshes). To pull state
   changes on demand without printing a link, use 'clink events poll'
   (see 'clink events --help').
@@ -6736,6 +7012,7 @@ More Help:
   clink ucp-order --help
   clink refund --help
   clink instruction --help
+  clink events --help
   clink tool --help
   clink config --help
 `;
@@ -7207,14 +7484,18 @@ Usage:
   clink card binding-link [options]
 
 Options:
-  --no-watch                   Return the link without starting or waiting for an Event Hub watch
+  --no-watch                   Skip Event Hub readiness/watch and return an explicit watch gap
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   Calls /agent/cwallet/card/bindingLink.
   Refreshes local cached payment methods from paymentMethodsVoList.
-  With watch enabled, initializes a payment_method.added watcher, then prints an origin-only
-  bindingUrl with watchReady=true and waits for that matching event (max 15 min).
+  With watch enabled, waits for the first well-formed successful Event Hub poll, then prints an
+  origin-only bindingUrl with watchReady=true and watchEventType=payment_method.added.
+  watchReady means the listener is ready; completion is the matching event in the second envelope.
+  Event Hub filters payment_method.added before pagination. Only matching events are ACKed;
+  unrelated current and stale events remain queued. A malformed successful poll fails before the
+  binding handoff is exposed.
   Pass --no-watch when you only need to refresh the cached card list; it does not poll and returns
   watchReady=false plus watchEventType=null while stderr identifies the missing listener.
 
@@ -7460,6 +7741,9 @@ Notes:
   complete sends a standard UCP payment object with payment.instruments[0].id as local
   config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
   omitted, it uses the local cached default card.
+  A completed get/complete response carries the OMS/UCP order ID in data.order.id. Pass that exact
+  value to ucp-order get; do not infer the ID kind from an order_ prefix. agent_order event
+  resourceId, data.orderId, and data.paymentOrderId are Clink Payment order IDs, not UCP order IDs.
 
 Examples:
   clink ucp-checkout create \\
@@ -7646,6 +7930,10 @@ Behavior:
   checked against the caller's wallet identity, so another buyer's order returns not_found.
   OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
   their legacy customer API key.
+  --order-id must be data.order.id from a completed ucp-checkout get/complete response. Do not infer
+  the ID kind from an order_ prefix: agent_order event resourceId, data.orderId, and
+  data.paymentOrderId are Clink Payment order IDs and must not be used here. A successful response
+  can include the merchant completion details in data.ucp.success_info.
 
 Examples:
   clink ucp-order get --order-id order_xxx --format json
@@ -7742,6 +8030,9 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Once completed, data.order.id is the OMS/UCP order ID accepted by ucp-order get. Do not use an
+  agent_order event's resourceId, data.orderId, or data.paymentOrderId; those are Clink Payment
+  order IDs, and an order_ prefix does not distinguish the two ID domains.
 
 Examples:
   clink ucp-checkout get --checkout-id chk_xxx --format json
@@ -7830,6 +8121,9 @@ Notes:
   Sends a standard UCP payment object in the request body. The selected instrument id is local
   config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
   --payment-instrument-id is omitted or empty, the CLI uses the local cached default card.
+  The response is passed through unchanged, including data.ucp.success_info. When completion
+  returns data.order.id, use that exact OMS/UCP order ID with ucp-order get. Do not substitute an
+  agent_order event's resourceId, data.orderId, or data.paymentOrderId, even when it starts order_.
 
 Examples:
   clink ucp-checkout complete --checkout-id chk_xxx --format json
@@ -8126,8 +8420,8 @@ Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
   --limit <n>                  Max events per poll (pageSize, default 20)
   --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
-  --checkout-id <id>           Match one agent_order event by data.checkoutId; keep same-type
-                               events for other checkouts queued
+  --checkout-id <id>           Match one agent_order event by data.checkoutId/data.checkout_id;
+                               preserve every event that is not an exact local match
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
@@ -8144,8 +8438,10 @@ Notes:
   records are also acknowledged by default.
   With both --type and --no-ack, matching records stay queued but unrelated records are still
   acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
-  --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The selector is sent
-  to Event Hub before pagination, then checked again locally before only exact matches are ACKed.
+  --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The request sends
+  eventTypes plus selectors.checkoutId to Event Hub before pagination, then checks the payload
+  locally. Missing/conflicting checkout aliases fail closed; resourceId/orderId never substitute.
+  Only an exact match is ACKed by default, and resumeCommand preserves the selector.
 
 Examples:
   clink events poll --format json
@@ -8568,7 +8864,9 @@ async function createDeviceAuthorization(options2) {
     body: {
       client_id: OAUTH_CLIENT_ID,
       device_id: options2.deviceId,
-      scope: OAUTH_DEFAULT_SCOPE
+      scope: OAUTH_DEFAULT_SCOPE,
+      source: OAUTH_CLIENT_ID,
+      agentClient: options2.agentClient
     },
     timeoutMs: options2.timeoutMs,
     dryRun: options2.dryRun
@@ -8611,6 +8909,7 @@ async function pollDeviceToken(options2) {
       const token = await requestToken({
         baseUrl: options2.baseUrl,
         timeoutMs: options2.timeoutMs,
+        requireAgentClientId: true,
         body: {
           grant_type: OAUTH_DEVICE_GRANT_TYPE,
           client_id: OAUTH_CLIENT_ID,
@@ -8653,6 +8952,7 @@ function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(),
     accessTokenExpiresAt: now + token.expiresIn * 1e3,
     refreshToken: token.refreshToken,
     refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
+    ...token.agentClientId ? { agentClientId: token.agentClientId } : {},
     scope: token.scope
   };
 }
@@ -8749,7 +9049,14 @@ async function refreshStoredAuthorization(options2) {
         refreshFailure = authError("OAuth refresh returned a different customer; run `clink wallet init` again.");
         return current;
       }
+      if (authorization.agentClientId && token.agentClientId && authorization.agentClientId !== token.agentClientId) {
+        refreshFailure = authError("OAuth refresh returned a different Agent Client; run `clink wallet init` again.");
+        return current;
+      }
       current.authorization = toStoredAuthorization(authorization.deviceId, token, authorization.issuerOrigin, Date.now(), authorization.sessionId);
+      if (!current.authorization.agentClientId && authorization.agentClientId) {
+        current.authorization.agentClientId = authorization.agentClientId;
+      }
       current.customerId = token.customerId;
       if (customerChanged) {
         delete current.paymentMethods;
@@ -8791,6 +9098,7 @@ async function requestToken(options2) {
   if (tokenType.toLowerCase() !== "bearer") {
     throw apiError(`unsupported OAuth token type: ${tokenType}`);
   }
+  const agentClientId = options2.requireAgentClientId ? requiredString(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   return {
     tokenType: "Bearer",
     accessToken: requiredString(data.access_token, "OAuth response is missing access_token"),
@@ -8798,6 +9106,7 @@ async function requestToken(options2) {
     refreshToken: requiredString(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
     refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
     customerId: requiredString(data.customer_id, "OAuth response is missing customer_id"),
+    ...agentClientId ? { agentClientId } : {},
     scope: requiredString(data.scope, "OAuth response is missing scope")
   };
 }
@@ -8871,6 +9180,9 @@ function requiredString(value, message) {
     throw apiError(message);
   }
   return value;
+}
+function optionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function positiveNumber(value, message) {
   const number = typeof value === "number" ? value : Number(value);
@@ -9034,7 +9346,7 @@ function createTipAuthorizationApi(input, overrides = {}) {
         dryRun: false
       }), dependencies.requestJson);
       const data = unwrapResponse(result, "invalid instruction create response");
-      const instructionId = optionalString(data.instructionId) ?? optionalString(data.purchaseInstructionId);
+      const instructionId = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
       if (!instructionId) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -9098,11 +9410,14 @@ function unwrapResponse(result, invalidMessage) {
 }
 function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
-    throw apiError("missing or invalid paymentMethodsVoList in card binding response", 502);
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  return value.filter((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0).map((item) => ({ ...item }));
+  if (!value.every((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  return value.map((item) => ({ ...item }));
 }
-function optionalString(value) {
+function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function isRecord(value) {
@@ -10540,7 +10855,7 @@ function closeZip(zipFile) {
 }
 
 // dist/skills/download.js
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
@@ -10690,7 +11005,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
   }
   let firstFailureOrigin;
   try {
-    const hash = createHash("sha256");
+    const hash = createHash2("sha256");
     let actualBytes = 0;
     const meter = new Transform2({
       transform(chunk, _encoding, callback) {
@@ -12254,10 +12569,10 @@ function equalIdentity(value, expected) {
 }
 
 // dist/tool.js
-import { execFile } from "node:child_process";
+import { execFile as execFile2 } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
-var execFileAsync = promisify(execFile);
+var execFileAsync = promisify(execFile2);
 var DEFAULT_SITE_TIMEOUT_MS = 1e4;
 var DEFAULT_RESOURCE_TIMEOUT_MS = 3e4;
 var BROWSER_LAUNCH_TIMEOUT_MS = 3e4;
@@ -13451,7 +13766,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
   validateEnvironmentFlagScope(command, subcommand, args.flags);
-  const validatedEventPoll = validateEventPollFlags(command, subcommand, args.flags);
+  validateEventPollSelector(command, subcommand, args.flags);
   if (getBooleanFlag(args.flags, "help")) {
     printHelp(command, subcommand, nestedCommand);
     return EXIT_CODES.OK;
@@ -13469,8 +13784,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
     globalOptions,
-    startedAt,
-    ...validatedEventPoll ? { validatedEventPoll } : {}
+    startedAt
   };
   await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
@@ -13506,19 +13820,18 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       throw validationError(`unsupported command: ${command}`);
   }
 }
-function validateEventPollFlags(command, subcommand, flags) {
-  if (command !== "events" || subcommand !== "poll") {
-    return void 0;
+function validateEventPollSelector(command, subcommand, flags) {
+  if (command !== "events" || subcommand !== "poll" || !("checkout-id" in flags)) {
+    return;
   }
-  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
   const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
-  if ("checkout-id" in flags && !checkoutId) {
+  if (!checkoutId) {
     throw validationError("invalid --checkout-id: expected a non-blank id");
   }
-  if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
+  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
+  if (type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
   }
-  return { type, checkoutId };
 }
 function validateEnvironmentFlagScope(command, subcommand, flags) {
   const isWalletInit = command === "wallet" && subcommand === "init";
@@ -13892,7 +14205,7 @@ function resolveWatchFlag(flags) {
   }
   return true;
 }
-async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady, watchOptions = {}) {
+async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
       printPendingWatchHandoff(url, watchTarget.eventType);
@@ -13913,7 +14226,6 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady, 
     url,
     label,
     ...watchTarget,
-    ...watchOptions,
     ...onReady ? { onReady } : {}
   });
   printSuccess(result, context.globalOptions.format);
@@ -13942,8 +14254,15 @@ async function eventsPoll(context) {
   const flags = context.args.flags;
   const maxWaitSeconds = parseIntFlag(getStringFlag(flags, "max-wait"), "invalid --max-wait", 1);
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
-  const { type, checkoutId } = context.validatedEventPoll ?? {};
+  const type = parseEventTypeFlag(getStringFlag(flags, "type"));
+  const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
   const ack = !getBooleanFlag(flags, "no-ack");
+  if ("checkout-id" in flags && !checkoutId) {
+    throw validationError("invalid --checkout-id: expected a non-blank id");
+  }
+  if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
+    throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
   if (context.globalOptions.dryRun) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
     return EXIT_CODES.OK;
@@ -14067,9 +14386,11 @@ async function walletInit(context) {
   }
   const baseUrl = resolveWalletInitBaseUrl(context.args.flags);
   const deviceId = resolveOAuthDeviceId(context.storedConfig);
+  const agentClient = await resolveAgentClientBootstrap(deviceId);
   const authorization = await createDeviceAuthorization({
     baseUrl,
     deviceId,
+    agentClient,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
@@ -14120,27 +14441,24 @@ ${verificationUrl}
     throw error;
   }
   const paymentMethodsCache = await refreshPaymentMethodsAfterWalletInit(context, nextConfig);
-  const successData = {
-    customerId: token.customerId,
-    email,
-    name,
-    hasAuthorization: true,
-    authorizationType: "oauth",
-    hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
-    bindingUrl: paymentMethodsCache.bindingUrl,
-    paymentMethodsCached: paymentMethodsCache.cached,
-    paymentMethodCount: paymentMethodsCache.count,
-    ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-    configPath: "~/.clink-cli/config.json"
-  };
-  await withConfigLock(async () => {
-    await assertWalletInitCurrent(isCurrent);
-    const current = await readStoredConfig();
-    if (!matchesAuthorizationIdentity(current, storedAuthorization)) {
-      throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
-    }
-    printSuccess(successData, context.globalOptions.format);
+  const printed = await runIfWalletInitCurrent(walletInitGeneration, () => {
+    printSuccess({
+      customerId: token.customerId,
+      email,
+      name,
+      hasAuthorization: true,
+      authorizationType: "oauth",
+      hasCustomerApiKey: Boolean(nextConfig.customerApiKey),
+      bindingUrl: paymentMethodsCache.bindingUrl,
+      paymentMethodsCached: paymentMethodsCache.cached,
+      paymentMethodCount: paymentMethodsCache.count,
+      ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
+      configPath: "~/.clink-cli/config.json"
+    }, context.globalOptions.format);
   });
+  if (!printed) {
+    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+  }
   return EXIT_CODES.OK;
 }
 async function assertWalletInitCurrent(isCurrent) {
@@ -14206,16 +14524,10 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
-    if (!Array.isArray(data.paymentMethodsVoList)) {
-      throw apiError("missing or invalid paymentMethodsVoList in card binding response", 502);
-    }
     const bindingUrl = buildBareDomainUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"));
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
-    if (error instanceof CliError && error.type === "auth_error") {
-      throw error;
-    }
     return {
       bindingUrl: null,
       cached: false,
@@ -14339,8 +14651,9 @@ async function cardBindingLink(context) {
   }
   await maybeWatchEvents(context, prepared.url, "card binding", {
     staleEventCutoffMs,
-    eventType: "payment_method.added"
-  }, () => printBindingHandoff(true), { deferHandoffUntilReady: true });
+    eventType: "payment_method.added",
+    ackUnmatchedEvents: false
+  }, () => printBindingHandoff(true));
   return EXIT_CODES.OK;
 }
 async function cardRedirectLink(context, label) {
@@ -15265,7 +15578,8 @@ async function instructionCreate(context) {
   await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId },
-    staleEventCutoffMs
+    staleEventCutoffMs,
+    ackUnmatchedEvents: false
   });
   return EXIT_CODES.OK;
 }
@@ -15292,7 +15606,8 @@ async function instructionSignUrl(context) {
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId },
-    staleEventCutoffMs
+    staleEventCutoffMs,
+    ackUnmatchedEvents: false
   });
   return EXIT_CODES.OK;
 }
@@ -15522,7 +15837,10 @@ function buildConfigView(config) {
 }
 async function cachePaymentMethods(context, value) {
   const requestedIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
-  const paymentMethods = normalizePaymentMethods(value);
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "object" && item !== null && !Array.isArray(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  const paymentMethods = value;
   const nextConfig = await updateStoredConfig((current) => {
     const currentIdentity = runtimeAuthorizationIdentity(resolveRuntimeConfig(current, context.args.flags));
     if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {

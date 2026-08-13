@@ -22,12 +22,20 @@ async function loadInstrumentedWatchEvents() {
   assert.notEqual(end, -1, 'events implementation end marker missing from bundle');
   const instrumentedSource = bundleSource.slice(start, end)
     .replace(
+      'error instanceof CliError',
+      'error && typeof error === "object"',
+    )
+    .replace(
       'records = await pollWebhookEvents({',
       'records = await (options2.pollWebhookEvents ?? pollWebhookEvents)({',
     )
     .replace(
       'polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);',
       'polledIdentity = options2.runtimeAuthorizationIdentity?.(runtimeState.value) ?? { type: "none" };',
+    )
+    .replace(
+      'assertPolledEventCustomers(records, polledIdentity);',
+      'options2.assertPolledEventCustomers?.(records, polledIdentity);',
     )
     .replace(
       'const watchIdentity = runtimeAuthorizationIdentity(runtimeState.value);',
@@ -230,6 +238,7 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
         refresh_token: 'refresh_wallet_pending_contract',
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_pending_contract',
+        agent_client_id: 'acl_wallet_pending_contract',
         scope: 'wallet:read wallet:setup events:read offline_access',
       }));
       return;
@@ -341,6 +350,7 @@ test('vendored wallet init treats missing or malformed paymentMethodsVoList as u
           refresh_token: `refresh_wallet_invalid_cards_${fixture.name}`,
           refresh_expires_in: 2592000,
           customer_id: `cus_wallet_invalid_cards_${fixture.name}`,
+          agent_client_id: `acl_wallet_invalid_cards_${fixture.name}`,
           scope: 'wallet:read wallet:setup offline_access',
         }));
         return;
@@ -387,7 +397,7 @@ test('vendored wallet init treats missing or malformed paymentMethodsVoList as u
       assert.equal(output.data.paymentMethodCount, 0);
       assert.match(
         output.data.paymentMethodsCacheError,
-        /missing or invalid paymentMethodsVoList/u,
+        /paymentMethodsVoList[\s\S]*(missing|invalid)|missing or invalid paymentMethodsVoList/u,
       );
       assert.deepEqual(requestPaths, [
         '/agent/cwallet/oauth/device/authorization',
@@ -444,6 +454,7 @@ test('vendored wallet init cannot emit success after a post-commit takeover', as
         refresh_token: 'refresh_wallet_takeover_first',
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_takeover_first',
+        agent_client_id: 'acl_wallet_takeover_first',
         scope: 'wallet:read wallet:setup offline_access',
       }));
       return;
@@ -550,6 +561,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
         refresh_token: 'refresh_wallet_init_contract',
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_init_contract',
+        agent_client_id: 'acl_wallet_init_contract',
         scope: 'wallet:read offline_access',
       }));
       return;
@@ -771,8 +783,12 @@ test('vendored card binding-link exposes its URL only after the default watch is
       return;
     }
     if (request.url === '/agent/event-hub/webhook-events/ack') {
-      ackBodies.push(await readRequestJson(request));
-      response.end(JSON.stringify({ code: 200, data: {} }));
+      const body = await readRequestJson(request);
+      ackBodies.push(body);
+      response.end(JSON.stringify({
+        code: 200,
+        data: { deletedCount: body.eventIds.length, notFoundEventIds: [] },
+      }));
       return;
     }
     response.statusCode = 404;
@@ -842,15 +858,16 @@ test('vendored card binding-link exposes its URL only after the default watch is
     assert.doesNotMatch(ready.stdout, /card-binding|watch-secret|fragment/u);
     assert.match(ready.stderr, /https:\/\/agent\.clinkbill\.com/u);
 
-    const unrelatedAcked = await live.waitFor(
-      ({ status, stdout }) => ackBodies.length >= 1
+    const unrelatedPreserved = await live.waitFor(
+      ({ status, stdout }) => pollRequests >= 2
         && status === undefined
         && jsonLines(stdout).length === 1,
-      'card binding watch did not acknowledge the unrelated event and continue',
+      'card binding watch did not preserve the unrelated event and continue',
+      7_000,
     );
-    assert.equal(unrelatedAcked.status, undefined);
-    assert.deepEqual(ackBodies[0], { eventIds: ['evt_binding_unrelated'] });
-    assert.equal(jsonLines(unrelatedAcked.stdout).length, 1);
+    assert.equal(unrelatedPreserved.status, undefined);
+    assert.deepEqual(ackBodies, []);
+    assert.equal(jsonLines(unrelatedPreserved.stdout).length, 1);
 
     const completed = await live.waitFor(
       ({ status }) => status !== undefined,
@@ -859,10 +876,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
     );
     assert.equal(completed.status, 0, completed.stderr);
     assert.ok(pollRequests >= 2);
-    assert.deepEqual(ackBodies, [
-      { eventIds: ['evt_binding_unrelated'] },
-      { eventIds: ['evt_binding_added'] },
-    ]);
+    assert.deepEqual(ackBodies, [{ eventIds: ['evt_binding_added'] }]);
     const envelopes = jsonLines(completed.stdout);
     assert.equal(envelopes.length, 2);
     assert.equal(envelopes[1].ok, true);
@@ -951,7 +965,7 @@ test('vendored card binding-link does not expose an old wallet URL after login t
     );
     assert.equal(completed.status, 4, completed.stderr);
     assert.equal(completed.stdout, '');
-    assert.match(completed.stderr, /Authentication changed|Wallet login changed/u);
+    assert.match(completed.stderr, /Authentication changed|Wallet login changed|newer wallet init/u);
     assert.doesNotMatch(
       `${completed.stdout}\n${completed.stderr}`,
       /agent\.clinkbill\.com|takeover-secret|watchReady/u,
@@ -1126,7 +1140,7 @@ test('vendored card binding-link fails closed when Event Hub omits records', asy
     const error = JSON.parse(result.stderr);
     assert.equal(error.error.type, 'api_error');
     assert.equal(error.error.code, 502);
-    assert.match(error.error.message, /missing or invalid records/u);
+    assert.match(error.error.message, /missing or invalid records|expected data\.records to be an array/u);
     assert.doesNotMatch(
       `${result.stdout}\n${result.stderr}`,
       /agent\.clinkbill\.com|malformed-watch-secret|watchReady/u,
@@ -1440,9 +1454,66 @@ test('vendored CLI documents typed polling as a draining any-of filter', () => {
 test('vendored CLI exposes the strict checkout event selector', () => {
   const eventsHelp = runBundle(['events', 'poll', '--help']);
   assert.match(eventsHelp, /--checkout-id <id>/u);
-  assert.match(eventsHelp, /selector is sent\s+to Event Hub before pagination/u);
-  assert.match(bundleSource, /event\.data\.checkout_id/u);
-  assert.match(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
+  assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
+  assert.match(bundleSource, /recordMatchesCheckoutId/u);
+  assert.match(bundleSource, /data\.checkout_id/u);
+  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
+  assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
+  assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
+});
+
+test('vendored instruction watches preserve unmatched same-type events', () => {
+  const protectedInstructionWatches = bundleSource.match(
+    /eventType: "purchase_instruction\.activated",[\s\S]{0,240}?ackUnmatchedEvents: false/gu,
+  ) ?? [];
+  assert.ok(
+    protectedInstructionWatches.length >= 2,
+    'instruction create and sign-url must both preserve unmatched activation events',
+  );
+});
+
+test('vendored instruction matching fails closed across every identifier alias', async () => {
+  const start = bundleSource.indexOf('// dist/events.js');
+  const helperStart = bundleSource.indexOf('function resolvedTypedIdentifierAliases(', start);
+  const helperEnd = bundleSource.indexOf('function isInstructionIdentifierKey(', helperStart);
+  const matcherEnd = bundleSource.indexOf('var realSleep =', start);
+  assert.notEqual(start, -1, 'events implementation marker missing from bundle');
+  assert.notEqual(helperStart, -1, 'strict identifier resolver missing from bundle');
+  assert.notEqual(helperEnd, -1, 'strict identifier resolver end marker missing from bundle');
+  assert.notEqual(matcherEnd, -1, 'instruction matcher end marker missing from bundle');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(
+    `${bundleSource.slice(start, matcherEnd)}\n${bundleSource.slice(helperStart, helperEnd)}\nexport { eventMatchesInstruction };`,
+  ).toString('base64')}`;
+  const { eventMatchesInstruction } = await import(moduleUrl);
+  const expectedInstructionId = 'ins_target';
+  const base = {
+    eventId: 'evt_instruction',
+    eventType: 'purchase_instruction.activated',
+    known: true,
+    summary: 'activated',
+  };
+
+  assert.equal(eventMatchesInstruction({
+    ...base,
+    resourceId: expectedInstructionId,
+    data: {
+      instruction_id: expectedInstructionId,
+      purchase_instruction_id: expectedInstructionId,
+    },
+  }, expectedInstructionId), true);
+
+  for (const event of [
+    { ...base, resourceId: 'ins_other', data: { instructionId: expectedInstructionId } },
+    { ...base, data: { instructionId: expectedInstructionId, purchaseInstructionId: null } },
+    { ...base, data: { instruction_id: expectedInstructionId, purchase_instruction_id: '   ' } },
+    {
+      ...base,
+      data: { instructionId: expectedInstructionId, purchaseInstructionId: [expectedInstructionId] },
+    },
+  ]) {
+    assert.equal(eventMatchesInstruction(event, expectedInstructionId), false);
+  }
 });
 
 test('vendored events poll filters checkout success before ACK', async () => {
@@ -1472,6 +1543,20 @@ test('vendored events poll filters checkout success before ACK', async () => {
       data: { checkout_id: targetCheckoutId, orderId: 'payment_order_target' },
     }),
   };
+  const malformedCheckoutEvents = [
+    { checkoutId: targetCheckoutId, checkout_id: 'checkout_other' },
+    { checkoutId: targetCheckoutId, checkout_id: null },
+    { checkoutId: targetCheckoutId, checkout_id: '   ' },
+    { checkoutId: targetCheckoutId, checkout_id: 123 },
+    { checkoutId: targetCheckoutId, checkout_id: [targetCheckoutId] },
+    { checkoutId: targetCheckoutId, checkout_id: { id: targetCheckoutId } },
+  ].map((data, index) => ({
+    eventId: `evt_malformed_checkout_${index}`,
+    eventType: 'agent_order.succeeded',
+    customerId: 'cus_checkout_filter',
+    resourceId: `payment_order_malformed_${index}`,
+    payload: JSON.stringify({ data }),
+  }));
   const unrelatedTypeEvent = {
     eventId: 'evt_unrelated_type',
     eventType: 'payment_method.updated',
@@ -1487,13 +1572,25 @@ test('vendored events poll filters checkout success before ACK', async () => {
       pollBodies.push(await readRequestJson(request));
       response.end(JSON.stringify({
         code: 200,
-        data: { records: [otherEvent, missingCheckoutEvent, targetEvent, unrelatedTypeEvent] },
+        data: {
+          records: [
+            otherEvent,
+            missingCheckoutEvent,
+            ...malformedCheckoutEvents,
+            targetEvent,
+            unrelatedTypeEvent,
+          ],
+        },
       }));
       return;
     }
     if (request.url === '/agent/event-hub/webhook-events/ack') {
-      ackBodies.push(await readRequestJson(request));
-      response.end(JSON.stringify({ code: 200, data: {} }));
+      const body = await readRequestJson(request);
+      ackBodies.push(body);
+      response.end(JSON.stringify({
+        code: 200,
+        data: { deletedCount: body.eventIds.length, notFoundEventIds: [] },
+      }));
       return;
     }
     response.statusCode = 404;
@@ -1530,9 +1627,9 @@ test('vendored events poll filters checkout success before ACK', async () => {
     const output = JSON.parse(result.stdout);
     assert.equal(output.data.ready, true);
     assert.deepEqual(output.data.events.map(({ eventId }) => eventId), ['evt_target_checkout']);
-    assert.deepEqual(output.data.ackedEventIds, ['evt_target_checkout', 'evt_unrelated_type']);
+    assert.deepEqual(output.data.ackedEventIds, ['evt_target_checkout']);
     assert.deepEqual(ackBodies, [{
-      eventIds: ['evt_target_checkout', 'evt_unrelated_type'],
+      eventIds: ['evt_target_checkout'],
     }]);
     assert.deepEqual(pollBodies, [{
       pageSize: 20,
@@ -1545,7 +1642,7 @@ test('vendored events poll filters checkout success before ACK', async () => {
   }
 });
 
-test('vendored checkout no-ack keeps selected checkout events but still drains other types', async () => {
+test('vendored checkout no-ack preserves every event while returning only the selected checkout', async () => {
   const targetCheckoutId = 'checkout_target_no_ack';
   const ackBodies = [];
   const server = createServer(async (request, response) => {
@@ -1586,8 +1683,12 @@ test('vendored checkout no-ack keeps selected checkout events but still drains o
       return;
     }
     if (request.url === '/agent/event-hub/webhook-events/ack') {
-      ackBodies.push(await readRequestJson(request));
-      response.end(JSON.stringify({ code: 200, data: {} }));
+      const body = await readRequestJson(request);
+      ackBodies.push(body);
+      response.end(JSON.stringify({
+        code: 200,
+        data: { deletedCount: body.eventIds.length, notFoundEventIds: [] },
+      }));
       return;
     }
     response.statusCode = 404;
@@ -1627,8 +1728,8 @@ test('vendored checkout no-ack keeps selected checkout events but still drains o
     assert.deepEqual(output.data.events.map(({ eventId }) => eventId), [
       'evt_target_checkout_no_ack',
     ]);
-    assert.deepEqual(output.data.ackedEventIds, ['evt_unrelated_type_no_ack']);
-    assert.deepEqual(ackBodies, [{ eventIds: ['evt_unrelated_type_no_ack'] }]);
+    assert.deepEqual(output.data.ackedEventIds, []);
+    assert.deepEqual(ackBodies, []);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(home, { recursive: true, force: true });
@@ -1708,16 +1809,13 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.8');
+  assert.equal(vendorPackage.version, '0.2.9');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '26e088bbe438a0f4f667fbae4e3943dc245f6e93',
+    '8b136568a7f0036bcb34af22edd8f8b69c3ec905',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
-  assert.equal(
-    vendorPackage.upstreamPatch,
-    'card-binding-watch-ready-and-checkout-event-selector-v1',
-  );
+  assert.equal('upstreamPatch' in vendorPackage, false);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);

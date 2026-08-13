@@ -6,11 +6,11 @@ Read this before waiting for card binding/change, risk-rule update, refund lifec
 
 Clink async operations complete through webhook events from the Clink event hub. Completion is not proven by re-running the initiating command or by guessing from time elapsed.
 
-The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot; `risk_rule.updated` upserts local risk-rule state. A typed poll returns only selected event types. Every record it reads is still processed, but non-selected records are acknowledged and skipped rather than returned.
+The local config remains a latest wallet state cache and does not persist historical event records. Payment-method events may update the cached payment-method snapshot; `risk_rule.updated` upserts local risk-rule state. A typed poll returns only selected event types. In ordinary typed polling, every record it reads is processed and non-selected records are acknowledged and skipped; checkout-selector polling follows the stricter rule below.
 
 ## Built-In Link Watch
 
-When a command prints a URL for user action, the CLI normally keeps running and polls the event queue until its readiness condition is met or the bounded wait expires. Without `eventType` or `expectedResource`, an unscoped watcher returns after the first non-stale event batch. With either target, the watcher acknowledges unrelated events and continues polling until a matching event arrives or the wait expires. This applies to:
+When a command prints a URL for user action, the CLI normally keeps running and polls the event queue until its readiness condition is met or the bounded wait expires. Without `eventType` or `expectedResource`, an unscoped watcher returns after the first non-stale event batch. A targeted watcher normally acknowledges unrelated events and continues polling. Scoped card binding and instruction create/sign-url watches are exceptions: they set `ackUnmatchedEvents=false`, ask Event Hub for the target event type, preserve unmatched records, and acknowledge only a matched event. This applies to:
 
 - `card binding-link`
 - `card setup-link`
@@ -65,10 +65,11 @@ Options:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--type <type[,type...]>` | none | Return when any listed exact type is present; process, acknowledge, and skip other types. |
+| `--type <type[,type...]>` | none | Return when any listed exact type is present; ordinarily process, acknowledge, and skip other types. This draining behavior does not apply with `--checkout-id`. |
 | `--max-wait <seconds>` | 60 | Bounded wait window. |
 | `--limit <n>` | 20 | Page size per poll. |
 | `--no-ack` | false | Keep selected typed events queued. Without `--type`, peek the whole batch without acknowledging it. |
+| `--checkout-id <id>` | none | With exactly one supported `agent_order.*` type, select before pagination and preserve every event that is not an exact local checkout match. |
 
 The result shape is:
 
@@ -76,13 +77,13 @@ The result shape is:
 { "ready": true, "timedOut": false, "events": [], "ackedEventIds": [] }
 ```
 
-With `--type`, `events` contains only listed types. By default the CLI acknowledges both selected and skipped records; with typed `--no-ack`, it acknowledges only skipped records and keeps selected records queued. Therefore `ackedEventIds` may contain IDs that are absent from `events`, and a typed timeout can have `events=[]` with non-empty `ackedEventIds`. Untyped `--no-ack` is the only form that acknowledges nothing.
+With `--type`, `events` contains only listed types. In ordinary typed polling, the default mode acknowledges selected and skipped records; typed `--no-ack` acknowledges skipped records and keeps selected records queued. A `--checkout-id` poll is stricter: the CLI sends `eventTypes` plus `selectors.checkoutId` before pagination, locally revalidates nested `data.checkoutId` / `data.checkout_id`, and acknowledges only locally verified exact matches. With both `--checkout-id` and `--no-ack`, it acknowledges nothing. Therefore `ackedEventIds` may contain IDs absent from `events` only outside checkout-selector mode.
 
 Always correlate returned events by the flow-specific identifiers below. Use `resourceId` only where that flow declares it valid; for UCP it is a payment order ID, not the checkout correlation key. Type selection controls queue progress, not business correctness.
 
 When a flow has more than one valid readiness event, use one any-of poll such as `--type type-a,type-b`; never start separate typed polls, because either poll can acknowledge the other type as unrelated. If existing FSMs use one wait spec per type, feed the same any-of result through each wait spec. Re-check authoritative status with a `get`/status command (`card binding-link --no-watch`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`.
 
-Do not start an on-demand poll beside a built-in watch for the same flow. Typed `--no-ack` preserves only the selected type set and still consumes every other type, so it is not a passive observer for another watcher.
+Do not start an on-demand poll beside a built-in watch for the same flow. Ordinary typed `--no-ack` preserves only selected types and still consumes other types, so it is not a passive observer. Checkout-selector `--no-ack` is the narrow ACK-free exception, but it still must not race the built-in watch for the same workflow.
 
 ## FSM Wait Specs
 
@@ -112,7 +113,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | --- | --- |
 | Card binding/update/default change | same customer and, when known, same `paymentInstrumentId` |
 | 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
-| UCP checkout payment success | exact `checkoutId` carried by both checkout and event. Event `orderId`/`resourceId` is the Clink Payment `paymentOrderId`, not the UCP order ID, and cannot substitute for checkout correlation or order lookup. |
+| UCP checkout payment success | exact non-empty string `checkoutId` carried by the checkout and the event payload's nested `data.checkoutId` / `data.checkout_id`. Event top-level fields and `resourceId` are never checkout correlation keys. Event `orderId`/`resourceId` is the Clink Payment `paymentOrderId`, not the UCP order ID, and cannot substitute for checkout correlation or order lookup. |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
 | VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |

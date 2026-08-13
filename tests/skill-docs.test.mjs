@@ -232,10 +232,11 @@ test('latest CLI identity continuity and effective wallet status are documented'
 
 test('typed event polling skips unrelated records without hiding any-of alternatives', () => {
   assert.match(asyncEvents, /With `--type`, `events` contains only listed types/u);
-  assert.match(asyncEvents, /acknowledges both selected and skipped records/u);
-  assert.match(asyncEvents, /typed `--no-ack`[\s\S]*acknowledges only skipped records/iu);
-  assert.match(asyncEvents, /Untyped `--no-ack`[\s\S]*acknowledges nothing/iu);
-  assert.match(asyncEvents, /`ackedEventIds` may contain IDs that are absent from `events`/u);
+  assert.match(asyncEvents, /ordinary typed polling[\s\S]*acknowledges selected and skipped records/iu);
+  assert.match(asyncEvents, /typed `--no-ack` acknowledges skipped records and keeps selected records queued/iu);
+  assert.match(asyncEvents, /`--checkout-id` poll is stricter[\s\S]*only locally verified exact matches/iu);
+  assert.match(asyncEvents, /both `--checkout-id` and `--no-ack`[\s\S]*acknowledges nothing/iu);
+  assert.match(asyncEvents, /`ackedEventIds` may contain IDs absent from `events` only outside checkout-selector mode/u);
   assert.match(asyncEvents, /use one any-of poll/u);
   assert.doesNotMatch(asyncEvents, /poll each valid type in turn/iu);
   assert.match(walletConfig, /typed poll processes and acknowledges non-selected events without returning them/u);
@@ -268,7 +269,7 @@ test('instruction activation runs on the command own built-in watch', () => {
   }
   assert.match(asyncEvents, /are no exception: they use their built-in watch too/u);
   assert.match(asyncEvents, /Without `eventType` or `expectedResource`[\s\S]*first non-stale event batch/iu);
-  assert.match(asyncEvents, /With either target[\s\S]*acknowledges unrelated events[\s\S]*matching event/iu);
+  assert.match(asyncEvents, /instruction create\/sign-url watches are exceptions[\s\S]*preserve unmatched records[\s\S]*only a matched event/iu);
 });
 
 // A 15-minute timeout or a runtime-killed foreground command leaves the activation unobserved
@@ -350,6 +351,7 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
   assert.match(skill, /checkout complete\/get `data\.order\.id` is `ucpOrderId`/u);
   assert.match(skill, /agent_order\.succeeded\.data\.orderId\/resourceId` is `paymentOrderId`/u);
   assert.match(skill, /never pass `paymentOrderId` to `ucp-order get`/u);
+  assert.match(skill, /only nested payload `data\.checkoutId` \/ `data\.checkout_id`/u);
   assert.match(skill, /classifyUcpOrderResolutionObservation/u);
   assert.match(skill, /classifyUcpOrderFetchObservation/u);
   assert.match(skill, /original internal endpoint/u);
@@ -360,6 +362,7 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
   assert.match(ucpCheckout, /`paymentOrderId`[\s\S]*agent_order\.succeeded/u);
   assert.match(ucpCheckout, /clink ucp-checkout get[\s\S]*original_rest_endpoint/u);
   assert.match(ucpCheckout, /clink ucp-order get --order-id <ucpOrderId>/u);
+  assert.match(ucpCheckout, /Never fall back to event top-level checkout fields or `resourceId`/u);
   assert.match(ucpCheckout, /Do not re-poll the acknowledged event, re-run complete, or retry payment/u);
   assert.match(ucpCheckout, /data\.ucp\.success_info/u);
   assert.match(ucpCheckout, /same-type event for another checkout stays queued/u);
@@ -367,6 +370,7 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
 
   assert.match(asyncEvents, /Event `orderId`\/`resourceId` is the Clink Payment `paymentOrderId`/u);
   assert.match(asyncEvents, /Only `ucpOrderId` may be passed to `ucp-order get`/u);
+  assert.match(asyncEvents, /event payload's nested `data\.checkoutId` \/ `data\.checkout_id`/u);
   assert.match(asyncEvents, /filtering happens before ACK/u);
 });
 

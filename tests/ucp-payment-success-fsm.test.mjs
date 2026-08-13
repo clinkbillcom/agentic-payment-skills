@@ -105,7 +105,70 @@ test('does not correlate a blank checkout alias', () => {
   assert.notEqual(result.paymentConfirmed, true);
 });
 
-test('normalizes a blank optional payment-order alias without inventing an id', () => {
+test('does not correlate checkout ids from event top-level fields', () => {
+  const stdout = JSON.stringify({
+    ok: true,
+    data: {
+      events: [{
+        eventType: 'agent_order.succeeded',
+        checkoutId,
+        resourceId: paymentOrderId,
+        data: { orderId: paymentOrderId },
+      }],
+    },
+  });
+  const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+  assert.equal(result.reason, 'payment_success_event_not_observed');
+  assert.notEqual(result.paymentConfirmed, true);
+});
+
+test('rejects non-string checkout ids in expected context and nested events', () => {
+  for (const malformedId of [[checkoutId], { id: checkoutId }, 123]) {
+    const invalidExpected = classifyUcpPaymentSuccessEventObservation(
+      { stdout: successEventOutput(checkoutId) },
+      { checkoutId: malformedId },
+    );
+    assert.equal(invalidExpected.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(invalidExpected.reason, 'payment_success_expected_checkout_id_conflict');
+    assert.equal(invalidExpected.paymentConfirmed, false);
+
+    const stdout = JSON.stringify({
+      ok: true,
+      data: {
+        events: [{
+          eventType: 'agent_order.succeeded',
+          resourceId: paymentOrderId,
+          data: { checkoutId: malformedId, orderId: paymentOrderId },
+        }],
+      },
+    });
+    const invalidEvent = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+    assert.equal(invalidEvent.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+    assert.equal(invalidEvent.reason, 'payment_success_event_not_observed');
+    assert.notEqual(invalidEvent.paymentConfirmed, true);
+  }
+});
+
+test('does not confirm events with non-string payment order ids', () => {
+  for (const malformedId of [[paymentOrderId], { id: paymentOrderId }, 123]) {
+    const stdout = JSON.stringify({
+      ok: true,
+      data: {
+        events: [{
+          eventType: 'agent_order.succeeded',
+          data: { checkoutId, orderId: malformedId },
+        }],
+      },
+    });
+    const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+    assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+    assert.equal(result.reason, 'payment_success_event_not_observed');
+    assert.notEqual(result.paymentConfirmed, true);
+  }
+});
+
+test('rejects a blank explicit payment-order alias', () => {
   const stdout = JSON.stringify({
     ok: true,
     data: {
@@ -116,7 +179,8 @@ test('normalizes a blank optional payment-order alias without inventing an id', 
     },
   });
   const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
-  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+  assert.equal(result.paymentConfirmed, undefined);
   assert.equal(result.paymentOrderId, undefined);
 });
 
@@ -139,6 +203,50 @@ test('rejects conflicting expected checkout aliases before event matching', () =
   assert.equal(result.paymentConfirmed, false);
   assert.equal(result.reason, 'payment_success_expected_checkout_id_conflict');
   assert.equal(result.resumeCommand, undefined);
+});
+
+test('rejects every explicit empty or null checkout alias beside a valid alias', () => {
+  for (const malformedAlias of [null, '', '   ']) {
+    const expectedResult = classifyUcpPaymentSuccessEventObservation(
+      { stdout: successEventOutput(checkoutId) },
+      { checkoutId, checkout_id: malformedAlias },
+    );
+    assert.equal(expectedResult.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(expectedResult.reason, 'payment_success_expected_checkout_id_conflict');
+
+    const eventOutput = JSON.stringify({
+      ok: true,
+      data: {
+        events: [{
+          eventType: 'agent_order.succeeded',
+          data: { checkoutId, checkout_id: malformedAlias, orderId: paymentOrderId },
+        }],
+      },
+    });
+    const eventResult = classifyUcpPaymentSuccessEventObservation(
+      { stdout: eventOutput },
+      { checkoutId },
+    );
+    assert.equal(eventResult.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+    assert.notEqual(eventResult.paymentConfirmed, true);
+  }
+});
+
+test('rejects every explicit empty or null payment-order alias beside a valid alias', () => {
+  for (const malformedAlias of [null, '', '   ']) {
+    const stdout = JSON.stringify({
+      ok: true,
+      data: {
+        events: [{
+          eventType: 'agent_order.succeeded',
+          data: { checkoutId, orderId: paymentOrderId, payment_order_id: malformedAlias },
+        }],
+      },
+    });
+    const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+    assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+    assert.notEqual(result.paymentConfirmed, true);
+  }
 });
 
 test('event observation rejects an explicit error envelope even if it contains a success event', () => {
@@ -211,7 +319,7 @@ test('complete observation extracts canonical ucpOrderId and compatibility alias
   assert.match(result.pollCommand, /--checkout-id checkout_abc123/u);
 });
 
-test('complete observation rejects a blank UCP order id instead of building an order command', () => {
+test('complete observation fails closed on a blank explicit UCP order id', () => {
   const result = classifyUcpCheckoutObservation({
     operation: 'complete',
     expectedCheckoutId: checkoutId,
@@ -222,8 +330,11 @@ test('complete observation rejects a blank UCP order id instead of building an o
     }),
   });
 
-  assert.equal(result.action, UcpCheckoutWorkflowAction.POLL_PAYMENT_SUCCESS_EVENT);
+  assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'checkout_ucp_order_id_alias_conflict');
   assert.equal(result.ucpOrderId, undefined);
+  assert.equal(result.pollCommand, undefined);
   assert.equal(result.orderCommand, undefined);
 });
 
@@ -269,6 +380,73 @@ test('complete observation rejects conflicting UCP order id aliases before event
   assert.equal(result.reason, 'checkout_ucp_order_id_alias_conflict');
   assert.equal(result.ucpOrderId, undefined);
   assert.equal(result.pollCommand, undefined);
+});
+
+test('complete observation rejects empty or null aliases beside valid checkout and UCP order ids', () => {
+  for (const malformedAlias of [null, '', '   ']) {
+    const invalidCheckout = classifyUcpCheckoutObservation({
+      operation: 'complete',
+      expectedCheckoutId: checkoutId,
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          id: checkoutId,
+          checkout_id: malformedAlias,
+          status: 'completed',
+          order: { id: ucpOrderId },
+        },
+      }),
+    });
+    assert.equal(invalidCheckout.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(invalidCheckout.reason, 'checkout_id_alias_conflict');
+
+    const invalidOrder = classifyUcpCheckoutObservation({
+      operation: 'complete',
+      expectedCheckoutId: checkoutId,
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          id: checkoutId,
+          status: 'completed',
+          order: { id: ucpOrderId, order_id: malformedAlias },
+        },
+      }),
+    });
+    assert.equal(invalidOrder.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(invalidOrder.reason, 'checkout_ucp_order_id_alias_conflict');
+  }
+});
+
+test('complete observation rejects non-string checkout and UCP order ids', () => {
+  for (const malformedId of [[checkoutId], { id: checkoutId }, 123]) {
+    const invalidCheckout = classifyUcpCheckoutObservation({
+      operation: 'complete',
+      expectedCheckoutId: checkoutId,
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { id: malformedId, status: 'completed', order: { id: ucpOrderId } },
+      }),
+    });
+    assert.equal(invalidCheckout.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(invalidCheckout.reason, 'checkout_id_alias_conflict');
+    assert.equal(invalidCheckout.pollCommand, undefined);
+
+    const invalidOrder = classifyUcpCheckoutObservation({
+      operation: 'complete',
+      expectedCheckoutId: checkoutId,
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { id: checkoutId, status: 'completed', order: { id: malformedId } },
+      }),
+    });
+    assert.equal(invalidOrder.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(invalidOrder.reason, 'checkout_ucp_order_id_alias_conflict');
+    assert.equal(invalidOrder.pollCommand, undefined);
+  }
 });
 
 test('merchantOrderId is not accepted as a UCP order id compatibility alias', () => {
@@ -452,6 +630,20 @@ test('conflicting UCP order context aliases fail closed before payment is confir
   assert.equal(result.resumeCommand, undefined);
 });
 
+test('empty or null UCP order context aliases fail closed beside a valid alias', () => {
+  for (const malformedAlias of [null, '', '   ']) {
+    const result = classifyUcpPaymentSuccessEventObservation(
+      { stdout: successEventOutput(checkoutId) },
+      { checkoutId, ucpOrderId, ucp_order_id: malformedAlias },
+    );
+
+    assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING);
+    assert.equal(result.paymentConfirmed, true);
+    assert.equal(result.reason, 'ucp_order_id_context_alias_conflict');
+    assert.equal(result.orderCommand, undefined);
+  }
+});
+
 // --- async id resolution path ---
 
 test('matched event without ucpOrderId resolves it through checkout get', () => {
@@ -533,6 +725,28 @@ test('checkout get rejects conflicting UCP order id aliases without losing payme
   assert.equal(result.paymentConfirmed, true);
   assert.equal(result.reason, 'ucp_order_resolution_ucp_order_id_alias_conflict');
   assert.equal(result.orderLookupStatus, 'IDENTIFIER_CONFLICT');
+  assert.equal(result.orderCommand, undefined);
+});
+
+test('checkout get rejects blank UCP order aliases beside a valid id', () => {
+  const result = classifyUcpOrderResolutionObservation(
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          id: checkoutId,
+          status: 'completed',
+          order: { id: ucpOrderId, order_id: '   ' },
+        },
+      }),
+    },
+    correlatedSuccessContext(),
+  );
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.reason, 'ucp_order_resolution_ucp_order_id_alias_conflict');
   assert.equal(result.orderCommand, undefined);
 });
 
@@ -1023,6 +1237,38 @@ test('ucp-order get rejects conflicting response id aliases', () => {
   assert.equal(result.reason, 'ucp_order_get_id_alias_conflict');
   assert.equal(result.orderLookupStatus, 'IDENTIFIER_CONFLICT');
   assert.equal(result.order, undefined);
+});
+
+test('ucp-order get rejects a blank response alias beside the expected id', () => {
+  const result = classifyUcpOrderFetchObservation(
+    {
+      exitCode: 0,
+      stdout: JSON.stringify({ ok: true, data: { id: ucpOrderId, order_id: '   ' } }),
+    },
+    correlatedSuccessContext({ ucpOrderId }),
+  );
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.ORDER_FETCH_FAILED);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.reason, 'ucp_order_get_id_alias_conflict');
+  assert.equal(result.orderLookupStatus, 'IDENTIFIER_CONFLICT');
+  assert.equal(result.order, undefined);
+});
+
+test('ucp-order get rejects non-string response ids', () => {
+  for (const malformedId of [[ucpOrderId], { id: ucpOrderId }, 123]) {
+    const result = classifyUcpOrderFetchObservation(
+      { exitCode: 0, stdout: JSON.stringify({ ok: true, data: { id: malformedId } }) },
+      correlatedSuccessContext({ ucpOrderId }),
+    );
+
+    assert.equal(result.state, UcpCheckoutWorkflowState.ORDER_FETCH_FAILED);
+    assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING);
+    assert.equal(result.paymentConfirmed, true);
+    assert.equal(result.reason, 'ucp_order_get_id_alias_conflict');
+    assert.equal(result.orderLookupStatus, 'IDENTIFIER_CONFLICT');
+    assert.equal(result.order, undefined);
+  }
 });
 
 // --- event timeout / error ---
