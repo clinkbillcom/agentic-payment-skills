@@ -41,7 +41,7 @@ The agent page environment follows the base URL persisted by `wallet init` (see 
 3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.updated` showing readiness, then confirm `visaRegistrationSucceeded === true` with `card get` before continuing.
 4. List reusable ACTIVE instructions before creating anything.
 5. Reuse an instruction only if card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request. For a scheduled/recurring task, cover the whole schedule horizon instead — see the scheduled-task section below.
-6. If no reusable instruction exists, create a draft only after the mandate scope is complete and the user has authorized that scope.
+6. If no reusable instruction exists, screen the complete purchase context against `references/clink-restricted-categories.md` with `classifyInstructionRestriction`. Refuse a restricted purchase, fix invalid/missing gate input, and create a draft only after the classifier returns `CONTINUE_INSTRUCTION_CREATION`, the mandate scope is complete, and the user has authorized that scope.
 
 ## List And Get
 
@@ -65,6 +65,8 @@ clink instruction get \
 ```
 
 ## Create
+
+`instruction create` may run only after `classifyInstructionRestriction` from `lib/restricted-categories.mjs` answered `CONTINUE_INSTRUCTION_CREATION` for this exact purchase context. `REFUSE_RESTRICTED_INSTRUCTION` ends the intent; `FIX_RESTRICTION_INPUT` requires correcting or completing the context and running the gate again. See `references/clink-restricted-categories.md`.
 
 The CLI and backend use UTC datetime strings in `yyyy-MM-dd HH:mm:ss` format for `--effective-until-time` and each mandate `effectiveUntilTime`. Do not send numeric epoch values.
 
@@ -110,6 +112,7 @@ A recurring purchase task ("每天中午 11 点买一份不超过 40 元的猪�
 collect schedule scope (cadence, per-run cap, currency, total budget, end time, merchant semantics, fulfillment)
   -> classifyScheduledAuthorizationScope        pick type and compute amountLimit
   -> classifyScheduledAuthorizationReuse        reuse only if it covers the WHOLE schedule
+  -> classifyInstructionRestriction             if no reusable authorization, screen before a draft
   -> instruction create (+ Passkey) if no full-horizon match
   -> verify ACTIVE with classifyAuthorizationActiveVerification
   -> PIN_SCHEDULED_AUTHORIZATION: freeze instructionId + mandateId into the schedule

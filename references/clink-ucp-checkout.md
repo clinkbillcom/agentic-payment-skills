@@ -226,7 +226,7 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 - filter out entries for a different `paymentInstrumentId`
 - filter out entries with missing `instructionId`, `mandateId`, `currencyCode`, or amount limit
 
-If there is no matching instruction+mandate after filtering, start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
+If there is no matching instruction+mandate after filtering, screen the purchase with `classifyInstructionRestriction` from `lib/restricted-categories.mjs` (see `references/clink-restricted-categories.md`) — a restricted category refuses here and ends the checkout attempt without a draft — then start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not run checkout create or complete on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
 When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
 
@@ -410,8 +410,9 @@ clink tool parse-item --url <item_url> --format json
 # If selected/default card is Visa + VIC ready:
 #   1. clink instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json
 #   2. match amount, reusability, merchantCategoryCode, and merchant/product semantics
-#   3. if no match, create/sign instruction and wait for purchase_instruction.activated
-#   4. restart from card refresh + instruction list after activation
+#   3. if no match, classifyInstructionRestriction over the complete purchase context
+#   4. only CONTINUE_INSTRUCTION_CREATION may create/sign and wait for purchase_instruction.activated
+#   5. restart from card refresh + instruction list after activation
 # If this run is unattended/scheduled:
 #   1. clink instruction get --purchase-instruction-id <pinned_instruction_id> --format json
 #   2. classifyUnattendedAuthorization with the pinned instructionId + mandateId

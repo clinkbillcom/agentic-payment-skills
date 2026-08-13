@@ -79,7 +79,7 @@ Resolver branches:
 - `AUTHORIZATION_BYPASSED`: the selected/default card is non-Visa, or it is Visa but VIC is not enabled. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`.
 - `AUTHORIZATION_LIST_REQUIRED`: the selected/default card is Visa + VIC ready. List ACTIVE instructions before pay.
 - `AUTHORIZATION_MATCHED`: pass the matched `instruction_id` and `mandate_id` to `clink pay`.
-- `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Start the instruction creation workflow and stop the current pay attempt until activation.
+- `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Run the restricted-category gate described below; only a clean result may start the instruction creation workflow. Stop the current pay attempt until activation.
 
 For the Visa + VIC ready branch, run:
 
@@ -106,7 +106,7 @@ clink pay \
   --format json
 ```
 
-If no matching instruction+mandate exists, start the instruction creation workflow with the same mandate scope (`clink instruction create`, then the Passkey authorization URL / activation wait) and stop. Run `classifyAuthorizationDraftObservation` on the create/sign-url draft envelope and send the Passkey URL at once; that command's own built-in watch is the listener, so do not start a separate `events poll`. Feed its second envelope back through the same classifier as `watchStdout`. For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
+If no matching instruction+mandate exists, read `references/clink-restricted-categories.md` and run `classifyInstructionRestriction` from `lib/restricted-categories.mjs` over the complete purchase context. `REFUSE_RESTRICTED_INSTRUCTION` ends this payment intent without creating a draft; `FIX_RESTRICTION_INPUT` requires correcting or completing the context before retrying the gate. Only `CONTINUE_INSTRUCTION_CREATION` may start the instruction creation workflow with the same mandate scope (`clink instruction create`, then the Passkey authorization URL / activation wait) and stop. Run `classifyAuthorizationDraftObservation` on the create/sign-url draft envelope and send the Passkey URL at once; that command's own built-in watch is the listener, so do not start a separate `events poll`. Feed its second envelope back through the same classifier as `watchStdout`. For `NO_SHIPPING_REQUIRED`, the instruction create command must pass the fixed Apple Park default address in CWallet instruction shape; for shipped physical goods, pass the real collected address. Persist or return the pending payment intent:
 
 ```text
 Payment Intent ID: payint_xxx

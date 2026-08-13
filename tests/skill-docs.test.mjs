@@ -15,6 +15,7 @@ const skillTip = await readFile(new URL('../references/clink-skill-tip.md', impo
 const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
 const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
 const browserHandoff = await readFile(new URL('../references/clink-browser-handoff.md', import.meta.url), 'utf8');
+const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -33,6 +34,7 @@ const shippedDocs = {
   'references/clink-skill-install.md': skillInstall,
   'references/clink-catalog-discovery.md': catalogDiscovery,
   'references/clink-browser-handoff.md': browserHandoff,
+  'references/clink-restricted-categories.md': restrictedCategories,
 };
 
 test('skill frontmatter stays compact and trigger-focused', () => {
@@ -390,8 +392,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.10\.1"/u);
-  assert.equal(packageJson.version, '1.10.1');
+  assert.match(skill, /version:\s*"1\.11\.0"/u);
+  assert.equal(packageJson.version, '1.11.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
