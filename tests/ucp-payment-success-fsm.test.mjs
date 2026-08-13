@@ -90,6 +90,36 @@ test('does not correlate conflicting checkoutId aliases', () => {
   assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
 });
 
+test('does not correlate a blank checkout alias', () => {
+  const stdout = JSON.stringify({
+    ok: true,
+    data: {
+      events: [{
+        eventType: 'agent_order.succeeded',
+        data: { checkoutId: '   ', orderId: paymentOrderId },
+      }],
+    },
+  });
+  const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+  assert.notEqual(result.paymentConfirmed, true);
+});
+
+test('normalizes a blank optional payment-order alias without inventing an id', () => {
+  const stdout = JSON.stringify({
+    ok: true,
+    data: {
+      events: [{
+        eventType: 'agent_order.succeeded',
+        data: { checkoutId, orderId: '   ' },
+      }],
+    },
+  });
+  const result = classifyUcpPaymentSuccessEventObservation({ stdout }, { checkoutId });
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.paymentOrderId, undefined);
+});
+
 test('does not match any event when no expectedResource fields are provided', () => {
   const result = classifyUcpPaymentSuccessEventObservation(
     { stdout: successEventOutput(checkoutId) },
@@ -179,6 +209,22 @@ test('complete observation extracts canonical ucpOrderId and compatibility alias
   assert.equal(result.checkoutId, checkoutId);
   assert.equal(result.orderPermalinkUrl, 'https://merchant.example/orders/order_ucp_xyz');
   assert.match(result.pollCommand, /--checkout-id checkout_abc123/u);
+});
+
+test('complete observation rejects a blank UCP order id instead of building an order command', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedCheckoutId: checkoutId,
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: { id: checkoutId, status: 'completed', order: { id: '   ' } },
+    }),
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.POLL_PAYMENT_SUCCESS_EVENT);
+  assert.equal(result.ucpOrderId, undefined);
+  assert.equal(result.orderCommand, undefined);
 });
 
 test('checkout observation rejects an explicit error envelope even if it looks completed', () => {
