@@ -348,7 +348,8 @@ test('UCP checkout workflow uses parse-item as the product analysis command', ()
 });
 
 test('UCP order lookup keeps payment and UCP order identifiers type-safe', () => {
-  assert.match(skill, /checkout complete\/get `data\.order\.id` is `ucpOrderId`/u);
+  assert.match(skill, /checkout create\/update\/complete\/get `data\.ucp\.ucp_order_id` is `ucpOrderId`/u);
+  assert.match(skill, /completed checkout `data\.order\.id` is a compatibility alias/u);
   assert.match(skill, /agent_order\.succeeded\.data\.orderId\/resourceId` is `paymentOrderId`/u);
   assert.match(skill, /never pass `paymentOrderId` to `ucp-order get`/u);
   assert.match(skill, /only nested payload `data\.checkoutId` \/ `data\.checkout_id`/u);
@@ -358,7 +359,7 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
   assert.match(skill, /data\.ucp\.success_info/u);
   assert.match(skill, /events poll --type agent_order\.succeeded --checkout-id <checkoutId>/u);
 
-  assert.match(ucpCheckout, /`ucpOrderId`[\s\S]*data\.order\.id/u);
+  assert.match(ucpCheckout, /`ucpOrderId`[\s\S]*data\.ucp\.ucp_order_id/u);
   assert.match(ucpCheckout, /`paymentOrderId`[\s\S]*agent_order\.succeeded/u);
   assert.match(ucpCheckout, /clink ucp-checkout get[\s\S]*original_rest_endpoint/u);
   assert.match(ucpCheckout, /clink ucp-order get --order-id <ucpOrderId>/u);

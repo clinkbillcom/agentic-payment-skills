@@ -319,6 +319,204 @@ test('complete observation extracts canonical ucpOrderId and compatibility alias
   assert.match(result.pollCommand, /--checkout-id checkout_abc123/u);
 });
 
+test('create observation freezes ucpOrderId from UCP meta before completion', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'create',
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        id: checkoutId,
+        status: 'ready_for_complete',
+        ucp: { ucp_order_id: ucpOrderId },
+      },
+    }),
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.COMPLETE_CHECKOUT);
+  assert.equal(result.checkoutId, checkoutId);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.equal(result.omsOrderId, ucpOrderId);
+});
+
+test('complete-in-progress observation preserves ucpOrderId from UCP meta', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedCheckoutId: checkoutId,
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        id: checkoutId,
+        status: 'complete_in_progress',
+        ucp: { ucp_order_id: ucpOrderId },
+      },
+    }),
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.WAIT_CHECKOUT);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.equal(result.omsOrderId, ucpOrderId);
+});
+
+test('later checkout responses cannot replace the UCP order id frozen at create', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedResource: { checkoutId, ucpOrderId },
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        id: checkoutId,
+        status: 'completed',
+        ucp: { ucp_order_id: 'order_other' },
+      },
+    }),
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'checkout_ucp_order_id_mismatch');
+  assert.equal(result.expectedUcpOrderId, ucpOrderId);
+  assert.equal(result.observedUcpOrderId, 'order_other');
+  assert.equal(result.pollCommand, undefined);
+});
+
+test('later checkout responses preserve the frozen UCP order id when they omit it', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedResource: { checkoutId, ucpOrderId },
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: { id: checkoutId, status: 'complete_in_progress' },
+    }),
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.WAIT_CHECKOUT);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.equal(result.omsOrderId, ucpOrderId);
+});
+
+test('exit-6 checkout recovery preserves the UCP order id frozen at create', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedResource: { checkoutId, ucpOrderId },
+    checkoutEndpoint: 'https://ucp.example/rest',
+    exitCode: 6,
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.VERIFY_CHECKOUT_BEFORE_RETRY);
+  assert.equal(result.checkoutId, checkoutId);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.equal(result.omsOrderId, ucpOrderId);
+  assert.match(result.resumeCommand, /--checkout-id checkout_abc123/u);
+});
+
+test('exit-6 checkout recovery rejects conflicting frozen UCP order aliases', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'get',
+    expectedResource: { checkoutId, ucpOrderId, omsOrderId: 'order_other' },
+    exitCode: 6,
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'expected_ucp_order_id_alias_conflict');
+  assert.equal(result.resumeCommand, undefined);
+});
+
+test('checkout observation rejects conflicting frozen UCP order aliases', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'get',
+    expectedResource: { checkoutId, ucpOrderId, omsOrderId: 'order_other' },
+    exitCode: 0,
+    stdout: completedCheckoutOutput(),
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'expected_ucp_order_id_alias_conflict');
+});
+
+test('checkout observation accepts matching order and UCP meta ids', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedCheckoutId: checkoutId,
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        id: checkoutId,
+        status: 'completed',
+        order: { id: ucpOrderId },
+        ucp: { ucpOrderId },
+      },
+    }),
+  });
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.POLL_PAYMENT_SUCCESS_EVENT);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+});
+
+test('checkout observation rejects conflicting order and UCP meta ids', () => {
+  const result = classifyUcpCheckoutObservation({
+    operation: 'complete',
+    expectedCheckoutId: checkoutId,
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        id: checkoutId,
+        status: 'completed',
+        order: { id: ucpOrderId },
+        ucp: { ucp_order_id: 'order_other' },
+      },
+    }),
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'checkout_ucp_order_id_alias_conflict');
+  assert.equal(result.pollCommand, undefined);
+});
+
+test('checkout observation rejects malformed UCP meta order ids', () => {
+  for (const malformedId of [null, '', '   ', [ucpOrderId], { id: ucpOrderId }, 123]) {
+    const result = classifyUcpCheckoutObservation({
+      operation: 'create',
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          id: checkoutId,
+          status: 'ready_for_complete',
+          ucp: { ucp_order_id: malformedId },
+        },
+      }),
+    });
+
+    assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(result.reason, 'checkout_ucp_order_id_alias_conflict');
+  }
+});
+
+test('order.id is only a compatibility alias on completed checkout responses', () => {
+  for (const status of ['ready_for_complete', 'complete_in_progress']) {
+    const result = classifyUcpCheckoutObservation({
+      operation: status === 'ready_for_complete' ? 'create' : 'complete',
+      ...(status === 'complete_in_progress' ? { expectedCheckoutId: checkoutId } : {}),
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { id: checkoutId, status, order: { id: ucpOrderId } },
+      }),
+    });
+
+    assert.equal(result.ucpOrderId, undefined);
+    assert.equal(result.omsOrderId, undefined);
+  }
+});
+
 test('complete observation fails closed on a blank explicit UCP order id', () => {
   const result = classifyUcpCheckoutObservation({
     operation: 'complete',
