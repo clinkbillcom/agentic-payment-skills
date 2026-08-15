@@ -2,7 +2,7 @@
 name: clink-payment-skill
 description: "Use when handling Clink wallet init/re-login/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, finding a described product through Clink catalog search, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
 metadata:
-  version: "1.11.0"
+  version: "1.11.1"
   requires:
     node: ">=20"
     bundled: "vendor/clink-cli/clink-cli.bundle.mjs"

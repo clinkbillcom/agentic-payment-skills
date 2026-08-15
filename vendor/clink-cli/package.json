@@ -1,12 +1,15 @@
 {
   "name": "clink-cli-vendored",
-  "version": "0.2.13",
-  "upstreamCommit": "b4ed4d468b904988afd9260419c57775b1d225de",
+  "version": "0.2.9",
+  "upstreamCommit": "8b136568a7f0036bcb34af22edd8f8b69c3ec905",
+  "backportCommits": [
+    "5290d69f3b4f460526c831ef7732212eacabc449"
+  ],
+  "bundleSha256": "93ce9de3eefb333c99a91dbd4cd0659cbbc9779d8d1dab54e892495c88321abd",
   "private": true,
   "type": "module",
   "bin": {
     "clink-cli": "clink-cli.bundle.mjs"
   },
-  "description": "Vendored single-file bundle of @clink-ai/clink-cli (../../../clink-cli). playwright stays external: it is an optional runtime fallback loaded through a guarded dynamic import, and bundling it pulls in unresolvable chromium-bidi/fsevents natives. Re-vendor from the clink-cli source dir: cd <repo>/clink-cli && npm run build && npx --yes esbuild@0.25.9 dist/index.js --bundle --platform=node --format=esm --external:playwright --outfile=../agentic-payment-skills/vendor/clink-cli/clink-cli.bundle.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
-  "edition": "main"
+  "description": "Vendored single-file bundle of @clink-ai/clink-cli (../../../clink-cli), built from upstreamCommit plus the rollback ownership fix listed in backportCommits. playwright stays external: it is an optional runtime fallback loaded through a guarded dynamic import, and bundling it pulls in unresolvable chromium-bidi/fsevents natives. Re-vendor from the patched clink-cli source dir: npm run build && npx --yes esbuild@0.25.9 dist/index.js --bundle --platform=node --format=esm --external:playwright --outfile=../agentic-payment-skills/vendor/clink-cli/clink-cli.bundle.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\""
 }

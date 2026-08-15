@@ -4941,42 +4941,10 @@ var OPTION_DEFINITIONS = [
   { name: "type", flags: "--type <eventType>" },
   { name: "url", flags: "--url <url>" }
 ];
-function parseArgs(argv, options2 = {}) {
-  const optionDefinitions = [
-    ...OPTION_DEFINITIONS,
-    ...options2.optionDefinitions ?? []
-  ];
-  const multiValueOptions = options2.multiValueOptions ?? /* @__PURE__ */ new Map();
+function parseArgs(argv) {
   const preFlags = {};
   const forwarded = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    const equalsIndex = token.indexOf("=");
-    const rawOption = equalsIndex >= 0 ? token.slice(0, equalsIndex) : token;
-    const multiValueName = multiValueOptions.get(rawOption);
-    if (multiValueName) {
-      const values = [];
-      if (equalsIndex >= 0) {
-        const inline = token.slice(equalsIndex + 1);
-        if (inline) {
-          values.push(inline);
-        }
-      } else {
-        while (index + 1 < argv.length && !argv[index + 1]?.startsWith("--")) {
-          values.push(argv[index + 1]);
-          index += 1;
-        }
-      }
-      if (values.length === 0) {
-        throw validationError(`option ${rawOption} requires at least one value`);
-      }
-      const previous = preFlags[multiValueName];
-      preFlags[multiValueName] = [
-        ...typeof previous === "string" ? previous.split(",") : [],
-        ...values
-      ].join(",");
-      continue;
-    }
+  for (const token of argv) {
     if (token === "--no-watch") {
       preFlags["no-watch"] = true;
       continue;
@@ -4996,7 +4964,7 @@ function parseArgs(argv, options2 = {}) {
     forwarded.push(token);
   }
   const parser = new Command().helpOption(false).allowUnknownOption(true);
-  for (const option of optionDefinitions) {
+  for (const option of OPTION_DEFINITIONS) {
     parser.option(option.flags);
   }
   const { operands, unknown } = parser.parseOptions(forwarded);
@@ -5006,7 +4974,7 @@ function parseArgs(argv, options2 = {}) {
   }
   const parsedOptions = parser.opts();
   const flags = { ...preFlags };
-  for (const option of optionDefinitions) {
+  for (const option of OPTION_DEFINITIONS) {
     const value = parsedOptions[toCommanderOptionName(option.name)];
     if (value === void 0 || value === false) {
       continue;
@@ -5047,10 +5015,6 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
-// dist/browser-handoff.js
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-
 // dist/url.js
 function httpOrigin(value) {
   try {
@@ -5067,397 +5031,6 @@ function sameHttpOrigin(left, right) {
   const leftOrigin = httpOrigin(left);
   const rightOrigin = httpOrigin(right);
   return leftOrigin !== void 0 && leftOrigin === rightOrigin;
-}
-
-// dist/browser-handoff.js
-var BROWSER_HANDOFF_CALLBACK_PATH = "/callback";
-var CREATE_HANDOFF_PATH = "/agent/cwallet/oauth/browser-handoffs";
-var COMPLETE_HANDOFF_PATH = "/oauth/cli-handoff/complete";
-var HANDOFF_PAGE_PREFIX = "/oauth/cli-handoff/";
-var MAX_HANDOFF_LIFETIME_SECONDS = 300;
-var OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/u;
-function canUseBrowserHandoff(runtimeConfig) {
-  return Boolean(runtimeConfig.authorization && sameHttpOrigin(runtimeConfig.authorization.issuerOrigin, runtimeConfig.baseUrl));
-}
-async function openBrowserHandoff(options2) {
-  if (!options2.open) {
-    return completedLaunch(notRequestedBrowserLaunch(), "direct_fallback");
-  }
-  const target = validateTargetUrl(options2.targetUrl, options2.portalOrigin);
-  if (!target) {
-    throw new Error("browser handoff target URL is not trusted");
-  }
-  if (!canUseBrowserHandoff(options2.runtimeConfig)) {
-    return directFallback(options2);
-  }
-  const clock = options2.clock ?? systemClock();
-  const bindLoopback = options2.bindLoopback ?? bindRandomLoopback;
-  const randomSecret = options2.randomSecret ?? defaultRandomSecret;
-  let binding;
-  let pending;
-  let timeoutHandle;
-  let processingCallback = false;
-  let completionSettled = false;
-  let resolveCompletion = () => {
-  };
-  const completion = new Promise((resolve4) => {
-    resolveCompletion = resolve4;
-  });
-  const settle = async (status) => {
-    if (completionSettled) {
-      return;
-    }
-    completionSettled = true;
-    if (timeoutHandle !== void 0) {
-      clock.clearTimeout(timeoutHandle);
-      timeoutHandle = void 0;
-    }
-    await binding?.close();
-    resolveCompletion(status);
-  };
-  const handleRequest = async (request, response) => {
-    if (completionSettled) {
-      sendStatus(response, 410);
-      return;
-    }
-    const currentBinding = binding;
-    if (!currentBinding) {
-      sendStatus(response, 503);
-      return;
-    }
-    const requestUrl = parseLoopbackRequestUrl(request, currentBinding.origin);
-    if (!requestUrl || requestUrl.pathname !== BROWSER_HANDOFF_CALLBACK_PATH) {
-      sendStatus(response, 404);
-      return;
-    }
-    if (request.method !== "GET") {
-      sendStatus(response, 405);
-      return;
-    }
-    if (!pending) {
-      sendStatus(response, 409);
-      return;
-    }
-    if (processingCallback) {
-      sendStatus(response, 409);
-      return;
-    }
-    const expectedHost = new URL(currentBinding.origin).host;
-    const handoffId = singleQueryValue(requestUrl, "handoff_id");
-    const claimId = singleQueryValue(requestUrl, "claim_id");
-    const browserNonce = singleQueryValue(requestUrl, "browser_nonce");
-    const loopbackState = singleQueryValue(requestUrl, "loopback_state");
-    const callbackValid = request.headers.host === expectedHost && handoffId === pending.handoffId && isOpaqueValue(claimId) && isOpaqueValue(browserNonce) && secureEqual(loopbackState, pending.loopbackState);
-    if (!callbackValid) {
-      await sendRedirect(response, pending.fallbackLoginUrl);
-      await settle("email_login_fallback");
-      return;
-    }
-    processingCallback = true;
-    try {
-      const approved = await options2.request({
-        path: `${CREATE_HANDOFF_PATH}/${encodeURIComponent(pending.handoffId)}/approve`,
-        body: {
-          claim_id: claimId,
-          browser_nonce: browserNonce,
-          cli_verifier: pending.verifier
-        }
-      });
-      if (!isSuccessfulResponse(approved)) {
-        throw new Error("approve rejected");
-      }
-      await sendRedirect(response, pending.completeUrl);
-      await settle("approved");
-    } catch {
-      await sendRedirect(response, pending.fallbackLoginUrl);
-      await settle("email_login_fallback");
-    }
-  };
-  try {
-    binding = await bindLoopback((request, response) => {
-      void handleRequest(request, response).catch(() => {
-        if (!response.headersSent) {
-          sendStatus(response, 500);
-        } else if (!response.writableEnded) {
-          response.end();
-        }
-        void settle("email_login_fallback");
-      });
-    });
-    const loopbackOrigin = validateLoopbackOrigin(binding.origin);
-    if (!loopbackOrigin) {
-      await binding.close();
-      return directFallback(options2);
-    }
-    const verifier = randomSecret();
-    const loopbackState = randomSecret();
-    const loopbackRedirectUri = new URL(BROWSER_HANDOFF_CALLBACK_PATH, loopbackOrigin).toString();
-    const created = await options2.request({
-      path: CREATE_HANDOFF_PATH,
-      body: {
-        cli_challenge: s256(verifier),
-        loopback_redirect_uri: loopbackRedirectUri,
-        loopback_state: loopbackState,
-        return_path: target.returnPath
-      }
-    });
-    const createResult = parseCreateResponse(created, target.portalOrigin);
-    pending = {
-      handoffId: createResult.handoffId,
-      verifier,
-      loopbackState,
-      fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
-      completeUrl: buildCompleteUrl(target.portalOrigin, createResult.handoffId)
-    };
-    timeoutHandle = clock.setTimeout(() => {
-      void settle("timeout");
-    }, createResult.expiresIn * 1e3);
-    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult.browserUrl);
-    if (browserLaunch.status !== "launched") {
-      await settle("direct_fallback");
-      const fallbackLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-      return { browserLaunch: fallbackLaunch, completion };
-    }
-    return { browserLaunch, completion };
-  } catch {
-    await settle("direct_fallback");
-    const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-    return { browserLaunch, completion };
-  }
-}
-async function bindRandomLoopback(handler) {
-  const server = createServer(handler);
-  server.on("clientError", (_error, socket) => {
-    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-  });
-  await new Promise((resolve4, reject) => {
-    const onError = (error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve4();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen({
-      host: "127.0.0.1",
-      port: 0,
-      exclusive: true
-    });
-  });
-  let closed = false;
-  const address = server.address();
-  if (!address || address.address !== "127.0.0.1") {
-    await closeServer();
-    throw new Error("loopback listener did not bind to 127.0.0.1");
-  }
-  server.on("error", () => {
-  });
-  return {
-    origin: `http://127.0.0.1:${address.port}`,
-    close: closeServer
-  };
-  async function closeServer() {
-    if (closed) {
-      return;
-    }
-    closed = true;
-    if (!server.listening) {
-      return;
-    }
-    await new Promise((resolve4) => {
-      server.close(() => resolve4());
-      server.closeIdleConnections();
-      server.closeAllConnections();
-    });
-  }
-}
-function validateTargetUrl(targetUrl, portalOrigin) {
-  try {
-    const trustedOrigin = new URL(portalOrigin).origin;
-    const target = new URL(targetUrl);
-    if (target.origin !== trustedOrigin || target.username || target.password) {
-      return void 0;
-    }
-    return {
-      portalOrigin: trustedOrigin,
-      returnPath: `${target.pathname}${target.search}${target.hash}`
-    };
-  } catch {
-    return void 0;
-  }
-}
-function validateLoopbackOrigin(origin) {
-  try {
-    const parsed = new URL(origin);
-    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !parsed.port || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
-      return void 0;
-    }
-    return parsed.origin;
-  } catch {
-    return void 0;
-  }
-}
-function parseCreateResponse(response, portalOrigin) {
-  if (!isSuccessfulResponse(response)) {
-    throw new Error("create rejected");
-  }
-  const data = unwrapData(response.body);
-  if (!isRecord(data)) {
-    throw new Error("invalid create response");
-  }
-  const handoffId = requiredOpaqueValue(data.handoff_id);
-  const browserUrl = requiredString(data.browser_url);
-  const expiresIn = Number(data.expires_in);
-  if (!Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_HANDOFF_LIFETIME_SECONDS) {
-    throw new Error("invalid create response");
-  }
-  const actual = new URL(browserUrl);
-  const expected = new URL(`${HANDOFF_PAGE_PREFIX}${encodeURIComponent(handoffId)}`, portalOrigin);
-  if (actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search || actual.hash || actual.username || actual.password) {
-    throw new Error("invalid create response");
-  }
-  return { handoffId, browserUrl: actual.toString(), expiresIn };
-}
-function isSuccessfulResponse(response) {
-  if (response.status < 200 || response.status >= 300) {
-    return false;
-  }
-  if (!isRecord(response.body) || !("code" in response.body)) {
-    return true;
-  }
-  const code = Number(response.body.code);
-  return code >= 200 && code < 300;
-}
-function unwrapData(value) {
-  return isRecord(value) && "data" in value ? value.data : value;
-}
-function parseLoopbackRequestUrl(request, loopbackOrigin) {
-  try {
-    const parsed = new URL(request.url ?? "/", loopbackOrigin);
-    return parsed.origin === loopbackOrigin ? parsed : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function singleQueryValue(url, name) {
-  const values = url.searchParams.getAll(name);
-  return values.length === 1 ? values[0] : void 0;
-}
-function requiredOpaqueValue(value) {
-  const text = requiredString(value);
-  if (!isOpaqueValue(text)) {
-    throw new Error("invalid opaque value");
-  }
-  return text;
-}
-function requiredString(value) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error("missing string");
-  }
-  return value.trim();
-}
-function isOpaqueValue(value) {
-  return Boolean(value && value.length <= 256 && OPAQUE_VALUE_PATTERN.test(value));
-}
-function secureEqual(left, right) {
-  if (left === void 0) {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-function s256(verifier) {
-  return createHash("sha256").update(verifier).digest("base64url");
-}
-function defaultRandomSecret() {
-  return randomBytes(32).toString("base64url");
-}
-function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
-  const login = new URL("/login", portalOrigin);
-  login.searchParams.set("redirectUrl", returnPath);
-  if (email) {
-    login.searchParams.set("email", email);
-  }
-  return login.toString();
-}
-function buildCompleteUrl(portalOrigin, handoffId) {
-  const complete = new URL(COMPLETE_HANDOFF_PATH, portalOrigin);
-  complete.searchParams.set("handoff_id", handoffId);
-  return complete.toString();
-}
-async function sendRedirect(response, location) {
-  if (response.destroyed || response.writableEnded) {
-    return;
-  }
-  await new Promise((resolve4) => {
-    const complete = () => resolve4();
-    response.once("finish", complete);
-    response.once("close", complete);
-    response.once("error", complete);
-    try {
-      response.writeHead(302, {
-        "Cache-Control": "no-store",
-        Connection: "close",
-        Location: location
-      });
-      response.end();
-      if (response.destroyed || response.writableFinished) {
-        complete();
-      }
-    } catch {
-      complete();
-    }
-  });
-}
-function sendStatus(response, status) {
-  response.writeHead(status, {
-    "Cache-Control": "no-store",
-    Connection: "close"
-  });
-  response.end();
-}
-async function safeOpenBrowser(openBrowser, url) {
-  try {
-    return await openBrowser(url);
-  } catch {
-    return {
-      requested: true,
-      status: "failed",
-      opener: null,
-      attempts: []
-    };
-  }
-}
-async function directFallback(options2) {
-  const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-  return completedLaunch(browserLaunch, "direct_fallback");
-}
-function completedLaunch(browserLaunch, status) {
-  return {
-    browserLaunch,
-    completion: Promise.resolve(status)
-  };
-}
-function notRequestedBrowserLaunch() {
-  return {
-    requested: false,
-    status: "not_requested",
-    opener: null,
-    attempts: []
-  };
-}
-function systemClock() {
-  return {
-    setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds),
-    clearTimeout: (handle) => clearTimeout(handle)
-  };
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/auth-identity.js
@@ -5750,8 +5323,7 @@ function cloneStoredConfig(config) {
     defaultOpenLinks: config.defaultOpenLinks,
     ...config.authorization ? { authorization: { ...config.authorization } } : {},
     ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
-    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {},
-    ...config.visa ? { visa: cloneOpaqueVisaState(config.visa) } : {}
+    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {}
   };
 }
 function normalizeStoredConfig(raw) {
@@ -5767,16 +5339,7 @@ function normalizeStoredConfig(raw) {
     config.defaultOpenLinks = record.defaultOpenLinks;
   }
   assignStoredCustomerState(config, parseStoredCustomerState(record));
-  if (isRecord2(record.visa)) {
-    config.visa = cloneOpaqueVisaState(record.visa);
-  }
   return config;
-}
-function cloneOpaqueVisaState(state) {
-  return structuredClone(state);
-}
-function isRecord2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function parseStoredCustomerState(raw) {
   const customer = {};
@@ -5829,7 +5392,6 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
   const accessToken = nonEmptyString(record.accessToken);
   const refreshToken = nonEmptyString(record.refreshToken);
   const agentClientId = nonEmptyString(record.agentClientId);
-  const visaRegistrationStatus = parseVisaRegistrationStatus(record.visaRegistrationStatus);
   const scope = nonEmptyString(record.scope);
   const accessTokenExpiresAt = finiteNumber(record.accessTokenExpiresAt);
   const refreshTokenExpiresAt = finiteNumber(record.refreshTokenExpiresAt);
@@ -5849,7 +5411,6 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
     refreshToken,
     refreshTokenExpiresAt,
     ...agentClientId ? { agentClientId } : {},
-    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
     scope
   };
 }
@@ -5858,13 +5419,6 @@ function nonEmptyString(value) {
 }
 function finiteNumber(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : void 0;
-}
-function parseVisaRegistrationStatus(value) {
-  if (typeof value !== "string") {
-    return void 0;
-  }
-  const normalized = value.trim().toUpperCase();
-  return normalized === "PENDING" || normalized === "REGISTERING" || normalized === "SUCCEEDED" || normalized === "FAILED" || normalized === "UNKNOWN" ? normalized : void 0;
 }
 async function writeStoredConfigUnlocked(config) {
   await ensureConfigDirectory();
@@ -6029,12 +5583,12 @@ function assignRiskRules(target, value) {
 
 // dist/device-identity.js
 import { execFile } from "node:child_process";
-import { createHash as createHash2 } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.13";
+var CLI_VERSION = "0.2.9";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -6068,7 +5622,7 @@ async function resolveAgentClientBootstrap(installationId, options2 = {}) {
 }
 function deriveDeviceId(platform, nativeDeviceId) {
   const normalized = normalizeNativeDeviceId(nativeDeviceId);
-  return createHash2("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
+  return createHash("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
 }
 async function readNativeDeviceId(platform, runtime) {
   try {
@@ -6226,13 +5780,6 @@ var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
   "deviceId",
   "installationId",
   "hostname",
-  "cli_challenge",
-  "cli_verifier",
-  "loopback_redirect_uri",
-  "loopback_state",
-  "return_path",
-  "claim_id",
-  "browser_nonce",
   "customerApiKey",
   "customerAPIKey"
 ]);
@@ -6309,8 +5856,6 @@ function isDryRun(value) {
 import { spawn } from "node:child_process";
 var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
-var BROWSER_OPEN_COMMAND_TIMEOUT_MS = 5e3;
-var BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS = 250;
 function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
   if (config.authorization) {
     assertAuthorizationRequestOrigin(config, requestBaseUrl);
@@ -6353,17 +5898,8 @@ function assertAuthorizationRequestOrigin(config, requestBaseUrl) {
     throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
   }
 }
-function buildAgentPortalUrl(bindingUrl, expectedPortalOrigin, pathname, email) {
-  const bindingOrigin = new URL(bindingUrl).origin;
-  const trustedOrigin = new URL(expectedPortalOrigin).origin;
-  if (!sameHttpOrigin(bindingOrigin, trustedOrigin)) {
-    throw configError("card binding URL belongs to an unexpected Portal environment");
-  }
-  const url = new URL(pathname, trustedOrigin);
-  if (email) {
-    url.searchParams.set("email", email);
-  }
-  return url.toString();
+function buildBareDomainUrl(bindingUrl) {
+  return new URL(bindingUrl).origin;
 }
 function resolveAgentBaseUrl(apiBaseUrl) {
   try {
@@ -6453,113 +5989,16 @@ function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.wr
   }
 }
 function resolveBrowserOpenCommand(platform, url) {
-  return resolveBrowserOpenCommands(platform, url)[0];
-}
-async function openBrowserWithResult(open5, url, options2 = {}) {
-  if (!open5) {
-    return {
-      requested: false,
-      status: "not_requested",
-      opener: null,
-      attempts: []
-    };
-  }
-  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url);
-  const launch = options2.launch ?? launchBrowserOpenCommand;
-  const attempts = [];
-  for (const command of commands) {
-    attempts.push(command.executable);
-    try {
-      await launch(command);
-      return {
-        requested: true,
-        status: "launched",
-        opener: command.executable,
-        attempts
-      };
-    } catch {
-    }
-  }
-  (options2.onFailure ?? ((message) => process.stderr.write(`${message}
-`)))(BROWSER_OPEN_FAILURE_MESSAGE);
-  return {
-    requested: true,
-    status: "failed",
-    opener: null,
-    attempts
-  };
-}
-function resolveBrowserOpenCommands(platform, url) {
   if (platform === "darwin") {
-    return [{ executable: "open", args: [url] }];
+    return { executable: "open", args: [url] };
   }
   if (platform === "win32") {
-    return [
-      {
-        executable: "rundll32.exe",
-        args: ["url.dll,FileProtocolHandler", url]
-      },
-      {
-        executable: "explorer.exe",
-        args: [url]
-      }
-    ];
-  }
-  return [
-    { executable: "xdg-open", args: [url] },
-    { executable: "gio", args: ["open", url] }
-  ];
-}
-async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAND_TIMEOUT_MS) {
-  const child = spawn(command.executable, command.args, {
-    stdio: "ignore",
-    windowsHide: true
-  });
-  const outcome = new Promise((resolve4) => {
-    let reported = false;
-    const report = (result2) => {
-      if (reported) {
-        return;
-      }
-      reported = true;
-      resolve4(result2);
+    return {
+      executable: "rundll32.exe",
+      args: ["url.dll,FileProtocolHandler", url]
     };
-    child.once("error", (error) => report({ type: "error", error }));
-    child.once("exit", (code, signal) => report({ type: "exit", code, signal }));
-  });
-  const waitForOutcome = async (waitMs) => {
-    let timeout;
-    try {
-      return await Promise.race([
-        outcome,
-        new Promise((resolve4) => {
-          timeout = setTimeout(resolve4, waitMs, null);
-        })
-      ]);
-    } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    }
-  };
-  const result = await waitForOutcome(timeoutMs);
-  if (result?.type === "error") {
-    throw result.error;
   }
-  if (result?.type === "exit") {
-    if (result.code === 0) {
-      return;
-    }
-    throw new Error(result.signal ? `${command.executable} exited on signal ${result.signal}` : `${command.executable} exited with code ${result.code ?? "unknown"}`);
-  }
-  const timeoutError = new Error(`${command.executable} timed out after ${timeoutMs}ms`);
-  child.kill("SIGTERM");
-  if (await waitForOutcome(BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS)) {
-    throw timeoutError;
-  }
-  child.kill("SIGKILL");
-  await outcome;
-  throw timeoutError;
+  return { executable: "xdg-open", args: [url] };
 }
 function parseJsonFlag(value, flagName) {
   try {
@@ -7540,7 +6979,7 @@ Event Watching:
   process events (logging progress to stderr and updating the local cache), ACK
   the records consumed by that workflow, and print a watch envelope to stdout.
   card binding-link is readiness-gated: it first starts a server-side
-  payment_method.added selector, then prints its sanitized Portal handoff, and ACKs only
+  payment_method.added selector, then prints its origin-only handoff, and ACKs only
   the matching event. Pass --no-watch to skip polling (for scripted or
   non-interactive use, including card binding-link refreshes). To pull state
   changes on demand without printing a link, use 'clink events poll'
@@ -7977,9 +7416,8 @@ Device Authorization:
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
-  card binding-link endpoint and returns the trusted add-card bindingUrl. It uses the local
-  add-card path and locally stored email; backend path, query, fragment, and token data are
-  discarded. A refresh failure is reported in output but does not fail wallet initialization.
+  card binding-link endpoint and returns the origin-only bindingUrl. A refresh failure
+  is reported in output but does not fail wallet initialization.
 
 Examples:
   clink wallet init --email alice@example.com
@@ -8052,11 +7490,8 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Calls /agent/cwallet/card/bindingLink.
   Refreshes local cached payment methods from paymentMethodsVoList.
-  Rebuilds the returned link from its Portal origin and appends the locally stored email.
-  Other backend path, query, and fragment values are not exposed.
   With watch enabled, waits for the first well-formed successful Event Hub poll, then prints an
-  add-card bindingUrl rebuilt from the trusted Portal origin with watchReady=true and
-  watchEventType=payment_method.added.
+  origin-only bindingUrl with watchReady=true and watchEventType=payment_method.added.
   watchReady means the listener is ready; completion is the matching event in the second envelope.
   Event Hub filters payment_method.added before pagination. Only matching events are ACKed;
   unrelated current and stale events remain queued. A malformed successful poll fails before the
@@ -8081,9 +7516,6 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Derives the add-card page from the binding link response.
   Refreshes local cached payment methods before returning the setup URL.
-  Appends the locally stored email so a signed-out browser can prefill login.
-  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
-  failures open the trusted setup URL directly; callback/approve failures use email-code login.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
@@ -8103,9 +7535,6 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Derives the manage-card page from the binding link response.
   Refreshes local cached payment methods before returning the modify URL.
-  Appends the locally stored email so a signed-out browser can prefill login.
-  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
-  failures open the trusted modify URL directly; callback/approve failures use email-code login.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
@@ -9212,12 +8641,6 @@ var ucp_merchants_default = {
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
-    },
-    {
-      domain_name: "vtravel.link2shops.com",
-      merchant_id: "mcht_ftmse61a6az0",
-      enabled: true,
-      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com/yiyuan/#/exitPage URL is an SPA storefront entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. The known UAT catalog includes HungryPanda (United States), item ID cf1c321c4d5a4754ad099fa01aa2f9a4. Catalog APIs remain the source of truth for title, price, currency, availability, and the orderable URL."
     }
   ]
 };
@@ -9407,7 +8830,6 @@ var OAUTH_DEFAULT_SCOPE = [
   "payment:execute",
   "instruction:read",
   "instruction:write",
-  "browser:handoff",
   "refund:read",
   "refund:write",
   "events:read",
@@ -9442,7 +8864,7 @@ async function createDeviceAuthorization(options2) {
     body: {
       client_id: OAUTH_CLIENT_ID,
       device_id: options2.deviceId,
-      scope: options2.scope ?? OAUTH_DEFAULT_SCOPE,
+      scope: OAUTH_DEFAULT_SCOPE,
       source: OAUTH_CLIENT_ID,
       agentClient: options2.agentClient
     },
@@ -9454,10 +8876,10 @@ async function createDeviceAuthorization(options2) {
   }
   const data = requireOAuthSuccess(result);
   return {
-    deviceCode: requiredString2(data.device_code, "OAuth response is missing device_code"),
-    userCode: requiredString2(data.user_code, "OAuth response is missing user_code"),
-    verificationUri: requiredString2(data.verification_uri, "OAuth response is missing verification_uri"),
-    verificationUriComplete: requiredString2(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
+    deviceCode: requiredString(data.device_code, "OAuth response is missing device_code"),
+    userCode: requiredString(data.user_code, "OAuth response is missing user_code"),
+    verificationUri: requiredString(data.verification_uri, "OAuth response is missing verification_uri"),
+    verificationUriComplete: requiredString(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
     expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
     interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
   };
@@ -9531,7 +8953,6 @@ function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(),
     refreshToken: token.refreshToken,
     refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
     ...token.agentClientId ? { agentClientId: token.agentClientId } : {},
-    ...token.visaRegistrationStatus ? { visaRegistrationStatus: token.visaRegistrationStatus } : {},
     scope: token.scope
   };
 }
@@ -9636,9 +9057,6 @@ async function refreshStoredAuthorization(options2) {
       if (!current.authorization.agentClientId && authorization.agentClientId) {
         current.authorization.agentClientId = authorization.agentClientId;
       }
-      if (!current.authorization.visaRegistrationStatus && authorization.visaRegistrationStatus) {
-        current.authorization.visaRegistrationStatus = authorization.visaRegistrationStatus;
-      }
       current.customerId = token.customerId;
       if (customerChanged) {
         delete current.paymentMethods;
@@ -9676,22 +9094,20 @@ async function requestToken(options2) {
     throw apiError("unexpected OAuth token dry-run response");
   }
   const data = requireOAuthSuccess(result);
-  const tokenType = requiredString2(data.token_type, "OAuth response is missing token_type");
+  const tokenType = requiredString(data.token_type, "OAuth response is missing token_type");
   if (tokenType.toLowerCase() !== "bearer") {
     throw apiError(`unsupported OAuth token type: ${tokenType}`);
   }
-  const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
-  const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
+  const agentClientId = options2.requireAgentClientId ? requiredString(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   return {
     tokenType: "Bearer",
-    accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
+    accessToken: requiredString(data.access_token, "OAuth response is missing access_token"),
     expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
-    refreshToken: requiredString2(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
+    refreshToken: requiredString(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
     refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
-    customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
+    customerId: requiredString(data.customer_id, "OAuth response is missing customer_id"),
     ...agentClientId ? { agentClientId } : {},
-    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
-    scope: requiredString2(data.scope, "OAuth response is missing scope")
+    scope: requiredString(data.scope, "OAuth response is missing scope")
   };
 }
 function requireOAuthSuccess(response) {
@@ -9759,7 +9175,7 @@ async function assertWalletInitIsCurrent(isCurrent) {
     throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
   }
 }
-function requiredString2(value, message) {
+function requiredString(value, message) {
   if (typeof value !== "string" || value.length === 0) {
     throw apiError(message);
   }
@@ -9767,19 +9183,6 @@ function requiredString2(value, message) {
 }
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function parseVisaRegistrationStatus2(value, required) {
-  const normalized = optionalString(value)?.toUpperCase();
-  if (!normalized) {
-    if (required) {
-      throw apiError("OAuth response is missing visa_registration_status");
-    }
-    return void 0;
-  }
-  if (normalized !== "PENDING" && normalized !== "REGISTERING" && normalized !== "SUCCEEDED" && normalized !== "FAILED" && normalized !== "UNKNOWN") {
-    throw apiError("OAuth response has invalid visa_registration_status");
-  }
-  return normalized;
 }
 function positiveNumber(value, message) {
   const number = typeof value === "number" ? value : Number(value);
@@ -10000,7 +9403,7 @@ function unwrapResponse(result, invalidMessage) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  if (!isRecord3(data)) {
+  if (!isRecord(data)) {
     throw apiError(invalidMessage, 502);
   }
   return data;
@@ -10009,7 +9412,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  if (!value.every((item) => isRecord3(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+  if (!value.every((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((item) => ({ ...item }));
@@ -10017,7 +9420,7 @@ function normalizePaymentMethods(value) {
 function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function isRecord3(value) {
+function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -10086,8 +9489,8 @@ function buildChargeBody(input) {
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord4(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord4(channel.action) ? channel.action : {};
+  const channel = isRecord2(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord2(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber2(channel.status);
   return {
@@ -10127,7 +9530,7 @@ async function executeCharge(input, runtime) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord4(value) {
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber2(value) {
@@ -11454,7 +10857,7 @@ function closeZip(zipFile) {
 }
 
 // dist/skills/download.js
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
@@ -11604,7 +11007,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
   }
   let firstFailureOrigin;
   try {
-    const hash = createHash3("sha256");
+    const hash = createHash2("sha256");
     let actualBytes = 0;
     const meter = new Transform2({
       transform(chunk, _encoding, callback) {
@@ -11926,7 +11329,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord5(parsed) ? parsed : void 0;
+    return isRecord3(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -11936,22 +11339,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord5)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord3)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord5(body) && Array.isArray(body.items)) {
+  if (isRecord3(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord5(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord3(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord5(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -13140,12 +12543,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord6(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord4(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord6(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord4(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -13160,7 +12563,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord6(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -13455,11 +12858,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord7(profile)) {
+  if (!isRecord5(profile)) {
     return [];
   }
-  const ucp = isRecord7(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord7(ucp.payment_handlers) ? ucp.payment_handlers : isRecord7(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord5(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord5(ucp.payment_handlers) ? ucp.payment_handlers : isRecord5(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -13470,10 +12873,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord7(handler) || !isRecord7(handler.config)) {
+      if (!isRecord5(handler) || !isRecord5(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord7(handler.config.merchant_info) ? handler.config.merchant_info : isRecord7(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord5(handler.config.merchant_info) ? handler.config.merchant_info : isRecord5(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -14134,11 +13537,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord7(value)) {
+  if (!isRecord5(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord7(result)) {
+  if (isRecord5(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -14154,7 +13557,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord7(runningTotal)) {
+  if (!isRecord5(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -14179,7 +13582,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord7(productJson)) {
+  if (!isRecord5(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -14201,7 +13604,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord7(variant)) {
+  if (!isRecord5(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -14237,7 +13640,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord7(option)) {
+    if (!isRecord5(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -14255,7 +13658,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord7(value)) {
+  if (!isRecord5(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -14313,14 +13716,14 @@ function asTrimmedString(value) {
 function readPath(value, path3) {
   let current = value;
   for (const key of path3) {
-    if (!isRecord7(current)) {
+    if (!isRecord5(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord7(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -14336,8 +13739,6 @@ function normalizeHostname(value) {
 
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
-var CARD_SETUP_PATH = "/payment-method-setup";
-var CARD_MANAGEMENT_PATH = "/payment-method-modify";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
   "CREATED",
   "ACTIVE",
@@ -14363,38 +13764,17 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
-  "wallet",
-  "card",
-  "risk",
-  "skills",
-  "pay",
-  "refund",
-  "ucp-checkout",
-  "ucp-catalog",
-  "catalog",
-  "ucp-order",
-  "instruction",
-  "events",
-  "tool",
-  "config"
-]);
-async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = {}) {
-  const args = parseArgs(argv, edition.parseArgsOptions);
+async function runCli(argv, startedAt = performance.timeOrigin + performance.now()) {
+  const args = parseArgs(argv);
   const [command, subcommand, nestedCommand] = args.positionals;
-  edition.validateArgs?.(command, subcommand, args.flags);
-  validateEnvironmentFlagScope(command, subcommand, args.flags, edition.environmentSelectingInitCommands ?? []);
+  validateEnvironmentFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
-  const editionCommandNames = new Set(edition.commandNames ?? []);
   if (getBooleanFlag(args.flags, "help")) {
-    if (command && !BASE_COMMAND_NAMES.has(command) && !editionCommandNames.has(command)) {
-      throw validationError(`unsupported command: ${command}`);
-    }
-    process.stdout.write((edition.getHelpText ?? getHelpText)(command, subcommand, nestedCommand));
+    printHelp(command, subcommand, nestedCommand);
     return EXIT_CODES.OK;
   }
   if (!command) {
-    process.stdout.write((edition.getHelpText ?? getHelpText)());
+    printHelp();
     return EXIT_CODES.OK;
   }
   const storedConfig = await readStoredConfig();
@@ -14406,9 +13786,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
     globalOptions,
-    startedAt,
-    oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
-    configLifecycle: edition.configLifecycle ?? {}
+    startedAt
   };
   await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
@@ -14440,12 +13818,9 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       return handleToolCommand(subcommand, context);
     case "config":
       return handleConfigCommand(subcommand, context);
+    default:
+      throw validationError(`unsupported command: ${command}`);
   }
-  const editionExitCode = await edition.handleCommand?.(command, subcommand, context);
-  if (editionExitCode !== void 0) {
-    return editionExitCode;
-  }
-  throw validationError(`unsupported command: ${command}`);
 }
 function validateEventPollSelector(command, subcommand, flags) {
   if (command !== "events" || subcommand !== "poll" || !("checkout-id" in flags)) {
@@ -14460,18 +13835,16 @@ function validateEventPollSelector(command, subcommand, flags) {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
   }
 }
-function validateEnvironmentFlagScope(command, subcommand, flags, editionCommands) {
-  const environmentCommands = ["wallet", ...editionCommands];
-  const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
-  if (isEnvironmentSelectingInit) {
+function validateEnvironmentFlagScope(command, subcommand, flags) {
+  const isWalletInit = command === "wallet" && subcommand === "init";
+  if (isWalletInit) {
     resolveSelectedEnvironment(flags);
   }
-  const supportedBy = environmentCommands.map((name) => `${name} init`).join(" or ");
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "sandbox")) {
-    throw validationError(`--sandbox is only supported by ${supportedBy}`);
+  if (!isWalletInit && getBooleanFlag(flags, "sandbox")) {
+    throw validationError("--sandbox is only supported by wallet init");
   }
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
-    throw validationError(`--test is only supported by ${supportedBy}`);
+  if (!isWalletInit && getBooleanFlag(flags, "test")) {
+    throw validationError("--test is only supported by wallet init");
   }
 }
 async function handleSkillsCommand(subcommand, context) {
@@ -15020,7 +14393,6 @@ async function walletInit(context) {
     baseUrl,
     deviceId,
     agentClient,
-    scope: context.oauthScope,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
@@ -15058,14 +14430,13 @@ ${verificationUrl}
   try {
     nextConfig = await updateStoredConfig(async (current) => {
       await assertWalletInitCurrent(isCurrent);
-      const merged = mergeOAuthLoginConfig(current, {
+      return mergeOAuthLoginConfig(current, {
         baseUrl,
         email,
         name,
         customerId: token.customerId,
         authorization: storedAuthorization
       });
-      return context.configLifecycle.afterWalletLogin?.(current, merged) ?? merged;
     });
   } catch (error) {
     await revokeUncommittedWalletAuthorization(storedAuthorization, context.globalOptions.timeoutMs);
@@ -15083,8 +14454,6 @@ ${verificationUrl}
       bindingUrl: paymentMethodsCache.bindingUrl,
       paymentMethodsCached: paymentMethodsCache.cached,
       paymentMethodCount: paymentMethodsCache.count,
-      agentClientId: token.agentClientId ?? null,
-      visaRegistrationStatus: token.visaRegistrationStatus ?? null,
       ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
       configPath: "~/.clink-cli/config.json"
     }, context.globalOptions.format);
@@ -15157,7 +14526,7 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
-    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), CARD_SETUP_PATH, refreshContext.runtimeConfig.email);
+    const bindingUrl = buildBareDomainUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"));
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
@@ -15211,7 +14580,7 @@ async function walletLogout(context) {
     }
     delete current.authorization;
     delete current.customerApiKey;
-    return context.configLifecycle.afterWalletLogout?.(current) ?? current;
+    return current;
   });
   printSuccess({
     loggedOut: true,
@@ -15254,9 +14623,9 @@ async function handleCardCommand(subcommand, context) {
     case "binding-link":
       return cardBindingLink(context);
     case "setup-link":
-      return cardRedirectLink(context, CARD_SETUP_PATH, "card setup");
+      return cardRedirectLink(context, "card setup");
     case "modify-link":
-      return cardRedirectLink(context, CARD_MANAGEMENT_PATH, "card management");
+      return cardRedirectLink(context, "card management");
     case "list":
       return cardList(context);
     case "get":
@@ -15266,7 +14635,7 @@ async function handleCardCommand(subcommand, context) {
   }
 }
 async function cardBindingLink(context) {
-  const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+  const prepared = await resolveBindingLink(context);
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
@@ -15289,14 +14658,14 @@ async function cardBindingLink(context) {
   }, () => printBindingHandoff(true));
   return EXIT_CODES.OK;
 }
-async function cardRedirectLink(context, targetPath, label) {
-  const prepared = await resolveBindingLink(context, targetPath);
+async function cardRedirectLink(context, label) {
+  const prepared = await resolveBindingLink(context);
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   const staleEventCutoffMs = Date.now();
-  await openPortalWithBrowserHandoff(context, prepared.url);
+  maybeOpenBrowser(context.globalOptions.open, prepared.url);
   printSuccess({
     url: prepared.url,
     paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
@@ -15304,7 +14673,7 @@ async function cardRedirectLink(context, targetPath, label) {
   await maybeWatchEvents(context, prepared.url, label, { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
-async function resolveBindingLink(context, targetPath) {
+async function resolveBindingLink(context) {
   const result = await callBindingLink(context);
   if (isDryRun3(result)) {
     return { dryRun: true, result };
@@ -15312,7 +14681,7 @@ async function resolveBindingLink(context, targetPath) {
   const data = unwrapApiData(result.body);
   await cachePaymentMethods(context, data.paymentMethodsVoList);
   const bindingUrl = asRequiredString(data.bindingUrl, "missing bindingUrl in response");
-  const url = buildAgentPortalUrl(bindingUrl, resolveAgentBaseUrl(context.runtimeConfig.baseUrl), targetPath, context.runtimeConfig.email);
+  const url = buildBareDomainUrl(bindingUrl);
   return { dryRun: false, data, url };
 }
 async function callBindingLink(context) {
@@ -15846,7 +15215,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord8(checkout)) {
+  if (!isRecord6(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -15854,7 +15223,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord8(checkoutContext)) {
+  if (!isRecord6(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -15991,7 +15360,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveInteger
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path3}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord8(value)) {
+  if (!isRecord6(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -16008,7 +15377,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveInteger
     ];
   }));
 }
-function isRecord8(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -16198,7 +15567,7 @@ async function instructionCreate(context) {
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
   const mandateIds = extractMandateIds(data);
   const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, context.runtimeConfig.email);
-  await openPortalWithBrowserHandoff(context, passkeyUrl);
+  maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
   printSuccess({
     ...data,
     action: "created",
@@ -16215,38 +15584,6 @@ async function instructionCreate(context) {
     ackUnmatchedEvents: false
   });
   return EXIT_CODES.OK;
-}
-async function openPortalWithBrowserHandoff(context, targetUrl) {
-  const launch = await openBrowserHandoff({
-    open: context.globalOptions.open,
-    targetUrl,
-    portalOrigin: resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
-    runtimeConfig: context.runtimeConfig,
-    ...context.runtimeConfig.email ? { email: context.runtimeConfig.email } : {},
-    request: (request) => requestBrowserHandoff(context, request),
-    openBrowser: (url) => openBrowserWithResult(true, url)
-  });
-  await launch.completion;
-}
-async function requestBrowserHandoff(context, request) {
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => {
-    if (!runtimeConfig.authorization) {
-      throw authError("Browser handoff requires Agent OAuth.");
-    }
-    return {
-      baseUrl: runtimeConfig.baseUrl,
-      method: "POST",
-      path: request.path,
-      headers: buildCustomerHeaders(runtimeConfig),
-      body: request.body,
-      timeoutMs: context.globalOptions.timeoutMs,
-      dryRun: false
-    };
-  });
-  if (isDryRun3(result)) {
-    throw apiError("Browser handoff is unavailable during dry-run.");
-  }
-  return result;
 }
 async function instructionGet(context) {
   const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
@@ -16307,7 +15644,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord8(data)) {
+  if (!isRecord6(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -16320,7 +15657,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord8(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord6(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -16345,7 +15682,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord8(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord6(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -16385,7 +15722,7 @@ async function configSet(context) {
   const key = normalizeConfigKey(rawKey);
   const value = parseConfigValue(key, rawValue);
   const nextConfig = await updateStoredConfig((current) => {
-    setConfigValue(current, key, value, context.configLifecycle);
+    setConfigValue(current, key, value);
     return current;
   });
   printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
@@ -16403,7 +15740,7 @@ async function configUnset(context) {
   const key = normalizeConfigKey(rawKey);
   const nextConfig = await updateStoredConfig((current) => {
     if (key === "baseUrl" || key === "defaultOpenLinks") {
-      setConfigValue(current, key, defaultValueForRequiredKey(key), context.configLifecycle);
+      setConfigValue(current, key, defaultValueForRequiredKey(key));
     } else {
       unsetConfigValue(current, key);
     }
@@ -16415,7 +15752,7 @@ async function configUnset(context) {
 function defaultValueForRequiredKey(key) {
   return key === "baseUrl" ? DEFAULT_BASE_URL : false;
 }
-function setConfigValue(target, key, value, configLifecycle) {
+function setConfigValue(target, key, value) {
   if (isCustomerConfigKey(key)) {
     switch (key) {
       case "customerId":
@@ -16441,8 +15778,7 @@ function setConfigValue(target, key, value, configLifecycle) {
     }
   }
   switch (key) {
-    case "baseUrl": {
-      const previousBaseUrl = target.baseUrl;
+    case "baseUrl":
       if (!sameHttpOrigin(target.baseUrl, value)) {
         delete target.authorization;
         delete target.customerApiKey;
@@ -16450,9 +15786,7 @@ function setConfigValue(target, key, value, configLifecycle) {
         delete target.riskRules;
       }
       target.baseUrl = value;
-      configLifecycle.afterBaseUrlChange?.(previousBaseUrl, target);
       return;
-    }
     case "defaultOpenLinks":
       target.defaultOpenLinks = value;
       return;
@@ -16497,8 +15831,6 @@ function buildConfigView(config) {
     authorizationType: authorization ? "oauth" : config.customerApiKey ? "csk" : null,
     accessTokenExpiresAt: authorization ? new Date(authorization.accessTokenExpiresAt).toISOString() : null,
     refreshTokenExpiresAt: authorization ? new Date(authorization.refreshTokenExpiresAt).toISOString() : null,
-    agentClientId: authorization?.agentClientId ?? null,
-    visaRegistrationStatus: authorization?.visaRegistrationStatus ?? null,
     hasCustomerApiKey: Boolean(config.customerApiKey),
     oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
@@ -16539,7 +15871,7 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord8(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
@@ -16621,7 +15953,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord8(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord6(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
@@ -16633,40 +15965,27 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/entrypoint.js
-var MAIN_HELP_COMMANDS = [
-  "wallet",
-  "card",
-  "risk",
-  "skills",
-  "pay",
-  "refund",
-  "ucp-checkout",
-  "ucp-catalog",
-  "catalog",
-  "ucp-order",
-  "instruction",
-  "events",
-  "tool",
-  "config"
-];
-async function runEntrypoint(runner, argv, helpCommands) {
+// dist/index.js
+async function main() {
   try {
-    const exitCode = await runner(argv);
+    const exitCode = await runCli(process.argv.slice(2));
     process.exitCode = exitCode;
   } catch (error) {
-    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands));
+    process.exitCode = printError(error, detectErrorPresentation(process.argv.slice(2)));
   }
 }
-function detectErrorPresentation(argv, helpCommands) {
+function detectErrorPresentation(argv) {
   const format = detectFormat(argv);
   const explicitFormat = hasExplicitFormat(argv);
-  const helpHint = detectHelpHint(argv, helpCommands);
-  return {
+  const helpHint = detectHelpHint(argv);
+  const result = {
     format,
-    explicitFormat,
-    ...!explicitFormat && helpHint ? { helpHint } : {}
+    explicitFormat
   };
+  if (!explicitFormat && helpHint) {
+    result.helpHint = helpHint;
+  }
+  return result;
 }
 function detectFormat(argv) {
   for (let index = 0; index < argv.length; index += 1) {
@@ -16689,16 +16008,14 @@ function detectFormat(argv) {
 function hasExplicitFormat(argv) {
   return argv.some((token) => token === "--format" || token.startsWith("--format="));
 }
-function detectHelpHint(argv, helpCommands) {
+function detectHelpHint(argv) {
   const command = argv.find((token) => !token.startsWith("-"));
   if (!command) {
     return "Run `clink --help`.";
   }
-  if (helpCommands.includes(command)) {
+  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "ucp-catalog", "catalog", "ucp-order", "instruction", "events", "tool", "config"].includes(command)) {
     return `Run \`clink ${command} --help\`.`;
   }
   return "Run `clink --help`.";
 }
-
-// dist/index.js
-void runEntrypoint(runCli, process.argv.slice(2), MAIN_HELP_COMMANDS);
+void main();
