@@ -1816,11 +1816,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.11');
+  assert.equal(vendorPackage.version, '0.2.13');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '31dd5c34337466dc0cf8c19d9d133874cfee7ce0',
+    'b4ed4d468b904988afd9260419c57775b1d225de',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
