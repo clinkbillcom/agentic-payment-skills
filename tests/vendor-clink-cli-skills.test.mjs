@@ -239,6 +239,7 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_pending_contract',
         agent_client_id: 'acl_wallet_pending_contract',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read wallet:setup events:read offline_access',
       }));
       return;
@@ -310,7 +311,10 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
     assert.equal(output.data.hasAuthorization, true);
     assert.equal(output.data.authorizationType, 'oauth');
     assert.equal(output.data.customerId, 'cus_wallet_pending_contract');
-    assert.equal(output.data.bindingUrl, 'https://agent.clinkbill.com');
+    assert.equal(
+      output.data.bindingUrl,
+      'https://agent.clinkbill.com/payment-method-setup?email=wallet-pending%40example.com',
+    );
     assert.equal(output.data.paymentMethodCount, 0);
     assert.equal(requestPaths.includes('/agent/event-hub/webhook-events/poll'), false);
     assert.doesNotMatch(completed.stdout, /init-secret/u);
@@ -351,6 +355,7 @@ test('vendored wallet init treats missing or malformed paymentMethodsVoList as u
           refresh_expires_in: 2592000,
           customer_id: `cus_wallet_invalid_cards_${fixture.name}`,
           agent_client_id: `acl_wallet_invalid_cards_${fixture.name}`,
+          visa_registration_status: 'UNKNOWN',
           scope: 'wallet:read wallet:setup offline_access',
         }));
         return;
@@ -455,6 +460,7 @@ test('vendored wallet init cannot emit success after a post-commit takeover', as
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_takeover_first',
         agent_client_id: 'acl_wallet_takeover_first',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read wallet:setup offline_access',
       }));
       return;
@@ -562,6 +568,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_init_contract',
         agent_client_id: 'acl_wallet_init_contract',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read offline_access',
       }));
       return;
@@ -627,7 +634,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal('oauthRequired' in output.data, false);
     assert.equal(
       output.data.bindingUrl,
-      'https://agent.clinkbill.com',
+      'https://agent.clinkbill.com/payment-method-setup?email=wallet-init%40example.com',
     );
     assert.equal(output.data.paymentMethodsCached, true);
     assert.equal(output.data.paymentMethodCount, 1);
@@ -849,7 +856,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
     assert.deepEqual(jsonLines(ready.stdout), [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
         paymentMethodsVoList: [],
         watchReady: true,
         watchEventType: 'payment_method.added',
@@ -1207,7 +1214,7 @@ test('vendored card binding-link --no-watch exits without polling Event Hub', as
     assert.deepEqual(jsonLines(result.stdout), [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
         paymentMethodsVoList: [],
         watchReady: false,
         watchEventType: null,
@@ -1809,10 +1816,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.9');
+  assert.equal(vendorPackage.version, '0.2.11');
+  assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '8b136568a7f0036bcb34af22edd8f8b69c3ec905',
+    '31dd5c34337466dc0cf8c19d9d133874cfee7ce0',
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);

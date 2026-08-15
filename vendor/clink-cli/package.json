@@ -1,9 +1,12 @@
 {
   "name": "clink-cli-vendored",
-  "version": "0.2.9",
-  "upstreamCommit": "8b136568a7f0036bcb34af22edd8f8b69c3ec905",
+  "version": "0.2.11",
+  "upstreamCommit": "31dd5c34337466dc0cf8c19d9d133874cfee7ce0",
   "private": true,
   "type": "module",
-  "bin": { "clink-cli": "clink-cli.bundle.mjs" },
-  "description": "Vendored single-file bundle of @clink-ai/clink-cli (../../../clink-cli). playwright stays external: it is an optional runtime fallback loaded through a guarded dynamic import, and bundling it pulls in unresolvable chromium-bidi/fsevents natives. Re-vendor from the clink-cli source dir: cd <repo>/clink-cli && npm run build && npx --yes esbuild@0.25.9 dist/index.js --bundle --platform=node --format=esm --external:playwright --outfile=../agentic-payment-skills/vendor/clink-cli/clink-cli.bundle.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\""
+  "bin": {
+    "clink-cli": "clink-cli.bundle.mjs"
+  },
+  "description": "Vendored single-file bundle of @clink-ai/clink-cli (../../../clink-cli). playwright stays external: it is an optional runtime fallback loaded through a guarded dynamic import, and bundling it pulls in unresolvable chromium-bidi/fsevents natives. Re-vendor from the clink-cli source dir: cd <repo>/clink-cli && npm run build && npx --yes esbuild@0.25.9 dist/index.js --bundle --platform=node --format=esm --external:playwright --outfile=../agentic-payment-skills/vendor/clink-cli/clink-cli.bundle.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
+  "edition": "main"
 }
