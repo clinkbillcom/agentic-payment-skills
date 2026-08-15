@@ -298,7 +298,10 @@ test('the --no-watch handoff is documented as the next command to run', () => {
 });
 
 test('wallet init starts the watch and then requires returning the binding URL', () => {
-  assert.match(walletConfig, /strips the returned URL to its HTTPS origin/u);
+  assert.match(
+    walletConfig,
+    /trusted Agent Portal origin[\s\S]*exact `\/payment-method-setup` path[\s\S]*optional configured `email`/u,
+  );
   assert.match(walletConfig, /Never emit that unprotected init copy/u);
   assert.match(walletConfig, /paymentMethodsCached=true[\s\S]*paymentMethodCount=0/u);
   assert.match(
@@ -314,7 +317,11 @@ test('wallet init starts the watch and then requires returning the binding URL',
   assert.match(skill, /`START_WATCHED_CARD_BINDING`/u);
   assert.match(skill, /Do not return the unprotected init copy/u);
   assert.match(skill, /`bindingUrlRequired=true`/u);
-  assert.match(skill, /must return that command's sanitized origin-only `data\.bindingUrl` to the user/u);
+  assert.match(
+    skill,
+    /must return that command's trusted Agent Portal `\/payment-method-setup` `data\.bindingUrl` to the user/u,
+  );
+  assert.match(skill, /only one optional non-empty `email` parameter/u);
   assert.match(skill, /`paymentMethodsCached=true`, `paymentMethodCount=0`/u);
   assert.match(skill, /`data\.watchReady=true`/u);
   assert.match(
@@ -328,6 +335,17 @@ test('wallet init starts the watch and then requires returning the binding URL',
   assert.match(readmeZh, /必须把这份已受监听保护的 `bindingUrl` 返回给用户/u);
   assert.match(asyncEvents, /polls the OAuth device-token endpoint; it does not poll the Event Hub/u);
   assert.match(browserHandoff, /must hand that watched URL to the user/u);
+  for (const body of [
+    skill,
+    readme,
+    readmeZh,
+    walletConfig,
+    browserHandoff,
+    asyncEvents,
+    cliInvocation,
+  ]) {
+    assert.doesNotMatch(body, /origin-only|仅保留 origin/iu);
+  }
 });
 
 test('wallet OAuth polling is distinguished from Event Hub listening', () => {

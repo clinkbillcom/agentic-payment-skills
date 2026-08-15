@@ -22,7 +22,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
 2. 否则向用户询问邮箱地址（唯一必填项；显示名取邮箱 `@` 前的部分，无需询问姓名）。
 3. 执行 `clink wallet init --email <email> --open --format json`。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 OAuth device-token 轮询已启动，不是 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成授权；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
-4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含仅保留 origin 的 `bindingUrl`、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
+4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含受信 Agent Portal 上精确的 `/payment-method-setup` `bindingUrl`（只允许受控的可选 `email` 参数）、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
 
