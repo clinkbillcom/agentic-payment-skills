@@ -8648,19 +8648,13 @@ var ucp_merchants_default = {
 // public/test/ucp-merchants.json
 var ucp_merchants_default2 = {
   version: 1,
-  updated_at: "2026-08-14T00:00:00Z",
+  updated_at: "2026-07-29T00:00:00Z",
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
-    },
-    {
-      domain_name: "testa.link2shops.com",
-      merchant_id: "mcht_f5xuyduv1a0j",
-      enabled: true,
-      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     }
   ]
 };
@@ -9854,6 +9848,7 @@ function createWritePlan(preflight, input) {
     backupVerified = true;
   }
   async function undoMutation() {
+    let removedPlacedTarget = false;
     if (copyTempPath !== null && copyTempFingerprint !== null) {
       await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
       copyTempFingerprint = null;
@@ -9861,10 +9856,11 @@ function createWritePlan(preflight, input) {
     if (placedFingerprint !== null) {
       const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
       if (currentFingerprint !== null) {
-        if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
+        if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
           throw new Error("installed target changed before rollback");
         }
         await rm2(targetPath, { recursive: true, force: true });
+        removedPlacedTarget = true;
       }
       placedFingerprint = null;
     }
@@ -9882,11 +9878,11 @@ function createWritePlan(preflight, input) {
       await removeOwnedDirectory(backupPath, backupContainerEntry);
       backupContainerEntry = null;
     }
-    if (parentCreated) {
+    if (parentCreated && removedPlacedTarget) {
       await removeOwnedParent(boundary, ownedParent);
-      parentCreated = false;
-      ownedParent = null;
     }
+    parentCreated = false;
+    ownedParent = null;
   }
   return {
     async apply({ releasePath, marker }) {

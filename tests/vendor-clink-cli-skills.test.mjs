@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -1808,14 +1809,27 @@ test('vendored events poll rejects checkout id without one supported event type'
   }
 });
 
-test('vendored CLI metadata tracks the latest upstream package version', () => {
+test('vendored CLI metadata tracks the production base and rollback backport', () => {
   assert.equal(vendorPackage.version, '0.2.9');
   assert.equal(
     vendorPackage.upstreamCommit,
     '8b136568a7f0036bcb34af22edd8f8b69c3ec905',
   );
+  assert.deepEqual(vendorPackage.backportCommits, [
+    '5290d69f3b4f460526c831ef7732212eacabc449',
+  ]);
+  assert.equal(
+    vendorPackage.bundleSha256,
+    createHash('sha256').update(bundleSource).digest('hex'),
+  );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
+  assert.match(
+    bundleSource,
+    /if \(!sameFingerprint\(currentFingerprint, placedFingerprint\)\)/u,
+  );
+  assert.match(bundleSource, /if \(parentCreated && removedPlacedTarget\)/u);
+  assert.doesNotMatch(bundleSource, /browser-handoffs|cli-handoff|browser:handoff/u);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
