@@ -6034,7 +6034,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.11";
+var CLI_VERSION = "0.2.13";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -10445,6 +10445,7 @@ function createWritePlan(preflight, input) {
     backupVerified = true;
   }
   async function undoMutation() {
+    let removedPlacedTarget = false;
     if (copyTempPath !== null && copyTempFingerprint !== null) {
       await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
       copyTempFingerprint = null;
@@ -10452,10 +10453,11 @@ function createWritePlan(preflight, input) {
     if (placedFingerprint !== null) {
       const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
       if (currentFingerprint !== null) {
-        if (!sameEntryIdentity(entryIdentityFromFingerprint(currentFingerprint), entryIdentityFromFingerprint(placedFingerprint))) {
+        if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
           throw new Error("installed target changed before rollback");
         }
         await rm2(targetPath, { recursive: true, force: true });
+        removedPlacedTarget = true;
       }
       placedFingerprint = null;
     }
@@ -10473,11 +10475,11 @@ function createWritePlan(preflight, input) {
       await removeOwnedDirectory(backupPath, backupContainerEntry);
       backupContainerEntry = null;
     }
-    if (parentCreated) {
+    if (parentCreated && removedPlacedTarget) {
       await removeOwnedParent(boundary, ownedParent);
-      parentCreated = false;
-      ownedParent = null;
     }
+    parentCreated = false;
+    ownedParent = null;
   }
   return {
     async apply({ releasePath, marker }) {
