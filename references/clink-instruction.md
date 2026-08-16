@@ -253,3 +253,13 @@ clink instruction get --purchase-instruction-id <instructionId> --format json
 ```
 
 Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed. If `instruction get` exits nonzero or returns an explicit error envelope, surface that error and stop. Only a successful `CREATED`, `PENDING`, or `INPROGRESS` response is still activatable and may restart the event poll. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are verification errors, not pending states.
+
+## Quick Instruction
+
+Quick instruction setup rides the wallet-init journey instead of the regular create-then-Passkey flow above: the instruction context travels with `clink wallet init`, the backend creates the instruction as `PENDING` when authentication completes, and a fresh Visa + VIC binding ceremony activates it — one browser journey instead of two.
+
+- A pending quick instruction never satisfies `clink instruction list --valid-only`; only `ACTIVE` does. Never treat a `PENDING` quick instruction as usable authorization.
+- Activation is driven solely by that fresh Visa + VIC binding ceremony. A non-Visa first card or skipped VIC enrollment leaves the instruction pending: continue the non-VIC path without waiting and let supersede or expiry clean it up.
+- A repeated quick `wallet init` carrying new context supersedes the older pending instruction server-side — the newest intent wins.
+
+After the binding watch delivers its `payment_method.added` envelope, verify activation with `clink instruction get --purchase-instruction-id <id> --format json` and classify with `classifyAuthorizationActiveVerification`, exactly as above. While the status is still activatable, poll `clink events poll --type purchase_instruction.activated --no-ack --format json`. On activation-wait timeout or a verification error, re-check once with `clink instruction get --purchase-instruction-id <id> --format json`, then fall back to the regular instruction creation workflow — the quick path never blocks a purchase, it only accelerates one.

@@ -9,6 +9,7 @@ import {
   classifyAuthorizationActiveVerification,
   classifyAuthorizationDraftObservation,
   classifyPaymentAuthorizationResolver,
+  classifyQuickInstructionActivationGate,
   classifyScheduledAuthorizationReuse,
   classifyScheduledAuthorizationScope,
   classifyUnattendedAuthorization,
@@ -457,6 +458,57 @@ test('authorization active verification rejects terminal, missing, and unknown s
     assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
     assert.equal(result.reason, reason);
     assert.equal(result.status, status);
+    assert.equal(result.pollCommand, undefined);
+  }
+});
+
+test('quick instruction gate verifies activation when a pending instruction id exists', () => {
+  const result = classifyQuickInstructionActivationGate({ pendingInstructionId: 'ins_quick_1' });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ACTIVATION_VERIFY_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_ACTIVATION);
+  assert.equal(result.terminal, false);
+  assert.equal(result.reason, 'quick_instruction_pending_verification');
+  assert.equal(result.instructionId, 'ins_quick_1');
+  assert.equal(
+    result.verifyCommand,
+    'clink instruction get --purchase-instruction-id ins_quick_1 --format json',
+  );
+  assert.equal(
+    result.pollCommand,
+    'clink events poll --type purchase_instruction.activated --no-ack --format json',
+  );
+  assert.deepEqual(result.expectedResource, {
+    instructionId: 'ins_quick_1',
+    purchaseInstructionId: 'ins_quick_1',
+  });
+  assert.equal(result.waitSpec.eventType, 'purchase_instruction.activated');
+});
+
+test('quick instruction gate accepts the snake_case token-response field name', () => {
+  const result = classifyQuickInstructionActivationGate({ pending_instruction_id: 'ins_quick_2' });
+
+  assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_ACTIVATION);
+  assert.equal(result.instructionId, 'ins_quick_2');
+});
+
+test('quick instruction gate falls back to the regular authorization list without an id', () => {
+  for (const input of [
+    undefined,
+    {},
+    { pendingInstructionId: null },
+    { pendingInstructionId: '' },
+    { pending_instruction_id: null },
+  ]) {
+    const result = input === undefined
+      ? classifyQuickInstructionActivationGate()
+      : classifyQuickInstructionActivationGate(input);
+
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+    assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
+    assert.equal(result.terminal, false);
+    assert.equal(result.reason, 'quick_instruction_absent');
+    assert.equal(result.verifyCommand, undefined);
     assert.equal(result.pollCommand, undefined);
   }
 });

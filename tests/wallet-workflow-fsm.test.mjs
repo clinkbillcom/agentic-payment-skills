@@ -397,6 +397,74 @@ test('wallet init classifier returns wallet ready when a payment method already 
   assert.equal(result.emitUrl, undefined);
 });
 
+test('wallet init classifier surfaces a pending quick instruction id with the binding watch', () => {
+  const result = classifyWalletInitObservation({
+    exitCode: 0,
+    stdout: {
+      ok: true,
+      data: {
+        customerId: 'cus_123',
+        email: 'user@example.com',
+        hasAuthorization: true,
+        authorizationType: 'oauth',
+        hasCustomerApiKey: false,
+        bindingUrl: 'https://agent.clinkbill.com',
+        paymentMethodsCached: true,
+        paymentMethodCount: 0,
+        pendingInstructionId: 'ins_quick_1',
+      },
+    },
+  });
+
+  assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
+  assert.equal(result.pendingInstructionId, 'ins_quick_1');
+});
+
+test('wallet init classifier reports a null pending instruction id when the backend skipped creation', () => {
+  for (const pendingInstructionId of [undefined, null, '']) {
+    const data = {
+      customerId: 'cus_123',
+      hasAuthorization: true,
+      authorizationType: 'oauth',
+      hasCustomerApiKey: false,
+      bindingUrl: 'https://agent.clinkbill.com',
+      paymentMethodsCached: true,
+      paymentMethodCount: 0,
+    };
+    if (pendingInstructionId !== undefined) data.pendingInstructionId = pendingInstructionId;
+
+    const result = classifyWalletInitObservation({
+      exitCode: 0,
+      stdout: { ok: true, data },
+    });
+
+    assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
+    assert.equal(result.pendingInstructionId, null);
+  }
+});
+
+test('wallet init classifier still surfaces the pending instruction id when cards already exist', () => {
+  const result = classifyWalletInitObservation({
+    exitCode: 0,
+    stdout: {
+      ok: true,
+      data: {
+        customerId: 'cus_123',
+        hasAuthorization: true,
+        authorizationType: 'oauth',
+        hasCustomerApiKey: false,
+        bindingUrl: 'https://agent.clinkbill.com',
+        paymentMethodsCached: true,
+        paymentMethodCount: 1,
+        pendingInstructionId: 'ins_quick_1',
+      },
+    },
+  });
+
+  assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+  assert.equal(result.pendingInstructionId, 'ins_quick_1');
+});
+
 test('wallet init classifier keeps OAuth ready when the card cache refresh failed', () => {
   const result = classifyWalletInitObservation({
     exitCode: 0,

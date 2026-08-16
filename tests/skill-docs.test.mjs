@@ -486,8 +486,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.11\.1"/u);
-  assert.equal(packageJson.version, '1.11.1');
+  assert.match(skill, /version:\s*"1\.12\.0"/u);
+  assert.equal(packageJson.version, '1.12.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -937,4 +937,28 @@ test('the prohibition never spills onto merchant product pages', () => {
   assert.match(skill, /Merchant product pages are the opposite case and stay agent work/u);
   assert.match(skill, /ALLOW_AGENT_BROWSER/u);
   assert.match(browserHandoff, /`AGENT_ALLOWED` is not weakened by any of this/u);
+});
+
+// Quick instruction setup (2026-08): a frozen purchase intent plus an uninitialized wallet used to
+// force two browser journeys — login+binding, then a second Passkey ceremony to activate a freshly
+// created instruction. The quick path rides the instruction context on wallet init and activates
+// during the binding ceremony instead. The docs must pin the recipe, the null-id fallback, the
+// no-wait-without-a-fresh-binding rule, and the supersede semantics — the failure mode is an agent
+// waiting on an activation event that can never arrive.
+test('quick instruction setup is documented end to end', () => {
+  assert.match(skill, /classifyQuickInstructionActivationGate/u);
+  assert.match(skill, /wallet init --email <email> --title <title> --mandates/u);
+  assert.match(skill, /null id always means the regular Step 2 authorization gate/u);
+  assert.match(skill, /informational only/u);
+  assert.match(skill, /the newest intent wins/u);
+  assert.match(walletConfig, /## Quick Instruction Setup/u);
+  assert.match(walletConfig, /`--title` and `--mandates` become required together/u);
+  assert.match(walletConfig, /rejects `--payment-instrument-id` and `--extra`/u);
+  assert.match(walletConfig, /`data\.pendingInstructionId` comes back null, and the regular authorization flow takes over/u);
+  assert.match(instruction, /## Quick Instruction/u);
+  assert.match(instruction, /never satisfies `clink instruction list --valid-only`/u);
+  assert.match(instruction, /supersedes the older pending instruction server-side/u);
+  assert.match(ucpCheckout, /picks it up naturally/u);
+  assert.match(asyncEvents, /`payment_method\.added` envelope, then the instruction activation wait for `purchase_instruction\.activated`/u);
+  assert.match(asyncEvents, /classifyQuickInstructionActivationGate/u);
 });

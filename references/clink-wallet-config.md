@@ -36,6 +36,14 @@ Classify live stderr and final init output with `classifyWalletInitObservation` 
 - `RETURN_WALLET_READY`: accept the final OAuth evidence when a card already exists or exact first-card evidence is absent; do not require an `oauthRequired` field from `wallet init`, and do not turn `paymentMethodsCacheError` into a login failure.
 - `SURFACE_ERROR`: return the terminal CLI error without inventing recovery.
 
+## Quick Instruction Setup
+
+When a frozen purchase intent meets an uninitialized wallet, pass the instruction context through `clink wallet init` so login, first-card binding, and instruction activation complete in one browser journey. Context flags: `--title`, `--description`, `--mandates`, `--is-recurring`, `--shipping-address`, `--effective-until-time`. When any context flag is present, `--title` and `--mandates` become required together. `wallet init` deliberately rejects `--payment-instrument-id` and `--extra`: no card exists yet, and the unauthenticated entry point keeps its input surface tight.
+
+Assemble the context from the frozen purchase intent: `--title` from the product name, mandate `amountLimit` from the order total, `currencyCode` from the order currency, and merchant name/category from the merchant context. Login never fails because of the instruction context: if backend creation fails, the token response simply omits the id, `data.pendingInstructionId` comes back null, and the regular authorization flow takes over.
+
+Record `data.pendingInstructionId` from the init envelope. On the first-card binding path it drives the quick activation wait only after the binding watch delivers its `payment_method.added` envelope. On the already-ready path (cards exist, no fresh binding ceremony) the id is informational only — no activation event is coming, so never start a quick activation wait there.
+
 ## Wallet Logout
 
 ```bash
