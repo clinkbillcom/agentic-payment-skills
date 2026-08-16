@@ -954,6 +954,7 @@ test('quick instruction setup is documented end to end', () => {
   assert.match(walletConfig, /## Quick Instruction Setup/u);
   assert.match(walletConfig, /`--title` and `--mandates` become required together/u);
   assert.match(walletConfig, /rejects `--payment-instrument-id` and `--extra`/u);
+  assert.match(walletConfig, /must carry `description`, `amountLimit`, and `currencyCode`/u);
   assert.match(walletConfig, /`data\.pendingInstructionId` comes back null, and the regular authorization flow takes over/u);
   assert.match(instruction, /## Quick Instruction/u);
   assert.match(instruction, /never satisfies `clink instruction list --valid-only`/u);
