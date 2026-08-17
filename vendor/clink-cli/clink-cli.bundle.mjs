@@ -16186,9 +16186,17 @@ function instructionContextBody(context) {
   }
   const isRecurring = getBooleanFlag(flags, "is-recurring");
   const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
+  const title = requireStringFlag(flags, "missing --title", "title");
+  if (title.length > 256) {
+    throw validationError(`--title must be at most 256 characters, got ${title.length}`);
+  }
+  const description = getStringFlag(flags, "description");
+  if (description !== void 0 && description.length > 1024) {
+    throw validationError(`--description must be at most 1024 characters, got ${description.length}`);
+  }
   const body = compact3({
-    title: requireStringFlag(flags, "missing --title", "title"),
-    description: getStringFlag(flags, "description"),
+    title,
+    description,
     effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
     mandates
   });
@@ -16201,13 +16209,21 @@ function instructionContextBody(context) {
   }
   return body;
 }
+var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 function normalizeInstructionMandates(mandates, isRecurring) {
-  if (!isRecurring) {
-    return mandates;
-  }
   return mandates.map((mandate, index) => {
     if (!isJsonObject(mandate)) {
-      throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
+      throw validationError(`--mandates[${index}] must be a JSON object`);
+    }
+    requireMandateText(mandate, "description", index);
+    requireMandateAmountLimit(mandate, index);
+    requireMandateText(mandate, "currencyCode", index);
+    const effectiveUntilTime = mandate.effectiveUntilTime;
+    if (effectiveUntilTime !== void 0 && effectiveUntilTime !== null && (typeof effectiveUntilTime !== "string" || !UTC_DATETIME_FORMAT.test(effectiveUntilTime))) {
+      throw validationError(`--mandates[${index}].effectiveUntilTime must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
+    }
+    if (!isRecurring) {
+      return mandate;
     }
     const frequency = mandate.recurringFrequency;
     if (typeof frequency !== "string" || frequency.trim().length === 0) {
@@ -16223,12 +16239,28 @@ function normalizeInstructionMandates(mandates, isRecurring) {
     };
   });
 }
+function requireMandateText(mandate, field, index) {
+  const value = mandate[field];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw validationError(`--mandates[${index}].${field} is required and cannot be blank`);
+  }
+}
+function requireMandateAmountLimit(mandate, index) {
+  const value = mandate.amountLimit;
+  if (value === void 0 || value === null) {
+    throw validationError(`--mandates[${index}].amountLimit is required`);
+  }
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
+    throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
+  }
+}
 function utcDateTimeFlag(flags, name) {
   const value = getStringFlag(flags, name);
   if (value === void 0) {
     return void 0;
   }
-  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+  if (!UTC_DATETIME_FORMAT.test(value)) {
     throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
   }
   return value;
