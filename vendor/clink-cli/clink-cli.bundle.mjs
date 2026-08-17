@@ -7961,10 +7961,10 @@ Options:
   --no-open                    Do not open the browser; overrides --open and default-open-links
   --dry-run                    Print the Device Authorization request without executing it
   --title <text>               Purchase intent title; enables the quick-instruction context
-  --mandates <json>            JSON array of mandates; required with any quick-instruction flag
+  --mandates <json>            JSON array of 1-10 mandates; required with any quick-instruction flag
   --description <text>         Optional quick-instruction description
   --is-recurring               Mark the quick instruction as recurring (mandates need recurringFrequency)
-  --shipping-address <json>    Optional shipping address JSON for the quick instruction
+  --shipping-address <json>    Optional shipping address JSON object for the quick instruction
   --effective-until-time <utc> Optional quick-instruction expiry, UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
 
@@ -7984,9 +7984,11 @@ Device Authorization:
 Quick Instruction:
   Passing any quick-instruction flag sends an instruction_context with the Device Authorization
   request; --title and --mandates are then required. --payment-instrument-id and --extra are not
-  accepted here. After the browser authorization completes, the server creates a purchase
-  instruction in PENDING state and the output includes its pendingInstructionId (null when the
-  server skips creation, e.g. the wallet already has a VIC-registered card, or creation failed).
+  accepted here. The title is non-blank and at most 256 characters, the optional description is
+  at most 1024 characters, mandates contain 1-10 entries, and the serialized context is at most
+  16384 UTF-8 bytes. After browser authorization, the server attempts to create a purchase
+  instruction in PENDING state and the output includes its pendingInstructionId. A null value means
+  no usable Quick ID was returned; it does not distinguish a deliberate skip from creation failure.
   The PENDING instruction activates automatically after VIC card binding completes and emits
   purchase_instruction.activated; it never appears in \`instruction list --valid-only\` until then.
 
@@ -16150,7 +16152,7 @@ function instructionBody(context) {
   const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
   const body = compact3({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
-    title: requireStringFlag(flags, "missing --title", "title"),
+    title: requireNonBlankStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
     effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
     extra: optionalJsonFlag(flags, "extra"),
@@ -16159,7 +16161,7 @@ function instructionBody(context) {
   if (isRecurring) {
     body.isRecurring = true;
   }
-  const shippingAddress = optionalJsonFlag(flags, "shipping-address");
+  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
   if (shippingAddress !== void 0) {
     body.shippingAddress = shippingAddress;
   }
@@ -16185,8 +16187,8 @@ function instructionContextBody(context) {
     return void 0;
   }
   const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
-  const title = requireStringFlag(flags, "missing --title", "title");
+  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring, { maxEntries: 10 });
+  const title = requireNonBlankStringFlag(flags, "missing --title", "title");
   if (title.length > 256) {
     throw validationError(`--title must be at most 256 characters, got ${title.length}`);
   }
@@ -16203,14 +16205,24 @@ function instructionContextBody(context) {
   if (isRecurring) {
     body.isRecurring = true;
   }
-  const shippingAddress = optionalJsonFlag(flags, "shipping-address");
+  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
   if (shippingAddress !== void 0) {
     body.shippingAddress = shippingAddress;
+  }
+  const contextBytes = Buffer.byteLength(JSON.stringify(body), "utf8");
+  if (contextBytes > 16 * 1024) {
+    throw validationError(`wallet init instruction context must be at most 16384 UTF-8 bytes, got ${contextBytes}`);
   }
   return body;
 }
 var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
-function normalizeInstructionMandates(mandates, isRecurring) {
+function normalizeInstructionMandates(mandates, isRecurring, options2 = {}) {
+  if (mandates.length === 0) {
+    throw validationError("--mandates must contain at least one entry");
+  }
+  if (options2.maxEntries !== void 0 && mandates.length > options2.maxEntries) {
+    throw validationError(`--mandates cannot exceed ${options2.maxEntries} entries, got ${mandates.length}`);
+  }
   return mandates.map((mandate, index) => {
     if (!isJsonObject(mandate)) {
       throw validationError(`--mandates[${index}] must be a JSON object`);
@@ -16254,6 +16266,20 @@ function requireMandateAmountLimit(mandate, index) {
   if (!/^\d{1,18}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
     throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
   }
+  if (typeof value === "number") {
+    const [integerPart, fractionPart = ""] = text.split(".");
+    const minorUnits = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
+    if (!Number.isSafeInteger(minorUnits)) {
+      throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
+    }
+  }
+}
+function requireNonBlankStringFlag(flags, missingMessage, name) {
+  const value = requireStringFlag(flags, missingMessage, name);
+  if (!value.trim()) {
+    throw validationError(`--${name} is required and cannot be blank`);
+  }
+  return value;
 }
 function utcDateTimeFlag(flags, name) {
   const value = getStringFlag(flags, name);

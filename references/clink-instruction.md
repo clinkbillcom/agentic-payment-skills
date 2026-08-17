@@ -20,25 +20,25 @@ https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
 
 This URL is hand-built, not CLI command output, so it has **no built-in watch**.
 
-It is also the page an agent browser can never complete. WebAuthn requires a platform authenticator bound to the user's own device keychain and scoped to the relying-party origin: a headless or embedded browser has none, and a CDP virtual authenticator would forge exactly the proof this page exists to collect. A credential registered in an agent browser profile also does not exist in the user's own browser, so later signing fails there regardless. Hand the URL to the user and let them approve with Face ID, Touch ID, Windows Hello, or a security key; their phone is often the right device. See `references/clink-browser-handoff.md`. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either `vic_device.binding_succeeded` or a same-card `payment_method.updated` with `visaRegistrationSucceeded=true`, so use one any-of poll:
+It is also the page an agent browser can never complete. WebAuthn requires a platform authenticator bound to the user's own device keychain and scoped to the relying-party origin: a headless or embedded browser has none, and a CDP virtual authenticator would forge exactly the proof this page exists to collect. A credential registered in an agent browser profile also does not exist in the user's own browser, so later signing fails there regardless. Hand the URL to the user and let them approve with Face ID, Touch ID, Windows Hello, or a security key; their phone is often the right device. See `references/clink-browser-handoff.md`. The moment you send it, start a concurrent, non-blocking listener; do not wait for the user to report completion first. Registration readiness arrives as either the canonical same-card `payment_method.update` with `visaRegistrationSucceeded=true` or `vic_device.binding_succeeded` (`payment_method.updated` is a compatibility alias), so use one any-of poll:
 
 ```bash
-clink events poll --type vic_device.binding_succeeded,payment_method.updated --no-ack --max-wait 60 --format json
+clink events poll --type payment_method.update,vic_device.binding_succeeded --no-ack --max-wait 60 --format json
 ```
 
-Then confirm authoritatively by refreshing the card and checking `visaRegistrationSucceeded === true` before proceeding:
+Then confirm authoritatively by refreshing the card list and checking the exact card's `visaRegistrationSucceeded === true` before proceeding:
 
 ```bash
-clink card get --payment-instrument-id <visa_pi> --format json
+clink card binding-link --no-watch --no-open --format json
 ```
 
 The agent page environment follows the base URL persisted by `wallet init` (see `references/clink-cli-invocation.md`); run instruction commands without environment flags and do not re-initialize into another environment during the workflow.
 
 ## Preparation Steps
 
-1. Refresh cards with `clink card binding-link --no-watch --format json`.
+1. Refresh cards with `clink card binding-link --no-watch --no-open --format json`.
 2. Select the user-specified Visa card, otherwise the default card, otherwise the first usable Visa card.
-3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.updated` showing readiness, then confirm `visaRegistrationSucceeded === true` with `card get` before continuing.
+3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.update` showing readiness, then refresh and confirm `visaRegistrationSucceeded === true` before continuing.
 4. List reusable ACTIVE instructions before creating anything.
 5. Reuse an instruction only if card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request. For a scheduled/recurring task, cover the whole schedule horizon instead — see the scheduled-task section below.
 6. If no reusable instruction exists, screen the complete purchase context against `references/clink-restricted-categories.md` with `classifyInstructionRestriction`. Refuse a restricted purchase, fix invalid/missing gate input, and create a draft only after the classifier returns `CONTINUE_INSTRUCTION_CREATION`, the mandate scope is complete, and the user has authorized that scope.
@@ -258,8 +258,15 @@ Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACT
 
 Quick instruction setup rides the wallet-init journey instead of the regular create-then-Passkey flow above: the instruction context travels with `clink wallet init`, the backend creates the instruction as `PENDING` when authentication completes, and a fresh Visa + VIC binding ceremony activates it — one browser journey instead of two.
 
+- Run `classifyInstructionRestriction` over the complete frozen purchase and the nested `instructionContext` before invoking `wallet init`; Quick setup creates an instruction too, so it never bypasses the restricted-category gate.
 - A pending quick instruction never satisfies `clink instruction list --valid-only`; only `ACTIVE` does. Never treat a `PENDING` quick instruction as usable authorization.
 - Activation is driven solely by that fresh Visa + VIC binding ceremony. A non-Visa first card or skipped VIC enrollment leaves the instruction pending: continue the non-VIC path without waiting and let supersede or expiry clean it up.
 - A repeated quick `wallet init` carrying new context supersedes the older pending instruction server-side — the newest intent wins.
 
-After the binding watch delivers its `payment_method.added` envelope, verify activation with `clink instruction get --purchase-instruction-id <id> --format json` and classify with `classifyAuthorizationActiveVerification`, exactly as above. While the status is still activatable, poll `clink events poll --type purchase_instruction.activated --no-ack --format json`. On activation-wait timeout or a verification error, re-check once with `clink instruction get --purchase-instruction-id <id> --format json`, then fall back to the regular instruction creation workflow — the quick path never blocks a purchase, it only accelerates one.
+`payment_method.added` is only card-addition evidence; CWallet does not put `visaRegistrationSucceeded` in that event and does not attempt Quick activation at that point. After the binding watch delivers it:
+
+1. Extract its exact `paymentInstrumentId`, run `clink card binding-link --no-watch --no-open --format json`, and invoke `classifyQuickInstructionActivationGate` with the recorded nullable `pendingInstructionId`, that exact card ID, and the refreshed `paymentMethodsVoList`. Never fall back to the default or first card.
+2. A missing Quick ID, a non-Visa card, or a Visa card still not VIC-ready after the one bounded readiness wait returns to `classifyPaymentAuthorizationResolver`; null cannot distinguish a deliberate backend skip from swallowed creation failure and never means “list instructions unconditionally.”
+3. For a Visa card with a Quick ID but `visaRegistrationSucceeded !== true`, run the gate's `singleAttempt` same-card any-of poll for `payment_method.update,vic_device.binding_succeeded`. Accept the update only when it carries `visaRegistrationSucceeded=true`. Event, timeout, wrong-card/non-ready event, empty result, and poll gap all return `VERIFY_RESOURCE_STATUS`, never a resume poll: refresh once, merge `{vicReadinessWaitAttempted:true}` from the returned continuation, and re-enter the gate.
+4. Only Visa + VIC-ready + a non-empty Quick ID may run `clink instruction get --purchase-instruction-id <id> --format json`. Bind verification to both that exact instruction ID and the newly added card ID. `ACTIVE` resumes the frozen purchase; a card/instruction mismatch or a GET/auth failure stops it.
+5. `CREATED`, `PENDING`, or `INPROGRESS` may use the returned `singleAttempt` bounded `purchase_instruction.activated` poll. Preserve its `activationWaitAttempted=true` waitSpec through event, timeout, wrong-resource event, empty result, or poll gap, then run one final GET. If it is still non-active, the classifier returns regular `LIST_AUTHORIZATIONS` with no poll command; do not create a parallel watcher or keep polling forever.

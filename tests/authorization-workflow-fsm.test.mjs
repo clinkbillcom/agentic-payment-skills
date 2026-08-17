@@ -14,6 +14,7 @@ import {
   classifyScheduledAuthorizationScope,
   classifyUnattendedAuthorization,
 } from '../lib/authorization-workflow-fsm.mjs';
+import { classifyEventPollObservation } from '../lib/event-workflow-fsm.mjs';
 
 test('authorization resolver refreshes payment instruments before deciding', () => {
   const result = classifyPaymentAuthorizationResolver({});
@@ -462,55 +463,301 @@ test('authorization active verification rejects terminal, missing, and unknown s
   }
 });
 
-test('quick instruction gate verifies activation when a pending instruction id exists', () => {
+test('quick activation verification requires ACTIVE to belong to the newly bound card', () => {
+  const gate = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_bound',
+    paymentInstrumentId: 'pi_expected',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_expected',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: true,
+    }],
+  });
+
+  const mismatched = classifyAuthorizationActiveVerification({
+    data: {
+      instructionId: 'ins_quick_bound',
+      paymentInstrumentId: 'pi_other',
+      status: 'ACTIVE',
+    },
+  }, gate.waitSpec);
+  assert.equal(mismatched.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(mismatched.reason, 'authorization_payment_instrument_mismatch');
+
+  const missing = classifyAuthorizationActiveVerification({
+    data: { instructionId: 'ins_quick_bound', status: 'ACTIVE' },
+  }, gate.waitSpec);
+  assert.equal(missing.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(missing.reason, 'authorization_payment_instrument_missing');
+
+  const missingInstruction = classifyAuthorizationActiveVerification({
+    data: { paymentInstrumentId: 'pi_expected', status: 'ACTIVE' },
+  }, gate.waitSpec);
+  assert.equal(missingInstruction.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(missingInstruction.reason, 'authorization_instruction_missing');
+
+  const pending = classifyAuthorizationActiveVerification({
+    data: { instructionId: 'ins_quick_bound', status: 'PENDING' },
+  }, gate.waitSpec);
+  assert.equal(pending.action, AuthorizationWorkflowAction.WAIT_AUTHORIZATION_ACTIVATION);
+
+  const active = classifyAuthorizationActiveVerification({
+    data: {
+      instructionId: 'ins_quick_bound',
+      paymentInstrumentId: 'pi_expected',
+      status: 'ACTIVE',
+    },
+  }, gate.waitSpec);
+  assert.equal(active.action, AuthorizationWorkflowAction.RESUME_AUTHORIZED_PAYMENT);
+});
+
+test('quick instruction gate requires the exact newly added payment instrument id', () => {
   const result = classifyQuickInstructionActivationGate({ pendingInstructionId: 'ins_quick_1' });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ERROR);
+  assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(result.reason, 'quick_instruction_payment_instrument_id_missing');
+});
+
+test('quick instruction gate refreshes the exact new card before deciding its route', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_new',
+    paymentMethodsVoList: [],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.PAYMENT_INSTRUMENT_REFRESH_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.REFRESH_PAYMENT_INSTRUMENT_LIST);
+  assert.equal(result.reason, 'quick_instruction_payment_instrument_refresh_required');
+  assert.equal(result.paymentInstrumentId, 'pi_new');
+  assert.equal(
+    result.refreshCommand,
+    'clink card binding-link --no-watch --no-open --format json',
+  );
+});
+
+test('quick instruction gate fails closed when the exact card is still absent after refresh', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_new',
+    paymentInstrumentRefreshAttempted: true,
+    paymentMethodsVoList: [{ paymentInstrumentId: 'pi_other', cardScheme: 'Visa' }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ERROR);
+  assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(result.reason, 'quick_instruction_payment_instrument_not_found_after_refresh');
+});
+
+test('quick instruction gate sends a non-Visa card through the regular resolver', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_mc',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_mc',
+      cardScheme: 'Mastercard',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(result.reason, 'payment_instrument_not_visa_bypass_authorization');
+  assert.equal(result.quickInstructionFallbackReason, 'new_payment_instrument_not_visa');
+});
+
+test('quick instruction gate waits for same-card VIC readiness before checking the pending id', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_visa',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.VIC_READINESS_WAIT_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.WAIT_VIC_READINESS);
+  assert.equal(result.reason, 'quick_instruction_vic_readiness_pending');
+  assert.equal(result.instructionId, 'ins_quick_1');
+  assert.deepEqual(result.expectedResource, { paymentInstrumentId: 'pi_visa' });
+  assert.equal(
+    result.waitSpec.eventType,
+    'payment_method.update,vic_device.binding_succeeded',
+  );
+  assert.equal(result.waitSpec.purpose, 'VIC_READINESS');
+  assert.equal(result.waitSpec.singleAttempt, true);
+  assert.deepEqual(result.waitSpec.continuation, { vicReadinessWaitAttempted: true });
+  assert.equal(result.waitSpec.maxWaitSeconds, 900);
+  assert.equal(
+    result.pollCommand,
+    'clink events poll --type payment_method.update,vic_device.binding_succeeded --max-wait 900 --no-ack --format json',
+  );
+  assert.equal(result.waitSpec.verifyCommand, result.refreshCommand);
+});
+
+test('quick instruction gate performs only one bounded VIC wait after any poll outcome', () => {
+  const initial = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_visa',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+  const pollResult = classifyEventPollObservation({
+    ready: false,
+    timedOut: true,
+    events: [],
+  }, initial.waitSpec);
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_visa',
+    ...pollResult.continuation,
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(result.reason, 'visa_vic_not_enabled_bypass_authorization');
+  assert.equal(
+    result.quickInstructionFallbackReason,
+    'vic_readiness_not_observed_after_bounded_wait',
+  );
+  assert.equal(result.pollCommand, undefined);
+});
+
+test('quick instruction gate keeps the original VIC timeout marker as a compatibility alias', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_visa',
+    vic_readiness_wait_timed_out: true,
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(result.quickInstructionFallbackReason, 'vic_readiness_not_observed_after_bounded_wait');
+});
+
+test('quick instruction gate verifies the exact instruction and VIC-ready card', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pending_instruction_id: 'ins_quick_2',
+    payment_instrument_id: 'pi_visa',
+    payment_methods_vo_list: [{
+      payment_instrument_id: 'pi_visa',
+      card_scheme: 'VISA',
+      visa_registration_succeeded: true,
+    }],
+  });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ACTIVATION_VERIFY_REQUIRED);
   assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_ACTIVATION);
   assert.equal(result.terminal, false);
   assert.equal(result.reason, 'quick_instruction_pending_verification');
-  assert.equal(result.instructionId, 'ins_quick_1');
+  assert.equal(result.instructionId, 'ins_quick_2');
+  assert.equal(result.paymentInstrumentId, 'pi_visa');
   assert.equal(
     result.verifyCommand,
-    'clink instruction get --purchase-instruction-id ins_quick_1 --format json',
+    'clink instruction get --purchase-instruction-id ins_quick_2 --format json',
   );
   assert.equal(
     result.pollCommand,
-    'clink events poll --type purchase_instruction.activated --no-ack --format json',
+    'clink events poll --type purchase_instruction.activated --max-wait 900 --no-ack --format json',
   );
   assert.deepEqual(result.expectedResource, {
-    instructionId: 'ins_quick_1',
-    purchaseInstructionId: 'ins_quick_1',
+    instructionId: 'ins_quick_2',
+    purchaseInstructionId: 'ins_quick_2',
+    paymentInstrumentId: 'pi_visa',
   });
   assert.equal(result.waitSpec.eventType, 'purchase_instruction.activated');
+  assert.equal(result.waitSpec.purpose, 'QUICK_INSTRUCTION_ACTIVATION');
+  assert.equal(result.waitSpec.singleAttempt, true);
+  assert.equal(result.waitSpec.activationWaitAttempted, false);
+  assert.equal(result.waitSpec.maxWaitSeconds, 900);
 });
 
-test('quick instruction gate accepts the snake_case token-response field name', () => {
-  const result = classifyQuickInstructionActivationGate({ pending_instruction_id: 'ins_quick_2' });
+test('quick activation gets one bounded poll and final pending verification returns to regular list', () => {
+  const gate = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_3',
+    paymentInstrumentId: 'pi_visa',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: true,
+    }],
+  });
+  const pending = {
+    data: {
+      purchaseInstructionId: 'ins_quick_3',
+      paymentInstrumentId: 'pi_visa',
+      status: 'PENDING',
+    },
+  };
 
-  assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_ACTIVATION);
-  assert.equal(result.instructionId, 'ins_quick_2');
+  const firstVerification = classifyAuthorizationActiveVerification(pending, gate.waitSpec);
+  assert.equal(firstVerification.action, AuthorizationWorkflowAction.WAIT_AUTHORIZATION_ACTIVATION);
+  assert.equal(firstVerification.waitSpec.activationWaitAttempted, true);
+  assert.equal(firstVerification.waitSpec.singleAttempt, true);
+  assert.deepEqual(firstVerification.waitSpec.continuation, { activationWaitAttempted: true });
+  assert.equal(
+    firstVerification.pollCommand,
+    'clink events poll --type purchase_instruction.activated --max-wait 900 --no-ack --format json',
+  );
+  const pollResult = classifyEventPollObservation({
+    ready: false,
+    timedOut: true,
+    events: [],
+  }, firstVerification.waitSpec);
+  assert.equal(pollResult.verifyCommand, firstVerification.verifyCommand);
+  assert.equal(pollResult.pollCommand, undefined);
+
+  const finalVerification = classifyAuthorizationActiveVerification(
+    pending,
+    pollResult.waitSpec,
+  );
+  assert.equal(finalVerification.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(finalVerification.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
+  assert.equal(finalVerification.reason, 'quick_instruction_still_pending_after_bounded_wait');
+  assert.equal(finalVerification.paymentInstrumentId, 'pi_visa');
+  assert.equal(finalVerification.pollCommand, undefined);
+
+  const active = classifyAuthorizationActiveVerification({
+    data: {
+      purchaseInstructionId: 'ins_quick_3',
+      paymentInstrumentId: 'pi_visa',
+      status: 'ACTIVE',
+    },
+  }, pollResult.waitSpec);
+  assert.equal(active.action, AuthorizationWorkflowAction.RESUME_AUTHORIZED_PAYMENT);
 });
 
-test('quick instruction gate falls back to the regular authorization list without an id', () => {
-  for (const input of [
-    undefined,
-    {},
-    { pendingInstructionId: null },
-    { pendingInstructionId: '' },
-    { pending_instruction_id: null },
-  ]) {
-    const result = input === undefined
-      ? classifyQuickInstructionActivationGate()
-      : classifyQuickInstructionActivationGate(input);
+test('quick instruction gate sends a missing pending id through the regular resolver', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: null,
+    paymentInstrumentId: 'pi_visa',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: true,
+    }],
+  });
 
-    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
-    assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
-    assert.equal(result.terminal, false);
-    assert.equal(result.reason, 'quick_instruction_absent');
-    assert.equal(result.verifyCommand, undefined);
-    assert.equal(result.pollCommand, undefined);
-  }
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
+  assert.equal(result.reason, 'visa_vic_ready_list_authorizations');
+  assert.equal(result.quickInstructionFallbackReason, 'pending_instruction_id_unavailable');
+  assert.equal(result.verifyCommand, undefined);
+  assert.equal(result.pollCommand, undefined);
 });
 
 // The backend has no DAILY cycle, so a daily task must fold its per-run cap into a WEEKLY budget.

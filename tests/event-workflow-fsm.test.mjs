@@ -22,6 +22,124 @@ const instructionWaitSpec = {
   verifyCommand: 'clink instruction get --purchase-instruction-id ins_123 --format json',
 };
 
+const vicReadinessWaitSpec = {
+  eventType: 'payment_method.update,vic_device.binding_succeeded',
+  purpose: 'VIC_READINESS',
+  singleAttempt: true,
+  continuation: { vicReadinessWaitAttempted: true },
+  expectedResource: { paymentInstrumentId: 'pi_quick' },
+  maxWaitSeconds: 900,
+  verifyCommand: 'clink card binding-link --no-watch --no-open --format json',
+};
+
+test('VIC readiness turns every completed single poll into one authoritative refresh', () => {
+  assert.equal(
+    pollCommandForWaitSpec(vicReadinessWaitSpec),
+    'clink events poll --type payment_method.update,vic_device.binding_succeeded --max-wait 900 --no-ack --format json',
+  );
+
+  const notReady = classifyEventPollObservation({
+    ready: true,
+    events: [{
+      eventType: 'payment_method.update',
+      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: false },
+    }],
+  }, vicReadinessWaitSpec);
+  assert.equal(notReady.domain, EventWorkflowDomain.VIC);
+  assert.equal(notReady.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+  assert.equal(notReady.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
+  assert.equal(notReady.reason, 'single_attempt_event_not_actionable');
+  assert.deepEqual(notReady.continuation, { vicReadinessWaitAttempted: true });
+  assert.equal(notReady.pollCommand, undefined);
+  assert.equal(notReady.resumeCommand, undefined);
+
+  const wrongCard = classifyEventPollObservation({
+    ready: true,
+    events: [{
+      eventType: 'payment_method.update',
+      data: { paymentInstrumentId: 'pi_other', visaRegistrationSucceeded: true },
+    }],
+  }, vicReadinessWaitSpec);
+  assert.equal(wrongCard.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+  assert.equal(wrongCard.reason, 'single_attempt_event_not_correlated');
+  assert.equal(wrongCard.pollCommand, undefined);
+
+  for (const event of [
+    {
+      eventType: 'payment_method.update',
+      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+    },
+    {
+      eventType: 'vic_device.binding_succeeded',
+      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+    },
+    {
+      eventType: 'payment_method.updated',
+      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+    },
+  ]) {
+    const ready = classifyEventPollObservation({ ready: true, events: [event] }, vicReadinessWaitSpec);
+    assert.equal(ready.domain, EventWorkflowDomain.VIC);
+    assert.equal(ready.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+    assert.equal(ready.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
+    assert.equal(ready.verifyCommand, vicReadinessWaitSpec.verifyCommand);
+    assert.deepEqual(ready.continuation, { vicReadinessWaitAttempted: true });
+    assert.equal(ready.pollCommand, undefined);
+  }
+
+  const timedOut = classifyEventPollObservation({
+    ready: false,
+    timedOut: true,
+    events: [],
+  }, vicReadinessWaitSpec);
+  assert.equal(timedOut.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+  assert.equal(timedOut.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
+  assert.equal(timedOut.reason, 'single_attempt_event_poll_timeout');
+  assert.deepEqual(timedOut.continuation, { vicReadinessWaitAttempted: true });
+  assert.equal(timedOut.resumeCommand, undefined);
+});
+
+test('Quick activation single-attempt outcomes require final GET instead of another poll', () => {
+  const waitSpec = {
+    eventType: 'purchase_instruction.activated',
+    purpose: 'QUICK_INSTRUCTION_ACTIVATION',
+    singleAttempt: true,
+    activationWaitAttempted: true,
+    continuation: { activationWaitAttempted: true },
+    expectedResource: {
+      instructionId: 'ins_quick',
+      purchaseInstructionId: 'ins_quick',
+      paymentInstrumentId: 'pi_quick',
+    },
+    verifyCommand: 'clink instruction get --purchase-instruction-id ins_quick --format json',
+  };
+
+  for (const observation of [
+    { ready: false, timedOut: true, events: [] },
+    {
+      ready: true,
+      timedOut: false,
+      events: [{
+        eventType: 'purchase_instruction.activated',
+        data: { purchaseInstructionId: 'ins_other' },
+      }],
+    },
+    { ready: false, timedOut: false, events: [] },
+    {
+      exitCode: 7,
+      stderr: JSON.stringify({ ok: false, error: { message: 'poll process gap' } }),
+    },
+  ]) {
+    const result = classifyEventPollObservation(observation, waitSpec);
+    assert.equal(result.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+    assert.equal(result.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
+    assert.equal(result.verifyCommand, waitSpec.verifyCommand);
+    assert.equal(result.waitSpec.activationWaitAttempted, true);
+    assert.equal(result.pollCommand, undefined);
+    assert.equal(result.resumeCommand, undefined);
+  }
+});
+
 test('normalizes CLI and body account event type aliases', () => {
   assert.equal(canonicalAccountEventType('account-created'), 'account.created');
   assert.equal(canonicalAccountEventType('account.created'), 'account.created');
