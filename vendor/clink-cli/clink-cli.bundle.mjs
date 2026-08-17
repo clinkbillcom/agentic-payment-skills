@@ -1195,7 +1195,7 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path3 = __require("node:path");
+    var path4 = __require("node:path");
     var fs = __require("node:fs");
     var process2 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2208,9 +2208,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path3.resolve(baseDir, baseName);
+          const localBin = path4.resolve(baseDir, baseName);
           if (fs.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path3.extname(baseName))) return void 0;
+          if (sourceExt.includes(path4.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs.existsSync(`${localBin}${ext}`)
           );
@@ -2228,17 +2228,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path3.resolve(
-            path3.dirname(resolvedScriptPath),
+          executableDir = path4.resolve(
+            path4.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path3.basename(
+            const legacyName = path4.basename(
               this._scriptPath,
-              path3.extname(this._scriptPath)
+              path4.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2249,7 +2249,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path3.extname(executableFile));
+        launchWithNode = sourceExt.includes(path4.extname(executableFile));
         let proc;
         if (process2.platform !== "win32") {
           if (launchWithNode) {
@@ -3164,7 +3164,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path3.basename(filename, path3.extname(filename));
+        this._name = path4.basename(filename, path4.extname(filename));
         return this;
       }
       /**
@@ -3178,9 +3178,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path4) {
-        if (path4 === void 0) return this._executableDir;
-        this._executableDir = path4;
+      executableDir(path5) {
+        if (path5 === void 0) return this._executableDir;
+        this._executableDir = path5;
         return this;
       }
       /**
@@ -3970,9 +3970,9 @@ var require_yauzl = __commonJS({
     exports.Entry = Entry;
     exports.LocalFileHeader = LocalFileHeader;
     exports.RandomAccessReader = RandomAccessReader;
-    function openPromise2(path3, options2) {
+    function openPromise2(path4, options2) {
       return new Promise((resolve4, reject) => {
-        open5(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
+        open5(path4, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
           resolve4(zipfile);
         });
@@ -4002,7 +4002,7 @@ var require_yauzl = __commonJS({
         });
       });
     }
-    function open5(path3, options2, callback) {
+    function open5(path4, options2, callback) {
       if (typeof options2 === "function") {
         callback = options2;
         options2 = null;
@@ -4014,7 +4014,7 @@ var require_yauzl = __commonJS({
       if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
       if (options2.strictFileNames == null) options2.strictFileNames = false;
       if (callback == null) callback = defaultCallback;
-      fs.open(path3, "r", function(err, fd) {
+      fs.open(path4, "r", function(err, fd) {
         if (err) return callback(err);
         fromFd(fd, options2, function(err2, zipfile) {
           if (err2) fs.close(fd, defaultCallback);
@@ -4803,6 +4803,7 @@ var require_yauzl = __commonJS({
 
 // dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
+import { readFile as readFile3 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { performance } from "node:perf_hooks";
 
@@ -4926,6 +4927,7 @@ var OPTION_DEFINITIONS = [
   { name: "description", flags: "--description <text>" },
   { name: "effective-until-time", flags: "--effective-until-time <datetime>" },
   { name: "mandates", flags: "--mandates <json>" },
+  { name: "mandates-file", flags: "--mandates-file <path>" },
   { name: "products", flags: "--products <json>" },
   { name: "is-recurring", flags: "--is-recurring" },
   { name: "shipping-address", flags: "--shipping-address <json>" },
@@ -5072,9 +5074,9 @@ function sameHttpOrigin(left, right) {
 // dist/browser-handoff.js
 var BROWSER_HANDOFF_CALLBACK_PATH = "/callback";
 var CREATE_HANDOFF_PATH = "/agent/cwallet/oauth/browser-handoffs";
-var COMPLETE_HANDOFF_PATH = "/oauth/cli-handoff/complete";
 var HANDOFF_PAGE_PREFIX = "/oauth/cli-handoff/";
 var MAX_HANDOFF_LIFETIME_SECONDS = 300;
+var MAX_COMPLETE_URL_LENGTH = 2048;
 var OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/u;
 function canUseBrowserHandoff(runtimeConfig) {
   return Boolean(runtimeConfig.authorization && sameHttpOrigin(runtimeConfig.authorization.issuerOrigin, runtimeConfig.baseUrl));
@@ -5207,7 +5209,7 @@ async function openBrowserHandoff(options2) {
       verifier,
       loopbackState,
       fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
-      completeUrl: buildCompleteUrl(target.portalOrigin, createResult.handoffId)
+      completeUrl: createResult.completeUrl
     };
     timeoutHandle = clock.setTimeout(() => {
       void settle("timeout");
@@ -5310,6 +5312,7 @@ function parseCreateResponse(response, portalOrigin) {
   }
   const handoffId = requiredOpaqueValue(data.handoff_id);
   const browserUrl = requiredString(data.browser_url);
+  const completeUrl = parseCompleteUrl(requiredString(data.complete_url), portalOrigin, handoffId);
   const expiresIn = Number(data.expires_in);
   if (!Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_HANDOFF_LIFETIME_SECONDS) {
     throw new Error("invalid create response");
@@ -5319,7 +5322,34 @@ function parseCreateResponse(response, portalOrigin) {
   if (actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search || actual.hash || actual.username || actual.password) {
     throw new Error("invalid create response");
   }
-  return { handoffId, browserUrl: actual.toString(), expiresIn };
+  if (!completeUrl) {
+    throw new Error("invalid create response");
+  }
+  return {
+    handoffId,
+    browserUrl: actual.toString(),
+    completeUrl,
+    expiresIn
+  };
+}
+function parseCompleteUrl(completeUrl, portalOrigin, handoffId) {
+  try {
+    if (completeUrl.length > MAX_COMPLETE_URL_LENGTH) {
+      return void 0;
+    }
+    const parsed = new URL(completeUrl);
+    if (parsed.protocol !== "https:" || parsed.origin !== new URL(portalOrigin).origin || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname === "/") {
+      return void 0;
+    }
+    const lastSegment = parsed.pathname.split("/").at(-1);
+    if (!lastSegment || decodeURIComponent(lastSegment) !== handoffId) {
+      return void 0;
+    }
+    const normalized = parsed.toString();
+    return normalized.length <= MAX_COMPLETE_URL_LENGTH ? normalized : void 0;
+  } catch {
+    return void 0;
+  }
 }
 function isSuccessfulResponse(response) {
   if (response.status < 200 || response.status >= 300) {
@@ -5383,11 +5413,6 @@ function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
     login.searchParams.set("email", email);
   }
   return login.toString();
-}
-function buildCompleteUrl(portalOrigin, handoffId) {
-  const complete = new URL(COMPLETE_HANDOFF_PATH, portalOrigin);
-  complete.searchParams.set("handoff_id", handoffId);
-  return complete.toString();
 }
 async function sendRedirect(response, location) {
   if (response.destroyed || response.writableEnded) {
@@ -6034,7 +6059,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.13";
+var CLI_VERSION = "0.2.15";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -6206,10 +6231,36 @@ async function requestJson(options2) {
     if (error.name === "AbortError") {
       throw networkError(`request timed out after ${options2.timeoutMs}ms`);
     }
-    throw networkError(error.message);
+    throw networkError(formatNetworkFailure(error));
   } finally {
     clearTimeout(timeout);
   }
+}
+function formatNetworkFailure(error) {
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
+  const cause = isRecord3(error) && isRecord3(error.cause) ? error.cause : void 0;
+  if (!cause) {
+    return message;
+  }
+  const details = [
+    diagnosticField("code", cause.code),
+    diagnosticField("errno", cause.errno),
+    diagnosticField("syscall", cause.syscall),
+    diagnosticField("hostname", cause.hostname),
+    diagnosticField("address", cause.address),
+    diagnosticField("port", cause.port)
+  ].filter((value) => Boolean(value));
+  return details.length > 0 ? `${message} (${details.join(", ")})` : message;
+}
+function diagnosticField(name, value) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return void 0;
+  }
+  const normalized = String(value).replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 200);
+  return normalized ? `${name}=${normalized}` : void 0;
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null;
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -6307,6 +6358,7 @@ function isDryRun(value) {
 
 // dist/utils.js
 import { spawn } from "node:child_process";
+import path2 from "node:path";
 var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
 var BROWSER_OPEN_COMMAND_TIMEOUT_MS = 5e3;
@@ -6452,8 +6504,8 @@ function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.wr
     reportFailure();
   }
 }
-function resolveBrowserOpenCommand(platform, url) {
-  return resolveBrowserOpenCommands(platform, url)[0];
+function resolveBrowserOpenCommand(platform, url, env = process.env) {
+  return resolveBrowserOpenCommands(platform, url, env)[0];
 }
 async function openBrowserWithResult(open5, url, options2 = {}) {
   if (!open5) {
@@ -6464,7 +6516,7 @@ async function openBrowserWithResult(open5, url, options2 = {}) {
       attempts: []
     };
   }
-  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url);
+  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url, options2.env ?? process.env);
   const launch = options2.launch ?? launchBrowserOpenCommand;
   const attempts = [];
   for (const command of commands) {
@@ -6489,18 +6541,21 @@ async function openBrowserWithResult(open5, url, options2 = {}) {
     attempts
   };
 }
-function resolveBrowserOpenCommands(platform, url) {
+function resolveBrowserOpenCommands(platform, url, env = process.env) {
   if (platform === "darwin") {
     return [{ executable: "open", args: [url] }];
   }
   if (platform === "win32") {
+    const windowsDirectory = env.SystemRoot?.trim() || env.WINDIR?.trim();
+    const rundll32 = windowsDirectory ? path2.win32.join(windowsDirectory, "System32", "rundll32.exe") : "rundll32.exe";
+    const explorer = windowsDirectory ? path2.win32.join(windowsDirectory, "explorer.exe") : "explorer.exe";
     return [
       {
-        executable: "rundll32.exe",
+        executable: rundll32,
         args: ["url.dll,FileProtocolHandler", url]
       },
       {
-        executable: "explorer.exe",
+        executable: explorer,
         args: [url]
       }
     ];
@@ -6563,7 +6618,7 @@ async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAN
 }
 function parseJsonFlag(value, flagName) {
   try {
-    return JSON.parse(value);
+    return JSON.parse(value.replace(/^\uFEFF/u, ""));
   } catch (error) {
     throw apiError(`invalid JSON for ${flagName}: ${error.message}`);
   }
@@ -8030,6 +8085,7 @@ Usage:
   clink card binding-link [options]
   clink card setup-link [--open] [options]
   clink card modify-link [--open] [options]
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
   clink card list [options]
   clink card get --payment-instrument-id <id> [options]
 
@@ -8037,6 +8093,7 @@ Subcommands:
   binding-link   Fetch raw binding link and refresh cached payment methods
   setup-link     Fetch payment method setup link and refresh cached payment methods
   modify-link    Fetch payment method modify link and refresh cached payment methods
+  passkey-link   Open Visa card Passkey registration through Browser Handoff
   list           List cached payment methods from local config
   get            Get cached payment method detail from local config
 `;
@@ -8111,6 +8168,31 @@ Notes:
 Examples:
   clink card modify-link
   clink card modify-link --open
+`;
+var CARD_PASSKEY_LINK_HELP = `clink card passkey-link
+
+Usage:
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
+
+Required Arguments:
+  --payment-instrument-id <id> Payment instrument ID for the Visa card
+
+Options:
+  --customer-api-key <key>     Legacy API key override for never-OAuth wallets only
+  --timeout <ms>               Browser Handoff request timeout in milliseconds
+  --open                       Open the Visa Passkey page in the browser
+  --dry-run                    Print the link without opening the browser
+${OUTPUT_OPTIONS}
+
+Notes:
+  Builds the Visa card Passkey URL locally without creating an Instruction.
+  With --open and Agent OAuth, first completes a one-time loopback Browser Handoff so the Portal
+  receives a browser session before navigating to the Passkey page.
+  After Passkey registration, refresh the card through clink card binding-link --no-watch.
+  Output includes manualOpenUrl and browserLaunch for caller diagnostics.
+
+Examples:
+  clink card passkey-link --payment-instrument-id pi_xxx --open
 `;
 var CARD_LIST_HELP = `clink card list
 
@@ -8830,12 +8912,14 @@ Examples:
 var INSTRUCTION_CREATE_HELP = `clink instruction create
 
 Usage:
-  clink instruction create --payment-instrument-id <id> --title <title> --mandates <json> [options]
+  clink instruction create --payment-instrument-id <id> --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
 
 Required Arguments:
   --payment-instrument-id <id> Payment instrument ID for the Visa card
   --title <title>              Instruction title
   --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
 
 Optional Arguments:
   --description <text>         Instruction description
@@ -8861,6 +8945,8 @@ Mandate Fields:
 Notes:
   Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
   after the user completes Passkey/FIDO authorization on the agent page.
+  --mandates and --mandates-file are mutually exclusive. On Windows PowerShell, prefer
+  --mandates-file so JSON quotes are not reinterpreted by the shell.
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
 
@@ -8870,6 +8956,9 @@ Examples:
     --effective-until-time "2026-06-25 00:00:00" \\
     --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
     --format json
+  clink instruction create \\
+    --payment-instrument-id pi_xxx --title "Business trip" \\
+    --mandates-file .\\mandates.json --format json
 `;
 var INSTRUCTION_SIGN_URL_HELP = `clink instruction sign-url
 
@@ -8886,6 +8975,7 @@ ${CUSTOMER_API_KEY_LINK_OPTIONS}
 Notes:
   Builds the Passkey URL locally. The browser page performs the backend sign call with WebAuthn
   authResult after the user authorizes.
+  Output includes manualOpenUrl and browserLaunch so callers can handle manual browser fallback.
 
 Examples:
   clink instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
@@ -9057,6 +9147,8 @@ function getHelpText(command, subcommand, nestedCommand) {
           return CARD_SETUP_LINK_HELP;
         case "modify-link":
           return CARD_MODIFY_LINK_HELP;
+        case "passkey-link":
+          return CARD_PASSKEY_LINK_HELP;
         case "list":
           return CARD_LIST_HELP;
         case "get":
@@ -9225,13 +9317,19 @@ var ucp_merchants_default = {
 // public/test/ucp-merchants.json
 var ucp_merchants_default2 = {
   version: 1,
-  updated_at: "2026-07-29T00:00:00Z",
+  updated_at: "2026-08-14T00:00:00Z",
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_id: "mcht_f5xuyduv1a0j",
+      enabled: true,
+      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     }
   ]
 };
@@ -10000,7 +10098,7 @@ function unwrapResponse(result, invalidMessage) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  if (!isRecord3(data)) {
+  if (!isRecord4(data)) {
     throw apiError(invalidMessage, 502);
   }
   return data;
@@ -10009,7 +10107,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  if (!value.every((item) => isRecord3(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+  if (!value.every((item) => isRecord4(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((item) => ({ ...item }));
@@ -10017,7 +10115,7 @@ function normalizePaymentMethods(value) {
 function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function isRecord3(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -10086,8 +10184,8 @@ function buildChargeBody(input) {
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord4(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord4(channel.action) ? channel.action : {};
+  const channel = isRecord5(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord5(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber2(channel.status);
   return {
@@ -10127,7 +10225,7 @@ async function executeCharge(input, runtime) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber2(value) {
@@ -11204,30 +11302,30 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
 }
 var ArchivePathRegistry = class {
   #paths = /* @__PURE__ */ new Map();
-  register(path3, kind) {
-    const segments = path3.split("/");
+  register(path4, kind) {
+    const segments = path4.split("/");
     for (let index = 1; index < segments.length; index += 1) {
       this.#registerDirectory(segments.slice(0, index).join("/"), false);
     }
     if (kind === "directory") {
-      this.#registerDirectory(path3, true);
+      this.#registerDirectory(path4, true);
       return;
     }
-    const key = canonicalArchivePath(path3);
+    const key = canonicalArchivePath(path4);
     const existing = this.#paths.get(key);
     if (existing !== void 0) {
       throw new Error("archive path collision");
     }
-    this.#paths.set(key, { kind: "file", path: path3, explicit: true });
+    this.#paths.set(key, { kind: "file", path: path4, explicit: true });
   }
-  #registerDirectory(path3, explicit) {
-    const key = canonicalArchivePath(path3);
+  #registerDirectory(path4, explicit) {
+    const key = canonicalArchivePath(path4);
     const existing = this.#paths.get(key);
     if (existing === void 0) {
-      this.#paths.set(key, { kind: "directory", path: path3, explicit });
+      this.#paths.set(key, { kind: "directory", path: path4, explicit });
       return;
     }
-    if (existing.kind !== "directory" || existing.path !== path3) {
+    if (existing.kind !== "directory" || existing.path !== path4) {
       throw new Error("archive path collision");
     }
     if (explicit && existing.explicit) {
@@ -11327,13 +11425,13 @@ function addBoundedSize(current, addition, maximum) {
   }
   return total;
 }
-function rejectInstallMarker(path3) {
-  if (path3.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
+function rejectInstallMarker(path4) {
+  if (path4.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
     throw new Error("archive contains a reserved install marker");
   }
 }
-function canonicalArchivePath(path3) {
-  return path3.normalize("NFC").toLowerCase();
+function canonicalArchivePath(path4) {
+  return path4.normalize("NFC").toLowerCase();
 }
 function assertPathContained(root, candidate) {
   const relativePath = relative2(root, candidate);
@@ -11760,7 +11858,7 @@ function ensureTrailingSlash2(value) {
 }
 
 // dist/skills/registry.js
-import path2 from "node:path";
+import path3 from "node:path";
 
 // dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
@@ -11926,7 +12024,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord5(parsed) ? parsed : void 0;
+    return isRecord6(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -11936,22 +12034,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord5)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord6)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord5(body) && Array.isArray(body.items)) {
+  if (isRecord6(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord5(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord6(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -12023,7 +12121,7 @@ function isPositiveSafeInteger(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 function isSafeFileName(value) {
-  return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
+  return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path3.posix.basename(value) === value && path3.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 // dist/skills/store.js
@@ -12339,9 +12437,9 @@ async function ensureReleaseParent(paths, marker) {
   await ensureRealDirectory(publisherPath);
   await ensureRealDirectory(join2(publisherPath, marker.skillName));
 }
-async function ensureRealDirectory(path3) {
-  await mkdir4(path3, { recursive: true, mode: 448 });
-  const pathStat = await lstat4(path3);
+async function ensureRealDirectory(path4) {
+  await mkdir4(path4, { recursive: true, mode: 448 });
+  const pathStat = await lstat4(path4);
   if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
     throw new Error("store path is not a real directory");
   }
@@ -12356,14 +12454,14 @@ async function writeInstallMarker(rootPath, marker) {
     await handle.close();
   }
 }
-async function readNoFollowInstallMarker(path3) {
-  const parsed = await readNoFollowJson(path3);
+async function readNoFollowInstallMarker(path4) {
+  const parsed = await readNoFollowJson(path4);
   return isInstallMarker(parsed) ? parsed : null;
 }
-async function readNoFollowJson(path3) {
+async function readNoFollowJson(path4) {
   let handle;
   try {
-    handle = await open4(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+    handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
     const before = await handle.stat();
     if (!before.isFile()) {
       return null;
@@ -12637,11 +12735,11 @@ async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
   }
   await rm5(cleanupPath, { recursive: true });
 }
-async function fingerprintPath2(path3) {
-  const before = await lstat4(path3);
+async function fingerprintPath2(path4) {
+  const before = await lstat4(path4);
   const kind = pathKind(before);
-  const linkTarget = kind === "symlink" ? await readlink2(path3) : null;
-  const after = await lstat4(path3);
+  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
+  const after = await lstat4(path4);
   if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
     throw new Error("path changed during inspection");
   }
@@ -12667,8 +12765,8 @@ function pathKind(pathStat) {
   }
   return "other";
 }
-async function assertPathFingerprint(path3, expected) {
-  const current = await fingerprintPath2(path3);
+async function assertPathFingerprint(path4, expected) {
+  const current = await fingerprintPath2(path4);
   if (!samePathFingerprint(current, expected)) {
     throw new Error("path changed before mutation");
   }
@@ -12709,7 +12807,7 @@ var DEFAULT_DEPENDENCIES2 = {
   prepareAgents: prepareAgentPlans,
   randomUUID: createRandomUUID,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path3) => rm6(path3, { recursive: true, force: true }),
+  remove: async (path4) => rm6(path4, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -13140,12 +13238,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord6(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord7(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord6(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord7(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -13160,7 +13258,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -13455,11 +13553,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord7(profile)) {
+  if (!isRecord8(profile)) {
     return [];
   }
-  const ucp = isRecord7(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord7(ucp.payment_handlers) ? ucp.payment_handlers : isRecord7(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord8(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord8(ucp.payment_handlers) ? ucp.payment_handlers : isRecord8(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -13470,10 +13568,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord7(handler) || !isRecord7(handler.config)) {
+      if (!isRecord8(handler) || !isRecord8(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord7(handler.config.merchant_info) ? handler.config.merchant_info : isRecord7(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord8(handler.config.merchant_info) ? handler.config.merchant_info : isRecord8(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -13958,7 +14056,7 @@ function parseSetCookieHeader(header, url) {
   const value = nameValue.slice(separator + 1);
   let domain = url.hostname.toLowerCase();
   let hostOnly = true;
-  let path3 = defaultCookiePath(url.pathname);
+  let path4 = defaultCookiePath(url.pathname);
   for (const attribute of attributes) {
     const attributeSeparator = attribute.indexOf("=");
     const attributeName = (attributeSeparator >= 0 ? attribute.slice(0, attributeSeparator) : attribute).toLowerCase();
@@ -13967,7 +14065,7 @@ function parseSetCookieHeader(header, url) {
       domain = attributeValue.trim().toLowerCase().replace(/^\./, "");
       hostOnly = false;
     } else if (attributeName === "path" && attributeValue.startsWith("/")) {
-      path3 = attributeValue;
+      path4 = attributeValue;
     }
   }
   return {
@@ -13975,7 +14073,7 @@ function parseSetCookieHeader(header, url) {
     value,
     domain,
     hostOnly,
-    path: path3
+    path: path4
   };
 }
 function defaultCookiePath(pathname) {
@@ -14134,11 +14232,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord7(value)) {
+  if (!isRecord8(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord7(result)) {
+  if (isRecord8(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -14154,7 +14252,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord7(runningTotal)) {
+  if (!isRecord8(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -14179,7 +14277,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord7(productJson)) {
+  if (!isRecord8(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -14201,7 +14299,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord7(variant)) {
+  if (!isRecord8(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -14237,7 +14335,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord7(option)) {
+    if (!isRecord8(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -14255,7 +14353,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord7(value)) {
+  if (!isRecord8(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -14310,17 +14408,17 @@ function asIdString(value) {
 function asTrimmedString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function readPath(value, path3) {
+function readPath(value, path4) {
   let current = value;
-  for (const key of path3) {
-    if (!isRecord7(current)) {
+  for (const key of path4) {
+    if (!isRecord8(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -14624,7 +14722,7 @@ async function requestOAuthBusinessJson(context, buildRequest) {
 function commandUsesCustomerAuthorization(command, subcommand) {
   switch (command) {
     case "card":
-      return subcommand === "binding-link" || subcommand === "setup-link" || subcommand === "modify-link";
+      return subcommand === "binding-link" || subcommand === "setup-link" || subcommand === "modify-link" || subcommand === "passkey-link";
     case "risk":
       return subcommand === "get" || subcommand === "link";
     case "skills":
@@ -15257,6 +15355,8 @@ async function handleCardCommand(subcommand, context) {
       return cardRedirectLink(context, CARD_SETUP_PATH, "card setup");
     case "modify-link":
       return cardRedirectLink(context, CARD_MANAGEMENT_PATH, "card management");
+    case "passkey-link":
+      return cardPasskeyLink(context);
     case "list":
       return cardList(context);
     case "get":
@@ -15302,6 +15402,18 @@ async function cardRedirectLink(context, targetPath, label) {
     paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
   }, context.globalOptions.format);
   await maybeWatchEvents(context, prepared.url, label, { staleEventCutoffMs });
+  return EXIT_CODES.OK;
+}
+async function cardPasskeyLink(context) {
+  const paymentInstrumentId = requireStringFlag(context.args.flags, "missing --payment-instrument-id", "payment-instrument-id");
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, void 0, context.runtimeConfig.email);
+  const browserLaunch = await openPortalWithBrowserHandoff(context, url);
+  printSuccess({
+    url,
+    paymentInstrumentId,
+    manualOpenUrl: url,
+    browserLaunch
+  }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function resolveBindingLink(context, targetPath) {
@@ -15846,7 +15958,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord8(checkout)) {
+  if (!isRecord9(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -15854,7 +15966,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord8(checkoutContext)) {
+  if (!isRecord9(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -15987,15 +16099,15 @@ function normalizeUcpCheckoutCreateLineItems(lineItems, currency) {
 function normalizeUcpCheckoutUpdateLineItems(lineItems, currency) {
   return lineItems.map((lineItem, index) => normalizeUcpCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`, true));
 }
-function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveIntegerMinorUnits) {
+function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveIntegerMinorUnits) {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path3}[${index}]`, preserveIntegerMinorUnits));
+    return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord8(value)) {
+  if (!isRecord9(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
-    const fieldPath = `${path3}.${key}`;
+    const fieldPath = `${path4}.${key}`;
     if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && shouldNormalizeUcpCheckoutMoneyInput(fieldValue, preserveIntegerMinorUnits)) {
       return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
     }
@@ -16008,7 +16120,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveInteger
     ];
   }));
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -16115,10 +16227,10 @@ async function handleInstructionCommand(subcommand, context) {
       throw validationError("unsupported instruction command");
   }
 }
-function instructionBody(context) {
+async function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
+  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring);
   const body = compact3({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
@@ -16135,6 +16247,35 @@ function instructionBody(context) {
     body.shippingAddress = shippingAddress;
   }
   return body;
+}
+async function readInstructionMandates(flags) {
+  const inlineJson = getStringFlag(flags, "mandates");
+  const filePath = getStringFlag(flags, "mandates-file");
+  if (inlineJson !== void 0 && filePath !== void 0) {
+    throw validationError("--mandates and --mandates-file cannot be used together");
+  }
+  if (inlineJson === void 0 && filePath === void 0) {
+    throw validationError("missing --mandates or --mandates-file (JSON array)");
+  }
+  let source = inlineJson;
+  let sourceName = "--mandates";
+  if (filePath !== void 0) {
+    if (!filePath.trim()) {
+      throw validationError("--mandates-file path must not be blank");
+    }
+    sourceName = "--mandates-file";
+    try {
+      source = await readFile3(filePath, "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
+    }
+  }
+  const parsed = parseJsonFlag(source, sourceName);
+  if (!Array.isArray(parsed)) {
+    throw validationError(`${sourceName} must be a JSON array`);
+  }
+  return parsed;
 }
 function normalizeInstructionMandates(mandates, isRecurring) {
   if (!isRecurring) {
@@ -16177,7 +16318,7 @@ function requireJsonArrayFlag(flags, name) {
 }
 async function instructionCreate(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
-  const body = instructionBody(context);
+  const body = await instructionBody(context);
   const staleEventCutoffMs = Date.now();
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
@@ -16218,7 +16359,7 @@ async function instructionCreate(context) {
 }
 async function openPortalWithBrowserHandoff(context, targetUrl) {
   const launch = await openBrowserHandoff({
-    open: context.globalOptions.open,
+    open: context.globalOptions.open && !context.globalOptions.dryRun,
     targetUrl,
     portalOrigin: resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
     runtimeConfig: context.runtimeConfig,
@@ -16227,6 +16368,7 @@ async function openPortalWithBrowserHandoff(context, targetUrl) {
     openBrowser: (url) => openBrowserWithResult(true, url)
   });
   await launch.completion;
+  return launch.browserLaunch;
 }
 async function requestBrowserHandoff(context, request) {
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => {
@@ -16266,8 +16408,14 @@ async function instructionSignUrl(context) {
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId, context.runtimeConfig.email);
   const staleEventCutoffMs = Date.now();
-  maybeOpenBrowser(context.globalOptions.open, url);
-  printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
+  const browserLaunch = await openPortalWithBrowserHandoff(context, url);
+  printSuccess({
+    url,
+    instructionId,
+    paymentInstrumentId,
+    manualOpenUrl: url,
+    browserLaunch
+  }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId },
@@ -16307,7 +16455,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord8(data)) {
+  if (!isRecord9(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -16320,7 +16468,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord8(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord9(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -16345,7 +16493,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord8(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord9(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -16539,7 +16687,7 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord8(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord9(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
@@ -16621,7 +16769,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord8(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord9(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {

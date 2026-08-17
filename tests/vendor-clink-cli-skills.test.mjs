@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -1836,14 +1837,22 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.13');
+  assert.equal(vendorPackage.version, '0.2.15');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'b4ed4d468b904988afd9260419c57775b1d225de',
+    'a4442cc7aafa59d55be8484ac4cd9916b0c6c7e0',
+  );
+  assert.equal(
+    vendorPackage.bundleSha256,
+    createHash('sha256').update(bundleSource).digest('hex'),
   );
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
+  assert.match(bundleSource, /\/agent\/cwallet\/oauth\/browser-handoffs/u);
+  assert.match(bundleSource, /\/oauth\/cli-handoff\//u);
+  assert.match(bundleSource, /data\.complete_url/u);
+  assert.match(bundleSource, /parseCompleteUrl/u);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
