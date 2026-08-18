@@ -96,6 +96,13 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
 
+test('Instruction mandate descriptions stay within the CLI limit', () => {
+  for (const document of [skill, instruction]) {
+    assert.match(document, /mandate `description`[\s\S]*150 characters or fewer/iu);
+    assert.match(document, /never silently truncate/iu);
+  }
+});
+
 test('payment reference documents Visa VIC resolver bypass branch', () => {
   assert.match(paymentRefund, /Direct\/Session Pay Authorization Resolver/u);
   assert.match(paymentRefund, /non-Visa/u);

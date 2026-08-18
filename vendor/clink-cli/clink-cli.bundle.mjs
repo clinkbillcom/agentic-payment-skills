@@ -1195,7 +1195,7 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path3 = __require("node:path");
+    var path4 = __require("node:path");
     var fs = __require("node:fs");
     var process2 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
@@ -2208,9 +2208,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path3.resolve(baseDir, baseName);
+          const localBin = path4.resolve(baseDir, baseName);
           if (fs.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path3.extname(baseName))) return void 0;
+          if (sourceExt.includes(path4.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
             (ext) => fs.existsSync(`${localBin}${ext}`)
           );
@@ -2228,17 +2228,17 @@ Expecting one of '${allowedValues.join("', '")}'`);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path3.resolve(
-            path3.dirname(resolvedScriptPath),
+          executableDir = path4.resolve(
+            path4.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path3.basename(
+            const legacyName = path4.basename(
               this._scriptPath,
-              path3.extname(this._scriptPath)
+              path4.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2249,7 +2249,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path3.extname(executableFile));
+        launchWithNode = sourceExt.includes(path4.extname(executableFile));
         let proc;
         if (process2.platform !== "win32") {
           if (launchWithNode) {
@@ -3164,7 +3164,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path3.basename(filename, path3.extname(filename));
+        this._name = path4.basename(filename, path4.extname(filename));
         return this;
       }
       /**
@@ -3178,9 +3178,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path4) {
-        if (path4 === void 0) return this._executableDir;
-        this._executableDir = path4;
+      executableDir(path5) {
+        if (path5 === void 0) return this._executableDir;
+        this._executableDir = path5;
         return this;
       }
       /**
@@ -3970,9 +3970,9 @@ var require_yauzl = __commonJS({
     exports.Entry = Entry;
     exports.LocalFileHeader = LocalFileHeader;
     exports.RandomAccessReader = RandomAccessReader;
-    function openPromise2(path3, options2) {
+    function openPromise2(path4, options2) {
       return new Promise((resolve4, reject) => {
-        open5(path3, { ...options2, lazyEntries: true }, function(err, zipfile) {
+        open5(path4, { ...options2, lazyEntries: true }, function(err, zipfile) {
           if (err) return reject(err);
           resolve4(zipfile);
         });
@@ -4002,7 +4002,7 @@ var require_yauzl = __commonJS({
         });
       });
     }
-    function open5(path3, options2, callback) {
+    function open5(path4, options2, callback) {
       if (typeof options2 === "function") {
         callback = options2;
         options2 = null;
@@ -4014,7 +4014,7 @@ var require_yauzl = __commonJS({
       if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
       if (options2.strictFileNames == null) options2.strictFileNames = false;
       if (callback == null) callback = defaultCallback;
-      fs.open(path3, "r", function(err, fd) {
+      fs.open(path4, "r", function(err, fd) {
         if (err) return callback(err);
         fromFd(fd, options2, function(err2, zipfile) {
           if (err2) fs.close(fd, defaultCallback);
@@ -4803,6 +4803,7 @@ var require_yauzl = __commonJS({
 
 // dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
+import { readFile as readFile3 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { performance } from "node:perf_hooks";
 
@@ -4926,6 +4927,7 @@ var OPTION_DEFINITIONS = [
   { name: "description", flags: "--description <text>" },
   { name: "effective-until-time", flags: "--effective-until-time <datetime>" },
   { name: "mandates", flags: "--mandates <json>" },
+  { name: "mandates-file", flags: "--mandates-file <path>" },
   { name: "products", flags: "--products <json>" },
   { name: "is-recurring", flags: "--is-recurring" },
   { name: "shipping-address", flags: "--shipping-address <json>" },
@@ -4941,10 +4943,42 @@ var OPTION_DEFINITIONS = [
   { name: "type", flags: "--type <eventType>" },
   { name: "url", flags: "--url <url>" }
 ];
-function parseArgs(argv) {
+function parseArgs(argv, options2 = {}) {
+  const optionDefinitions = [
+    ...OPTION_DEFINITIONS,
+    ...options2.optionDefinitions ?? []
+  ];
+  const multiValueOptions = options2.multiValueOptions ?? /* @__PURE__ */ new Map();
   const preFlags = {};
   const forwarded = [];
-  for (const token of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    const equalsIndex = token.indexOf("=");
+    const rawOption = equalsIndex >= 0 ? token.slice(0, equalsIndex) : token;
+    const multiValueName = multiValueOptions.get(rawOption);
+    if (multiValueName) {
+      const values = [];
+      if (equalsIndex >= 0) {
+        const inline = token.slice(equalsIndex + 1);
+        if (inline) {
+          values.push(inline);
+        }
+      } else {
+        while (index + 1 < argv.length && !argv[index + 1]?.startsWith("--")) {
+          values.push(argv[index + 1]);
+          index += 1;
+        }
+      }
+      if (values.length === 0) {
+        throw validationError(`option ${rawOption} requires at least one value`);
+      }
+      const previous = preFlags[multiValueName];
+      preFlags[multiValueName] = [
+        ...typeof previous === "string" ? previous.split(",") : [],
+        ...values
+      ].join(",");
+      continue;
+    }
     if (token === "--no-watch") {
       preFlags["no-watch"] = true;
       continue;
@@ -4964,7 +4998,7 @@ function parseArgs(argv) {
     forwarded.push(token);
   }
   const parser = new Command().helpOption(false).allowUnknownOption(true);
-  for (const option of OPTION_DEFINITIONS) {
+  for (const option of optionDefinitions) {
     parser.option(option.flags);
   }
   const { operands, unknown } = parser.parseOptions(forwarded);
@@ -4974,7 +5008,7 @@ function parseArgs(argv) {
   }
   const parsedOptions = parser.opts();
   const flags = { ...preFlags };
-  for (const option of OPTION_DEFINITIONS) {
+  for (const option of optionDefinitions) {
     const value = parsedOptions[toCommanderOptionName(option.name)];
     if (value === void 0 || value === false) {
       continue;
@@ -5015,6 +5049,10 @@ function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
 
+// dist/browser-handoff.js
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createServer } from "node:http";
+
 // dist/url.js
 function httpOrigin(value) {
   try {
@@ -5031,6 +5069,420 @@ function sameHttpOrigin(left, right) {
   const leftOrigin = httpOrigin(left);
   const rightOrigin = httpOrigin(right);
   return leftOrigin !== void 0 && leftOrigin === rightOrigin;
+}
+
+// dist/browser-handoff.js
+var BROWSER_HANDOFF_CALLBACK_PATH = "/callback";
+var CREATE_HANDOFF_PATH = "/agent/cwallet/oauth/browser-handoffs";
+var HANDOFF_PAGE_PREFIX = "/oauth/cli-handoff/";
+var MAX_HANDOFF_LIFETIME_SECONDS = 300;
+var MAX_COMPLETE_URL_LENGTH = 2048;
+var OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/u;
+function canUseBrowserHandoff(runtimeConfig) {
+  return Boolean(runtimeConfig.authorization && sameHttpOrigin(runtimeConfig.authorization.issuerOrigin, runtimeConfig.baseUrl));
+}
+async function openBrowserHandoff(options2) {
+  if (!options2.open) {
+    return completedLaunch(notRequestedBrowserLaunch(), "direct_fallback");
+  }
+  const target = validateTargetUrl(options2.targetUrl, options2.portalOrigin);
+  if (!target) {
+    throw new Error("browser handoff target URL is not trusted");
+  }
+  if (!canUseBrowserHandoff(options2.runtimeConfig)) {
+    return directFallback(options2);
+  }
+  const clock = options2.clock ?? systemClock();
+  const bindLoopback = options2.bindLoopback ?? bindRandomLoopback;
+  const randomSecret = options2.randomSecret ?? defaultRandomSecret;
+  let binding;
+  let pending;
+  let timeoutHandle;
+  let processingCallback = false;
+  let completionSettled = false;
+  let resolveCompletion = () => {
+  };
+  const completion = new Promise((resolve4) => {
+    resolveCompletion = resolve4;
+  });
+  const settle = async (status) => {
+    if (completionSettled) {
+      return;
+    }
+    completionSettled = true;
+    if (timeoutHandle !== void 0) {
+      clock.clearTimeout(timeoutHandle);
+      timeoutHandle = void 0;
+    }
+    await binding?.close();
+    resolveCompletion(status);
+  };
+  const handleRequest = async (request, response) => {
+    if (completionSettled) {
+      sendStatus(response, 410);
+      return;
+    }
+    const currentBinding = binding;
+    if (!currentBinding) {
+      sendStatus(response, 503);
+      return;
+    }
+    const requestUrl = parseLoopbackRequestUrl(request, currentBinding.origin);
+    if (!requestUrl || requestUrl.pathname !== BROWSER_HANDOFF_CALLBACK_PATH) {
+      sendStatus(response, 404);
+      return;
+    }
+    if (request.method !== "GET") {
+      sendStatus(response, 405);
+      return;
+    }
+    if (!pending) {
+      sendStatus(response, 409);
+      return;
+    }
+    if (processingCallback) {
+      sendStatus(response, 409);
+      return;
+    }
+    const expectedHost = new URL(currentBinding.origin).host;
+    const handoffId = singleQueryValue(requestUrl, "handoff_id");
+    const claimId = singleQueryValue(requestUrl, "claim_id");
+    const browserNonce = singleQueryValue(requestUrl, "browser_nonce");
+    const loopbackState = singleQueryValue(requestUrl, "loopback_state");
+    const callbackValid = request.headers.host === expectedHost && handoffId === pending.handoffId && isOpaqueValue(claimId) && isOpaqueValue(browserNonce) && secureEqual(loopbackState, pending.loopbackState);
+    if (!callbackValid) {
+      await sendRedirect(response, pending.fallbackLoginUrl);
+      await settle("email_login_fallback");
+      return;
+    }
+    processingCallback = true;
+    try {
+      const approved = await options2.request({
+        path: `${CREATE_HANDOFF_PATH}/${encodeURIComponent(pending.handoffId)}/approve`,
+        body: {
+          claim_id: claimId,
+          browser_nonce: browserNonce,
+          cli_verifier: pending.verifier
+        }
+      });
+      if (!isSuccessfulResponse(approved)) {
+        throw new Error("approve rejected");
+      }
+      await sendRedirect(response, pending.completeUrl);
+      await settle("approved");
+    } catch {
+      await sendRedirect(response, pending.fallbackLoginUrl);
+      await settle("email_login_fallback");
+    }
+  };
+  try {
+    binding = await bindLoopback((request, response) => {
+      void handleRequest(request, response).catch(() => {
+        if (!response.headersSent) {
+          sendStatus(response, 500);
+        } else if (!response.writableEnded) {
+          response.end();
+        }
+        void settle("email_login_fallback");
+      });
+    });
+    const loopbackOrigin = validateLoopbackOrigin(binding.origin);
+    if (!loopbackOrigin) {
+      await binding.close();
+      return directFallback(options2);
+    }
+    const verifier = randomSecret();
+    const loopbackState = randomSecret();
+    const loopbackRedirectUri = new URL(BROWSER_HANDOFF_CALLBACK_PATH, loopbackOrigin).toString();
+    const created = await options2.request({
+      path: CREATE_HANDOFF_PATH,
+      body: {
+        cli_challenge: s256(verifier),
+        loopback_redirect_uri: loopbackRedirectUri,
+        loopback_state: loopbackState,
+        return_path: target.returnPath
+      }
+    });
+    const createResult = parseCreateResponse(created, target.portalOrigin);
+    pending = {
+      handoffId: createResult.handoffId,
+      verifier,
+      loopbackState,
+      fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
+      completeUrl: createResult.completeUrl
+    };
+    timeoutHandle = clock.setTimeout(() => {
+      void settle("timeout");
+    }, createResult.expiresIn * 1e3);
+    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult.browserUrl);
+    if (browserLaunch.status !== "launched") {
+      await settle("direct_fallback");
+      const fallbackLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+      return { browserLaunch: fallbackLaunch, completion };
+    }
+    return { browserLaunch, completion };
+  } catch {
+    await settle("direct_fallback");
+    const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+    return { browserLaunch, completion };
+  }
+}
+async function bindRandomLoopback(handler) {
+  const server = createServer(handler);
+  server.on("clientError", (_error, socket) => {
+    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+  });
+  await new Promise((resolve4, reject) => {
+    const onError = (error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve4();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen({
+      host: "127.0.0.1",
+      port: 0,
+      exclusive: true
+    });
+  });
+  let closed = false;
+  const address = server.address();
+  if (!address || address.address !== "127.0.0.1") {
+    await closeServer();
+    throw new Error("loopback listener did not bind to 127.0.0.1");
+  }
+  server.on("error", () => {
+  });
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    close: closeServer
+  };
+  async function closeServer() {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    if (!server.listening) {
+      return;
+    }
+    await new Promise((resolve4) => {
+      server.close(() => resolve4());
+      server.closeIdleConnections();
+      server.closeAllConnections();
+    });
+  }
+}
+function validateTargetUrl(targetUrl, portalOrigin) {
+  try {
+    const trustedOrigin = new URL(portalOrigin).origin;
+    const target = new URL(targetUrl);
+    if (target.origin !== trustedOrigin || target.username || target.password) {
+      return void 0;
+    }
+    return {
+      portalOrigin: trustedOrigin,
+      returnPath: `${target.pathname}${target.search}${target.hash}`
+    };
+  } catch {
+    return void 0;
+  }
+}
+function validateLoopbackOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !parsed.port || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return void 0;
+    }
+    return parsed.origin;
+  } catch {
+    return void 0;
+  }
+}
+function parseCreateResponse(response, portalOrigin) {
+  if (!isSuccessfulResponse(response)) {
+    throw new Error("create rejected");
+  }
+  const data = unwrapData(response.body);
+  if (!isRecord(data)) {
+    throw new Error("invalid create response");
+  }
+  const handoffId = requiredOpaqueValue(data.handoff_id);
+  const browserUrl = requiredString(data.browser_url);
+  const completeUrl = parseCompleteUrl(requiredString(data.complete_url), portalOrigin, handoffId);
+  const expiresIn = Number(data.expires_in);
+  if (!Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_HANDOFF_LIFETIME_SECONDS) {
+    throw new Error("invalid create response");
+  }
+  const actual = new URL(browserUrl);
+  const expected = new URL(`${HANDOFF_PAGE_PREFIX}${encodeURIComponent(handoffId)}`, portalOrigin);
+  if (actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search || actual.hash || actual.username || actual.password) {
+    throw new Error("invalid create response");
+  }
+  if (!completeUrl) {
+    throw new Error("invalid create response");
+  }
+  return {
+    handoffId,
+    browserUrl: actual.toString(),
+    completeUrl,
+    expiresIn
+  };
+}
+function parseCompleteUrl(completeUrl, portalOrigin, handoffId) {
+  try {
+    if (completeUrl.length > MAX_COMPLETE_URL_LENGTH) {
+      return void 0;
+    }
+    const parsed = new URL(completeUrl);
+    if (parsed.protocol !== "https:" || parsed.origin !== new URL(portalOrigin).origin || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname === "/") {
+      return void 0;
+    }
+    const lastSegment = parsed.pathname.split("/").at(-1);
+    if (!lastSegment || decodeURIComponent(lastSegment) !== handoffId) {
+      return void 0;
+    }
+    const normalized = parsed.toString();
+    return normalized.length <= MAX_COMPLETE_URL_LENGTH ? normalized : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function isSuccessfulResponse(response) {
+  if (response.status < 200 || response.status >= 300) {
+    return false;
+  }
+  if (!isRecord(response.body) || !("code" in response.body)) {
+    return true;
+  }
+  const code = Number(response.body.code);
+  return code >= 200 && code < 300;
+}
+function unwrapData(value) {
+  return isRecord(value) && "data" in value ? value.data : value;
+}
+function parseLoopbackRequestUrl(request, loopbackOrigin) {
+  try {
+    const parsed = new URL(request.url ?? "/", loopbackOrigin);
+    return parsed.origin === loopbackOrigin ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function singleQueryValue(url, name) {
+  const values = url.searchParams.getAll(name);
+  return values.length === 1 ? values[0] : void 0;
+}
+function requiredOpaqueValue(value) {
+  const text = requiredString(value);
+  if (!isOpaqueValue(text)) {
+    throw new Error("invalid opaque value");
+  }
+  return text;
+}
+function requiredString(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("missing string");
+  }
+  return value.trim();
+}
+function isOpaqueValue(value) {
+  return Boolean(value && value.length <= 256 && OPAQUE_VALUE_PATTERN.test(value));
+}
+function secureEqual(left, right) {
+  if (left === void 0) {
+    return false;
+  }
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+function s256(verifier) {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+function defaultRandomSecret() {
+  return randomBytes(32).toString("base64url");
+}
+function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
+  const login = new URL("/login", portalOrigin);
+  login.searchParams.set("redirectUrl", returnPath);
+  if (email) {
+    login.searchParams.set("email", email);
+  }
+  return login.toString();
+}
+async function sendRedirect(response, location) {
+  if (response.destroyed || response.writableEnded) {
+    return;
+  }
+  await new Promise((resolve4) => {
+    const complete = () => resolve4();
+    response.once("finish", complete);
+    response.once("close", complete);
+    response.once("error", complete);
+    try {
+      response.writeHead(302, {
+        "Cache-Control": "no-store",
+        Connection: "close",
+        Location: location
+      });
+      response.end();
+      if (response.destroyed || response.writableFinished) {
+        complete();
+      }
+    } catch {
+      complete();
+    }
+  });
+}
+function sendStatus(response, status) {
+  response.writeHead(status, {
+    "Cache-Control": "no-store",
+    Connection: "close"
+  });
+  response.end();
+}
+async function safeOpenBrowser(openBrowser, url) {
+  try {
+    return await openBrowser(url);
+  } catch {
+    return {
+      requested: true,
+      status: "failed",
+      opener: null,
+      attempts: []
+    };
+  }
+}
+async function directFallback(options2) {
+  const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+  return completedLaunch(browserLaunch, "direct_fallback");
+}
+function completedLaunch(browserLaunch, status) {
+  return {
+    browserLaunch,
+    completion: Promise.resolve(status)
+  };
+}
+function notRequestedBrowserLaunch() {
+  return {
+    requested: false,
+    status: "not_requested",
+    opener: null,
+    attempts: []
+  };
+}
+function systemClock() {
+  return {
+    setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds),
+    clearTimeout: (handle) => clearTimeout(handle)
+  };
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/auth-identity.js
@@ -5323,7 +5775,8 @@ function cloneStoredConfig(config) {
     defaultOpenLinks: config.defaultOpenLinks,
     ...config.authorization ? { authorization: { ...config.authorization } } : {},
     ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
-    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {}
+    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {},
+    ...config.visa ? { visa: cloneOpaqueVisaState(config.visa) } : {}
   };
 }
 function normalizeStoredConfig(raw) {
@@ -5339,7 +5792,16 @@ function normalizeStoredConfig(raw) {
     config.defaultOpenLinks = record.defaultOpenLinks;
   }
   assignStoredCustomerState(config, parseStoredCustomerState(record));
+  if (isRecord2(record.visa)) {
+    config.visa = cloneOpaqueVisaState(record.visa);
+  }
   return config;
+}
+function cloneOpaqueVisaState(state) {
+  return structuredClone(state);
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function parseStoredCustomerState(raw) {
   const customer = {};
@@ -5392,6 +5854,7 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
   const accessToken = nonEmptyString(record.accessToken);
   const refreshToken = nonEmptyString(record.refreshToken);
   const agentClientId = nonEmptyString(record.agentClientId);
+  const visaRegistrationStatus = parseVisaRegistrationStatus(record.visaRegistrationStatus);
   const scope = nonEmptyString(record.scope);
   const accessTokenExpiresAt = finiteNumber(record.accessTokenExpiresAt);
   const refreshTokenExpiresAt = finiteNumber(record.refreshTokenExpiresAt);
@@ -5411,6 +5874,7 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
     refreshToken,
     refreshTokenExpiresAt,
     ...agentClientId ? { agentClientId } : {},
+    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
     scope
   };
 }
@@ -5419,6 +5883,13 @@ function nonEmptyString(value) {
 }
 function finiteNumber(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function parseVisaRegistrationStatus(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const normalized = value.trim().toUpperCase();
+  return normalized === "PENDING" || normalized === "REGISTERING" || normalized === "SUCCEEDED" || normalized === "FAILED" || normalized === "UNKNOWN" ? normalized : void 0;
 }
 async function writeStoredConfigUnlocked(config) {
   await ensureConfigDirectory();
@@ -5583,12 +6054,12 @@ function assignRiskRules(target, value) {
 
 // dist/device-identity.js
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.9";
+var CLI_VERSION = "0.2.16";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -5622,7 +6093,7 @@ async function resolveAgentClientBootstrap(installationId, options2 = {}) {
 }
 function deriveDeviceId(platform, nativeDeviceId) {
   const normalized = normalizeNativeDeviceId(nativeDeviceId);
-  return createHash("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
+  return createHash2("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
 }
 async function readNativeDeviceId(platform, runtime) {
   try {
@@ -5760,10 +6231,36 @@ async function requestJson(options2) {
     if (error.name === "AbortError") {
       throw networkError(`request timed out after ${options2.timeoutMs}ms`);
     }
-    throw networkError(error.message);
+    throw networkError(formatNetworkFailure(error));
   } finally {
     clearTimeout(timeout);
   }
+}
+function formatNetworkFailure(error) {
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
+  const cause = isRecord3(error) && isRecord3(error.cause) ? error.cause : void 0;
+  if (!cause) {
+    return message;
+  }
+  const details = [
+    diagnosticField("code", cause.code),
+    diagnosticField("errno", cause.errno),
+    diagnosticField("syscall", cause.syscall),
+    diagnosticField("hostname", cause.hostname),
+    diagnosticField("address", cause.address),
+    diagnosticField("port", cause.port)
+  ].filter((value) => Boolean(value));
+  return details.length > 0 ? `${message} (${details.join(", ")})` : message;
+}
+function diagnosticField(name, value) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return void 0;
+  }
+  const normalized = String(value).replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 200);
+  return normalized ? `${name}=${normalized}` : void 0;
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null;
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -5780,6 +6277,13 @@ var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
   "deviceId",
   "installationId",
   "hostname",
+  "cli_challenge",
+  "cli_verifier",
+  "loopback_redirect_uri",
+  "loopback_state",
+  "return_path",
+  "claim_id",
+  "browser_nonce",
   "customerApiKey",
   "customerAPIKey"
 ]);
@@ -5854,8 +6358,11 @@ function isDryRun(value) {
 
 // dist/utils.js
 import { spawn } from "node:child_process";
+import path2 from "node:path";
 var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
 var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
+var BROWSER_OPEN_COMMAND_TIMEOUT_MS = 5e3;
+var BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS = 250;
 function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
   if (config.authorization) {
     assertAuthorizationRequestOrigin(config, requestBaseUrl);
@@ -5898,8 +6405,17 @@ function assertAuthorizationRequestOrigin(config, requestBaseUrl) {
     throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
   }
 }
-function buildBareDomainUrl(bindingUrl) {
-  return new URL(bindingUrl).origin;
+function buildAgentPortalUrl(bindingUrl, expectedPortalOrigin, pathname, email) {
+  const bindingOrigin = new URL(bindingUrl).origin;
+  const trustedOrigin = new URL(expectedPortalOrigin).origin;
+  if (!sameHttpOrigin(bindingOrigin, trustedOrigin)) {
+    throw configError("card binding URL belongs to an unexpected Portal environment");
+  }
+  const url = new URL(pathname, trustedOrigin);
+  if (email) {
+    url.searchParams.set("email", email);
+  }
+  return url.toString();
 }
 function resolveAgentBaseUrl(apiBaseUrl) {
   try {
@@ -5988,21 +6504,121 @@ function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.wr
     reportFailure();
   }
 }
-function resolveBrowserOpenCommand(platform, url) {
-  if (platform === "darwin") {
-    return { executable: "open", args: [url] };
-  }
-  if (platform === "win32") {
+function resolveBrowserOpenCommand(platform, url, env = process.env) {
+  return resolveBrowserOpenCommands(platform, url, env)[0];
+}
+async function openBrowserWithResult(open5, url, options2 = {}) {
+  if (!open5) {
     return {
-      executable: "rundll32.exe",
-      args: ["url.dll,FileProtocolHandler", url]
+      requested: false,
+      status: "not_requested",
+      opener: null,
+      attempts: []
     };
   }
-  return { executable: "xdg-open", args: [url] };
+  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url, options2.env ?? process.env);
+  const launch = options2.launch ?? launchBrowserOpenCommand;
+  const attempts = [];
+  for (const command of commands) {
+    attempts.push(command.executable);
+    try {
+      await launch(command);
+      return {
+        requested: true,
+        status: "launched",
+        opener: command.executable,
+        attempts
+      };
+    } catch {
+    }
+  }
+  (options2.onFailure ?? ((message) => process.stderr.write(`${message}
+`)))(BROWSER_OPEN_FAILURE_MESSAGE);
+  return {
+    requested: true,
+    status: "failed",
+    opener: null,
+    attempts
+  };
+}
+function resolveBrowserOpenCommands(platform, url, env = process.env) {
+  if (platform === "darwin") {
+    return [{ executable: "open", args: [url] }];
+  }
+  if (platform === "win32") {
+    const windowsDirectory = env.SystemRoot?.trim() || env.WINDIR?.trim();
+    const rundll32 = windowsDirectory ? path2.win32.join(windowsDirectory, "System32", "rundll32.exe") : "rundll32.exe";
+    const explorer = windowsDirectory ? path2.win32.join(windowsDirectory, "explorer.exe") : "explorer.exe";
+    return [
+      {
+        executable: rundll32,
+        args: ["url.dll,FileProtocolHandler", url]
+      },
+      {
+        executable: explorer,
+        args: [url]
+      }
+    ];
+  }
+  return [
+    { executable: "xdg-open", args: [url] },
+    { executable: "gio", args: ["open", url] }
+  ];
+}
+async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAND_TIMEOUT_MS) {
+  const child = spawn(command.executable, command.args, {
+    stdio: "ignore",
+    windowsHide: true
+  });
+  const outcome = new Promise((resolve4) => {
+    let reported = false;
+    const report = (result2) => {
+      if (reported) {
+        return;
+      }
+      reported = true;
+      resolve4(result2);
+    };
+    child.once("error", (error) => report({ type: "error", error }));
+    child.once("exit", (code, signal) => report({ type: "exit", code, signal }));
+  });
+  const waitForOutcome = async (waitMs) => {
+    let timeout;
+    try {
+      return await Promise.race([
+        outcome,
+        new Promise((resolve4) => {
+          timeout = setTimeout(resolve4, waitMs, null);
+        })
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
+  };
+  const result = await waitForOutcome(timeoutMs);
+  if (result?.type === "error") {
+    throw result.error;
+  }
+  if (result?.type === "exit") {
+    if (result.code === 0) {
+      return;
+    }
+    throw new Error(result.signal ? `${command.executable} exited on signal ${result.signal}` : `${command.executable} exited with code ${result.code ?? "unknown"}`);
+  }
+  const timeoutError = new Error(`${command.executable} timed out after ${timeoutMs}ms`);
+  child.kill("SIGTERM");
+  if (await waitForOutcome(BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS)) {
+    throw timeoutError;
+  }
+  child.kill("SIGKILL");
+  await outcome;
+  throw timeoutError;
 }
 function parseJsonFlag(value, flagName) {
   try {
-    return JSON.parse(value);
+    return JSON.parse(value.replace(/^\uFEFF/u, ""));
   } catch (error) {
     throw apiError(`invalid JSON for ${flagName}: ${error.message}`);
   }
@@ -6979,7 +7595,7 @@ Event Watching:
   process events (logging progress to stderr and updating the local cache), ACK
   the records consumed by that workflow, and print a watch envelope to stdout.
   card binding-link is readiness-gated: it first starts a server-side
-  payment_method.added selector, then prints its origin-only handoff, and ACKs only
+  payment_method.added selector, then prints its sanitized Portal handoff, and ACKs only
   the matching event. Pass --no-watch to skip polling (for scripted or
   non-interactive use, including card binding-link refreshes). To pull state
   changes on demand without printing a link, use 'clink events poll'
@@ -7416,8 +8032,9 @@ Device Authorization:
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
-  card binding-link endpoint and returns the origin-only bindingUrl. A refresh failure
-  is reported in output but does not fail wallet initialization.
+  card binding-link endpoint and returns the trusted add-card bindingUrl. It uses the local
+  add-card path and locally stored email; backend path, query, fragment, and token data are
+  discarded. A refresh failure is reported in output but does not fail wallet initialization.
 
 Examples:
   clink wallet init --email alice@example.com
@@ -7468,6 +8085,7 @@ Usage:
   clink card binding-link [options]
   clink card setup-link [--open] [options]
   clink card modify-link [--open] [options]
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
   clink card list [options]
   clink card get --payment-instrument-id <id> [options]
 
@@ -7475,6 +8093,7 @@ Subcommands:
   binding-link   Fetch raw binding link and refresh cached payment methods
   setup-link     Fetch payment method setup link and refresh cached payment methods
   modify-link    Fetch payment method modify link and refresh cached payment methods
+  passkey-link   Open Visa card Passkey registration through Browser Handoff
   list           List cached payment methods from local config
   get            Get cached payment method detail from local config
 `;
@@ -7490,8 +8109,11 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Calls /agent/cwallet/card/bindingLink.
   Refreshes local cached payment methods from paymentMethodsVoList.
+  Rebuilds the returned link from its Portal origin and appends the locally stored email.
+  Other backend path, query, and fragment values are not exposed.
   With watch enabled, waits for the first well-formed successful Event Hub poll, then prints an
-  origin-only bindingUrl with watchReady=true and watchEventType=payment_method.added.
+  add-card bindingUrl rebuilt from the trusted Portal origin with watchReady=true and
+  watchEventType=payment_method.added.
   watchReady means the listener is ready; completion is the matching event in the second envelope.
   Event Hub filters payment_method.added before pagination. Only matching events are ACKed;
   unrelated current and stale events remain queued. A malformed successful poll fails before the
@@ -7516,6 +8138,9 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Derives the add-card page from the binding link response.
   Refreshes local cached payment methods before returning the setup URL.
+  Appends the locally stored email so a signed-out browser can prefill login.
+  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
+  failures open the trusted setup URL directly; callback/approve failures use email-code login.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
@@ -7535,11 +8160,39 @@ ${CUSTOMER_REQUEST_OPTIONS}
 Notes:
   Derives the manage-card page from the binding link response.
   Refreshes local cached payment methods before returning the modify URL.
+  Appends the locally stored email so a signed-out browser can prefill login.
+  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
+  failures open the trusted modify URL directly; callback/approve failures use email-code login.
   After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
 
 Examples:
   clink card modify-link
   clink card modify-link --open
+`;
+var CARD_PASSKEY_LINK_HELP = `clink card passkey-link
+
+Usage:
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
+
+Required Arguments:
+  --payment-instrument-id <id> Payment instrument ID for the Visa card
+
+Options:
+  --customer-api-key <key>     Legacy API key override for never-OAuth wallets only
+  --timeout <ms>               Browser Handoff request timeout in milliseconds
+  --open                       Open the Visa Passkey page in the browser
+  --dry-run                    Print the link without opening the browser
+${OUTPUT_OPTIONS}
+
+Notes:
+  Builds the Visa card Passkey URL locally without creating an Instruction.
+  With --open and Agent OAuth, first completes a one-time loopback Browser Handoff so the Portal
+  receives a browser session before navigating to the Passkey page.
+  After Passkey registration, refresh the card through clink card binding-link --no-watch.
+  Output includes manualOpenUrl and browserLaunch for caller diagnostics.
+
+Examples:
+  clink card passkey-link --payment-instrument-id pi_xxx --open
 `;
 var CARD_LIST_HELP = `clink card list
 
@@ -8259,12 +8912,14 @@ Examples:
 var INSTRUCTION_CREATE_HELP = `clink instruction create
 
 Usage:
-  clink instruction create --payment-instrument-id <id> --title <title> --mandates <json> [options]
+  clink instruction create --payment-instrument-id <id> --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
 
 Required Arguments:
   --payment-instrument-id <id> Payment instrument ID for the Visa card
   --title <title>              Instruction title
   --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
 
 Optional Arguments:
   --description <text>         Instruction description
@@ -8283,13 +8938,15 @@ Endpoint:
   POST /agent/cwallet/instructions
 
 Mandate Fields:
-  Common fields include title, description, amountLimit, currencyCode,
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
   merchantCategoryCode, and effectiveUntilTime.
   When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
 
 Notes:
   Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
   after the user completes Passkey/FIDO authorization on the agent page.
+  --mandates and --mandates-file are mutually exclusive. On Windows PowerShell, prefer
+  --mandates-file so JSON quotes are not reinterpreted by the shell.
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
   Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
 
@@ -8299,6 +8956,9 @@ Examples:
     --effective-until-time "2026-06-25 00:00:00" \\
     --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
     --format json
+  clink instruction create \\
+    --payment-instrument-id pi_xxx --title "Business trip" \\
+    --mandates-file .\\mandates.json --format json
 `;
 var INSTRUCTION_SIGN_URL_HELP = `clink instruction sign-url
 
@@ -8315,6 +8975,7 @@ ${CUSTOMER_API_KEY_LINK_OPTIONS}
 Notes:
   Builds the Passkey URL locally. The browser page performs the backend sign call with WebAuthn
   authResult after the user authorizes.
+  Output includes manualOpenUrl and browserLaunch so callers can handle manual browser fallback.
 
 Examples:
   clink instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
@@ -8486,6 +9147,8 @@ function getHelpText(command, subcommand, nestedCommand) {
           return CARD_SETUP_LINK_HELP;
         case "modify-link":
           return CARD_MODIFY_LINK_HELP;
+        case "passkey-link":
+          return CARD_PASSKEY_LINK_HELP;
         case "list":
           return CARD_LIST_HELP;
         case "get":
@@ -8641,6 +9304,12 @@ var ucp_merchants_default = {
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "vtravel.link2shops.com",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com/yiyuan/#/exitPage URL is an SPA storefront entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. The known UAT catalog includes HungryPanda (United States), item ID cf1c321c4d5a4754ad099fa01aa2f9a4. Catalog APIs remain the source of truth for title, price, currency, availability, and the orderable URL."
     }
   ]
 };
@@ -8648,13 +9317,19 @@ var ucp_merchants_default = {
 // public/test/ucp-merchants.json
 var ucp_merchants_default2 = {
   version: 1,
-  updated_at: "2026-07-29T00:00:00Z",
+  updated_at: "2026-08-14T00:00:00Z",
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_id: "mcht_f5xuyduv1a0j",
+      enabled: true,
+      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     }
   ]
 };
@@ -8830,6 +9505,7 @@ var OAUTH_DEFAULT_SCOPE = [
   "payment:execute",
   "instruction:read",
   "instruction:write",
+  "browser:handoff",
   "refund:read",
   "refund:write",
   "events:read",
@@ -8864,7 +9540,7 @@ async function createDeviceAuthorization(options2) {
     body: {
       client_id: OAUTH_CLIENT_ID,
       device_id: options2.deviceId,
-      scope: OAUTH_DEFAULT_SCOPE,
+      scope: options2.scope ?? OAUTH_DEFAULT_SCOPE,
       source: OAUTH_CLIENT_ID,
       agentClient: options2.agentClient
     },
@@ -8876,10 +9552,10 @@ async function createDeviceAuthorization(options2) {
   }
   const data = requireOAuthSuccess(result);
   return {
-    deviceCode: requiredString(data.device_code, "OAuth response is missing device_code"),
-    userCode: requiredString(data.user_code, "OAuth response is missing user_code"),
-    verificationUri: requiredString(data.verification_uri, "OAuth response is missing verification_uri"),
-    verificationUriComplete: requiredString(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
+    deviceCode: requiredString2(data.device_code, "OAuth response is missing device_code"),
+    userCode: requiredString2(data.user_code, "OAuth response is missing user_code"),
+    verificationUri: requiredString2(data.verification_uri, "OAuth response is missing verification_uri"),
+    verificationUriComplete: requiredString2(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
     expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
     interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
   };
@@ -8953,6 +9629,7 @@ function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(),
     refreshToken: token.refreshToken,
     refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
     ...token.agentClientId ? { agentClientId: token.agentClientId } : {},
+    ...token.visaRegistrationStatus ? { visaRegistrationStatus: token.visaRegistrationStatus } : {},
     scope: token.scope
   };
 }
@@ -9057,6 +9734,9 @@ async function refreshStoredAuthorization(options2) {
       if (!current.authorization.agentClientId && authorization.agentClientId) {
         current.authorization.agentClientId = authorization.agentClientId;
       }
+      if (!current.authorization.visaRegistrationStatus && authorization.visaRegistrationStatus) {
+        current.authorization.visaRegistrationStatus = authorization.visaRegistrationStatus;
+      }
       current.customerId = token.customerId;
       if (customerChanged) {
         delete current.paymentMethods;
@@ -9094,20 +9774,22 @@ async function requestToken(options2) {
     throw apiError("unexpected OAuth token dry-run response");
   }
   const data = requireOAuthSuccess(result);
-  const tokenType = requiredString(data.token_type, "OAuth response is missing token_type");
+  const tokenType = requiredString2(data.token_type, "OAuth response is missing token_type");
   if (tokenType.toLowerCase() !== "bearer") {
     throw apiError(`unsupported OAuth token type: ${tokenType}`);
   }
-  const agentClientId = options2.requireAgentClientId ? requiredString(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
+  const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
+  const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
   return {
     tokenType: "Bearer",
-    accessToken: requiredString(data.access_token, "OAuth response is missing access_token"),
+    accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
     expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
-    refreshToken: requiredString(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
+    refreshToken: requiredString2(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
     refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
-    customerId: requiredString(data.customer_id, "OAuth response is missing customer_id"),
+    customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
     ...agentClientId ? { agentClientId } : {},
-    scope: requiredString(data.scope, "OAuth response is missing scope")
+    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
+    scope: requiredString2(data.scope, "OAuth response is missing scope")
   };
 }
 function requireOAuthSuccess(response) {
@@ -9175,7 +9857,7 @@ async function assertWalletInitIsCurrent(isCurrent) {
     throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
   }
 }
-function requiredString(value, message) {
+function requiredString2(value, message) {
   if (typeof value !== "string" || value.length === 0) {
     throw apiError(message);
   }
@@ -9183,6 +9865,19 @@ function requiredString(value, message) {
 }
 function optionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function parseVisaRegistrationStatus2(value, required) {
+  const normalized = optionalString(value)?.toUpperCase();
+  if (!normalized) {
+    if (required) {
+      throw apiError("OAuth response is missing visa_registration_status");
+    }
+    return void 0;
+  }
+  if (normalized !== "PENDING" && normalized !== "REGISTERING" && normalized !== "SUCCEEDED" && normalized !== "FAILED" && normalized !== "UNKNOWN") {
+    throw apiError("OAuth response has invalid visa_registration_status");
+  }
+  return normalized;
 }
 function positiveNumber(value, message) {
   const number = typeof value === "number" ? value : Number(value);
@@ -9403,7 +10098,7 @@ function unwrapResponse(result, invalidMessage) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  if (!isRecord(data)) {
+  if (!isRecord4(data)) {
     throw apiError(invalidMessage, 502);
   }
   return data;
@@ -9412,7 +10107,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  if (!value.every((item) => isRecord(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+  if (!value.every((item) => isRecord4(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((item) => ({ ...item }));
@@ -9420,7 +10115,7 @@ function normalizePaymentMethods(value) {
 function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function isRecord(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -9489,8 +10184,8 @@ function buildChargeBody(input) {
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord2(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord2(channel.action) ? channel.action : {};
+  const channel = isRecord5(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord5(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber2(channel.status);
   return {
@@ -9530,7 +10225,7 @@ async function executeCharge(input, runtime) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord2(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber2(value) {
@@ -10607,30 +11302,30 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
 }
 var ArchivePathRegistry = class {
   #paths = /* @__PURE__ */ new Map();
-  register(path3, kind) {
-    const segments = path3.split("/");
+  register(path4, kind) {
+    const segments = path4.split("/");
     for (let index = 1; index < segments.length; index += 1) {
       this.#registerDirectory(segments.slice(0, index).join("/"), false);
     }
     if (kind === "directory") {
-      this.#registerDirectory(path3, true);
+      this.#registerDirectory(path4, true);
       return;
     }
-    const key = canonicalArchivePath(path3);
+    const key = canonicalArchivePath(path4);
     const existing = this.#paths.get(key);
     if (existing !== void 0) {
       throw new Error("archive path collision");
     }
-    this.#paths.set(key, { kind: "file", path: path3, explicit: true });
+    this.#paths.set(key, { kind: "file", path: path4, explicit: true });
   }
-  #registerDirectory(path3, explicit) {
-    const key = canonicalArchivePath(path3);
+  #registerDirectory(path4, explicit) {
+    const key = canonicalArchivePath(path4);
     const existing = this.#paths.get(key);
     if (existing === void 0) {
-      this.#paths.set(key, { kind: "directory", path: path3, explicit });
+      this.#paths.set(key, { kind: "directory", path: path4, explicit });
       return;
     }
-    if (existing.kind !== "directory" || existing.path !== path3) {
+    if (existing.kind !== "directory" || existing.path !== path4) {
       throw new Error("archive path collision");
     }
     if (explicit && existing.explicit) {
@@ -10730,13 +11425,13 @@ function addBoundedSize(current, addition, maximum) {
   }
   return total;
 }
-function rejectInstallMarker(path3) {
-  if (path3.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
+function rejectInstallMarker(path4) {
+  if (path4.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
     throw new Error("archive contains a reserved install marker");
   }
 }
-function canonicalArchivePath(path3) {
-  return path3.normalize("NFC").toLowerCase();
+function canonicalArchivePath(path4) {
+  return path4.normalize("NFC").toLowerCase();
 }
 function assertPathContained(root, candidate) {
   const relativePath = relative2(root, candidate);
@@ -10857,7 +11552,7 @@ function closeZip(zipFile) {
 }
 
 // dist/skills/download.js
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
@@ -11007,7 +11702,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
   }
   let firstFailureOrigin;
   try {
-    const hash = createHash2("sha256");
+    const hash = createHash3("sha256");
     let actualBytes = 0;
     const meter = new Transform2({
       transform(chunk, _encoding, callback) {
@@ -11163,7 +11858,7 @@ function ensureTrailingSlash2(value) {
 }
 
 // dist/skills/registry.js
-import path2 from "node:path";
+import path3 from "node:path";
 
 // dist/skills/public-api.js
 var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
@@ -11329,7 +12024,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord3(parsed) ? parsed : void 0;
+    return isRecord6(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -11339,22 +12034,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord3)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord6)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord3(body) && Array.isArray(body.items)) {
+  if (isRecord6(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord3(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord6(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord3(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -11426,7 +12121,7 @@ function isPositiveSafeInteger(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 function isSafeFileName(value) {
-  return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path2.posix.basename(value) === value && path2.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
+  return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path3.posix.basename(value) === value && path3.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 // dist/skills/store.js
@@ -11742,9 +12437,9 @@ async function ensureReleaseParent(paths, marker) {
   await ensureRealDirectory(publisherPath);
   await ensureRealDirectory(join2(publisherPath, marker.skillName));
 }
-async function ensureRealDirectory(path3) {
-  await mkdir4(path3, { recursive: true, mode: 448 });
-  const pathStat = await lstat4(path3);
+async function ensureRealDirectory(path4) {
+  await mkdir4(path4, { recursive: true, mode: 448 });
+  const pathStat = await lstat4(path4);
   if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
     throw new Error("store path is not a real directory");
   }
@@ -11759,14 +12454,14 @@ async function writeInstallMarker(rootPath, marker) {
     await handle.close();
   }
 }
-async function readNoFollowInstallMarker(path3) {
-  const parsed = await readNoFollowJson(path3);
+async function readNoFollowInstallMarker(path4) {
+  const parsed = await readNoFollowJson(path4);
   return isInstallMarker(parsed) ? parsed : null;
 }
-async function readNoFollowJson(path3) {
+async function readNoFollowJson(path4) {
   let handle;
   try {
-    handle = await open4(path3, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+    handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
     const before = await handle.stat();
     if (!before.isFile()) {
       return null;
@@ -12040,11 +12735,11 @@ async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
   }
   await rm5(cleanupPath, { recursive: true });
 }
-async function fingerprintPath2(path3) {
-  const before = await lstat4(path3);
+async function fingerprintPath2(path4) {
+  const before = await lstat4(path4);
   const kind = pathKind(before);
-  const linkTarget = kind === "symlink" ? await readlink2(path3) : null;
-  const after = await lstat4(path3);
+  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
+  const after = await lstat4(path4);
   if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
     throw new Error("path changed during inspection");
   }
@@ -12070,8 +12765,8 @@ function pathKind(pathStat) {
   }
   return "other";
 }
-async function assertPathFingerprint(path3, expected) {
-  const current = await fingerprintPath2(path3);
+async function assertPathFingerprint(path4, expected) {
+  const current = await fingerprintPath2(path4);
   if (!samePathFingerprint(current, expected)) {
     throw new Error("path changed before mutation");
   }
@@ -12112,7 +12807,7 @@ var DEFAULT_DEPENDENCIES2 = {
   prepareAgents: prepareAgentPlans,
   randomUUID: createRandomUUID,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path3) => rm6(path3, { recursive: true, force: true }),
+  remove: async (path4) => rm6(path4, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -12543,12 +13238,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord4(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord7(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord4(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord7(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -12563,7 +13258,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord4(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -12858,11 +13553,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord5(profile)) {
+  if (!isRecord8(profile)) {
     return [];
   }
-  const ucp = isRecord5(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord5(ucp.payment_handlers) ? ucp.payment_handlers : isRecord5(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord8(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord8(ucp.payment_handlers) ? ucp.payment_handlers : isRecord8(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -12873,10 +13568,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord5(handler) || !isRecord5(handler.config)) {
+      if (!isRecord8(handler) || !isRecord8(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord5(handler.config.merchant_info) ? handler.config.merchant_info : isRecord5(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord8(handler.config.merchant_info) ? handler.config.merchant_info : isRecord8(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -13361,7 +14056,7 @@ function parseSetCookieHeader(header, url) {
   const value = nameValue.slice(separator + 1);
   let domain = url.hostname.toLowerCase();
   let hostOnly = true;
-  let path3 = defaultCookiePath(url.pathname);
+  let path4 = defaultCookiePath(url.pathname);
   for (const attribute of attributes) {
     const attributeSeparator = attribute.indexOf("=");
     const attributeName = (attributeSeparator >= 0 ? attribute.slice(0, attributeSeparator) : attribute).toLowerCase();
@@ -13370,7 +14065,7 @@ function parseSetCookieHeader(header, url) {
       domain = attributeValue.trim().toLowerCase().replace(/^\./, "");
       hostOnly = false;
     } else if (attributeName === "path" && attributeValue.startsWith("/")) {
-      path3 = attributeValue;
+      path4 = attributeValue;
     }
   }
   return {
@@ -13378,7 +14073,7 @@ function parseSetCookieHeader(header, url) {
     value,
     domain,
     hostOnly,
-    path: path3
+    path: path4
   };
 }
 function defaultCookiePath(pathname) {
@@ -13537,11 +14232,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord5(value)) {
+  if (!isRecord8(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord5(result)) {
+  if (isRecord8(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -13557,7 +14252,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord5(runningTotal)) {
+  if (!isRecord8(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -13582,7 +14277,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord5(productJson)) {
+  if (!isRecord8(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -13604,7 +14299,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord5(variant)) {
+  if (!isRecord8(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -13640,7 +14335,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord5(option)) {
+    if (!isRecord8(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -13658,7 +14353,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord5(value)) {
+  if (!isRecord8(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -13713,17 +14408,17 @@ function asIdString(value) {
 function asTrimmedString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function readPath(value, path3) {
+function readPath(value, path4) {
   let current = value;
-  for (const key of path3) {
-    if (!isRecord5(current)) {
+  for (const key of path4) {
+    if (!isRecord8(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord5(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -13739,6 +14434,8 @@ function normalizeHostname(value) {
 
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
+var CARD_SETUP_PATH = "/payment-method-setup";
+var CARD_MANAGEMENT_PATH = "/payment-method-modify";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
   "CREATED",
   "ACTIVE",
@@ -13751,6 +14448,7 @@ var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
 var UCP_ORDER_PATH = "/agent/ucp/orders";
@@ -13764,17 +14462,38 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-async function runCli(argv, startedAt = performance.timeOrigin + performance.now()) {
-  const args = parseArgs(argv);
+var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
+  "wallet",
+  "card",
+  "risk",
+  "skills",
+  "pay",
+  "refund",
+  "ucp-checkout",
+  "ucp-catalog",
+  "catalog",
+  "ucp-order",
+  "instruction",
+  "events",
+  "tool",
+  "config"
+]);
+async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = {}) {
+  const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
-  validateEnvironmentFlagScope(command, subcommand, args.flags);
+  edition.validateArgs?.(command, subcommand, args.flags);
+  validateEnvironmentFlagScope(command, subcommand, args.flags, edition.environmentSelectingInitCommands ?? []);
   validateEventPollSelector(command, subcommand, args.flags);
+  const editionCommandNames = new Set(edition.commandNames ?? []);
   if (getBooleanFlag(args.flags, "help")) {
-    printHelp(command, subcommand, nestedCommand);
+    if (command && !BASE_COMMAND_NAMES.has(command) && !editionCommandNames.has(command)) {
+      throw validationError(`unsupported command: ${command}`);
+    }
+    process.stdout.write((edition.getHelpText ?? getHelpText)(command, subcommand, nestedCommand));
     return EXIT_CODES.OK;
   }
   if (!command) {
-    printHelp();
+    process.stdout.write((edition.getHelpText ?? getHelpText)());
     return EXIT_CODES.OK;
   }
   const storedConfig = await readStoredConfig();
@@ -13786,7 +14505,9 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
     globalOptions,
-    startedAt
+    startedAt,
+    oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
+    configLifecycle: edition.configLifecycle ?? {}
   };
   await prepareOAuthAuthorization(command, subcommand, context);
   switch (command) {
@@ -13818,9 +14539,12 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       return handleToolCommand(subcommand, context);
     case "config":
       return handleConfigCommand(subcommand, context);
-    default:
-      throw validationError(`unsupported command: ${command}`);
   }
+  const editionExitCode = await edition.handleCommand?.(command, subcommand, context);
+  if (editionExitCode !== void 0) {
+    return editionExitCode;
+  }
+  throw validationError(`unsupported command: ${command}`);
 }
 function validateEventPollSelector(command, subcommand, flags) {
   if (command !== "events" || subcommand !== "poll" || !("checkout-id" in flags)) {
@@ -13835,16 +14559,18 @@ function validateEventPollSelector(command, subcommand, flags) {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
   }
 }
-function validateEnvironmentFlagScope(command, subcommand, flags) {
-  const isWalletInit = command === "wallet" && subcommand === "init";
-  if (isWalletInit) {
+function validateEnvironmentFlagScope(command, subcommand, flags, editionCommands) {
+  const environmentCommands = ["wallet", ...editionCommands];
+  const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
+  if (isEnvironmentSelectingInit) {
     resolveSelectedEnvironment(flags);
   }
-  if (!isWalletInit && getBooleanFlag(flags, "sandbox")) {
-    throw validationError("--sandbox is only supported by wallet init");
+  const supportedBy = environmentCommands.map((name) => `${name} init`).join(" or ");
+  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "sandbox")) {
+    throw validationError(`--sandbox is only supported by ${supportedBy}`);
   }
-  if (!isWalletInit && getBooleanFlag(flags, "test")) {
-    throw validationError("--test is only supported by wallet init");
+  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
+    throw validationError(`--test is only supported by ${supportedBy}`);
   }
 }
 async function handleSkillsCommand(subcommand, context) {
@@ -13997,7 +14723,7 @@ async function requestOAuthBusinessJson(context, buildRequest) {
 function commandUsesCustomerAuthorization(command, subcommand) {
   switch (command) {
     case "card":
-      return subcommand === "binding-link" || subcommand === "setup-link" || subcommand === "modify-link";
+      return subcommand === "binding-link" || subcommand === "setup-link" || subcommand === "modify-link" || subcommand === "passkey-link";
     case "risk":
       return subcommand === "get" || subcommand === "link";
     case "skills":
@@ -14393,6 +15119,7 @@ async function walletInit(context) {
     baseUrl,
     deviceId,
     agentClient,
+    scope: context.oauthScope,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   });
@@ -14430,13 +15157,14 @@ ${verificationUrl}
   try {
     nextConfig = await updateStoredConfig(async (current) => {
       await assertWalletInitCurrent(isCurrent);
-      return mergeOAuthLoginConfig(current, {
+      const merged = mergeOAuthLoginConfig(current, {
         baseUrl,
         email,
         name,
         customerId: token.customerId,
         authorization: storedAuthorization
       });
+      return context.configLifecycle.afterWalletLogin?.(current, merged) ?? merged;
     });
   } catch (error) {
     await revokeUncommittedWalletAuthorization(storedAuthorization, context.globalOptions.timeoutMs);
@@ -14454,6 +15182,8 @@ ${verificationUrl}
       bindingUrl: paymentMethodsCache.bindingUrl,
       paymentMethodsCached: paymentMethodsCache.cached,
       paymentMethodCount: paymentMethodsCache.count,
+      agentClientId: token.agentClientId ?? null,
+      visaRegistrationStatus: token.visaRegistrationStatus ?? null,
       ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
       configPath: "~/.clink-cli/config.json"
     }, context.globalOptions.format);
@@ -14526,7 +15256,7 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
-    const bindingUrl = buildBareDomainUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"));
+    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), CARD_SETUP_PATH, refreshContext.runtimeConfig.email);
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
@@ -14580,7 +15310,7 @@ async function walletLogout(context) {
     }
     delete current.authorization;
     delete current.customerApiKey;
-    return current;
+    return context.configLifecycle.afterWalletLogout?.(current) ?? current;
   });
   printSuccess({
     loggedOut: true,
@@ -14623,9 +15353,11 @@ async function handleCardCommand(subcommand, context) {
     case "binding-link":
       return cardBindingLink(context);
     case "setup-link":
-      return cardRedirectLink(context, "card setup");
+      return cardRedirectLink(context, CARD_SETUP_PATH, "card setup");
     case "modify-link":
-      return cardRedirectLink(context, "card management");
+      return cardRedirectLink(context, CARD_MANAGEMENT_PATH, "card management");
+    case "passkey-link":
+      return cardPasskeyLink(context);
     case "list":
       return cardList(context);
     case "get":
@@ -14635,7 +15367,7 @@ async function handleCardCommand(subcommand, context) {
   }
 }
 async function cardBindingLink(context) {
-  const prepared = await resolveBindingLink(context);
+  const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
@@ -14658,14 +15390,14 @@ async function cardBindingLink(context) {
   }, () => printBindingHandoff(true));
   return EXIT_CODES.OK;
 }
-async function cardRedirectLink(context, label) {
-  const prepared = await resolveBindingLink(context);
+async function cardRedirectLink(context, targetPath, label) {
+  const prepared = await resolveBindingLink(context, targetPath);
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   const staleEventCutoffMs = Date.now();
-  maybeOpenBrowser(context.globalOptions.open, prepared.url);
+  await openPortalWithBrowserHandoff(context, prepared.url);
   printSuccess({
     url: prepared.url,
     paymentMethodsVoList: prepared.data.paymentMethodsVoList ?? []
@@ -14673,7 +15405,19 @@ async function cardRedirectLink(context, label) {
   await maybeWatchEvents(context, prepared.url, label, { staleEventCutoffMs });
   return EXIT_CODES.OK;
 }
-async function resolveBindingLink(context) {
+async function cardPasskeyLink(context) {
+  const paymentInstrumentId = requireStringFlag(context.args.flags, "missing --payment-instrument-id", "payment-instrument-id");
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, void 0, context.runtimeConfig.email);
+  const browserLaunch = await openPortalWithBrowserHandoff(context, url);
+  printSuccess({
+    url,
+    paymentInstrumentId,
+    manualOpenUrl: url,
+    browserLaunch
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function resolveBindingLink(context, targetPath) {
   const result = await callBindingLink(context);
   if (isDryRun3(result)) {
     return { dryRun: true, result };
@@ -14681,7 +15425,7 @@ async function resolveBindingLink(context) {
   const data = unwrapApiData(result.body);
   await cachePaymentMethods(context, data.paymentMethodsVoList);
   const bindingUrl = asRequiredString(data.bindingUrl, "missing bindingUrl in response");
-  const url = buildBareDomainUrl(bindingUrl);
+  const url = buildAgentPortalUrl(bindingUrl, resolveAgentBaseUrl(context.runtimeConfig.baseUrl), targetPath, context.runtimeConfig.email);
   return { dryRun: false, data, url };
 }
 async function callBindingLink(context) {
@@ -15215,7 +15959,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord6(checkout)) {
+  if (!isRecord9(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -15223,7 +15967,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord6(checkoutContext)) {
+  if (!isRecord9(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -15356,15 +16100,15 @@ function normalizeUcpCheckoutCreateLineItems(lineItems, currency) {
 function normalizeUcpCheckoutUpdateLineItems(lineItems, currency) {
   return lineItems.map((lineItem, index) => normalizeUcpCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`, true));
 }
-function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveIntegerMinorUnits) {
+function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveIntegerMinorUnits) {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path3}[${index}]`, preserveIntegerMinorUnits));
+    return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord6(value)) {
+  if (!isRecord9(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
-    const fieldPath = `${path3}.${key}`;
+    const fieldPath = `${path4}.${key}`;
     if (EXTERNAL_CHECKOUT_MONEY_FIELDS.has(key) && shouldNormalizeUcpCheckoutMoneyInput(fieldValue, preserveIntegerMinorUnits)) {
       return [key, majorAmountToMinorUnits(fieldValue, currency, fieldPath)];
     }
@@ -15377,7 +16121,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path3, preserveInteger
     ];
   }));
 }
-function isRecord6(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -15484,10 +16228,10 @@ async function handleInstructionCommand(subcommand, context) {
       throw validationError("unsupported instruction command");
   }
 }
-function instructionBody(context) {
+async function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring);
+  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring);
   const body = compact3({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireStringFlag(flags, "missing --title", "title"),
@@ -15505,11 +16249,43 @@ function instructionBody(context) {
   }
   return body;
 }
-function normalizeInstructionMandates(mandates, isRecurring) {
-  if (!isRecurring) {
-    return mandates;
+async function readInstructionMandates(flags) {
+  const inlineJson = getStringFlag(flags, "mandates");
+  const filePath = getStringFlag(flags, "mandates-file");
+  if (inlineJson !== void 0 && filePath !== void 0) {
+    throw validationError("--mandates and --mandates-file cannot be used together");
   }
+  if (inlineJson === void 0 && filePath === void 0) {
+    throw validationError("missing --mandates or --mandates-file (JSON array)");
+  }
+  let source = inlineJson;
+  let sourceName = "--mandates";
+  if (filePath !== void 0) {
+    if (!filePath.trim()) {
+      throw validationError("--mandates-file path must not be blank");
+    }
+    sourceName = "--mandates-file";
+    try {
+      source = await readFile3(filePath, "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
+    }
+  }
+  const parsed = parseJsonFlag(source, sourceName);
+  if (!Array.isArray(parsed)) {
+    throw validationError(`${sourceName} must be a JSON array`);
+  }
+  return parsed;
+}
+function normalizeInstructionMandates(mandates, isRecurring) {
   return mandates.map((mandate, index) => {
+    if (isJsonObject(mandate) && typeof mandate.description === "string" && mandate.description.length > MAX_MANDATE_DESCRIPTION_LENGTH) {
+      throw validationError(`--mandates[${index}].description must not exceed ${MAX_MANDATE_DESCRIPTION_LENGTH} characters`);
+    }
+    if (!isRecurring) {
+      return mandate;
+    }
     if (!isJsonObject(mandate)) {
       throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
     }
@@ -15546,7 +16322,7 @@ function requireJsonArrayFlag(flags, name) {
 }
 async function instructionCreate(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
-  const body = instructionBody(context);
+  const body = await instructionBody(context);
   const staleEventCutoffMs = Date.now();
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
@@ -15567,7 +16343,7 @@ async function instructionCreate(context) {
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
   const mandateIds = extractMandateIds(data);
   const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, context.runtimeConfig.email);
-  maybeOpenBrowser(context.globalOptions.open, passkeyUrl);
+  await openPortalWithBrowserHandoff(context, passkeyUrl);
   printSuccess({
     ...data,
     action: "created",
@@ -15584,6 +16360,39 @@ async function instructionCreate(context) {
     ackUnmatchedEvents: false
   });
   return EXIT_CODES.OK;
+}
+async function openPortalWithBrowserHandoff(context, targetUrl) {
+  const launch = await openBrowserHandoff({
+    open: context.globalOptions.open && !context.globalOptions.dryRun,
+    targetUrl,
+    portalOrigin: resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
+    runtimeConfig: context.runtimeConfig,
+    ...context.runtimeConfig.email ? { email: context.runtimeConfig.email } : {},
+    request: (request) => requestBrowserHandoff(context, request),
+    openBrowser: (url) => openBrowserWithResult(true, url)
+  });
+  await launch.completion;
+  return launch.browserLaunch;
+}
+async function requestBrowserHandoff(context, request) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => {
+    if (!runtimeConfig.authorization) {
+      throw authError("Browser handoff requires Agent OAuth.");
+    }
+    return {
+      baseUrl: runtimeConfig.baseUrl,
+      method: "POST",
+      path: request.path,
+      headers: buildCustomerHeaders(runtimeConfig),
+      body: request.body,
+      timeoutMs: context.globalOptions.timeoutMs,
+      dryRun: false
+    };
+  });
+  if (isDryRun3(result)) {
+    throw apiError("Browser handoff is unavailable during dry-run.");
+  }
+  return result;
 }
 async function instructionGet(context) {
   const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
@@ -15603,8 +16412,14 @@ async function instructionSignUrl(context) {
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId, context.runtimeConfig.email);
   const staleEventCutoffMs = Date.now();
-  maybeOpenBrowser(context.globalOptions.open, url);
-  printSuccess({ url, instructionId, paymentInstrumentId }, context.globalOptions.format);
+  const browserLaunch = await openPortalWithBrowserHandoff(context, url);
+  printSuccess({
+    url,
+    instructionId,
+    paymentInstrumentId,
+    manualOpenUrl: url,
+    browserLaunch
+  }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
     expectedResource: { instructionId, purchaseInstructionId: instructionId },
@@ -15644,7 +16459,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord6(data)) {
+  if (!isRecord9(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -15657,7 +16472,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord6(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord9(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -15682,7 +16497,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord6(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord9(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -15722,7 +16537,7 @@ async function configSet(context) {
   const key = normalizeConfigKey(rawKey);
   const value = parseConfigValue(key, rawValue);
   const nextConfig = await updateStoredConfig((current) => {
-    setConfigValue(current, key, value);
+    setConfigValue(current, key, value, context.configLifecycle);
     return current;
   });
   printSuccess(buildConfigView(nextConfig), context.globalOptions.format);
@@ -15740,7 +16555,7 @@ async function configUnset(context) {
   const key = normalizeConfigKey(rawKey);
   const nextConfig = await updateStoredConfig((current) => {
     if (key === "baseUrl" || key === "defaultOpenLinks") {
-      setConfigValue(current, key, defaultValueForRequiredKey(key));
+      setConfigValue(current, key, defaultValueForRequiredKey(key), context.configLifecycle);
     } else {
       unsetConfigValue(current, key);
     }
@@ -15752,7 +16567,7 @@ async function configUnset(context) {
 function defaultValueForRequiredKey(key) {
   return key === "baseUrl" ? DEFAULT_BASE_URL : false;
 }
-function setConfigValue(target, key, value) {
+function setConfigValue(target, key, value, configLifecycle) {
   if (isCustomerConfigKey(key)) {
     switch (key) {
       case "customerId":
@@ -15778,7 +16593,8 @@ function setConfigValue(target, key, value) {
     }
   }
   switch (key) {
-    case "baseUrl":
+    case "baseUrl": {
+      const previousBaseUrl = target.baseUrl;
       if (!sameHttpOrigin(target.baseUrl, value)) {
         delete target.authorization;
         delete target.customerApiKey;
@@ -15786,7 +16602,9 @@ function setConfigValue(target, key, value) {
         delete target.riskRules;
       }
       target.baseUrl = value;
+      configLifecycle.afterBaseUrlChange?.(previousBaseUrl, target);
       return;
+    }
     case "defaultOpenLinks":
       target.defaultOpenLinks = value;
       return;
@@ -15831,6 +16649,8 @@ function buildConfigView(config) {
     authorizationType: authorization ? "oauth" : config.customerApiKey ? "csk" : null,
     accessTokenExpiresAt: authorization ? new Date(authorization.accessTokenExpiresAt).toISOString() : null,
     refreshTokenExpiresAt: authorization ? new Date(authorization.refreshTokenExpiresAt).toISOString() : null,
+    agentClientId: authorization?.agentClientId ?? null,
+    visaRegistrationStatus: authorization?.visaRegistrationStatus ?? null,
     hasCustomerApiKey: Boolean(config.customerApiKey),
     oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
@@ -15871,7 +16691,7 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord6(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord9(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 function createPaymentMethodApi(context) {
@@ -15953,7 +16773,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord6(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord9(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
@@ -15965,27 +16785,40 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/index.js
-async function main() {
+// dist/entrypoint.js
+var MAIN_HELP_COMMANDS = [
+  "wallet",
+  "card",
+  "risk",
+  "skills",
+  "pay",
+  "refund",
+  "ucp-checkout",
+  "ucp-catalog",
+  "catalog",
+  "ucp-order",
+  "instruction",
+  "events",
+  "tool",
+  "config"
+];
+async function runEntrypoint(runner, argv, helpCommands) {
   try {
-    const exitCode = await runCli(process.argv.slice(2));
+    const exitCode = await runner(argv);
     process.exitCode = exitCode;
   } catch (error) {
-    process.exitCode = printError(error, detectErrorPresentation(process.argv.slice(2)));
+    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands));
   }
 }
-function detectErrorPresentation(argv) {
+function detectErrorPresentation(argv, helpCommands) {
   const format = detectFormat(argv);
   const explicitFormat = hasExplicitFormat(argv);
-  const helpHint = detectHelpHint(argv);
-  const result = {
+  const helpHint = detectHelpHint(argv, helpCommands);
+  return {
     format,
-    explicitFormat
+    explicitFormat,
+    ...!explicitFormat && helpHint ? { helpHint } : {}
   };
-  if (!explicitFormat && helpHint) {
-    result.helpHint = helpHint;
-  }
-  return result;
 }
 function detectFormat(argv) {
   for (let index = 0; index < argv.length; index += 1) {
@@ -16008,14 +16841,16 @@ function detectFormat(argv) {
 function hasExplicitFormat(argv) {
   return argv.some((token) => token === "--format" || token.startsWith("--format="));
 }
-function detectHelpHint(argv) {
+function detectHelpHint(argv, helpCommands) {
   const command = argv.find((token) => !token.startsWith("-"));
   if (!command) {
     return "Run `clink --help`.";
   }
-  if (["wallet", "card", "risk", "skills", "pay", "refund", "ucp-checkout", "ucp-catalog", "catalog", "ucp-order", "instruction", "events", "tool", "config"].includes(command)) {
+  if (helpCommands.includes(command)) {
     return `Run \`clink ${command} --help\`.`;
   }
   return "Run `clink --help`.";
 }
-void main();
+
+// dist/index.js
+void runEntrypoint(runCli, process.argv.slice(2), MAIN_HELP_COMMANDS);

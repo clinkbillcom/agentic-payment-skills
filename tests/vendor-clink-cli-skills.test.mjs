@@ -240,6 +240,7 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_pending_contract',
         agent_client_id: 'acl_wallet_pending_contract',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read wallet:setup events:read offline_access',
       }));
       return;
@@ -311,7 +312,10 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
     assert.equal(output.data.hasAuthorization, true);
     assert.equal(output.data.authorizationType, 'oauth');
     assert.equal(output.data.customerId, 'cus_wallet_pending_contract');
-    assert.equal(output.data.bindingUrl, 'https://agent.clinkbill.com');
+    assert.equal(
+      output.data.bindingUrl,
+      'https://agent.clinkbill.com/payment-method-setup?email=wallet-pending%40example.com',
+    );
     assert.equal(output.data.paymentMethodCount, 0);
     assert.equal(requestPaths.includes('/agent/event-hub/webhook-events/poll'), false);
     assert.doesNotMatch(completed.stdout, /init-secret/u);
@@ -352,6 +356,7 @@ test('vendored wallet init treats missing or malformed paymentMethodsVoList as u
           refresh_expires_in: 2592000,
           customer_id: `cus_wallet_invalid_cards_${fixture.name}`,
           agent_client_id: `acl_wallet_invalid_cards_${fixture.name}`,
+          visa_registration_status: 'UNKNOWN',
           scope: 'wallet:read wallet:setup offline_access',
         }));
         return;
@@ -456,6 +461,7 @@ test('vendored wallet init cannot emit success after a post-commit takeover', as
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_takeover_first',
         agent_client_id: 'acl_wallet_takeover_first',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read wallet:setup offline_access',
       }));
       return;
@@ -563,6 +569,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
         refresh_expires_in: 2592000,
         customer_id: 'cus_wallet_init_contract',
         agent_client_id: 'acl_wallet_init_contract',
+        visa_registration_status: 'UNKNOWN',
         scope: 'wallet:read offline_access',
       }));
       return;
@@ -628,7 +635,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal('oauthRequired' in output.data, false);
     assert.equal(
       output.data.bindingUrl,
-      'https://agent.clinkbill.com',
+      'https://agent.clinkbill.com/payment-method-setup?email=wallet-init%40example.com',
     );
     assert.equal(output.data.paymentMethodsCached, true);
     assert.equal(output.data.paymentMethodCount, 1);
@@ -850,7 +857,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
     assert.deepEqual(jsonLines(ready.stdout), [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
         paymentMethodsVoList: [],
         watchReady: true,
         watchEventType: 'payment_method.added',
@@ -1208,7 +1215,7 @@ test('vendored card binding-link --no-watch exits without polling Event Hub', as
     assert.deepEqual(jsonLines(result.stdout), [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
         paymentMethodsVoList: [],
         watchReady: false,
         watchEventType: null,
@@ -1809,15 +1816,13 @@ test('vendored events poll rejects checkout id without one supported event type'
   }
 });
 
-test('vendored CLI metadata tracks the production base and rollback backport', () => {
-  assert.equal(vendorPackage.version, '0.2.9');
+test('vendored CLI metadata tracks the Main Edition source', () => {
+  assert.equal(vendorPackage.version, '0.2.16');
+  assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '8b136568a7f0036bcb34af22edd8f8b69c3ec905',
+    '8b0d10b810577a91a20fea318155ffb542632cc5',
   );
-  assert.deepEqual(vendorPackage.backportCommits, [
-    '5290d69f3b4f460526c831ef7732212eacabc449',
-  ]);
   assert.equal(
     vendorPackage.bundleSha256,
     createHash('sha256').update(bundleSource).digest('hex'),
@@ -1829,7 +1834,7 @@ test('vendored CLI metadata tracks the production base and rollback backport', (
     /if \(!sameFingerprint\(currentFingerprint, placedFingerprint\)\)/u,
   );
   assert.match(bundleSource, /if \(parentCreated && removedPlacedTarget\)/u);
-  assert.doesNotMatch(bundleSource, /browser-handoffs|cli-handoff|browser:handoff/u);
+  assert.match(bundleSource, /browser-handoffs|cli-handoff|browser:handoff/u);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
@@ -1845,6 +1850,29 @@ test('vendored CLI metadata tracks the production base and rollback backport', (
   assert.match(bundleSource, /eventType: "payment_method\.added"/u);
   assert.doesNotMatch(bundleSource, /CLINK_CONFIG_DIR/u);
   assert.doesNotMatch(bundleSource, /\/agent\/cwallet\/customer\/bootstrap/u);
+});
+
+test('vendored CLI rejects mandate descriptions over 150 characters', () => {
+  const result = runBundleRaw([
+    'instruction',
+    'create',
+    '--payment-instrument-id',
+    'pi_visa',
+    '--title',
+    'Visa purchase',
+    '--mandates',
+    JSON.stringify([{
+      title: 'Visa purchase',
+      description: 'a'.repeat(151),
+      amountLimit: 1,
+      currencyCode: 'USD',
+    }]),
+    '--format',
+    'json',
+  ]);
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /description must not exceed 150 characters/u);
 });
 
 test('vendored CLI embeds the .dev test API, agent, and dashboard domains', () => {
