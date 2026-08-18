@@ -486,9 +486,34 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.0"/u);
-  assert.equal(packageJson.version, '1.12.0');
+  const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
+  assert.equal(skillVersion, '1.13.0');
+  assert.equal(packageJson.version, '1.13.0');
+  assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('Agent Alipay QR docs preserve the native-image, event, expiry, and cleanup contract', () => {
+  for (const body of [skill, paymentRefund, asyncEvents, cliInvocation]) {
+    assert.match(body, /QR_CODE_REQUIRED/u);
+    assert.match(body, /image\/png/u);
+    assert.match(body, /cleanupPath/u);
+    assert.match(body, /agent_order\.succeeded,agent_order\.failed/u);
+    assert.match(body, /paymentExecutionDetailId/u);
+  }
+
+  assert.match(skill, /SHOW_QR_AND_WAIT_EVENT/u);
+  assert.match(skill, /RETURN_QR_TERMINAL_AND_CLEANUP/u);
+  assert.match(skill, /native image/u);
+  assert.match(skill, /never automatically run `pay` again/u);
+  assert.match(skill, /recursively remove/u);
+  assert.match(paymentRefund, /epoch seconds/u);
+  assert.match(paymentRefund, /Prefer a positive `expiresSecond`/u);
+  assert.match(paymentRefund, /cap either result at 900 seconds/iu);
+  assert.match(paymentRefund, /\[redacted:png-data-url\]/u);
+  assert.match(paymentRefund, /real UAT Agent QR E2E/u);
+  assert.match(asyncEvents, /native image action/u);
+  assert.doesNotMatch(paymentRefund, /Date\.parse/u);
 });
 
 // The command was renamed clink-cli -> clink across every doc. A rename verified only by positive

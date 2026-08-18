@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   PaymentWorkflowAction,
   PaymentWorkflowState,
   classifyPaymentAccountEventObservation,
   classifyPaymentObservation,
+  classifyPaymentQrEventObservation,
 } from '../lib/payment-workflow-fsm.mjs';
 
 const paymentContext = {
@@ -16,6 +19,30 @@ const paymentContext = {
   amount: 19.99,
   currency: 'USD',
 };
+
+const qrCleanupPath = join(tmpdir(), 'clink-cli-payment-qr-order_qr');
+const qrImagePath = join(qrCleanupPath, 'payment-qr.png');
+const qrObservedAtMs = 1_799_999_900_000;
+const qrOutput = (customerAction = {}) => JSON.stringify({
+  ok: true,
+  data: {
+    orderId: 'order_qr',
+    channelPaymentResponse: { status: 5 },
+    customerAction: {
+      type: 'QR_CODE_REQUIRED',
+      imagePath: qrImagePath,
+      mediaType: 'image/png',
+      temporary: true,
+      cleanupRequired: true,
+      orderId: 'order_qr',
+      paymentExecutionDetailId: 'ped_qr',
+      expiresAt: 1_800_000_000,
+      expiresSecond: 120,
+      cleanupPath: qrCleanupPath,
+      ...customerAction,
+    },
+  },
+});
 
 test('Agent Pay synchronous success starts optional account event monitoring', () => {
   const result = classifyPaymentObservation({
@@ -146,6 +173,483 @@ test('Agent Pay response without status keeps the existing order-event wait', ()
   assert.equal(result.state, PaymentWorkflowState.PAY_SUBMITTED);
   assert.equal(result.action, PaymentWorkflowAction.WAIT_EVENT);
   assert.equal(result.pollCommands, undefined);
+});
+
+test('Agent Alipay QR customer action uses a native PNG and starts one correlated any-of wait', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_CODE_REQUIRED);
+  assert.equal(result.action, PaymentWorkflowAction.SHOW_QR_AND_WAIT_EVENT);
+  assert.equal(result.terminal, false);
+  assert.equal(result.paymentStatus, 'PENDING_CUSTOMER_ACTION');
+  assert.equal(result.retryAllowed, false);
+  assert.deepEqual(result.customerAction, {
+    type: 'QR_CODE_REQUIRED',
+    imagePath: qrImagePath,
+    mediaType: 'image/png',
+    temporary: true,
+    cleanupRequired: true,
+    orderId: 'order_qr',
+    paymentExecutionDetailId: 'ped_qr',
+    expiresAt: 1_800_000_000,
+    expiresSecond: 120,
+    cleanupPath: qrCleanupPath,
+  });
+  assert.deepEqual(result.orderWaitSpec, {
+    eventType: 'agent_order.succeeded,agent_order.failed',
+    maxWaitSeconds: 120,
+    noAck: false,
+    pollCommand: 'clink events poll --type agent_order.succeeded,agent_order.failed --max-wait 120 --format json',
+    purpose: 'AGENT_PAY_QR',
+    expectedResource: {
+      orderId: 'order_qr',
+      paymentExecutionDetailId: 'ped_qr',
+    },
+  });
+  assert.deepEqual(result.pollCommands, [result.orderWaitSpec.pollCommand]);
+  assert.doesNotMatch(JSON.stringify(result), /base64|imageUrlPng/iu);
+});
+
+test('Agent Alipay QR customer action can correlate by the frozen pay session', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        channelPaymentResponse: { status: 5 },
+        customerAction: {
+          type: 'QR_CODE_REQUIRED',
+          imagePath: qrImagePath,
+          mediaType: 'image/png',
+          temporary: true,
+          cleanupRequired: true,
+          orderId: null,
+          paymentExecutionDetailId: null,
+          expiresAt: null,
+          expiresSecond: 45,
+          cleanupPath: qrCleanupPath,
+        },
+      },
+    }),
+    paymentContext: { ...paymentContext, sessionId: 'sess_qr' },
+  });
+
+  assert.deepEqual(result.orderWaitSpec.expectedResource, { sessionId: 'sess_qr' });
+  assert.equal(result.customerAction.sessionId, undefined);
+});
+
+test('Agent Alipay QR wait prefers expiresSecond and caps it at 900 seconds', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({ expiresSecond: 1_200 }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.orderWaitSpec.maxWaitSeconds, 900);
+  assert.match(result.orderWaitSpec.pollCommand, /--max-wait 900/u);
+});
+
+test('Agent Alipay QR wait derives seconds from epoch expiry when expiresSecond is null', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: Math.floor(qrObservedAtMs / 1000) + 45,
+      expiresSecond: null,
+    }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.orderWaitSpec.maxWaitSeconds, 45);
+  assert.match(result.orderWaitSpec.pollCommand, /--max-wait 45/u);
+});
+
+test('status 5 without an explicit CLI QR action keeps the legacy pending event flow', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        orderId: 'order_legacy',
+        channelPaymentResponse: { status: 5 },
+      },
+    }),
+    paymentContext,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.PAY_SUBMITTED);
+  assert.equal(result.action, PaymentWorkflowAction.WAIT_EVENT);
+});
+
+test('Agent Alipay QR rejects inline image data even when a temporary path is also present', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      imageUrlPng: 'data:image/png;base64,secret-qr-payload',
+    }),
+    paymentContext,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.action, PaymentWorkflowAction.SURFACE_ERROR);
+  assert.equal(result.reason, 'qr_inline_image_not_redacted');
+  assert.equal(result.retryAllowed, false);
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.doesNotMatch(JSON.stringify(result), /secret-qr-payload|base64/iu);
+});
+
+test('Agent Alipay QR accepts the CLI redacted PNG marker without treating it as a leak', () => {
+  const parsed = JSON.parse(qrOutput());
+  parsed.data.channelPaymentResponse.action = {
+    walletHandleRedirectOrDisplayQrCode: {
+      imageUrlPng: '[redacted:png-data-url]',
+    },
+  };
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: JSON.stringify(parsed),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_CODE_REQUIRED);
+  assert.equal(result.action, PaymentWorkflowAction.SHOW_QR_AND_WAIT_EVENT);
+});
+
+test('Agent Alipay QR rejects a path outside the OS temporary directory', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({ imagePath: '/opt/clink-agent-pay-qr.png' }),
+    paymentContext,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'qr_temporary_png_path_invalid');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('Agent Alipay QR rejects missing fixed file metadata and cleans its owned directory', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({ cleanupRequired: false }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'qr_file_metadata_invalid');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('Agent Alipay QR rejects an image outside its caller-owned cleanup directory', () => {
+  const otherCleanupPath = join(tmpdir(), 'clink-cli-payment-qr-other');
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      cleanupPath: otherCleanupPath,
+    }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'qr_image_outside_cleanup_path');
+  assert.equal(result.cleanupPath, otherCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('an already expired numeric epoch QR customer action is terminal and requires recursive cleanup', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: 1_800_000_000,
+      expiresSecond: null,
+    }),
+    paymentContext,
+    observedAtMs: 1_800_000_001_000,
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_TIMED_OUT);
+  assert.equal(result.action, PaymentWorkflowAction.RETURN_QR_TERMINAL_AND_CLEANUP);
+  assert.equal(result.terminal, true);
+  assert.equal(result.qrEventStatus, 'TIMED_OUT');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('an epoch-expired QR becomes terminal when a non-correlated poll returns', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: 1_800_000_001,
+      expiresSecond: 120,
+    }),
+    paymentContext,
+    observedAtMs: 1_800_000_000_000,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    observedAtMs: 1_800_000_002_000,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { orderId: 'order_other' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_TIMED_OUT);
+  assert.equal(result.reason, 'qr_customer_action_expired');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('a correlated Agent Alipay success event completes payment and cleans up the QR PNG', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const event = {
+    type: 'agent_order.succeeded',
+    data: { orderId: 'order_qr' },
+  };
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: { ready: true, timedOut: false, events: [event] },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_SUCCEEDED);
+  assert.equal(result.action, PaymentWorkflowAction.RETURN_QR_TERMINAL_AND_CLEANUP);
+  assert.equal(result.paymentStatus, 'PAID');
+  assert.equal(result.qrEventStatus, 'SUCCEEDED');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+  assert.deepEqual(result.event, event);
+});
+
+test('Agent Alipay QR can correlate a terminal event by paymentExecutionDetailId', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({ orderId: null }),
+    paymentContext: {},
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { paymentExecutionDetailId: 'ped_qr' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.deepEqual(qrWorkflow.orderWaitSpec.expectedResource, {
+    paymentExecutionDetailId: 'ped_qr',
+  });
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_SUCCEEDED);
+  assert.equal(result.cleanupPath, qrCleanupPath);
+});
+
+test('a correlated Agent Alipay failure event stops without retry and cleans up the QR PNG', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.failed',
+            data: { orderId: 'order_qr', message: 'declined' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_FAILED);
+  assert.equal(result.paymentStatus, 'FAILED');
+  assert.equal(result.qrEventStatus, 'FAILED');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('Agent Alipay QR event timeout is terminal, removes the PNG, and exposes no resume retry', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: false,
+          timedOut: true,
+          events: [],
+          resumeCommand: 'must-not-be-returned',
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_TIMED_OUT);
+  assert.equal(result.paymentStatus, 'UNKNOWN');
+  assert.equal(result.qrEventStatus, 'TIMED_OUT');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+  assert.equal(result.resumeCommand, undefined);
+  assert.equal(result.pollCommands, undefined);
+});
+
+test('an Agent Alipay event for another order keeps the QR pending without cleanup', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { orderId: 'order_other' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_CODE_REQUIRED);
+  assert.equal(result.action, PaymentWorkflowAction.WAIT_EVENT);
+  assert.equal(result.terminal, false);
+  assert.equal(result.cleanupPending, true);
+  assert.equal(result.cleanupPath, undefined);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('an Agent Alipay event poll error becomes terminal unknown without payment retry', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    pollObservation: {
+      exitCode: 4,
+      stderr: JSON.stringify({
+        ok: false,
+        error: { message: 'event scope denied' },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_UNKNOWN);
+  assert.equal(result.paymentStatus, 'UNKNOWN');
+  assert.equal(result.qrEventStatus, 'POLL_ERROR');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.cleanupRecursive, true);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('Agent Alipay QR rejects a tampered event wait before classifying its result', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput(),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  qrWorkflow.orderWaitSpec = {
+    ...qrWorkflow.orderWaitSpec,
+    maxWaitSeconds: 900,
+    pollCommand: 'clink events poll --type agent_order.succeeded --max-wait 900 --format json',
+    expectedResource: { orderId: 'order_other' },
+  };
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    observedAtMs: qrObservedAtMs,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { orderId: 'order_other' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'invalid_qr_workflow_context');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.retryAllowed, false);
 });
 
 test('Agent Pay account aggregation returns created confirmation and core event information', () => {
