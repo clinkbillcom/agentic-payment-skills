@@ -1816,11 +1816,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.13');
+  assert.equal(vendorPackage.version, '0.2.16');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '33afc2ccfd332d9bdf1f12f98e284eb2689de5b1',
+    '0e63974ad26daa94640c5c3132069695b91e9336',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
@@ -1832,7 +1832,11 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   );
   assert.match(bundleSource, /if \(parentCreated && removedPlacedTarget\)/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/browser-handoffs/u);
-  assert.match(bundleSource, /\/oauth\/cli-handoff\/complete/u);
+  assert.match(
+    bundleSource,
+    /completeUrl = parseCompleteUrl\(requiredString\(data\.complete_url\), portalOrigin, handoffId\)/u,
+  );
+  assert.match(bundleSource, /decodeURIComponent\(lastSegment\) !== handoffId/u);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
