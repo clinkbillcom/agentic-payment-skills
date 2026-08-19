@@ -1463,8 +1463,10 @@ test('vendored CLI exposes the strict checkout event selector', () => {
   assert.match(eventsHelp, /--checkout-id <id>/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
-  assert.match(bundleSource, /data\.checkout_id/u);
-  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /data\?\.checkout_id/u);
+  assert.match(bundleSource, /agentInstructionInfo", "ucpCheckoutId"/u);
+  assert.match(bundleSource, /nextToken: checkoutNextToken/u);
+  assert.match(bundleSource, /cursor-backed selector support is required/u);
   assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
   assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
   assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
@@ -1816,11 +1818,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.16');
+  assert.equal(vendorPackage.version, '0.2.18');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '0e63974ad26daa94640c5c3132069695b91e9336',
+    'c66961a77be86759e1f5116edf46c955b6160147',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
@@ -2045,4 +2047,31 @@ test('vendored CLI rejects a literal latest Skill install version', () => {
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /invalid skill package/u);
+});
+
+const hasAggregateUcpCheckoutRun = bundleSource.includes('clink ucp-checkout run')
+  && bundleSource.includes('--confirm-purchase')
+  && bundleSource.includes('--wait-delivery');
+
+test('vendored CLI aggregate UCP checkout contract after official upstream sync', {
+  skip: hasAggregateUcpCheckoutRun
+    ? false
+    : 'awaiting official clink-cli bundle sync; source/FSM/docs tests remain authoritative',
+}, () => {
+  const result = runBundleRaw(['ucp-checkout', 'run', '--help']);
+  assert.equal(result.status, 0, result.stderr);
+  for (const contract of [
+    /ucp-checkout run/u,
+    /--endpoint/u,
+    /--merchant-url/u,
+    /--merchant-category-code/u,
+    /--currency/u,
+    /--line-items/u,
+    /--payment-instrument-id/u,
+    /--confirm-purchase/u,
+    /--wait-delivery/u,
+    /--max-wait/u,
+  ]) {
+    assert.match(result.stdout, contract);
+  }
 });

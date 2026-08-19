@@ -134,7 +134,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or canonical `payment_method.update` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
-| UCP checkout payment success | `agent_order.succeeded` with exact matching `checkoutId`; poll with `clink events poll --type agent_order.succeeded --checkout-id <checkoutId> --max-wait 900 --format json` after checkout complete returns `completed` |
+| UCP aggregate checkout | The CLI owns payment-event correlation inside the one foreground `clink ucp-checkout run`; the Agent does not start a second UCP event poll |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |

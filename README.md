@@ -38,7 +38,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - Explicitly authorized public Skill installs with `clink skills install publisher/name[@version]`: omit version for latest, use `@version` for an exact release, or resolve a Number from the newest same-context two-hour list and confirm the frozen publisher/name/version before installation
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
-- UCP checkout for product orders — parse product-page facts with `clink tool parse-item`, select one available item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization when required, then call `clink tool internal-ucp get-endpoint` with the product URL. A configured endpoint uses internal checkout; only `NOT_IN_INTERNAL_UCP_LIST` falls back to `/.well-known/ucp-clink` plus `get-rest-endpoint`, where provider `clinkbill` uses internal checkout and other providers or discovery failures use external checkout
+- UCP checkout for product orders — parse and freeze one item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization, then use `clink tool internal-ucp get-endpoint`. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `get-rest-endpoint`; a resolved endpoint or fallback provider `clinkbill` selects internal checkout, while another provider selects external checkout. Execute one foreground `clink ucp-checkout run ... --confirm-purchase --format json`. Digital delivery alone adds `--wait-delivery --max-wait 900`; the agent never manually chains create, complete, event polling, or delivery polling
 - Refund submission and polling
 - Risk rule configuration
 - Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink events poll`, instead of guessing or busy-retrying
@@ -53,7 +53,7 @@ Because completion is proven by a webhook event rather than by anything the brow
 
 `SKILL.md` contains routing and safety rules. Command-level details live under `references/`, following the same "read the operation reference before running the CLI" pattern used by the Lark skills.
 
-For product checkout, read `references/clink-ucp-checkout.md` before running `clink tool parse-item`, `clink instruction list`, or `clink ucp-checkout create/complete`.
+For product checkout, read `references/clink-ucp-checkout.md` before running `clink tool parse-item`, `clink instruction list`, or the one aggregate `clink ucp-checkout run` command. Keep that command in the foreground; do not query `--help` at runtime, sleep, background it, or split it into manual create/complete/wait steps.
 
 For public skill listing or tipping, read `references/clink-skill-tip.md` before running `clink skills list --all --tippable` or `clink skills tip`. A Number is resolved only from the same user/session/environment snapshot displayed within two hours, then executed as publisher/name without a version. Without a valid snapshot, the agent lists Skills and requires confirmation before payment.
 
