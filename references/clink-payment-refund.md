@@ -166,7 +166,7 @@ clink pay \
   --format json
 ```
 
-Do not inject a default Card `--payment-instrument-id`. With `--terminal-qr`, the CLI writes a UTF-8 QR to stderr and keeps stdout as one JSON envelope. Preserve the rendered block characters, line breaks, and spaces exactly. Do not print or expose the underlying `qrCodeContent`.
+Do not inject a default Card `--payment-instrument-id`. With `--terminal-qr`, the CLI writes a UTF-8 QR to stderr and keeps stdout as one JSON envelope. Preserve the rendered block characters, line breaks, and spaces exactly. In Codex, repeat only those QR lines inside a fenced `text` block because the command transcript is collapsed/hidden from the user. Do not print or expose the underlying `qrCodeContent`.
 
 The CLI also converts the channel's PNG Data URL into a private local file before stdout is produced. This file is the fallback when the runtime cannot preserve terminal formatting or the CLI prints:
 
@@ -197,7 +197,7 @@ The Skill must consume the fixed customer action rather than the redacted channe
 
 On `SHOW_QR_AND_WAIT_EVENT`:
 
-1. Surface the UTF-8 QR emitted by `--terminal-qr` through a whitespace-preserving terminal or preformatted-text channel. If it was unavailable or the CLI printed the warning above, attach `customerAction.imagePath` through the host's native image or file-attachment capability. Do not generate another QR, expose `qrCodeContent`, or open the PNG with Agent Browser, browser MCP, computer-use, a webview, or generated HTML.
+1. When stderr contains QR block characters and no warning, extract only the contiguous QR lines and repeat them exactly in a user-visible fenced `text` block. A collapsed tool transcript does not count, and concern about chat alignment is not a reason to switch to PNG. If and only if the CLI printed the warning above or produced no block characters, attach `customerAction.imagePath` through the host's native image or file-attachment capability. Do not generate another QR, expose `qrCodeContent`, or open the PNG with Agent Browser, browser MCP, computer-use, a webview, or generated HTML.
 2. Immediately run the one any-of poll returned by the FSM:
 
    ```bash

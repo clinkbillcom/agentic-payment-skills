@@ -506,8 +506,13 @@ test('Agent Alipay QR docs preserve terminal rendering, image fallback, event, e
   assert.match(skill, /RETURN_QR_TERMINAL_AND_CLEANUP/u);
   assert.match(skill, /--payment-method-type ALIPAY --terminal-qr --format json/u);
   assert.match(skill, /stderr[\s\S]*stdout remains one JSON envelope/u);
-  assert.match(skill, /whitespace-preserving/u);
+  assert.match(skill, /Preserve every character, leading\/trailing space, and line break/u);
   assert.match(skill, /native image/u);
+  assert.match(skill, /collapsed or hidden from the user/u);
+  assert.match(skill, /fenced `text` block/u);
+  assert.match(skill, /Do not replace a successfully rendered character QR with PNG/u);
+  assert.match(skill, /do not call `nodeRepl\.emitImage`, `view_image`, or any image\/file attachment tool/u);
+  assert.match(skill, /tool transcript.*is not the user-visible response/iu);
   assert.match(skill, /omit any default Card `--payment-instrument-id`/u);
   assert.match(skill, /never expose Base64 or `qrCodeContent`/u);
   assert.match(skill, /never automatically run `pay` again/u);
@@ -515,6 +520,8 @@ test('Agent Alipay QR docs preserve terminal rendering, image fallback, event, e
   assert.match(paymentRefund, /--payment-method-type ALIPAY[\s\S]*--terminal-qr[\s\S]*--format json/u);
   assert.match(paymentRefund, /UTF-8 QR to stderr[\s\S]*stdout as one JSON envelope/u);
   assert.match(paymentRefund, /terminal QR could not be displayed; use customerAction\.imagePath instead/u);
+  assert.match(paymentRefund, /collapsed tool transcript does not count/u);
+  assert.match(paymentRefund, /concern about chat alignment is not a reason to switch to PNG/u);
   assert.match(paymentRefund, /Do not generate another QR, expose `qrCodeContent`/u);
   assert.match(paymentRefund, /epoch seconds/u);
   assert.match(paymentRefund, /Prefer a positive `expiresSecond`/u);
@@ -526,6 +533,8 @@ test('Agent Alipay QR docs preserve terminal rendering, image fallback, event, e
   assert.match(cliInvocation, /successful `pay --terminal-qr --format json`/u);
   assert.match(cliInvocation, /Never parse that character QR as JSON/u);
   assert.match(cliInvocation, /raw `qrCodeContent` are redacted/u);
+  assert.match(cliInvocation, /repeat them exactly inside a fenced `text` block/u);
+  assert.match(cliInvocation, /Do not substitute PNG because of possible alignment concerns/u);
   assert.match(readme, /character QR directly in the terminal/u);
   assert.match(readmeZh, /终端展示 CLI 生成的字符二维码/u);
   assert.doesNotMatch(paymentRefund, /Date\.parse/u);
