@@ -148,7 +148,47 @@ test('Agent Pay unknown network result does not start account event monitoring',
 
   assert.equal(result.state, PaymentWorkflowState.PAY_UNKNOWN);
   assert.equal(result.action, PaymentWorkflowAction.VERIFY_BEFORE_RETRY);
+  assert.equal(result.retryAllowed, false);
   assert.equal(result.pollCommands, undefined);
+});
+
+test('Agent Pay preserves payment_state_unknown verification context without retry', () => {
+  const result = classifyPaymentObservation({
+    exitCode: 5,
+    stderr: JSON.stringify({
+      ok: false,
+      error: {
+        type: 'payment_state_unknown',
+        code: 500,
+        message: 'payment was submitted but its QR code could not be stored',
+        details: {
+          paymentState: 'UNKNOWN',
+          paymentSubmitted: true,
+          retryAllowed: false,
+          orderId: 'order_qr_unknown',
+          paymentExecutionDetailId: 'ped_qr_unknown',
+          paymentStatus: 5,
+          failure: 'failed to store payment QR code',
+        },
+      },
+    }),
+    paymentContext,
+  });
+
+  assert.deepEqual(result, {
+    state: PaymentWorkflowState.PAY_UNKNOWN,
+    action: PaymentWorkflowAction.VERIFY_BEFORE_RETRY,
+    terminal: false,
+    reason: 'payment_state_unknown',
+    paymentStatus: 'UNKNOWN',
+    paymentTerminal: false,
+    paymentSubmitted: true,
+    retryAllowed: false,
+    orderId: 'order_qr_unknown',
+    paymentExecutionDetailId: 'ped_qr_unknown',
+    reportedPaymentStatus: 5,
+    failure: 'failed to store payment QR code',
+  });
 });
 
 test('Agent Pay 3DS continuation does not start account event monitoring', () => {

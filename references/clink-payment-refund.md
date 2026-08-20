@@ -147,7 +147,11 @@ Exit 6:
 
 Exit 5:
 
-- API error. Show `error.message`.
+- Ordinary API error: show `error.message`.
+- `error.type=payment_state_unknown`: the charge was already submitted but the QR could not be
+  materialized locally. Return `PAY_UNKNOWN / VERIFY_BEFORE_RETRY`, preserve safe
+  `error.details.orderId` and `error.details.paymentExecutionDetailId`, keep
+  `retryAllowed=false`, and verify the existing payment before any resubmission.
 
 ### Agent Alipay QR Customer Action
 
