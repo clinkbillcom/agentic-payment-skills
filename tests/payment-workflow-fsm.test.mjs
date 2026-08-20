@@ -270,6 +270,75 @@ test('Agent Alipay QR wait derives seconds from epoch expiry when expiresSecond 
   assert.match(result.orderWaitSpec.pollCommand, /--max-wait 45/u);
 });
 
+test('an expiresAt-only Agent Alipay QR accepts a success event after time advances', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: Math.floor(qrObservedAtMs / 1000) + 45,
+      expiresSecond: null,
+    }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    observedAtMs: qrObservedAtMs + 1_000,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { orderId: 'order_qr' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(qrWorkflow.orderWaitSpec.maxWaitSeconds, 45);
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_SUCCEEDED);
+  assert.equal(result.reason, 'qr_payment_event_succeeded');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('an expiresAt-only Agent Alipay QR accepts a timeout after time advances', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: Math.floor(qrObservedAtMs / 1000) + 45,
+      expiresSecond: null,
+    }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    observedAtMs: qrObservedAtMs + 1_000,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: false,
+          timedOut: true,
+          events: [],
+        },
+      }),
+    },
+  });
+
+  assert.equal(qrWorkflow.orderWaitSpec.maxWaitSeconds, 45);
+  assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_TIMED_OUT);
+  assert.equal(result.reason, 'qr_payment_event_timeout');
+  assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.retryAllowed, false);
+});
+
 test('status 5 without an explicit CLI QR action keeps the legacy pending event flow', () => {
   const result = classifyPaymentObservation({
     exitCode: 0,
