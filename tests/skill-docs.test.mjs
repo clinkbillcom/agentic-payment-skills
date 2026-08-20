@@ -486,9 +486,49 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.0"/u);
-  assert.equal(packageJson.version, '1.12.0');
+  const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
+  assert.equal(skillVersion, '1.14.0');
+  assert.equal(packageJson.version, '1.14.0');
+  assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('Agent Alipay QR docs preserve terminal rendering, image fallback, event, expiry, and cleanup', () => {
+  for (const body of [skill, paymentRefund, asyncEvents, cliInvocation]) {
+    assert.match(body, /QR_CODE_REQUIRED/u);
+    assert.match(body, /image\/png/u);
+    assert.match(body, /cleanupPath/u);
+    assert.match(body, /agent_order\.succeeded,agent_order\.failed/u);
+    assert.match(body, /paymentExecutionDetailId/u);
+  }
+
+  assert.match(skill, /SHOW_QR_AND_WAIT_EVENT/u);
+  assert.match(skill, /RETURN_QR_TERMINAL_AND_CLEANUP/u);
+  assert.match(skill, /--payment-method-type ALIPAY --terminal-qr --format json/u);
+  assert.match(skill, /stderr[\s\S]*stdout remains one JSON envelope/u);
+  assert.match(skill, /whitespace-preserving/u);
+  assert.match(skill, /native image/u);
+  assert.match(skill, /omit any default Card `--payment-instrument-id`/u);
+  assert.match(skill, /never expose Base64 or `qrCodeContent`/u);
+  assert.match(skill, /never automatically run `pay` again/u);
+  assert.match(skill, /recursively remove/u);
+  assert.match(paymentRefund, /--payment-method-type ALIPAY[\s\S]*--terminal-qr[\s\S]*--format json/u);
+  assert.match(paymentRefund, /UTF-8 QR to stderr[\s\S]*stdout as one JSON envelope/u);
+  assert.match(paymentRefund, /terminal QR could not be displayed; use customerAction\.imagePath instead/u);
+  assert.match(paymentRefund, /Do not generate another QR, expose `qrCodeContent`/u);
+  assert.match(paymentRefund, /epoch seconds/u);
+  assert.match(paymentRefund, /Prefer a positive `expiresSecond`/u);
+  assert.match(paymentRefund, /cap either result at 900 seconds/iu);
+  assert.match(paymentRefund, /\[redacted:png-data-url\]/u);
+  assert.match(paymentRefund, /real UAT Agent QR E2E/u);
+  assert.match(asyncEvents, /terminal QR becomes visible/u);
+  assert.match(asyncEvents, /\[redacted:qr-code-content\]/u);
+  assert.match(cliInvocation, /successful `pay --terminal-qr --format json`/u);
+  assert.match(cliInvocation, /Never parse that character QR as JSON/u);
+  assert.match(cliInvocation, /raw `qrCodeContent` are redacted/u);
+  assert.match(readme, /character QR directly in the terminal/u);
+  assert.match(readmeZh, /终端展示 CLI 生成的字符二维码/u);
+  assert.doesNotMatch(paymentRefund, /Date\.parse/u);
 });
 
 // The command was renamed clink-cli -> clink across every doc. A rename verified only by positive

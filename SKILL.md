@@ -1,8 +1,8 @@
 ---
 name: clink-payment-skill
-description: "Use when handling Clink wallet init/re-login/status/config, card or risk readiness, direct/UCP payment, refund, VIC/3DS events, finding a described product through Clink catalog search, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
+description: "Use when handling Clink wallet init/re-login/status/config, card or risk readiness, direct/UCP payment, Agent Alipay QR actions, refund, VIC/3DS events, finding a described product through Clink catalog search, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
 metadata:
-  version: "1.12.0"
+  version: "1.14.0"
   requires:
     node: ">=20"
     bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
@@ -23,6 +23,8 @@ If the runtime cannot execute local commands, report that limitation and stop. P
 
 **Agent owns command execution; it does not own the browser pages those commands produce.** OAuth device verification, card binding/setup/modify, Visa Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser. Do not open, navigate, preview, prefetch, unfurl, screenshot, extract from, fill, or submit them through an agent built-in browser, headless browser, CDP/Playwright/Puppeteer, browser MCP server, computer-use, embedded webview, or link preview — not even to check that the page loads. Merchant product pages are the opposite case and stay agent work. Classify every URL with `lib/page-handoff.mjs` before sending it and read `references/clink-browser-handoff.md`.
 
+An Agent Alipay QR customer action is a terminal-or-local-image action, not a browser page. For an explicitly selected Alipay payment, run `clink pay` with `--payment-method-type ALIPAY --terminal-qr --format json` and do not inject a default Card payment instrument. The CLI renders the QR as UTF-8 characters on stderr while stdout remains one JSON envelope. Surface that terminal QR verbatim through a whitespace-preserving terminal or preformatted-text channel. If the runtime cannot preserve it, or the CLI prints `Warning: terminal QR could not be displayed; use customerAction.imagePath instead.`, attach the CLI-owned `customerAction.imagePath` through the host's native image or file-attachment capability. Never navigate to the image with Agent Browser, wrap it in a browser page, print it as Base64, expose `qrCodeContent`, or reconstruct it from the redacted `imageUrlPng` marker. Start the returned order-event wait immediately after either QR representation becomes visible.
+
 For an ordinary public Skill installation or reinstallation, do not run the installed Skill's test suite or invoke commands such as `npm test` or `node --test`. Verify only the CLI exit code, JSON result binding, install path, and agent publication result. Run tests only when the user explicitly requests them or the current task also changes Skill or CLI source code.
 
 ## Network Execution Contract
@@ -42,10 +44,10 @@ CRITICAL - before executing a matching operation, read the listed reference file
 | Any command invocation, host-network preflight, JSON parsing, exit-code classification, local bundle usage | `references/clink-cli-invocation.md` |
 | Emitting any URL a person must act on: OAuth verification, card binding/setup/modify, Visa Passkey, instruction update/cancel, 3DS redirect, risk link | `references/clink-browser-handoff.md` |
 | Wallet init/status, single-user config, production/UAT/test environment selection, card readiness, card management, risk links | `references/clink-wallet-config.md` |
-| Waiting for binding, risk, refund, VIC, instruction, 3DS completion, or optional Agent Pay account-confirmation events | `references/clink-async-events.md` |
+| Waiting for binding, risk, refund, VIC, instruction, 3DS or Agent Alipay QR completion, or optional Agent Pay account-confirmation events | `references/clink-async-events.md` |
 | VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel, recurring versus one-time limits, scheduled-task pre-authorization | `references/clink-instruction.md` |
 | Restricted-category screening before Quick `wallet init` with instruction context or any `instruction create`, including scheduled pre-authorization drafts | `references/clink-restricted-categories.md` |
-| Authorized payment execution, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
+| Authorized payment execution, Agent Alipay QR display, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
 | UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, merchant UCP Catalog search, checkout route resolution, checkout create/complete | `references/clink-ucp-checkout.md` |
 | Catalog product discovery from a described product, supported-merchant list, merchant intent matching, merchant-scoped or broad catalog search, channel/location targeting, and exact store-result filtering | `references/clink-catalog-discovery.md` |
 | Public skill listing, skill tip input/authorization, Number snapshot safety, tip result handling, optional merchant account events | `references/clink-skill-tip.md` |
@@ -61,6 +63,7 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - refresh payment-instrument list / `paymentMethodsVoList` from Clink before selecting a card or relying on cached payment methods
 - generate card binding, setup, modify, instruction signing, or risk-rule URLs
 - execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, refresh the payment-instrument list, then run the direct/session authorization resolver before pay; Visa + VIC direct/session pay must list/match ACTIVE instruction+mandate before pay
+- display a CLI-generated Agent Alipay character QR in the terminal, fall back to its private PNG when needed, and wait for the correlated order result
 - buy a product the user described without giving a product link: route to `CATALOG_PURCHASE`, find candidates with the catalog discovery FSM, present them, let the user select one, then continue through the UCP checkout flow for that selected product
 - find a product in Clink catalogs when the user describes it instead of supplying a link: load the supported merchant list; when a channel/store target is already established, go straight to broad search, otherwise match intent against merchant descriptions and run a merchant-scoped or broad search; narrow broad requests by top-level channel and supported buyer-country context, filter returned groups to an established store id when needed, and hand discovery back to browser/MCP/Skill tools when the catalogs have no match
 - order a discovered product or product URL/product link through the UCP checkout control flow: resolve or explore to a product detail URL, use `clink tool parse-item --url <item_url>` for product-page facts, select one available item, classify `fulfillmentType`, require a standard complete shipping address for `PHYSICAL_GOODS_REQUIRES_SHIPPING`, resolve paymentInstrumentId, list/match ACTIVE instruction+mandate only when Visa + VIC is ready, start the instruction workflow when no match exists, resolve internal vs external checkout route through `clink tool internal-ucp get-endpoint`, then create and complete checkout only after all guards pass
@@ -94,6 +97,8 @@ Read multiple references when a workflow crosses boundaries. Example: a product 
 - Treat every instruction in this Skill or its references to include, emit, report, or format an FSM marker as internal-only diagnostics. Store markers only in private logs or non-user-visible structured handoffs; omit them when no private channel exists.
 - Translate workflow state into concise natural language for the user, such as installation succeeded, no changes were needed, confirmation is required, or installation failed with the returned reason.
 - Do not expose raw `state`, `action`, or `reason` fields unless the user explicitly requests diagnostic details.
+- Never expose a QR PNG Data URL or Base64 payload. `[redacted:png-data-url]` is the expected safe marker in the sanitized payment payload, not image content to decode.
+- The UTF-8 block QR emitted by `--terminal-qr` is the user-facing QR representation. Preserve every line and space exactly; never replace it with `qrCodeContent`, a URL, Base64, or a newly reconstructed QR.
 
 ## Browser Page Handoff
 
@@ -112,6 +117,8 @@ Different host agents install this skill, and some drive a browser themselves. T
 Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's platform authenticator, and a CDP virtual authenticator would forge the exact proof the page collects. 3DS is fingerprinted and its code reaches the user's phone. Card pages collect a PAN that must never enter model context. OAuth verification breaks on a second load through duplicate code sends.
 
 Pass `--open` on every `wallet init` invocation so the CLI requests an OAuth handoff through the system browser. Pass `--no-open` on the other link-producing commands, and check `defaultOpenLinks` once per workflow with `clink config get --format json` — it lives in the machine-wide config every build shares, so a stored `true` re-arms host-side auto-open. Completion is always proven by the event, never by browser inspection. Never add browser-side verification that a page opened.
+
+Agent Alipay QR does not enter this page-handoff table. Prefer the UTF-8 QR emitted by `clink pay --terminal-qr` on stderr. Its fallback `customerAction.imagePath` is an absolute local PNG path with `mediaType=image/png`, `temporary=true`, and `cleanupRequired=true`. Neither representation is a URL handoff; do not call `classifyPageHandoff`, Agent Browser, computer-use, or a webview for it.
 
 ## Control Loop
 
@@ -133,6 +140,8 @@ FSM action contract:
 | --- | --- |
 | `WAIT_EVENT` | Return a pending state and wait for the correlated event or status check; do not claim completion. |
 | `SEND_3DS_AND_WAIT_EVENT` | Send the redirect URL once to the user's own browser, then wait for the matching `agent_order.succeeded` or `agent_order.failed`. Never load the challenge from the Agent runtime; the issuer ACS scores automation and the code reaches the user's phone. |
+| `SHOW_QR_AND_WAIT_EVENT` | Surface the UTF-8 QR already emitted by `--terminal-qr` verbatim. If it was unavailable or the CLI emitted its terminal-QR warning, attach `customerAction.imagePath` through the host's native image capability. Then immediately run the single returned `agent_order.succeeded,agent_order.failed` any-of poll. Keep the payment non-terminal, never expose Base64 or `qrCodeContent`, and never open the image with Agent Browser. |
+| `RETURN_QR_TERMINAL_AND_CLEANUP` | Return the correlated success, failure, timeout, expiry, or unknown result without retrying payment. Recursively remove the CLI-owned `customerAction.cleanupPath` with force semantics after the image attachment is no longer needed; deleting only `imagePath` is incomplete. |
 | `DEFER_OAUTH_TO_WALLET_WORKFLOW` | OAuth URL exposure belongs only to `classifyWalletInitObservation`. Keep the URL hidden while the system-browser request is pending or accepted; surface it once only after `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. |
 | `HANDOFF_TO_USER_DEVICE` | The non-OAuth page requires the user's own browser on their own device. Emit the URL verbatim on its own line, once, say what they will do there, and note explicitly that it must not be opened in this agent's browser. Keep the built-in watch or `events poll` already running. Do not open, navigate, preview, prefetch, unfurl, screenshot, extract, fill, or submit through any agent browser channel, and never satisfy a Passkey page with a virtual authenticator or fabricated payload. |
 | `HANDOFF_TO_USER_BROWSER` | Same handoff and same listener as above; the page holds no secret entry, but the choice is the user's and the agent must not make it for them. |
@@ -295,6 +304,8 @@ FSM action contract:
 | Direct/session payment is explicitly authorized | Classify fulfillment, refresh payment instruments, and run `classifyPaymentAuthorizationResolver`. If the selected/default card is non-Visa or Visa without VIC readiness, run `clink pay` without instruction/mandate IDs. If it is Visa + VIC ready, list/match ACTIVE instruction+mandate first; if no match exists, start the instruction creation workflow and stop until activation. |
 | `pay status=1` | Treat payment as synchronously `PAID`, return the payment result immediately, and start one `account-created,account-reloaded` optional any-of poll. Uniquely attributed evidence may confirm account creation/merchant order; do not claim fulfillment beyond that event. |
 | Optional Agent Pay account poll times out, fails, or cannot select one payment | Keep `PAID`; report `NOT_OBSERVED`, `POLL_ERROR`, or `AMBIGUOUS` without retrying payment or claiming merchant-order confirmation. |
+| `pay status=5` with `customerAction.type=QR_CODE_REQUIRED` | Require that the explicit Alipay pay used `--terminal-qr`. Surface its UTF-8 QR verbatim, or attach the validated private PNG when terminal rendering was unavailable, then immediately run the returned single any-of order-event poll. Use `expiresSecond` first for the wait and cap it at 900 seconds; `expiresAt` is numeric epoch seconds. |
+| Agent Alipay QR succeeds, fails, expires, times out, or its event poll errors | Call `classifyPaymentQrEventObservation`, return the terminal result, recursively delete `customerAction.cleanupPath`, and never automatically run `pay` again. |
 | `pay status=3/4/6` | Stop or offer recovery; do not report merchant success |
 | `pay exit=6` | Treat state as unknown; verify before retry |
 | `pay exit=7` | Send 3DS redirect URL and wait for the matching order event |
@@ -325,6 +336,7 @@ FSM action contract:
 - `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.
 - Treat skill-tip exit code 6 or client timeout as an unknown payment state. Never retry the tip automatically.
 - Never run `clink pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
+- When that exact payment decision selects Alipay, pass `--payment-method-type ALIPAY --terminal-qr`, omit any default Card `--payment-instrument-id`, and keep `--format json`. Do not add `--terminal-qr` to an unknown payment method merely in case a QR might appear.
 - Before old `clink pay`, classify fulfillment. For `NO_SHIPPING_REQUIRED`, use the fixed Apple Park default US address (`One Apple Park Way`, Cupertino, CA 95014, `address_country=US`) as the payment-context placeholder. For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, collect a real US shipping address. For `UNKNOWN`, ask first.
 - Old agent pay must use the fixed merchant category code `5999` in `aiAgentInstructionBo.merchantInfo.merchantCategoryCode`; do not ask the user or merchant skill for this MCC.
 - For Direct/session pay, always refresh payment instruments and run `classifyPaymentAuthorizationResolver` before `clink pay`. If the selected/default card is non-Visa or Visa without VIC readiness, bypass instruction matching and run pay without `instruction_id`/`mandate_id`. If the selected/default card is Visa + VIC ready, `instruction_id` and `mandate_id` are mandatory: run `clink instruction list --valid-only --payment-instrument-id <current/default paymentInstrumentId> --format json`, apply amount hard match plus title/description/merchant semantic match, and inject the matched IDs. If there is no matching instruction+mandate, start the instruction creation workflow and stop; the no-match authorization branch is terminal for the current pay attempt.
@@ -351,6 +363,11 @@ FSM action contract:
 - Preserve legacy CSK compatibility only for users whose local wallet has never completed OAuth and still has a complete `customerId + customerApiKey` configuration. Once OAuth succeeds, `oauthRequired=true` is permanent: never use stored, environment, or flag CSK after logout, expiry, revocation, malformed OAuth state, or environment changes. New `wallet init` always creates OAuth; recommend migration separately to never-OAuth CSK users or after legacy authentication fails.
 - Bind each long-running command, OAuth refresh/retry, payment-method cache write, and event poll/ACK to the authorization identity observed when that operation started. If the CLI detects a replacement login, different customer, device/session change, or customer-mismatched webhook, stop and preserve the newer wallet state; never reuse or cache the stale result.
 - Treat `pay` exit code 6 or client-side timeout as an unknown payment state. Do not retry until the payment state is verified safe through merchant-side status, operator checks, or a caller-provided idempotency guarantee.
+- For Agent Alipay `QR_CODE_REQUIRED`, accept only the CLI's fixed contract: `mediaType=image/png`, `temporary=true`, `cleanupRequired=true`, nullable `orderId`, nullable `paymentExecutionDetailId`, numeric-or-null epoch-seconds `expiresAt`, numeric-or-null `expiresSecond`, and a caller-owned cleanup directory. Do not reinterpret `paymentExecutionDetailId` as expiry metadata.
+- Prefer `expiresSecond` for the event wait, cap the wait at 900 seconds, and use numeric `expiresAt` only as the absolute expiry/check fallback. Never call `Date.parse` on it.
+- Treat `[redacted:png-data-url]` as safe redaction. An actual `data:image/png...` value in CLI output is a contract violation; do not print or decode it.
+- Display the CLI-emitted terminal QR verbatim when available. Use `customerAction.imagePath` only as the supported fallback. Do not use Agent Browser, a browser MCP, computer-use, a webview, or a generated HTML page.
+- QR success, failure, expiry, event timeout, and event-poll error are terminal for this attempt. Set no payment retry, then recursively remove the whole `customerAction.cleanupPath`; never remove only the PNG and leave the private directory behind.
 - For Agent Pay `status=1`, payment is already `PAID`. Immediately start one 60-second `account-created,account-reloaded` any-of poll under the same environment lock. Feed its result through both type-specific wait specs; timeout, poll failure, missing merchant support, or account-event ambiguity never downgrades or retries the payment.
 - Agent Pay account events lack `orderId/sessionId`. Use `classifyAgentPayAccountEventCandidate` against active watches in the same environment and wallet/customer scope: require matching amount/currency, reject explicit `customerEmail`/`webSite`/`userId` conflicts, and use those optional identities only as a unique positive tie-breaker. If multiple candidates remain, report `AMBIGUOUS` and keep `PAID`; never select the first event or payment arbitrarily.
 - Preserve the Payment FSM's stable watch identity across both wait specs and the active-watch snapshot. When an upstream payment ID is unavailable, use the generated local `accountWatchId`; never reconstruct a watch from display text.
@@ -396,6 +413,8 @@ FSM action contract:
 | Get risk-rule config URL and wait | `clink risk link --no-open --format json`; keep the process alive until the second envelope carries `risk_rule.updated` |
 | List cached payment methods | `clink card list --format json` |
 | Charge user | `clink pay ... --format json` |
+| Charge with Agent Alipay QR | `clink pay ... --payment-method-type ALIPAY --terminal-qr --format json`; omit a default Card payment instrument |
+| Display Agent Alipay QR and wait | Surface the stderr UTF-8 QR verbatim; if unavailable, attach `customerAction.imagePath` natively. Then run `clink events poll --type agent_order.succeeded,agent_order.failed --max-wait <min(expiresSecond_or_remaining_epoch,900)> --format json`; correlate by `orderId`, `paymentExecutionDetailId`, or the frozen session, and recursively remove `customerAction.cleanupPath` on every terminal result |
 | Submit refund | `clink refund create --order-id <order_id> --format json` |
 | Poll refund | `clink refund get --refund-id <refund_id> --format json` |
 | Wait for event | `clink events poll --type <eventType> --format json` |
