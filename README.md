@@ -34,7 +34,6 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Explicit fresh wallet login and reauthorization
 - Card binding and management
 - Payment execution (direct and session mode)
-- Agent Alipay QR payments: show the CLI-generated private PNG through the host's native image capability, wait for the correlated success/failure event, and recursively clean up the temporary directory on every terminal result
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - Explicitly authorized public Skill installs with `clink skills install publisher/name[@version]`: omit version for latest, use `@version` for an exact release, or resolve a Number from the newest same-context two-hour list and confirm the frozen publisher/name/version before installation
@@ -49,8 +48,6 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 Different agents install this skill, and some drive a browser of their own. OAuth device verification, card binding/setup/modify, Visa Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser — not opened, navigated, previewed, screenshotted, or filled by an agent browser, headless browser, browser MCP, computer-use, or embedded webview. Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's own platform authenticator. Merchant product pages are the opposite case and remain agent work.
 
 Because completion is proven by a webhook event rather than by anything the browser reports, the user may finish on any browser or device — including a phone — and the flow still converges. `references/clink-browser-handoff.md` holds the per-page contract, and `lib/page-handoff.mjs` classifies each URL before it is sent.
-
-An Agent Alipay QR is not one of these pages. The CLI returns a local `image/png` file action; the host attaches that file directly, never opens it in Agent Browser and never prints Base64. The Skill starts the order-event wait immediately and recursively removes the caller-owned cleanup directory after success, failure, expiry, timeout, or polling error.
 
 ## Skill Structure
 
