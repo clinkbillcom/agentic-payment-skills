@@ -203,6 +203,7 @@ test('Agent Alipay QR customer action uses a native PNG and starts one correlate
   assert.deepEqual(result.orderWaitSpec, {
     eventType: 'agent_order.succeeded,agent_order.failed',
     maxWaitSeconds: 120,
+    observedAtEpochSeconds: Math.floor(qrObservedAtMs / 1000),
     noAck: false,
     pollCommand: 'clink events poll --type agent_order.succeeded,agent_order.failed --max-wait 120 --format json',
     purpose: 'AGENT_PAY_QR',
@@ -336,6 +337,45 @@ test('an expiresAt-only Agent Alipay QR accepts a timeout after time advances', 
   assert.equal(result.state, PaymentWorkflowState.QR_PAYMENT_TIMED_OUT);
   assert.equal(result.reason, 'qr_payment_event_timeout');
   assert.equal(result.cleanupPath, qrCleanupPath);
+  assert.equal(result.retryAllowed, false);
+});
+
+test('an expiresAt-only Agent Alipay QR rejects a tampered frozen wait', () => {
+  const qrWorkflow = classifyPaymentObservation({
+    exitCode: 0,
+    stdout: qrOutput({
+      expiresAt: Math.floor(qrObservedAtMs / 1000) + 45,
+      expiresSecond: null,
+    }),
+    paymentContext,
+    observedAtMs: qrObservedAtMs,
+  });
+  qrWorkflow.orderWaitSpec = {
+    ...qrWorkflow.orderWaitSpec,
+    maxWaitSeconds: 46,
+    pollCommand: 'clink events poll --type agent_order.succeeded,agent_order.failed --max-wait 46 --format json',
+  };
+  const result = classifyPaymentQrEventObservation({
+    qrWorkflow,
+    observedAtMs: qrObservedAtMs + 1_000,
+    pollObservation: {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          ready: true,
+          timedOut: false,
+          events: [{
+            type: 'agent_order.succeeded',
+            data: { orderId: 'order_qr' },
+          }],
+        },
+      }),
+    },
+  });
+
+  assert.equal(result.state, PaymentWorkflowState.CLI_ERROR);
+  assert.equal(result.reason, 'invalid_qr_workflow_context');
   assert.equal(result.retryAllowed, false);
 });
 

@@ -4840,12 +4840,14 @@ var CliError = class extends Error {
   type;
   exitCode;
   code;
-  constructor(type, message, exitCode, code) {
+  details;
+  constructor(type, message, exitCode, code, details) {
     super(message);
     this.name = "CliError";
     this.type = type;
     this.exitCode = exitCode;
     this.code = code ?? exitCode;
+    this.details = details;
   }
 };
 function validationError(message) {
@@ -4859,6 +4861,9 @@ function authError(message, code = 401) {
 }
 function apiError(message, code = 400) {
   return new CliError("api_error", message, EXIT_CODES.API, code);
+}
+function paymentStateUnknownError(message, details) {
+  return new CliError("payment_state_unknown", message, EXIT_CODES.API, 500, details);
 }
 function networkError(message) {
   return new CliError("network_error", message, EXIT_CODES.NETWORK);
@@ -8395,14 +8400,17 @@ ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
   If --payment-method-type is omitted, pay uses CARD and the cached default payment instrument.
-  CARD and BALANCE without an explicit instrument keep using the cached default payment method.
+  CARD without an explicit instrument keeps using the cached default payment method.
+  BALANCE without an explicit instrument omits the payment instrument so Order keeps the legacy
+  balance route instead of receiving an unrelated cached default card.
   When ALIPAY is explicit and --payment-instrument-id is omitted, Order resolves or creates the
   Alipay payment instrument. This path does not use the cached default card or require a pre-bound
   Alipay method.
-  Other non-CARD/BALANCE types refresh payment methods and require one matching type. When several
-  match, exactly one must be marked default or the caller must pass --payment-instrument-id.
-  An explicit payment instrument for a non-CARD/BALANCE type is validated against the refreshed
-  list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
+  Other non-CARD/BALANCE types refresh payment methods and require one matching type, except for
+  Order-resolved ALIPAY without an explicit instrument. When several match, exactly one must be
+  marked default or the caller must pass --payment-instrument-id.
+  An explicit payment instrument for another non-CARD/BALANCE type is validated against the
+  refreshed list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
   Refresh cached payment methods with clink card binding-link when needed.
   For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
   For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
@@ -8417,6 +8425,9 @@ Notes:
   event consumers use expiresSecond with a maximum of 900 seconds. The PNG Data URL is never
   printed. After payment reaches a terminal state or expires, the caller must remove
   customerAction.cleanupPath recursively.
+  If the payment was submitted but the QR cannot be validated or stored, pay returns
+  error.type=payment_state_unknown with retryAllowed=false and the existing order/payment
+  execution IDs. Do not retry automatically; verify the existing payment first.
 
 Examples:
   clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
@@ -10094,7 +10105,8 @@ function printError(error, options2) {
     error: {
       type: cliError.type,
       code: cliError.code,
-      message: cliError.message
+      message: cliError.message,
+      ...cliError.details ? { details: cliError.details } : {}
     }
   };
   process.stderr.write(serialize(envelope, options2.format));
@@ -10424,12 +10436,12 @@ function compact(value) {
 
 // dist/payment/method-selection.js
 var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
-var ORDER_RESOLVED_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
+var OMIT_PAYMENT_INSTRUMENT_WHEN_ABSENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY", "BALANCE"]);
 function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
   return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
 }
-function shouldResolvePaymentInstrumentInOrder(paymentMethodType) {
-  return ORDER_RESOLVED_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+function shouldOmitPaymentInstrumentWhenAbsent(paymentMethodType) {
+  return OMIT_PAYMENT_INSTRUMENT_WHEN_ABSENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
 }
 function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
   const normalizedType = normalizePaymentMethodType(paymentMethodType);
@@ -16031,10 +16043,10 @@ async function handlePayCommand(context) {
   }
   const paymentMethodApi = createPaymentMethodApi(context);
   let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
-  const resolvePaymentInstrumentInOrder = !paymentInstrumentId && shouldResolvePaymentInstrumentInOrder(paymentMethodType);
+  const omitPaymentInstrumentWhenAbsent = !paymentInstrumentId && shouldOmitPaymentInstrumentWhenAbsent(paymentMethodType);
   const requiresTypeMatch = requiresTypeMatchedPaymentInstrument(paymentMethodType);
-  const typeValidationMethods = requiresTypeMatch && !resolvePaymentInstrumentInOrder ? context.globalOptions.dryRun ? getStoredPaymentMethods(context) : await paymentMethodApi.refreshPaymentMethods() : void 0;
-  if (!paymentInstrumentId && !resolvePaymentInstrumentInOrder) {
+  const typeValidationMethods = requiresTypeMatch && !omitPaymentInstrumentWhenAbsent ? context.globalOptions.dryRun ? getStoredPaymentMethods(context) : await paymentMethodApi.refreshPaymentMethods() : void 0;
+  if (!paymentInstrumentId && !omitPaymentInstrumentWhenAbsent) {
     paymentInstrumentId = requiresTypeMatch ? selectPaymentInstrumentByType(typeValidationMethods, paymentMethodType) : await resolveDefaultPaymentInstrumentId(context);
   } else if (paymentInstrumentId && requiresTypeMatch) {
     paymentInstrumentId = validatePaymentInstrumentType(typeValidationMethods, paymentInstrumentId, paymentMethodType);
@@ -16097,7 +16109,18 @@ async function handlePayCommand(context) {
     return EXIT_CODES.THREE_DS;
   }
   if (execution.qrCode) {
-    const customerAction = await materializeQrCodeCustomerAction(execution.qrCode);
+    const qrCode = execution.qrCode;
+    const customerAction = await materializeQrCodeCustomerAction(qrCode).catch((error) => {
+      throw paymentStateUnknownError("payment was submitted but its QR code could not be stored; do not retry automatically", {
+        paymentState: "UNKNOWN",
+        paymentSubmitted: true,
+        retryAllowed: false,
+        orderId: qrCode.orderId,
+        paymentExecutionDetailId: qrCode.paymentExecutionDetailId,
+        paymentStatus: execution.status ?? null,
+        failure: error instanceof CliError ? error.message : "failed to store payment QR code"
+      });
+    });
     printSuccess(addPaymentMethodsRefreshWarning(buildQrCodePaymentOutput(execution.data, customerAction), execution.paymentMethodsRefreshWarning), context.globalOptions.format);
     return EXIT_CODES.OK;
   }
