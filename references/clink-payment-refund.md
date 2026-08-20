@@ -123,6 +123,7 @@ Never invent amount, currency, merchant ID, session ID, order ID, payment method
 Exit 0:
 
 - `data.status === 1`: payment succeeded. Save `data.orderId` when present, return `paymentStatus=PAID` immediately, and start the optional account-event flow below.
+- `data.channelPaymentResponse.status === 5` plus `data.customerAction.type === "QR_CODE_REQUIRED"`: show the CLI-generated PNG through the host's native image capability and enter the Agent Alipay QR flow below.
 - `data.status === 3`: card declined. Offer `card setup-link --no-open` and ask before retry.
 - `data.status === 4`: risk rule blocked. Show `risk get`, generate `risk link --no-open`, ask before retry.
 - `data.status === 6`: other failure. Show the API message.
@@ -146,7 +147,50 @@ Exit 6:
 
 Exit 5:
 
-- API error. Show `error.message`.
+- Ordinary API error: show `error.message`.
+- `error.type=payment_state_unknown`: the charge was already submitted but the QR could not be
+  materialized locally. Return `PAY_UNKNOWN / VERIFY_BEFORE_RETRY`, preserve safe
+  `error.details.orderId` and `error.details.paymentExecutionDetailId`, keep
+  `retryAllowed=false`, and verify the existing payment before any resubmission.
+
+### Agent Alipay QR Customer Action
+
+The CLI converts the channel's PNG Data URL into a private local file before stdout is produced. The Skill must consume the fixed customer action rather than the redacted channel field:
+
+```json
+{
+  "type": "QR_CODE_REQUIRED",
+  "imagePath": "/tmp/clink-cli-payment-qr-.../payment-qr.png",
+  "mediaType": "image/png",
+  "temporary": true,
+  "cleanupRequired": true,
+  "orderId": "order_xxx",
+  "paymentExecutionDetailId": "ped_xxx",
+  "expiresAt": 1800000000,
+  "expiresSecond": 120,
+  "cleanupPath": "/tmp/clink-cli-payment-qr-..."
+}
+```
+
+`orderId`, `paymentExecutionDetailId`, `expiresAt`, and `expiresSecond` are nullable. `expiresAt` is numeric epoch seconds, never an ISO string. Prefer a positive `expiresSecond` for the event wait; otherwise derive the remaining seconds from `expiresAt`. Cap either result at 900 seconds. A zero duration or elapsed epoch is already expired.
+
+`imageUrlPng` in the sanitized channel payload is normally `[redacted:png-data-url]`. That marker is expected and must not be treated as a leaked image. If an actual `data:image/png...` string reaches stdout, fail closed without printing or decoding it.
+
+On `SHOW_QR_AND_WAIT_EVENT`:
+
+1. Attach `customerAction.imagePath` through the host's native image or file-attachment capability. Do not open it with Agent Browser, browser MCP, computer-use, a webview, or generated HTML.
+2. Immediately run the one any-of poll returned by the FSM:
+
+   ```bash
+   clink events poll --type agent_order.succeeded,agent_order.failed --max-wait <seconds> --format json
+   ```
+
+3. Pass the poll output to `classifyPaymentQrEventObservation`. Correlate the event with `orderId`, `paymentExecutionDetailId`, or the frozen pay session. A type-only event for another payment stays non-terminal.
+4. A correlated `agent_order.succeeded` returns `PAID`; a correlated `agent_order.failed` returns `FAILED`. Timeout, QR expiry, and poll errors return terminal `UNKNOWN`.
+5. Never automatically rerun `clink pay` for any QR terminal result.
+6. After any terminal result, recursively remove `customerAction.cleanupPath` with force semantics. Delete the directory, not only `imagePath`.
+
+For a real UAT Agent QR E2E, verify that the host visibly attaches the PNG, the user can scan it with Alipay, one correlated order event ends the wait, no browser page is opened, the payment command is not resubmitted, and the cleanup directory no longer exists after the terminal result.
 
 ### Optional Account Confirmation After Agent Pay Success
 

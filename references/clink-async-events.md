@@ -1,6 +1,6 @@
 # Async Events
 
-Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, post-3DS payment completion, optional Agent Pay account confirmation, or optional skill-tip merchant account evidence.
+Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, Agent Alipay QR or post-3DS payment completion, optional Agent Pay account confirmation, or optional skill-tip merchant account evidence.
 
 ## Model
 
@@ -24,6 +24,8 @@ When a command prints a URL for user action, the CLI normally keeps running and 
 
 For most commands, the first JSON envelope contains the URL or immediate command result. Watched `card binding-link` is the deliberate exception: it waits for the first successful Event Hub poll, then emits the URL with `watchReady=true`. If a built-in watch observes its matching event, the CLI emits a second JSON envelope on stdout with the processed event.
 
+Agent Alipay QR is another deliberate exception, but it is not a link watch. `pay` returns a local `QR_CODE_REQUIRED` file action with `mediaType=image/png` and exits so the host can attach the PNG. The Skill must start one explicit `agent_order.succeeded,agent_order.failed` any-of poll immediately after attaching the image.
+
 `wallet init` is deliberately different. Before OAuth completes, its original process polls the OAuth device-token endpoint; it does not poll the Event Hub and needs no completion event. Consider that poll active only after the current attempt prints the complete `Waiting for authorization...` marker. After OAuth completes, init performs an internal payment-method refresh with watching disabled and may return `data.bindingUrl`; never emit that unprotected init copy. If the refresh proves `paymentMethodCount=0`, start `card binding-link --no-open --format json` without `--no-watch`. The command scopes its watch to `payment_method.added`, waits for its first Event Hub poll to succeed, then emits a sanitized origin-only URL with `data.watchReady=true` and `data.watchEventType=payment_method.added`. You must return that watched URL to the user while the same process remains alive, and keep it running for the matching second envelope; do not stop at OAuth-ready or add an `events poll` beside it. A positive count needs no first-card watch, while a refresh error leaves OAuth ready but card readiness unknown.
 
 Quick instruction setup has three distinct stages. First, the built-in binding watch yields `payment_method.added`; this proves only that the card exists, not that VIC is ready. Extract that event's exact `paymentInstrumentId`, refresh with `clink card binding-link --no-watch --no-open --format json`, and feed the nullable recorded `pendingInstructionId`, exact card ID, and refreshed list through `classifyQuickInstructionActivationGate`. Second, only a Visa card with a Quick ID and `visaRegistrationSucceeded !== true` enters one `singleAttempt` same-card any-of poll for canonical `payment_method.update` (requiring `visaRegistrationSucceeded=true`) or `vic_device.binding_succeeded`; every completed outcome routes to one refresh with the returned `vicReadinessWaitAttempted=true` continuation and never exposes a resume poll. Third, only Visa + VIC-ready + a non-null Quick ID reaches exact-ID `instruction get` and, while still activatable, one `singleAttempt` bounded `purchase_instruction.activated` wait plus final GET. Preserve the returned `activationWaitAttempted=true` waitSpec; final PENDING returns to the regular authorization list with no second Quick poll. A null ID or a non-Visa/non-VIC fallback returns to the regular authorization resolver rather than listing instructions unconditionally. Never start any Quick wait without a fresh binding ceremony: a wallet that was already ready produces no binding-driven activation.
@@ -44,6 +46,8 @@ That line means the Passkey URL is about to go out with nothing listening. Run t
 ## Start Monitoring At Emit Time
 
 Start the event listener the moment a browser-action URL is emitted, concurrently with sending that URL to the user. Who may open that URL is a separate question with its own contract in `references/clink-browser-handoff.md`: the event is the proof of completion, so never verify a page by loading it from the Agent runtime. Do not wait for the user to report "done" before you begin listening; the completion event can arrive before, during, or after the user's message. Start a non-blocking watch through the available runtime and keep working while it listens, then correlate the event when it arrives.
+
+For Agent Alipay QR, "emit time" means the moment the host attaches `customerAction.imagePath`. This is a native image action, not a URL handoff. Start the returned order-event poll immediately; do not wait for the user to say they scanned it.
 
 This applies to every browser-action URL, including hand-built URLs that are not CLI command output. In particular, the **Visa Passkey registration URL** (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) is not one of the built-in-watch commands above, so it has **no built-in watch**. Cover it with a concurrently-started `events poll` beginning when you send the URL.
 
@@ -115,6 +119,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | --- | --- |
 | Card binding/update/default change | same customer and, when known, same `paymentInstrumentId` |
 | 3DS order result | same `orderId` or `sessionId` returned by the payment attempt |
+| Agent Alipay QR order result | same `orderId`, `paymentExecutionDetailId`, or frozen pay `sessionId` returned with the QR attempt |
 | UCP checkout payment success | exact non-empty string `checkoutId` carried by the checkout and the event payload's nested `data.checkoutId` / `data.checkout_id`. Event top-level fields and `resourceId` are never checkout correlation keys. Event `orderId`/`resourceId` is the Clink Payment `paymentOrderId`, not the UCP order ID, and cannot substitute for checkout correlation or order lookup. |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
@@ -134,6 +139,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or canonical `payment_method.update` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
+| Agent Alipay QR result | one any-of poll for `agent_order.succeeded,agent_order.failed`, correlated by `orderId`, `paymentExecutionDetailId`, or frozen session |
 | UCP checkout payment success | `agent_order.succeeded` with exact matching `checkoutId`; poll with `clink events poll --type agent_order.succeeded --checkout-id <checkoutId> --max-wait 900 --format json` after checkout complete returns `completed` |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
@@ -145,6 +151,9 @@ If the right event type appears for a different resource, keep the current workf
 - Do not cache, acknowledge, or correlate an event after the CLI reports a changed login or customer mismatch; preserve the newer wallet and re-observe status first.
 - Start listening at URL-emit time; do not wait for the user to report completion before you begin.
 - Do not busy-retry the initiating link command to check status.
+- Agent Alipay QR timeout, expiry, failure, success, and poll error are terminal for that attempt. Never rerun `pay`; recursively remove the CLI-owned `customerAction.cleanupPath` instead of returning a resume command.
+- A QR `expiresAt` value is epoch seconds. Prefer `expiresSecond` for the wait and cap it at 900 seconds; never parse the epoch with `Date.parse`.
+- `[redacted:png-data-url]` is safe output and not a QR payload. Display only the private `imagePath` through the host's native image capability, never Agent Browser or Base64.
 - Remember that typed `--no-ack` still acknowledges types outside its selected set; only an untyped `--no-ack` poll is a full peek.
 - A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
 - A synchronous successful Agent Pay is already `PAID`. Run one `account-created,account-reloaded` any-of poll immediately, then classify the same result for both wait specs with `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.

@@ -4,9 +4,10 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const wrapperPath = fileURLToPath(new URL('../bin/clink', import.meta.url));
 const bundlePath = fileURLToPath(
   new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
 );
@@ -85,7 +86,7 @@ function runBundleJson(args) {
   return JSON.parse(runBundle(args));
 }
 
-function runBundleAsync(args, env = {}) {
+function runCommandAsync(command, args, env = {}) {
   return new Promise((resolve, reject) => {
     const childEnv = { ...testEnv, ...env };
     for (const [key, value] of Object.entries(childEnv)) {
@@ -93,7 +94,7 @@ function runBundleAsync(args, env = {}) {
         delete childEnv[key];
       }
     }
-    const child = spawn(process.execPath, [bundlePath, ...args], {
+    const child = spawn(command, args, {
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -106,6 +107,14 @@ function runBundleAsync(args, env = {}) {
     child.once('error', reject);
     child.once('close', (status) => resolve({ status, stdout, stderr }));
   });
+}
+
+function runBundleAsync(args, env = {}) {
+  return runCommandAsync(process.execPath, [bundlePath, ...args], env);
+}
+
+function runWrapperAsync(args, env = {}) {
+  return runCommandAsync(wrapperPath, args, env);
 }
 
 function spawnBundleLive(args, env = {}) {
@@ -1463,8 +1472,10 @@ test('vendored CLI exposes the strict checkout event selector', () => {
   assert.match(eventsHelp, /--checkout-id <id>/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
-  assert.match(bundleSource, /data\.checkout_id/u);
-  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /data\?\.checkout_id/u);
+  assert.match(bundleSource, /agentInstructionInfo", "ucpCheckoutId"/u);
+  assert.match(bundleSource, /nextToken: checkoutNextToken/u);
+  assert.match(bundleSource, /cursor-backed selector support is required/u);
   assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
   assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
   assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
@@ -1815,12 +1826,138 @@ test('vendored events poll rejects checkout id without one supported event type'
   }
 });
 
+test('bin/clink vendored pay emits the Agent Alipay private PNG contract', async () => {
+  const imageUrlPng = [
+    'data:image/png;base64,',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42Y',
+    'AAAAASUVORK5CYII=',
+  ].join('');
+  const requestPaths = [];
+  const chargeBodies = [];
+  const server = createServer(async (request, response) => {
+    requestPaths.push(request.url);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    if (request.url === '/agent/cwallet/card/bindingLink') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+          paymentMethodsVoList: [{
+            paymentInstrumentId: 'pi_alipay_contract',
+            paymentMethodType: 'ALIPAY',
+            isDefault: true,
+          }],
+        },
+      }));
+      return;
+    }
+    if (request.url === '/agent/order/charge') {
+      chargeBodies.push(await readRequestJson(request));
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          orderId: 'order_qr_contract',
+          channelPaymentResponse: {
+            status: 5,
+            paymentExecutionDetailId: 'ped_qr_contract',
+            action: {
+              walletHandleRedirectOrDisplayQrCode: {
+                imageUrlPng,
+                normalUrl: 'https://wallet.example/pay',
+                expiresAt: 1_900_000_000,
+                expiresSecond: 120,
+              },
+            },
+          },
+        },
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: 404, message: 'not found' }));
+  });
+  const address = await listen(server);
+  const home = await mkdtemp(join(tmpdir(), 'clink-agent-alipay-contract-'));
+  let cleanupPath;
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const result = await runWrapperAsync([
+      'pay',
+      '--merchant-id', 'merchant_qr_contract',
+      '--amount', '1.00',
+      '--currency', 'USD',
+      '--payment-instrument-id', 'pi_alipay_contract',
+      '--payment-method-type', 'ALIPAY',
+      '--format', 'json',
+    ], {
+      HOME: home,
+      CLINK_BASE_URL: baseUrl,
+      CLINK_CUSTOMER_ID: 'cus_qr_contract',
+      CLINK_CUSTOMER_API_KEY: 'csk_qr_contract',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.includes(imageUrlPng), false);
+    assert.doesNotMatch(result.stdout, /iVBORw0KGgo/u);
+    const output = JSON.parse(result.stdout);
+    const action = output.data.customerAction;
+    cleanupPath = action.cleanupPath;
+    assert.deepEqual(
+      {
+        ...action,
+        imagePath: '<image>',
+        cleanupPath: '<directory>',
+      },
+      {
+        type: 'QR_CODE_REQUIRED',
+        mediaType: 'image/png',
+        imagePath: '<image>',
+        temporary: true,
+        cleanupRequired: true,
+        cleanupPath: '<directory>',
+        orderId: 'order_qr_contract',
+        paymentExecutionDetailId: 'ped_qr_contract',
+        expiresAt: 1_900_000_000,
+        expiresSecond: 120,
+      },
+    );
+    assert.equal(dirname(action.imagePath), action.cleanupPath);
+    assert.deepEqual(
+      [...(await readFile(action.imagePath)).subarray(0, 8)],
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+    );
+    assert.equal(
+      output.data.channelPaymentResponse.action
+        .walletHandleRedirectOrDisplayQrCode.imageUrlPng,
+      '[redacted:png-data-url]',
+    );
+    assert.deepEqual(chargeBodies, [{
+      paymentInstrumentId: 'pi_alipay_contract',
+      paymentMethodType: 'ALIPAY',
+      merchantId: 'merchant_qr_contract',
+      customAmount: 1,
+      paymentCurrency: 'USD',
+      aiAgentInstructionBo: {
+        merchantInfo: { merchantCategoryCode: '5999' },
+      },
+    }]);
+    assert.equal(requestPaths.includes('/agent/order/charge'), true);
+  } finally {
+    if (cleanupPath) {
+      await rm(cleanupPath, { recursive: true, force: true });
+    }
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.16');
+  assert.equal(vendorPackage.version, '0.2.17');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '0e63974ad26daa94640c5c3132069695b91e9336',
+    'd22dd70706dd03f0a21581ba49fad08e5cb107bf',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

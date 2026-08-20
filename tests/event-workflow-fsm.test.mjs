@@ -738,3 +738,70 @@ test('event poll observation reads the last JSON envelope from built-in watch st
   assert.equal(result.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
   assert.equal(result.event.resourceId, 'ins_watch');
 });
+
+test('payment events correlate by paymentExecutionDetailId when no order or session id exists', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'agent_order.succeeded',
+      data: { paymentExecutionDetailId: 'ped_qr' },
+    },
+    { paymentExecutionDetailId: 'ped_qr' },
+  );
+
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.missingKeys, []);
+  assert.deepEqual(result.mismatchedKeys, []);
+  assert.equal(result.workflow.state, EventWorkflowState.PAY_ASYNC_SUCCEEDED);
+});
+
+test('payment event rejects a conflicting order id even when its PED matches', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'agent_order.succeeded',
+      data: {
+        orderId: 'order_other',
+        paymentExecutionDetailId: 'ped_qr',
+      },
+    },
+    {
+      orderId: 'order_qr',
+      paymentExecutionDetailId: 'ped_qr',
+    },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.missingKeys, []);
+  assert.deepEqual(result.mismatchedKeys, ['orderId']);
+});
+
+test('payment event may correlate by order when the event omits the expected PED', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'agent_order.succeeded',
+      data: { orderId: 'order_qr' },
+    },
+    {
+      orderId: 'order_qr',
+      paymentExecutionDetailId: 'ped_qr',
+    },
+  );
+
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.missingKeys, []);
+  assert.deepEqual(result.mismatchedKeys, []);
+});
+
+test('payment event resourceId never substitutes for paymentExecutionDetailId', () => {
+  const result = correlateEventWorkflow(
+    {
+      type: 'agent_order.succeeded',
+      resourceId: 'ped_qr',
+      data: {},
+    },
+    { paymentExecutionDetailId: 'ped_qr' },
+  );
+
+  assert.equal(result.matched, false);
+  assert.deepEqual(result.missingKeys, ['paymentExecutionDetailId']);
+  assert.deepEqual(result.mismatchedKeys, []);
+});
