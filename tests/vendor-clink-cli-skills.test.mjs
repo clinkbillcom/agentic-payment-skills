@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -1484,8 +1483,10 @@ test('vendored CLI exposes the strict checkout event selector', () => {
   assert.match(eventsHelp, /--checkout-id <id>/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
-  assert.match(bundleSource, /data\.checkout_id/u);
-  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /data\?\.checkout_id/u);
+  assert.match(bundleSource, /agentInstructionInfo", "ucpCheckoutId"/u);
+  assert.match(bundleSource, /nextToken: checkoutNextToken/u);
+  assert.match(bundleSource, /cursor-backed selector support is required/u);
   assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
   assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
   assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
@@ -1836,23 +1837,28 @@ test('vendored events poll rejects checkout id without one supported event type'
   }
 });
 
-test('vendored CLI metadata tracks the latest upstream package version', () => {
-  assert.equal(vendorPackage.version, '0.2.15');
+test('vendored CLI metadata tracks the main edition and production contracts', () => {
+  assert.equal(vendorPackage.version, '0.2.22');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'a4442cc7aafa59d55be8484ac4cd9916b0c6c7e0',
+    'f11618047b7266fc869fc51b5697130b5e169b23',
   );
-  assert.equal(
-    vendorPackage.bundleSha256,
-    createHash('sha256').update(bundleSource).digest('hex'),
-  );
+  assert.equal('backportCommits' in vendorPackage, false);
+  assert.equal('bundleSha256' in vendorPackage, false);
   assert.equal('upstreamDirty' in vendorPackage, false);
   assert.equal('upstreamPatch' in vendorPackage, false);
+  assert.match(
+    bundleSource,
+    /if \(!sameFingerprint\(currentFingerprint, placedFingerprint\)\)/u,
+  );
+  assert.match(bundleSource, /if \(parentCreated && removedPlacedTarget\)/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/browser-handoffs/u);
-  assert.match(bundleSource, /\/oauth\/cli-handoff\//u);
-  assert.match(bundleSource, /data\.complete_url/u);
-  assert.match(bundleSource, /parseCompleteUrl/u);
+  assert.match(
+    bundleSource,
+    /completeUrl = parseCompleteUrl\(requiredString\(data\.complete_url\), portalOrigin, handoffId\)/u,
+  );
+  assert.match(bundleSource, /decodeURIComponent\(lastSegment\) !== handoffId/u);
   assert.match(bundleSource, /urn:ietf:params:oauth:grant-type:device_code/u);
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);

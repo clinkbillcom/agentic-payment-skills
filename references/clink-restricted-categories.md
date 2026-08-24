@@ -22,8 +22,9 @@ together.
 ## When The Gate Runs
 
 Run `classifyInstructionRestriction` from `lib/restricted-categories.mjs`
-before every `instruction create`, on all of these paths:
+before every request that can create an instruction, on all of these paths:
 
+- Quick setup that carries `instructionContext` / `instruction_context` through `wallet init`.
 - The direct/session pay no-match branch (`START_AUTHORIZATION_DRAFT_AND_WAIT`).
 - Every scheduled-task pre-authorization draft (`CREATE_SCHEDULED_AUTHORIZATION_DRAFT`).
 - The UCP checkout no-match branch that falls back to creating an instruction.
@@ -32,7 +33,9 @@ Pass the complete purchase context: instruction title and description, every
 mandate (title, description, `merchantCategoryCode`), merchant name/domain,
 product name/title/description/URL (including a UCP `item` or
 `selectedProduct` object and direct-pay `products`), and the user's own words
-for the request. Screening a trimmed subset of the context defeats the gate.
+for the request. The classifier accepts Quick context in nested camelCase or
+snake_case form and screens its title, description, mandates, and mandate MCCs.
+Screening a trimmed subset of the context defeats the gate.
 
 ## Restricted Categories
 
@@ -119,7 +122,8 @@ site" is `GAMBLING`, even if no keyword fires.
 
 When the classifier answers `REFUSE_RESTRICTED_INSTRUCTION`:
 
-- Do not run `instruction create`, do not create any draft, and do not send a
+- Do not run Quick `wallet init` with that instruction context, do not run
+  `instruction create`, do not create any draft, and do not send a
   Passkey or registration URL for this purchase.
 - Tell the user, in their language, which category (类目) is restricted and
   that Clink cannot create a purchase authorization for it. Do not paste the

@@ -250,6 +250,36 @@ test('restricted wording is caught anywhere in the purchase context', () => {
   }
 });
 
+test('quick wallet-init instruction context passes through the same restriction gate', () => {
+  assertBlocked(
+    classifyInstructionRestriction({
+      instructionContext: {
+        title: 'Weekly membership',
+        mandates: [{ description: 'Casino chips', merchantCategoryCode: '7995' }],
+      },
+    }),
+    RestrictedCategory.GAMBLING,
+  );
+  assertBlocked(
+    classifyInstructionRestriction({
+      instruction_context: JSON.stringify({
+        title: 'Monthly plan',
+        mandates: [{ description: 'Vape supplies' }],
+      }),
+    }),
+    RestrictedCategory.TOBACCO,
+  );
+
+  assertInvalid(
+    classifyInstructionRestriction({ instruction_context: '[]' }),
+    'invalid_instruction_context',
+  );
+  assertInvalid(
+    classifyInstructionRestriction({ instructionContext: '{bad json' }),
+    'invalid_instruction_context_json',
+  );
+});
+
 test('the payment router selected-product shape is screened without remapping', () => {
   const routed = classifyPaymentIntent({
     text: '第一个',
@@ -573,7 +603,9 @@ test('the preflight is documented on every instruction-creation path', () => {
   assert.match(skill, /classifyInstructionRestriction/u);
   assert.match(skill, /`REFUSE_RESTRICTED_INSTRUCTION`/u);
   assert.match(skill, /`CONTINUE_INSTRUCTION_CREATION`/u);
-  assert.match(skill, /Never run `clink instruction create` on any path/u);
+  assert.match(skill, /Never carry instruction context through Quick `wallet init`/u);
+  assert.match(skill, /never run `clink instruction create` on any later path/u);
+  assert.match(restrictedDoc, /Quick setup that carries `instructionContext`/u);
   assert.match(restrictedDoc, /Never rephrase, translate/u);
 
   assert.match(instruction, /classifyInstructionRestriction/u);

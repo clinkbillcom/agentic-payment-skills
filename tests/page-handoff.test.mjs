@@ -325,7 +325,7 @@ test('completion events match the flows that prove them', () => {
   );
   assert.deepEqual(
     classifyPageHandoff({ kind: PageHandoffKind.VIC_PASSKEY_REGISTRATION }).completionEvents,
-    ['vic_device.binding_succeeded', 'payment_method.updated'],
+    ['vic_device.binding_succeeded', 'payment_method.update'],
   );
   assert.deepEqual(
     classifyPageHandoff({

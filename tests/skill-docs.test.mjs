@@ -504,8 +504,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.11\.2"/u);
-  assert.equal(packageJson.version, '1.11.2');
+  assert.match(skill, /version:\s*"1\.12\.1"/u);
+  assert.equal(packageJson.version, '1.12.1');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -955,4 +955,46 @@ test('the prohibition never spills onto merchant product pages', () => {
   assert.match(skill, /Merchant product pages are the opposite case and stay agent work/u);
   assert.match(skill, /ALLOW_AGENT_BROWSER/u);
   assert.match(browserHandoff, /`AGENT_ALLOWED` is not weakened by any of this/u);
+});
+
+// Quick instruction setup (2026-08) rides the instruction context on wallet init. CWallet does not
+// activate at payment_method.added, though: that event precedes VIC readiness. The docs must pin
+// the restricted-category preflight, exact-card refresh, bounded VIC stage, null-id regular-gate
+// fallback, and final exact instruction+card verification.
+test('quick instruction setup is documented end to end', () => {
+  assert.match(skill, /classifyQuickInstructionActivationGate/u);
+  assert.match(skill, /wallet init --email <email> --title <title> --mandates/u);
+  assert.match(skill, /null is ambiguous between deliberate skip and swallowed creation failure/u);
+  assert.match(skill, /never means “list unconditionally(?:\.”|”\.)/u);
+  assert.match(skill, /WAIT_VIC_READINESS/u);
+  assert.match(skill, /payment_method\.update,vic_device\.binding_succeeded/u);
+  assert.match(skill, /singleAttempt=true/u);
+  assert.match(skill, /vicReadinessWaitAttempted=true/u);
+  assert.match(skill, /activationWaitAttempted=true/u);
+  assert.match(skill, /never supplies a resume poll/u);
+  assert.match(skill, /exact new `paymentInstrumentId`/u);
+  assert.match(skill, /informational only/u);
+  assert.match(skill, /newest intent wins/u);
+  assert.match(walletConfig, /## Quick Instruction Setup/u);
+  assert.match(walletConfig, /`--title` and `--mandates` become required together/u);
+  assert.match(walletConfig, /rejects `--payment-instrument-id` and `--extra`/u);
+  assert.match(walletConfig, /must carry `description`, `amountLimit`, and `currencyCode`/u);
+  assert.match(walletConfig, /at most 10 entries/u);
+  assert.match(walletConfig, /16384 UTF-8 bytes/u);
+  assert.match(walletConfig, /no usable Quick ID was returned/u);
+  assert.match(walletConfig, /classifyInstructionRestriction/u);
+  assert.match(instruction, /## Quick Instruction/u);
+  assert.match(instruction, /never satisfies `clink instruction list --valid-only`/u);
+  assert.match(instruction, /supersedes the older pending instruction server-side/u);
+  assert.match(instruction, /only card-addition evidence/u);
+  assert.match(instruction, /Never fall back to the default or first card/u);
+  assert.match(instruction, /null cannot distinguish a deliberate backend skip from swallowed creation failure/u);
+  assert.match(instruction, /Bind verification to both that exact instruction ID and the newly added card ID/u);
+  assert.match(ucpCheckout, /picks it up naturally/u);
+  assert.match(asyncEvents, /three distinct stages/u);
+  assert.match(asyncEvents, /proves only that the card exists, not that VIC is ready/u);
+  assert.match(asyncEvents, /regular authorization resolver rather than listing instructions unconditionally/u);
+  assert.match(asyncEvents, /classifyQuickInstructionActivationGate/u);
+  assert.match(asyncEvents, /final PENDING returns to the regular authorization list with no second Quick poll/u);
+  assert.match(restrictedCategories, /Quick setup that carries `instructionContext`/u);
 });

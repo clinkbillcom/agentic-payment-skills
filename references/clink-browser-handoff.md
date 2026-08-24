@@ -34,9 +34,9 @@ Classify every URL with `classifyPageHandoff` from `lib/page-handoff.mjs` before
 | --- | --- | --- | --- |
 | OAuth device verification (`wallet init` live stderr) | `OAUTH_DEVICE_VERIFICATION` | `USER_DEVICE_ONLY`, single load | none; the original init process polls the OAuth device-token endpoint and resolves |
 | First card binding (`card binding-link`) | `CARD_BINDING` | `USER_DEVICE_ONLY` | `payment_method.added` |
-| Add a payment method (`card setup-link`) | `CARD_SETUP` | `USER_DEVICE_ONLY` | `payment_method.added` / `payment_method.updated` |
-| Manage payment methods (`card modify-link`) | `CARD_MODIFY` | `USER_DEVICE_ONLY` | `payment_method.updated` / `payment_method.default_change` |
-| Visa Passkey registration (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) | `VIC_PASSKEY_REGISTRATION` | `USER_DEVICE_ONLY` | `vic_device.binding_succeeded` / same-card `payment_method.updated` |
+| Add a payment method (`card setup-link`) | `CARD_SETUP` | `USER_DEVICE_ONLY` | `payment_method.added` / `payment_method.update` |
+| Manage payment methods (`card modify-link`) | `CARD_MODIFY` | `USER_DEVICE_ONLY` | `payment_method.update` / `payment_method.default_change` |
+| Visa Passkey registration (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) | `VIC_PASSKEY_REGISTRATION` | `USER_DEVICE_ONLY` | `vic_device.binding_succeeded` / same-card `payment_method.update` with `visaRegistrationSucceeded=true` (`payment_method.updated` is a compatibility alias) |
 | Mandate signing (`instruction create` / `sign-url` `passkeyUrl`) | `INSTRUCTION_PASSKEY_SIGNING` | `USER_DEVICE_ONLY` | `purchase_instruction.activated` |
 | Authorization update/cancel page (`instruction update` / `cancel`) | `INSTRUCTION_AGENT_PAGE` | `USER_DEVICE_ONLY` | flow-specific |
 | 3DS challenge (`pay` exit 7 `redirectUrl`) | `THREE_DS_CHALLENGE` | `USER_DEVICE_ONLY`, single load | `agent_order.succeeded` / `agent_order.failed` |
