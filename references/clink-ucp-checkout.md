@@ -297,7 +297,7 @@ For a successful profile, the `<standard_ucp_url>` must come from the profile sh
 clink tool get-rest-endpoint --url <standard_ucp_url> --format json
 ```
 
-Reclassify with the `provider` and `endpoint` from that output. If `provider` is `clinkbill`, route to internal UCP checkout and freeze `rest_endpoint` into the aggregate command. If provider is not `clinkbill`, route to external UCP checkout and freeze `endpoint=null`. If endpoint discovery returns `NO_UCP_REST_ENDPOINT` or another failure payload, route to external UCP checkout.
+Reclassify with the `provider` and `endpoint` from that output. If `provider` is `clinkbill`, route to internal UCP checkout and freeze `rest_endpoint` into the aggregate command. If provider is not `clinkbill`, route to external UCP checkout and freeze that resolved external endpoint. If endpoint discovery returns `NO_UCP_REST_ENDPOINT`, another failure payload, or no trusted endpoint, do not enter aggregate checkout until the effective external checkout endpoint has been resolved and frozen. An external route with `endpoint=null` is invalid.
 
 Route resolution must not mutate the selected item, amount, authorization, or merchant facts.
 
@@ -312,7 +312,7 @@ Call `classifyUcpCheckoutRunRequest` with the frozen product, route, payment ins
 - `restrictedCategoryGatePassed=true`
 - `checkoutRouteResolved=true`
 - `explicitPurchaseAuthorized=true`
-- exact `checkoutRoute`, `merchantUrl`, optional internal `endpoint`, `merchantCategoryCode`, `currency`, `lineItems`, and `paymentInstrumentId`
+- exact `checkoutRoute`, `merchantUrl`, resolved `endpoint` for either route, `merchantCategoryCode`, `currency`, `lineItems`, and `paymentInstrumentId`
 - UCP Postal Address only for shipped physical goods
 - `digitalDeliveryExpected=true` plus `digitalDeliveryContractVerified=true` only for an explicit artifact-delivery contract
 
@@ -320,7 +320,7 @@ The helper canonicalizes JSON and shell-quotes every dynamic value. Execute only
 
 ```bash
 clink ucp-checkout run \
-  [--endpoint <rest_endpoint>] \
+  --endpoint <frozen_rest_endpoint> \
   --merchant-url <frozen_selected_item_url> \
   --merchant-category-code <frozen_mcc> \
   --currency <frozen_currency> \
@@ -338,19 +338,19 @@ For a digital product, `--wait-delivery` and `--max-wait 900` are part of this s
 
 ## Step 6: Classify The Aggregate Result
 
-Pass the `{ok:true,data:{...}}` envelope and the exact `frozenRequest` to `classifyUcpCheckoutRunObservation`.
+Pass the aggregate `{ok:true,data:{...}}` envelope and the exact `frozenRequest` to `classifyUcpCheckoutRunObservation`. Before any `paymentConfirmed=true` result, the classifier requires the real create/complete stage objects, consistent nested status, and matching checkout/order identifiers.
 
 | Aggregate result | Required action |
 | --- | --- |
 | `stage=create|complete,status=completed`, no expected digital delivery | Return payment/order completion. Run no additional Agent command. |
-| `stage=create|complete,status=complete_in_progress|processing|pending` | Return pending. Execute only the classifier-validated `resumeCommand`, which must be `clink ucp-checkout get` bound to the same checkout ID and observed endpoint. |
+| `stage=create|complete,status=complete_in_progress|processing|pending` | Return pending with immutable `resumeContext`. Execute only the classifier-validated `resumeCommand`, which must be `clink ucp-checkout get` bound to the same checkout ID and frozen endpoint. Classify its ordinary checkout envelope with `classifyUcpCheckoutRunResumeObservation`. |
 | `stage=delivery,status=ready` | Require completed checkout context and nonempty `digital_delivery.artifacts`; only then return delivery evidence. |
 | `stage=delivery,status=failed` | Return payment success and delivery failure separately. Do not retry payment or checkout. |
-| `stage=delivery,status=timeout` | Preserve payment success and the last order snapshot. Execute only the validated `clink ucp-order wait-delivery --order-id <same_ucp_order_id> --max-wait 900 --format json` resume command. |
+| `stage=delivery,status=timeout` | Preserve payment success, the last order snapshot, and immutable `resumeContext`. Execute only the validated `clink ucp-order wait-delivery --order-id <same_ucp_order_id> --max-wait 900 --format json` resume command, then classify its ordinary delivery envelope with `classifyUcpCheckoutRunResumeObservation`. |
 | `requires_escalation`, `failed`, `cancelled`, or `expired` | Stop and surface the checkout failure. |
 | malformed envelope, unknown status, mismatched ID/endpoint, or unsafe resume | Fail closed with `paymentConfirmed=false`; do not synthesize a recovery mutation. |
 
-The read-only resume validator rejects `ucp-checkout run`, create, complete, update, cancel, `pay`, event polling, shell operators, a different checkout/order ID, endpoint drift, and a delivery wait other than 900 seconds.
+The read-only resume validator rejects `ucp-checkout run`, create, complete, update, cancel, `pay`, event polling, shell operators, a different checkout/order ID, endpoint drift, and a delivery wait other than 900 seconds. Never pass a resume output back to the aggregate classifier: use its `resumeContext` with `classifyUcpCheckoutRunResumeObservation` until the same resource reaches a terminal state.
 
 Legacy event evidence remains type-safe: checkout correlation accepts only nested payload `data.checkoutId` / `data.checkout_id`; a payment event order ID is never a UCP order ID and must not be used for order lookup.
 
@@ -385,5 +385,6 @@ clink ucp-checkout run ... --confirm-purchase --format json
 # Digital artifact product: the same command also includes:
 #   --wait-delivery --max-wait 900
 #
-# Pending result: execute only classifyUcpCheckoutRunObservation.resumeCommand.
+# Pending result: execute only classifyUcpCheckoutRunObservation.resumeCommand,
+# then call classifyUcpCheckoutRunResumeObservation(output, resumeContext).
 ```

@@ -376,13 +376,14 @@ test('UCP aggregate result keeps identifiers, attempts, and recovery type-safe',
   assert.match(skill, /lib\/ucp-checkout-run-fsm\.mjs/u);
   assert.match(skill, /classifyUcpCheckoutRunExecution/u);
   assert.match(skill, /classifyUcpCheckoutRunObservation/u);
-  assert.match(skill, /same-checkout `ucp-checkout get`/u);
+  assert.match(skill, /same-checkout and same-endpoint `ucp-checkout get`/u);
+  assert.match(skill, /classifyUcpCheckoutRunResumeObservation/u);
   assert.match(skill, /same-order `ucp-order wait-delivery --max-wait 900`/u);
   assert.match(skill, /No result authorizes create, complete, or payment retry/u);
 
   assert.match(ucpCheckout, /stage=create\|complete,status=completed/u);
   assert.match(ucpCheckout, /stage=delivery,status=ready/u);
-  assert.match(ucpCheckout, /same checkout ID and observed endpoint/u);
+  assert.match(ucpCheckout, /same checkout ID and frozen endpoint/u);
   assert.match(ucpCheckout, /same_ucp_order_id/u);
   assert.match(ucpCheckout, /Never rerun the aggregate command/u);
   assert.match(ucpCheckout, /read-only resume validator rejects `ucp-checkout run`/u);
@@ -664,7 +665,7 @@ test('UCP checkout route delegates internal detection to clink before profile fa
   assert.match(ucpCheckout, /services\.\*\.endpoint/u);
   assert.match(ucpCheckout, /provider.*clinkbill/u);
   assert.match(ucpCheckout, /provider.*not.*clinkbill.*external/u);
-  assert.match(ucpCheckout, /--endpoint <rest_endpoint>/u);
+  assert.match(ucpCheckout, /--endpoint <frozen_rest_endpoint>/u);
   assert.match(ucpCheckout, /standard_ucp_profile_absent/u);
   assert.doesNotMatch(skill, /STANDARD_UCP_DOMAINS/u);
   assert.doesNotMatch(skill, /STANDARD_UCP_CHECKOUT/u);

@@ -26,6 +26,7 @@ test('Skill documents the single foreground aggregate checkout contract', () => 
     '`RESUME_UCP_CHECKOUT_READ_ONLY`',
     'classifyUcpCheckoutRunRequest',
     'classifyUcpCheckoutRunObservation',
+    'classifyUcpCheckoutRunResumeObservation',
     'explicitPurchaseAuthorized=true',
   ]) {
     assert.ok(skill.includes(token), `${token} must stay documented`);
@@ -49,6 +50,9 @@ test('UCP reference uses final gate names and no manual mutation sequence', () =
   assert.doesNotMatch(reference, /^clink ucp-checkout create /mu);
   assert.doesNotMatch(reference, /^clink ucp-checkout complete /mu);
   assert.doesNotMatch(reference, /^clink events poll --type agent_order\.succeeded/mu);
+  assert.doesNotMatch(reference, /freeze `endpoint=null`/u);
+  assert.match(reference, /resolved `endpoint` for either route/u);
+  assert.match(reference, /ordinary checkout envelope with `classifyUcpCheckoutRunResumeObservation`/u);
   assert.match(reference, /Never use a fixed `sleep`, runtime `--help`/u);
 });
 
