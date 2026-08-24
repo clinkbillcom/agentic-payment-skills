@@ -4803,7 +4803,6 @@ var require_yauzl = __commonJS({
 
 // dist/cli.js
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { readFile as readFile3 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { performance } from "node:perf_hooks";
 
@@ -4872,6 +4871,8 @@ var OPTION_DEFINITIONS = [
   { name: "help", flags: "-h, --help" },
   { name: "format", flags: "--format <format>" },
   { name: "dry-run", flags: "--dry-run" },
+  { name: "confirm-purchase", flags: "--confirm-purchase" },
+  { name: "wait-delivery", flags: "--wait-delivery" },
   { name: "all", flags: "--all" },
   { name: "tippable", flags: "--tippable" },
   { name: "force", flags: "--force" },
@@ -4888,6 +4889,7 @@ var OPTION_DEFINITIONS = [
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
   { name: "checkout-id", flags: "--checkout-id <id>" },
+  { name: "next-token", flags: "--next-token <token>" },
   { name: "endpoint", flags: "--endpoint <url>" },
   { name: "endpont", flags: "--endpont <url>" },
   { name: "merchant-url", flags: "--merchant-url <url>" },
@@ -5698,18 +5700,24 @@ function resolveWalletInitBaseUrl(flags) {
   const selectedEnvironment = resolveSelectedEnvironment(flags);
   return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
 }
+function resolvePublicCatalogBaseUrl(flags) {
+  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
+}
 function resolveSelectedEnvironment(flags) {
-  const sandbox = getBooleanFlag(flags, "sandbox");
-  const test = getBooleanFlag(flags, "test");
-  if (sandbox && test) {
-    throw validationError("--sandbox and --test cannot be used together");
-  }
-  const explicitEnvironment = sandbox ? "sandbox" : test ? "test" : void 0;
+  const explicitEnvironment = resolveExplicitEnvironment(flags);
   const distributionEnvironment = walletInitDistributionEnvironment();
   if (explicitEnvironment && distributionEnvironment && explicitEnvironment !== distributionEnvironment) {
     throw validationError(`wallet init environment is fixed to ${distributionEnvironment} by this CLI distribution`);
   }
   return explicitEnvironment ?? distributionEnvironment;
+}
+function resolveExplicitEnvironment(flags) {
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (sandbox && test) {
+    throw validationError("--sandbox and --test cannot be used together");
+  }
+  return sandbox ? "sandbox" : test ? "test" : void 0;
 }
 function walletInitDistributionEnvironment() {
   const value = process.env.CLINK_WALLET_INIT_ENVIRONMENT?.trim().toLowerCase();
@@ -6059,7 +6067,8 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.15";
+var CLI_VERSION = "0.2.22";
+var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -6195,6 +6204,7 @@ async function requestJson(options2) {
   if (options2.body !== void 0) {
     headers["Content-Type"] = "application/json";
   }
+  setHeader(headers, CLI_VERSION_HEADER, CLI_VERSION);
   if (options2.dryRun) {
     return {
       dryRun: true,
@@ -6235,6 +6245,14 @@ async function requestJson(options2) {
   } finally {
     clearTimeout(timeout);
   }
+}
+function setHeader(headers, name, value) {
+  for (const existingName of Object.keys(headers)) {
+    if (existingName.toLowerCase() === name.toLowerCase()) {
+      delete headers[existingName];
+    }
+  }
+  headers[name] = value;
 }
 function formatNetworkFailure(error) {
   const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
@@ -6784,6 +6802,9 @@ var stderrLog = (message) => {
 `);
 };
 async function pollWebhookEvents(options2) {
+  return (await pollWebhookEventPage(options2)).records;
+}
+async function pollWebhookEventPage(options2) {
   const result = await requestJsonWithOAuthRetry({
     getRuntimeConfig: options2.getRuntimeConfig ?? (() => options2.runtimeConfig),
     ...options2.getRuntimeConfig ? { reloadRuntimeConfig: options2.getRuntimeConfig } : {},
@@ -6796,24 +6817,33 @@ async function pollWebhookEvents(options2) {
     body: {
       pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE,
       ...options2.eventTypes && options2.eventTypes.length > 0 ? { eventTypes: options2.eventTypes } : {},
-      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {}
+      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {},
+      ...options2.nextToken ? { nextToken: options2.nextToken } : {}
     },
     timeoutMs: options2.timeoutMs,
     dryRun: false
   }));
   if ("dryRun" in result) {
-    return [];
+    return { records: [] };
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  const records = typeof data === "object" && data !== null ? data.records : void 0;
+  const dataObject = typeof data === "object" && data !== null ? data : void 0;
+  const records = dataObject ? dataObject.records : void 0;
   if (!Array.isArray(records)) {
     throw apiError("invalid Event Hub poll response: expected data.records to be an array", 502);
   }
   if (!records.every(isWebhookEventRecord)) {
     throw apiError("invalid Event Hub poll response: expected every record to contain non-empty eventId and eventType", 502);
   }
-  return records;
+  const nextTokenValue = dataObject?.nextToken;
+  if (nextTokenValue === void 0 || nextTokenValue === null) {
+    return { records };
+  }
+  if (typeof nextTokenValue !== "string" || nextTokenValue.trim().length === 0) {
+    throw apiError("invalid Event Hub poll response: expected data.nextToken to be a non-empty string", 502);
+  }
+  return { records, nextToken: nextTokenValue.trim() };
 }
 async function ackWebhookEvents(options2, eventIds) {
   const requestedEventIds = [...new Set(eventIds)];
@@ -7142,6 +7172,12 @@ function assertValidCollectTarget(options2) {
   if (options2.checkoutId !== void 0 && normalizedValue(options2.checkoutId) === void 0) {
     throw validationError("checkoutId must be a non-blank string when provided");
   }
+  if (options2.nextToken !== void 0 && normalizedValue(options2.nextToken) === void 0) {
+    throw validationError("nextToken must be a non-blank string when provided");
+  }
+  if (options2.nextToken !== void 0 && options2.checkoutId === void 0) {
+    throw validationError("nextToken requires checkoutId");
+  }
   assertValidExpectedResource(options2.expectedResource);
 }
 function assertValidExpectedResource(expectedResource) {
@@ -7217,6 +7253,7 @@ async function collectWebhookEvents(options2) {
   const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
   const checkoutId = normalizedValue(options2.checkoutId);
   const hasCheckoutFilter = checkoutId !== void 0;
+  const effectivePageSize = options2.pageSize ?? DEFAULT_PAGE_SIZE;
   const checkoutEventType = [...requestedTypes][0];
   if (hasCheckoutFilter && (requestedTypes.size !== 1 || checkoutEventType !== "agent_order.succeeded" && checkoutEventType !== "agent_order.failed")) {
     throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
@@ -7229,39 +7266,66 @@ async function collectWebhookEvents(options2) {
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
+  let checkoutNextToken = normalizedValue(options2.nextToken);
   const targetReached = () => collected.length > 0;
+  const processPolledRecords = async (records) => {
+    if (records.length === 0) {
+      return false;
+    }
+    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+    const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
+    const matchingEvents = events.filter((event, index) => matchesTarget(event, records[index]));
+    const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+    const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
+    const confirmedAckedEventIds = await ackWebhookEvents({
+      runtimeConfig: runtimeState.value,
+      ...getRuntimeConfig ? { getRuntimeConfig } : {},
+      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+      expectedIdentity: polledIdentity,
+      timeoutMs: options2.timeoutMs
+    }, ids);
+    ackedEventIds.push(...confirmedAckedEventIds);
+    if (ack) {
+      const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
+      collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
+    } else {
+      collected.push(...matchingEvents);
+    }
+    return targetReached();
+  };
   const deadline = now() + maxDurationMs;
   for (; ; ) {
-    const records = await pollWebhookEvents({
+    const page = hasCheckoutFilter ? await pollWebhookEventPage({
       runtimeConfig: runtimeState.value,
       ...getRuntimeConfig ? { getRuntimeConfig } : {},
       ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
       timeoutMs: options2.timeoutMs,
-      ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
-      ...hasCheckoutFilter ? { eventTypes: [...requestedTypes], checkoutId } : {}
-    });
-    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-    if (records.length > 0) {
-      const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-      const matchingEvents = events.filter((event, index) => matchesTarget(event, records[index]));
-      const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
-      const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-      const confirmedAckedEventIds = await ackWebhookEvents({
+      pageSize: effectivePageSize,
+      eventTypes: [...requestedTypes],
+      checkoutId,
+      ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+    }) : {
+      records: await pollWebhookEvents({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-        expectedIdentity: polledIdentity,
-        timeoutMs: options2.timeoutMs
-      }, ids);
-      ackedEventIds.push(...confirmedAckedEventIds);
-      if (ack) {
-        const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
-        collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
-      } else {
-        collected.push(...matchingEvents);
-      }
-      if (targetReached()) {
-        return { ready: true, timedOut: false, events: collected, ackedEventIds };
+        timeoutMs: options2.timeoutMs,
+        pageSize: effectivePageSize,
+        ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
+      })
+    };
+    const records = page.records;
+    if (await processPolledRecords(records)) {
+      return { ready: true, timedOut: false, events: collected, ackedEventIds };
+    }
+    if (hasCheckoutFilter) {
+      if (page.nextToken !== void 0) {
+        if (records.length > 0 && page.nextToken === checkoutNextToken) {
+          throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+        }
+        checkoutNextToken = page.nextToken;
+      } else if (records.length >= effectivePageSize) {
+        throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
       }
     }
     if (now() + pollIntervalMs >= deadline) {
@@ -7269,26 +7333,61 @@ async function collectWebhookEvents(options2) {
     }
     await sleep3(pollIntervalMs);
   }
-  return { ready: false, timedOut: true, events: collected, ackedEventIds };
+  return {
+    ready: false,
+    timedOut: true,
+    events: collected,
+    ackedEventIds,
+    ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+  };
 }
 function recordMatchesCheckoutId(record, expectedCheckoutId) {
-  const data = strictPayloadData(record?.payload);
-  if (!data) {
+  const payload = strictPayloadObject(record?.payload);
+  if (!payload) {
     return false;
   }
-  return resolvedTypedIdentifierAliases([data.checkoutId, data.checkout_id]) === expectedCheckoutId;
+  const dataValue = strictObjectValue(payload, "data");
+  const data = isRecord4(dataValue) ? dataValue : void 0;
+  return resolvedTypedIdentifierAliases([
+    ...dataValue === null ? [null] : [],
+    data?.checkoutId,
+    data?.checkout_id,
+    strictNestedValue(payload, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"]),
+    ...data ? [
+      strictNestedValue(data, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"])
+    ] : []
+  ]) === expectedCheckoutId;
 }
-function strictPayloadData(payload) {
+function strictObjectValue(record, key) {
+  if (!(key in record)) {
+    return void 0;
+  }
+  const value = record[key];
+  return isRecord4(value) ? value : null;
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function strictNestedValue(record, path4) {
+  let current = record;
+  for (const key of path4) {
+    if (!isRecord4(current)) {
+      return null;
+    }
+    if (!(key in current)) {
+      return void 0;
+    }
+    current = current[key];
+  }
+  return current;
+}
+function strictPayloadObject(payload) {
   if (!payload) {
     return null;
   }
   try {
     const parsed = JSON.parse(payload);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    const data = parsed.data;
-    return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
+    return isRecord4(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -7543,6 +7642,15 @@ var CUSTOMER_API_KEY_REQUEST_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --dry-run                     Print the request without executing it
 ${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_ENVIRONMENT_OPTIONS = `  --sandbox                    Use the sandbox/UAT API for this command
+  --test                       Use the test API for this command; cannot be combined with --sandbox`;
+var PUBLIC_CATALOG_REQUEST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_LIST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+${OUTPUT_OPTIONS}`;
 var CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --open                        Open the generated link in the browser
@@ -7566,7 +7674,7 @@ Commands:
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
   ucp-catalog       Search merchant UCP catalogs
   catalog           Search catalogs across merchants without naming one
-  ucp-order         Query UCP orders by ID or list them by status and time range
+  ucp-order         Query UCP orders and wait for digital delivery
   instruction       Manage purchase instruction mandates (agentic authorization)
   events            Poll the webhook-event queue for state-change events
   tool              Utility tools for UCP and checkout workflows
@@ -7578,8 +7686,8 @@ Global Options:
   --open                        Open generated link in browser
   --no-open                     Do not open generated links; overrides --open and saved defaults
   --no-watch                    Do not poll for webhook events after printing a link
-  --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only
+  --customer-id <id>            Override customer ID for authenticated commands
+  --customer-api-key <key>      Legacy API key override for authenticated never-OAuth wallets only
   --timeout <ms>                Request timeout in milliseconds
   --help, -h                    Show help
 
@@ -7587,7 +7695,12 @@ Wallet Environment:
   Select an official environment with wallet init: --sandbox uses sandbox and --test uses test.
   The main distribution uses production when neither is present; packaged distributions may fix
   their wallet-init environment internally. Successful initialization saves the environment, and
-  later commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced process override.
+  later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
+  process override for those authenticated commands.
+
+Public Catalog Environment:
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
 
 Event Watching:
   Link commands normally print the browser handoff and then poll
@@ -7614,6 +7727,7 @@ Examples:
   clink catalog search --query "iced latte" --format json
   clink ucp-checkout get --checkout-id chk_xxx
   clink ucp-order get --order-id order_xxx
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900
   clink ucp-order list --status paid --start-time 2026-07-01T00:00:00Z
   clink tool item-id --url https://shop.example/products/t-shirt?variant=123
   clink refund create --order-id order_xxx
@@ -7919,15 +8033,15 @@ Usage:
 
 Subcommands:
   get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
-  get-merchant-list  Return the supported merchant-list document for the configured environment
+  get-merchant-list  Return the supported merchant-list document for a public environment
 
 Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Reads the merchant list for the configured environment, normally saved by wallet init.
-  get-merchant-list returns the document; get-endpoint generates an endpoint from the effective API
-  base. Production is fetched on every call; sandbox/UAT and test use their bundled lists.
+  get-endpoint uses the effective wallet API base and does not accept environment flags.
+  get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
+  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
 
 Examples:
@@ -7968,11 +8082,13 @@ Usage:
   clink tool internal-ucp get-merchant-list [options]
 
 Options:
-${TOOL_NETWORK_OPTIONS}
+${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
   Returns the complete merchant-list document after validating its merchant entries.
-  The environment normally comes from wallet init; CLINK_BASE_URL can override it for the process.
+  The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
+  It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
+  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
   The output preserves list metadata, descriptions, enabled flags, and disabled entries.
@@ -8015,12 +8131,13 @@ Options:
   --open                       Open the authorization URL in the browser
   --no-open                    Do not open the browser; overrides --open and default-open-links
   --dry-run                    Print the Device Authorization request without executing it
-  --title <text>               Purchase intent title; enables the quick-instruction context
-  --mandates <json>            JSON array of 1-10 mandates; required with any quick-instruction flag
-  --description <text>         Optional quick-instruction description
-  --is-recurring               Mark the quick instruction as recurring (mandates need recurringFrequency)
-  --shipping-address <json>    Optional shipping address JSON object for the quick instruction
-  --effective-until-time <utc> Optional quick-instruction expiry, UTC yyyy-MM-dd HH:mm:ss
+  --title <text>               Purchase intent title; enables the Quick Instruction context
+  --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
+  --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
+  --description <text>         Optional Quick Instruction description
+  --is-recurring               Mark the Quick Instruction as recurring
+  --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
+  --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
 
 Device Authorization:
@@ -8037,15 +8154,18 @@ Device Authorization:
   their initial name; --name is rejected. Use \`config set name\` to change the local name later.
 
 Quick Instruction:
-  Passing any quick-instruction flag sends an instruction_context with the Device Authorization
-  request; --title and --mandates are then required. --payment-instrument-id and --extra are not
-  accepted here. The title is non-blank and at most 256 characters, the optional description is
-  at most 1024 characters, mandates contain 1-10 entries, and the serialized context is at most
-  16384 UTF-8 bytes. After browser authorization, the server attempts to create a purchase
-  instruction in PENDING state and the output includes its pendingInstructionId. A null value means
-  no usable Quick ID was returned; it does not distinguish a deliberate skip from creation failure.
-  The PENDING instruction activates automatically after VIC card binding completes and emits
-  purchase_instruction.activated; it never appears in \`instruction list --valid-only\` until then.
+  Passing any Quick Instruction option sends instruction_context with Device Authorization;
+  --title and one of --mandates/--mandates-file are then required. --payment-instrument-id and
+  --extra are rejected because no card exists yet and the context is intentionally bounded.
+  Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
+  contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
+  requires a description of at most 150 characters, a positive amountLimit with at most two
+  decimals, and currencyCode.
+  Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
+  A successful token response reports pendingInstructionId; null means no usable Quick ID was
+  returned and does not prove whether creation was skipped or failed.
+  A PENDING instruction activates after VIC card binding completes and emits
+  purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -8058,7 +8178,7 @@ Examples:
   clink wallet init --sandbox --email alice@example.com
   clink wallet init --test --email alice@example.com
   clink wallet init --test --email alice@example.com --title "Buy running shoes" \\
-    --mandates '[{"description":"Running shoes order","amountLimit":25.5,"currencyCode":"USD"}]'
+    --mandates '[{"description":"Running shoes","amountLimit":"25.50","currencyCode":"USD"}]'
 `;
 var WALLET_LOGOUT_HELP = `clink wallet logout
 
@@ -8312,7 +8432,12 @@ Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
-  If --payment-instrument-id is omitted, pay uses the default cached payment method from local config.
+  If --payment-instrument-id is omitted, CARD and BALANCE keep using the cached default payment
+  method. Other types refresh payment methods and require one matching type. If none match, bind
+  one and refresh payment methods. When several match, exactly one must be marked default or the
+  caller must pass --payment-instrument-id explicitly.
+  An explicit payment instrument for those other types is also validated against the refreshed
+  list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
   Refresh cached payment methods with clink card binding-link when needed.
   For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
   For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
@@ -8321,6 +8446,12 @@ Notes:
   For product-level VIC credential context, pass --products as a JSON array with productId,
   productName, productUrl, quantity, unitPrice, currencyCode, and optional extra.
   Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
+  A status 5 payment with a PNG QR response returns customerAction.type=QR_CODE_REQUIRED,
+  mediaType=image/png, a private temporary imagePath, cleanupRequired=true, a directory-level
+  cleanupPath, order/payment execution IDs, and expiry metadata. expiresAt is Unix epoch seconds;
+  event consumers use expiresSecond with a maximum of 900 seconds. The PNG Data URL is never
+  printed. After payment reaches a terminal state or expires, the caller must remove
+  customerAction.cleanupPath recursively.
 
 Examples:
   clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
@@ -8373,9 +8504,10 @@ Examples:
 var UCP_CHECKOUT_HELP = `clink ucp-checkout
 
 Usage:
-  clink ucp-checkout <create|get|update|cancel|complete> [options]
+  clink ucp-checkout <run|create|get|update|cancel|complete> [options]
 
 Actions:
+  run       Create, complete exactly once, and optionally wait for digital delivery
   create    Create a UCP checkout session for an external/shadow merchant
   get       Fetch one checkout session by --checkout-id
   update    Replace editable checkout fields by --checkout-id
@@ -8393,7 +8525,10 @@ Arguments:
   --buyer <json>                  UCP buyer JSON object for create/update
   --shipping-address <json>       Shipping address JSON object for create/update
   --metadata <json>               Metadata JSON object for create/update
-  --payment-instrument-id <id>    Payment instrument ID for complete; defaults to the cached default card
+  --payment-instrument-id <id>    Payment instrument ID for run/complete; defaults to the cached default card
+  --confirm-purchase              Required for a live run; confirms the user-approved purchase
+  --wait-delivery                 After a completed run, wait for the returned digital order
+  --max-wait <seconds>            Delivery wait bound for run; defaults to 900
   --endpoint <url>                Optional checkout endpoint prefix; appends checkout-sessions paths
 
 Notes:
@@ -8413,11 +8548,22 @@ Notes:
   complete sends a standard UCP payment object with payment.instruments[0].id as local
   config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
   omitted, it uses the local cached default card.
+  run requires --confirm-purchase before any live request. It never retries create or complete,
+  calls complete exactly once, and returns a read-only get resumeCommand for non-completed states.
+  --wait-delivery starts only when complete returns status=completed and data.order.id. It reuses
+  the bounded, read-only ucp-order delivery wait and never retries payment or Checkout.
+  run --dry-run needs no confirmation and prints the create, exactly-once complete, and optional
+  delivery plan without making network requests or payment side effects.
   A completed get/complete response carries the OMS/UCP order ID in data.order.id. Pass that exact
   value to ucp-order get; do not infer the ID kind from an order_ prefix. agent_order event
   resourceId, data.orderId, and data.paymentOrderId are Clink Payment order IDs, not UCP order IDs.
 
 Examples:
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --payment-instrument-id pi_xxx --confirm-purchase --wait-delivery --format json
   clink ucp-checkout create \\
     --merchant-url https://shop.example/checkout/abc \\
     --merchant-category-code 5311 --currency USD \\
@@ -8465,12 +8611,16 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/search using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/search. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
+  CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
+  refresh or a wallet-login recovery prompt.
+  Set context.language to an IETF BCP 47 tag for localized results. When Search omits it, UCP may
+  infer the result language from the query; there is no separate --language option.
 
 Examples:
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
@@ -8494,12 +8644,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/product using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
+  Set context.language to an IETF BCP 47 tag for localized results; there is no separate
+  --language option.
 
 Examples:
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
@@ -8541,12 +8693,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Endpoint:
   POST /agent/ucp/extra/catalog/search
 
 Behavior:
+  Sends an anonymous request, defaults to production, and accepts --sandbox or --test for this
+  invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
   address_country is a discovery hint, not a strict filter. Published external-store mappings
@@ -8556,6 +8710,8 @@ Behavior:
   Results come back grouped by target, each group carrying channel_type plus either merchant_id
   (internal merchant) or store_id (external platform store). The shape does not change with
   --channel-type; only the number of groups does.
+  Set context.language to an IETF BCP 47 tag for localized results. When omitted, UCP may infer the
+  result language from the query; there is no separate --language option.
 
 Examples:
   clink catalog search --query "iced latte" --format json
@@ -8572,14 +8728,16 @@ Examples:
 var UCP_ORDER_HELP = `clink ucp-order
 
 Usage:
-  clink ucp-order <get|list> [options]
+  clink ucp-order <get|wait-delivery|list> [options]
 
 Actions:
-  get        Get one UCP order's current status by order ID
-  list       List the calling wallet's orders, newest first
+  get             Get one UCP order's current status by order ID
+  wait-delivery   Poll an expected digital delivery until ready, failed, or timed out
+  list            List the calling wallet's orders, newest first
 
 Examples:
   clink ucp-order get --order-id order_xxx --format json
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
   clink ucp-order list --status paid --format json
   clink ucp-order list --status paid,refunded --start-time 2026-07-01T00:00:00Z --format pretty
 `;
@@ -8609,6 +8767,38 @@ Behavior:
 
 Examples:
   clink ucp-order get --order-id order_xxx --format json
+`;
+var UCP_ORDER_WAIT_DELIVERY_HELP = `clink ucp-order wait-delivery
+
+Usage:
+  clink ucp-order wait-delivery --order-id <id> [--max-wait <seconds>] [options]
+
+Required Arguments:
+  --order-id <id>             UCP Order ID whose digital delivery is expected
+
+Optional Arguments:
+  --max-wait <seconds>        Bounded wait across order reads (default 900)
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  Repeated GET /agent/ucp/orders/{orderId}
+
+Behavior:
+  Use only when the frozen product context expects a digital delivery such as a voucher, coupon,
+  card secret, redemption link, or image. A missing digital_delivery field is treated as pending
+  because the asynchronous payment projection may not have initialized it yet. Pending reads honor
+  digital_delivery.next_retry_at with a 3-to-30-second local clamp. The command stops at ready or
+  failed; ready requires at least one artifact. It never retries payment, checkout completion, or
+  order creation.
+
+  Output contains ready, timedOut, deliveryStatus, attempts, and the last authoritative order.
+  A timeout also contains resumeCommand. Payment success and delivery status remain independent:
+  failed or timed-out delivery must not downgrade an already confirmed payment.
+
+Examples:
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
 `;
 var UCP_ORDER_LIST_HELP = `clink ucp-order list
 
@@ -8683,6 +8873,59 @@ Examples:
     --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
     --format json
 `;
+var UCP_CHECKOUT_RUN_HELP = `clink ucp-checkout run
+
+Usage:
+  clink ucp-checkout run --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
+
+Required Arguments:
+  --merchant-url <url>            External merchant checkout URL
+  --merchant-category-code <code> Merchant category code, ISO 18245 MCC
+  --currency <currency>           Checkout currency, for example USD
+  --line-items <json>             UCP line_items JSON array
+  --confirm-purchase              Required for live execution; omit only with --dry-run
+
+Optional Arguments:
+  --merchant-name <name>          Merchant display name override
+  --order-channel-id <id>         Advanced override; backend normally derives it from merchant-url
+  --buyer <json>                  UCP buyer JSON object
+  --shipping-address <json>       Shipping address JSON object
+  --metadata <json>               Metadata JSON object
+  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
+  --wait-delivery                 Wait for digital delivery after authoritative completion
+  --max-wait <seconds>            Delivery wait bound; defaults to 900 and requires --wait-delivery
+  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoints:
+  POST /agent/ucp/external/checkout-sessions
+  POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
+  GET  /agent/ucp/orders/{orderId} only with --wait-delivery after completed + data.order.id
+
+Safety:
+  Missing --confirm-purchase on a live run is rejected before any network request.
+  create and complete are each called once and are never automatically retried. complete is the
+  only payment-submitting step. A complete_in_progress or any other non-completed response returns
+  stage=complete plus a read-only resumeCommand bound to the original endpoint and checkoutId.
+  --wait-delivery starts only for status=completed with data.order.id. ready, failed, and timeout
+  return the authoritative order and digital_delivery snapshot; timeout reuses the ucp-order
+  wait-delivery resumeCommand. Delivery polling never retries create, complete, or payment.
+  --dry-run performs no network request and prints an auditable create/complete/delivery plan.
+
+Examples:
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --payment-instrument-id pi_xxx --confirm-purchase --format json
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Voucher","price":"10.00"},"quantity":1}]' \\
+    --confirm-purchase --wait-delivery --max-wait 900 --format json
+`;
 var UCP_CHECKOUT_GET_HELP = `clink ucp-checkout get
 
 Usage:
@@ -8693,6 +8936,8 @@ Required Arguments:
 
 Optional Arguments:
   --endpoint <url>                Optional checkout endpoint prefix
+  --max-wait <seconds>            Poll only this Checkout until terminal; defaults to 900
+  --wait-delivery                 After completed + data.order.id, also wait for digital delivery
 
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -8702,12 +8947,17 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Without wait flags, performs one GET. With --max-wait, polls only the same Checkout by GET and
+  never creates, completes, or submits payment. --wait-delivery continues from an authoritative
+  completed Checkout into the same order's digital-delivery wait. A timeout returns one bound
+  ucp-checkout get resumeCommand; callers must not append ucp-order commands.
   Once completed, data.order.id is the OMS/UCP order ID accepted by ucp-order get. Do not use an
   agent_order event's resourceId, data.orderId, or data.paymentOrderId; those are Clink Payment
   order IDs, and an order_ prefix does not distinguish the two ID domains.
 
 Examples:
   clink ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout get --checkout-id chk_xxx --wait-delivery --max-wait 900 --format json
 `;
 var UCP_CHECKOUT_UPDATE_HELP = `clink ucp-checkout update
 
@@ -8957,7 +9207,7 @@ Endpoint:
   POST /agent/cwallet/instructions
 
 Mandate Fields:
-  Common fields include title, description, amountLimit, currencyCode,
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
   merchantCategoryCode, and effectiveUntilTime.
   When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
 
@@ -9100,15 +9350,19 @@ Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
   --limit <n>                  Max events per poll (pageSize, default 20)
   --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
-  --checkout-id <id>           Match one agent_order event by data.checkoutId/data.checkout_id;
-                               preserve every event that is not an exact local match
+  --checkout-id <id>           Match one agent_order event by canonical checkout aliases or the
+                               UCP agentInstructionInfo checkout ID; preserve every nonmatch
+  --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
+  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
 Output (data):
-  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...] }
-  On timeout, "resumeCommand" is included \u2014 rerun it to continue (acked events are
-  removed server-side, so no offset is needed).
+  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...],
+    "nextToken"?: string }
+  On timeout, "resumeCommand" is included. Ordinary polls need no cursor because ACKed
+  events are removed server-side. Checkout polls may also return nextToken, which the
+  generated resumeCommand carries automatically.
 
 Notes:
   Every record read is processed: payment_method.* events refresh cached payment methods
@@ -9119,13 +9373,19 @@ Notes:
   With both --type and --no-ack, matching records stay queued but unrelated records are still
   acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
   --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The request sends
-  eventTypes plus selectors.checkoutId to Event Hub before pagination, then checks the payload
-  locally. Missing/conflicting checkout aliases fail closed; resourceId/orderId never substitute.
-  Only an exact match is ACKed by default, and resumeCommand preserves the selector.
+  eventTypes plus selectors.checkoutId to Event Hub before pagination. Event Hub returns nextToken
+  so the CLI can continue past unacknowledged events owned by another Checkout. Missing, malformed,
+  or conflicting checkout aliases fail closed; resourceId/orderId never substitute. A full page
+  without nextToken fails explicitly instead of polling the same page forever. Only an exact match
+  is ACKed, and resumeCommand preserves the selector and nextToken.
+  --payment-instrument-id requires --type, is mutually exclusive with --checkout-id, and matches
+  canonical payload aliases or the event resourceId. Same-type events for another card remain
+  unacknowledged, and resumeCommand preserves the card selector.
 
 Examples:
   clink events poll --format json
   clink events poll --type payment_method.updated --format json
+  clink events poll --type payment_method.update,vic_device.binding_succeeded --payment-instrument-id pi_123 --format json
   clink events poll --type account-created,account-reloaded --format json
   clink events poll --type agent_order.succeeded --checkout-id checkout_123 --format json
   clink events poll --no-ack --format json
@@ -9247,6 +9507,8 @@ function getHelpText(command, subcommand, nestedCommand) {
       }
     case "ucp-checkout":
       switch (subcommand) {
+        case "run":
+          return UCP_CHECKOUT_RUN_HELP;
         case "create":
           return UCP_CHECKOUT_CREATE_HELP;
         case "get":
@@ -9280,6 +9542,8 @@ function getHelpText(command, subcommand, nestedCommand) {
       switch (subcommand) {
         case "get":
           return UCP_ORDER_GET_HELP;
+        case "wait-delivery":
+          return UCP_ORDER_WAIT_DELIVERY_HELP;
         case "list":
           return UCP_ORDER_LIST_HELP;
         default:
@@ -9328,7 +9592,7 @@ var ucp_merchants_default = {
       domain_name: "vtravel.link2shops.com",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
-      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com/yiyuan/#/exitPage URL is an SPA storefront entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. The known UAT catalog includes HungryPanda (United States), item ID cf1c321c4d5a4754ad099fa01aa2f9a4. Catalog APIs remain the source of truth for title, price, currency, availability, and the orderable URL."
+      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
     }
   ]
 };
@@ -9511,6 +9775,200 @@ function stringValue(value) {
 }
 function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
+}
+
+// dist/instruction-context.js
+import { readFile as readFile3 } from "node:fs/promises";
+var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
+var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
+var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
+var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
+  "title",
+  "description",
+  "mandates",
+  "mandates-file",
+  "is-recurring",
+  "shipping-address",
+  "effective-until-time"
+];
+var QUICK_INSTRUCTION_OPTIONS = [
+  ...QUICK_INSTRUCTION_CONTEXT_FLAGS,
+  "payment-instrument-id",
+  "extra"
+];
+async function buildQuickInstructionContext(flags, commandLabel) {
+  if ("payment-instrument-id" in flags) {
+    throw validationError(`--payment-instrument-id is not supported by ${commandLabel}; the card is bound after login`);
+  }
+  if ("extra" in flags) {
+    throw validationError(`--extra is not supported by the ${commandLabel} Quick Instruction context`);
+  }
+  if (!QUICK_INSTRUCTION_CONTEXT_FLAGS.some((name) => name in flags)) {
+    return void 0;
+  }
+  const title = requireNonBlankStringFlag(flags, "missing --title", "title");
+  if (title.length > 256) {
+    throw validationError(`--title must be at most 256 characters, got ${title.length}`);
+  }
+  const description = getStringFlag(flags, "description");
+  if (description !== void 0 && description.length > 1024) {
+    throw validationError(`--description must be at most 1024 characters, got ${description.length}`);
+  }
+  const isRecurring = getBooleanFlag(flags, "is-recurring");
+  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring, { maxEntries: 10, requireCoreFields: true });
+  const effectiveUntilTime = utcDateTimeFlag(flags, "effective-until-time");
+  const context = {
+    title,
+    mandates,
+    ...description !== void 0 ? { description } : {},
+    ...effectiveUntilTime !== void 0 ? { effectiveUntilTime } : {},
+    ...isRecurring ? { isRecurring: true } : {}
+  };
+  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
+  if (shippingAddress !== void 0) {
+    context.shippingAddress = shippingAddress;
+  }
+  const contextBytes = Buffer.byteLength(JSON.stringify(context), "utf8");
+  if (contextBytes > QUICK_INSTRUCTION_CONTEXT_MAX_BYTES) {
+    throw validationError(`${commandLabel} instruction context must be at most 16384 UTF-8 bytes, got ${contextBytes}`);
+  }
+  return context;
+}
+async function readInstructionMandates(flags) {
+  const inlineJson = getStringFlag(flags, "mandates");
+  const filePath = getStringFlag(flags, "mandates-file");
+  if (inlineJson !== void 0 && filePath !== void 0) {
+    throw validationError("--mandates and --mandates-file cannot be used together");
+  }
+  if (inlineJson === void 0 && filePath === void 0) {
+    throw validationError("missing --mandates or --mandates-file (JSON array)");
+  }
+  let source = inlineJson;
+  let sourceName = "--mandates";
+  if (filePath !== void 0) {
+    if (!filePath.trim()) {
+      throw validationError("--mandates-file path must not be blank");
+    }
+    sourceName = "--mandates-file";
+    try {
+      source = await readFile3(filePath, "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
+    }
+  }
+  const parsed = parseJsonFlag(source, sourceName);
+  if (!Array.isArray(parsed)) {
+    throw validationError(`${sourceName} must be a JSON array`);
+  }
+  return parsed;
+}
+function normalizeInstructionMandates(mandates, isRecurring, options2 = {}) {
+  if (options2.requireCoreFields && mandates.length === 0) {
+    throw validationError("--mandates must contain at least one entry");
+  }
+  if (options2.maxEntries !== void 0 && mandates.length > options2.maxEntries) {
+    throw validationError(`--mandates cannot exceed ${options2.maxEntries} entries, got ${mandates.length}`);
+  }
+  return mandates.map((mandate, index) => {
+    if (!isJsonObject(mandate)) {
+      if (options2.requireCoreFields) {
+        throw validationError(`--mandates[${index}] must be a JSON object`);
+      }
+      if (isRecurring) {
+        throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
+      }
+      return mandate;
+    }
+    if (typeof mandate.description === "string" && mandate.description.length > MAX_MANDATE_DESCRIPTION_LENGTH) {
+      throw validationError(`--mandates[${index}].description must not exceed ${MAX_MANDATE_DESCRIPTION_LENGTH} characters`);
+    }
+    if (options2.requireCoreFields) {
+      requireMandateText(mandate, "description", index);
+      requireMandateAmountLimit(mandate, index);
+      requireMandateText(mandate, "currencyCode", index);
+      validateUtcDateTime(mandate.effectiveUntilTime, `--mandates[${index}].effectiveUntilTime`);
+    }
+    if (!isRecurring) {
+      return mandate;
+    }
+    const frequency = mandate.recurringFrequency;
+    if (typeof frequency !== "string" || frequency.trim().length === 0) {
+      throw validationError(`--mandates[${index}].recurringFrequency is required when --is-recurring is set`);
+    }
+    const normalizedFrequency = frequency.trim().toUpperCase();
+    if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
+      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
+    }
+    return {
+      ...mandate,
+      recurringFrequency: normalizedFrequency
+    };
+  });
+}
+function utcDateTimeFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  if (!UTC_DATETIME_FORMAT.test(value)) {
+    throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
+  }
+  return value;
+}
+function requireNonBlankStringFlag(flags, missingMessage, name) {
+  const value = requireStringFlag(flags, missingMessage, name);
+  if (!value.trim()) {
+    throw validationError(`--${name} is required and cannot be blank`);
+  }
+  return value;
+}
+function optionalJsonObjectFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  const parsed = parseJsonFlag(value, `--${name}`);
+  if (!isJsonObject(parsed)) {
+    throw validationError(`--${name} must be a JSON object`);
+  }
+  return parsed;
+}
+function validateUtcDateTime(value, field) {
+  if (value === void 0 || value === null) {
+    return;
+  }
+  if (typeof value !== "string" || !UTC_DATETIME_FORMAT.test(value)) {
+    throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
+  }
+}
+function requireMandateText(mandate, field, index) {
+  const value = mandate[field];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw validationError(`--mandates[${index}].${field} is required and cannot be blank`);
+  }
+}
+function requireMandateAmountLimit(mandate, index) {
+  const value = mandate.amountLimit;
+  if (value === void 0 || value === null) {
+    throw validationError(`--mandates[${index}].amountLimit is required`);
+  }
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
+    throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
+  }
+  if (typeof value === "number") {
+    const [integerPart, fractionPart = ""] = text.split(".");
+    const minorUnits = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
+    if (!Number.isSafeInteger(minorUnits)) {
+      throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
+    }
+  }
+}
+function isJsonObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/oauth.js
@@ -9800,7 +10258,7 @@ async function requestToken(options2) {
   }
   const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
-  const pendingInstructionId = optionalString(data.pending_instruction_id);
+  const pendingInstructionId = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
   return {
     tokenType: "Bearer",
     accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
@@ -10120,7 +10578,7 @@ function unwrapResponse(result, invalidMessage) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  if (!isRecord4(data)) {
+  if (!isRecord5(data)) {
     throw apiError(invalidMessage, 502);
   }
   return data;
@@ -10129,7 +10587,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  if (!value.every((item) => isRecord4(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+  if (!value.every((item) => isRecord5(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((item) => ({ ...item }));
@@ -10137,7 +10595,7 @@ function normalizePaymentMethods(value) {
 function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -10206,14 +10664,24 @@ function buildChargeBody(input) {
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord5(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord5(channel.action) ? channel.action : {};
+  const channel = isRecord6(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord6(channel.action) ? channel.action : {};
+  const walletAction = isRecord6(action.walletHandleRedirectOrDisplayQrCode) ? action.walletHandleRedirectOrDisplayQrCode : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber2(channel.status);
+  const imageUrlPng = typeof walletAction.imageUrlPng === "string" && walletAction.imageUrlPng.length > 0 ? walletAction.imageUrlPng : void 0;
+  const qrCode = status === 5 && imageUrlPng ? {
+    dataUrl: imageUrlPng,
+    orderId: nonEmptyString2(data.orderId),
+    paymentExecutionDetailId: nonEmptyString2(channel.paymentExecutionDetailId) ?? nonEmptyString2(isRecord6(channel.processingDetail) ? channel.processingDetail.paymentExecutionDetailId : void 0),
+    expiresAt: nonNegativeInteger(walletAction.expiresAt),
+    expiresSecond: nonNegativeInteger(walletAction.expiresSecond)
+  } : void 0;
   return {
     status,
     requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
-    ...redirectUrl ? { redirectUrl } : {}
+    ...redirectUrl ? { redirectUrl } : {},
+    ...qrCode ? { qrCode } : {}
   };
 }
 async function executeCharge(input, runtime) {
@@ -10247,7 +10715,7 @@ async function executeCharge(input, runtime) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber2(value) {
@@ -10260,19 +10728,238 @@ function finiteNumber2(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : void 0;
 }
+function nonNegativeInteger(value) {
+  const parsed = finiteNumber2(value);
+  return parsed !== void 0 && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+function nonEmptyString2(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized || null;
+}
 function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
+// dist/payment/method-selection.js
+var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
+function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
+  return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+}
+function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  const candidates = /* @__PURE__ */ new Map();
+  if (Array.isArray(paymentMethods)) {
+    for (const item of paymentMethods) {
+      if (!isRecord7(item) || paymentMethodTypeOf(item) !== normalizedType) {
+        continue;
+      }
+      const paymentInstrumentId = nonEmptyString3(item.paymentInstrumentId);
+      if (!paymentInstrumentId) {
+        continue;
+      }
+      const existing = candidates.get(paymentInstrumentId);
+      candidates.set(paymentInstrumentId, {
+        paymentInstrumentId,
+        isDefault: Boolean(existing?.isDefault || isDefaultPaymentMethod(item))
+      });
+    }
+  }
+  const matches = [...candidates.values()];
+  if (matches.length === 0) {
+    throw validationError(`no ${normalizedType} payment method is available; bind one and refresh payment methods`);
+  }
+  if (matches.length === 1) {
+    return matches[0].paymentInstrumentId;
+  }
+  const defaultMatches = matches.filter((candidate) => candidate.isDefault);
+  if (defaultMatches.length === 1) {
+    return defaultMatches[0].paymentInstrumentId;
+  }
+  throw validationError(`multiple ${normalizedType} payment methods are available without one unique default; pass --payment-instrument-id explicitly`);
+}
+function validatePaymentInstrumentType(paymentMethods, paymentInstrumentId, paymentMethodType) {
+  const normalizedId = nonEmptyString3(paymentInstrumentId);
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  if (!normalizedId) {
+    throw validationError("--payment-instrument-id must not be blank");
+  }
+  const matchingIdRecords = Array.isArray(paymentMethods) ? paymentMethods.filter((item) => isRecord7(item) && nonEmptyString3(item.paymentInstrumentId) === normalizedId) : [];
+  if (matchingIdRecords.length === 0) {
+    throw validationError(`payment instrument ${normalizedId} was not found after refreshing payment methods`);
+  }
+  if (matchingIdRecords.some((item) => paymentMethodTypeOf(item) === normalizedType)) {
+    return normalizedId;
+  }
+  const actualTypes = [...new Set(matchingIdRecords.map((item) => paymentMethodTypeOf(item) ?? "UNKNOWN"))].join(", ");
+  throw validationError(`payment instrument ${normalizedId} has type ${actualTypes}, not ${normalizedType}`);
+}
+function normalizePaymentMethodType(value) {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    throw validationError("--payment-method-type must not be blank");
+  }
+  return normalized;
+}
+function normalizeOptionalType(value) {
+  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : void 0;
+}
+function paymentMethodTypeOf(item) {
+  return normalizeOptionalType(item.paymentMethodType) ?? normalizeOptionalType(item.paymentInstrumentType);
+}
+function isDefaultPaymentMethod(item) {
+  return item.isDefault === true || item.default === true || item.defaultPaymentMethod === true;
+}
+function nonEmptyString3(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord7(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/payment/qr-code.js
+import { chmod as chmod2, mkdtemp, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+var PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+var MAX_QR_PNG_BYTES = 1024 * 1024;
+var MAX_QR_PNG_DATA_URL_LENGTH = PNG_DATA_URL_PREFIX.length + Math.ceil(MAX_QR_PNG_BYTES / 3) * 4;
+var PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+var REDACTED_PNG_DATA_URL = "[redacted:png-data-url]";
+async function materializeQrCodeCustomerAction(qrCode, options2 = {}) {
+  const png = decodePngDataUrl(qrCode.dataUrl);
+  let directoryPath;
+  try {
+    directoryPath = await mkdtemp(join(options2.temporaryDirectory ?? tmpdir(), "clink-cli-payment-qr-"));
+    if (process.platform !== "win32") {
+      await chmod2(directoryPath, 448);
+    }
+    const imagePath = join(directoryPath, "payment-qr.png");
+    await writeFile2(imagePath, png, { flag: "wx", mode: 384 });
+    if (process.platform !== "win32") {
+      await chmod2(imagePath, 384);
+    }
+    return {
+      type: "QR_CODE_REQUIRED",
+      mediaType: "image/png",
+      imagePath,
+      temporary: true,
+      cleanupRequired: true,
+      cleanupPath: directoryPath,
+      orderId: qrCode.orderId,
+      paymentExecutionDetailId: qrCode.paymentExecutionDetailId,
+      expiresAt: qrCode.expiresAt,
+      expiresSecond: qrCode.expiresSecond
+    };
+  } catch {
+    if (directoryPath) {
+      await rm2(directoryPath, { recursive: true, force: true }).catch(() => {
+      });
+    }
+    throw apiError("failed to store payment QR code", 500);
+  }
+}
+function buildQrCodePaymentOutput(data, customerAction) {
+  const redacted = redactPngDataUrls(data);
+  if (!isRecord8(redacted)) {
+    throw apiError("invalid payment response", 502);
+  }
+  return {
+    ...redacted,
+    customerAction
+  };
+}
+function redactPngDataUrls(value) {
+  if (typeof value === "string") {
+    return looksLikePngDataUrl(value) ? REDACTED_PNG_DATA_URL : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactPngDataUrls(item));
+  }
+  if (!isRecord8(value)) {
+    return value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactPngDataUrls(item)]));
+}
+function decodePngDataUrl(dataUrl) {
+  if (dataUrl.length > MAX_QR_PNG_DATA_URL_LENGTH || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+    throw invalidQrCode();
+  }
+  const encoded = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
+  if (encoded.length === 0 || encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(encoded)) {
+    throw invalidQrCode();
+  }
+  const png = Buffer.from(encoded, "base64");
+  if (png.length === 0 || png.length > MAX_QR_PNG_BYTES || png.toString("base64") !== encoded) {
+    throw invalidQrCode();
+  }
+  validatePngStructure(png);
+  return png;
+}
+function validatePngStructure(png) {
+  if (png.length < 33 || !png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    throw invalidQrCode();
+  }
+  let offset = PNG_SIGNATURE.length;
+  let firstChunk = true;
+  let foundEnd = false;
+  while (offset + 12 <= png.length) {
+    const length = png.readUInt32BE(offset);
+    const typeOffset = offset + 4;
+    const dataOffset = typeOffset + 4;
+    const chunkEnd = dataOffset + length + 4;
+    if (length > MAX_QR_PNG_BYTES || chunkEnd > png.length) {
+      throw invalidQrCode();
+    }
+    const type = png.toString("ascii", typeOffset, dataOffset);
+    if (!/^[A-Za-z]{4}$/u.test(type)) {
+      throw invalidQrCode();
+    }
+    if (firstChunk) {
+      if (type !== "IHDR" || length !== 13) {
+        throw invalidQrCode();
+      }
+      const width = png.readUInt32BE(dataOffset);
+      const height = png.readUInt32BE(dataOffset + 4);
+      if (width === 0 || height === 0 || width > 4096 || height > 4096) {
+        throw invalidQrCode();
+      }
+      firstChunk = false;
+    }
+    if (type === "IEND") {
+      if (length !== 0 || chunkEnd !== png.length) {
+        throw invalidQrCode();
+      }
+      foundEnd = true;
+      break;
+    }
+    offset = chunkEnd;
+  }
+  if (!foundEnd) {
+    throw invalidQrCode();
+  }
+}
+function looksLikePngDataUrl(value) {
+  return value.trimStart().toLowerCase().startsWith("data:image/png");
+}
+function invalidQrCode() {
+  return apiError("payment response contained an invalid PNG QR code", 502);
+}
+function isRecord8(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // dist/skills/install.js
 import { randomUUID as createRandomUUID } from "node:crypto";
-import { mkdir as mkdir5, rm as rm6 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { mkdir as mkdir5, rm as rm7 } from "node:fs/promises";
+import { join as join5 } from "node:path";
 
 // dist/skills/agents.js
 import { constants } from "node:fs";
-import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm3, rmdir, symlink } from "node:fs/promises";
+import { dirname, isAbsolute, join as join2, relative, resolve } from "node:path";
 var MARKER_FILE_NAME = ".clink-install.json";
 var DETECTION_FAILURE = "failed to detect installed agents";
 var PREPARE_FAILURE = "failed to prepare agent installation";
@@ -10284,22 +10971,22 @@ var UNSUPPORTED_REASON = "no supported local skill directory";
 async function detectAgents(input) {
   const homeDir = resolve(input.homeDir);
   const skillsRoot = resolve(input.skillsRoot);
-  const sharedTarget = join(skillsRoot, input.skillName);
+  const sharedTarget = join2(skillsRoot, input.skillName);
   const detected = [];
   try {
-    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
-    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
-    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
-    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
-    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "cursor", "link", join2(homeDir, ".cursor"), (rootPath) => join2(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "claude-code", "link", join2(homeDir, ".claude"), (rootPath) => join2(rootPath, "skills", input.skillName));
+    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join2(homeDir, ".codex"));
+    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join2(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "codebuddy", "link", join2(homeDir, ".codebuddy"), (rootPath) => join2(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "openclaw", "shared", join2(homeDir, ".openclaw"), () => sharedTarget);
+    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join2(homeDir, ".hermes"));
+    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join2(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "trae", "link", join2(homeDir, ".trae"), (rootPath) => join2(rootPath, "skills", input.skillName));
     const opencodeRoot = await firstExistingRoot(uniquePaths([
       resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
-      join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
-      join(homeDir, ".opencode")
+      join2(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join2(homeDir, ".config")), "opencode"),
+      join2(homeDir, ".opencode")
     ]));
     if (opencodeRoot !== null) {
       detected.push({
@@ -10309,10 +10996,10 @@ async function detectAgents(input) {
         targetPath: sharedTarget
       });
     }
-    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
+    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join2(homeDir, ".copilot"));
     const copilotRoot = await firstExistingRoot(uniquePaths([
       copilotCliRoot,
-      join(homeDir, ".config", "github-copilot")
+      join2(homeDir, ".config", "github-copilot")
     ]));
     if (copilotRoot !== null) {
       detected.push({
@@ -10323,18 +11010,18 @@ async function detectAgents(input) {
       });
     }
     const geminiHome = resolveEnvironmentRoot(input.env.GEMINI_CLI_HOME, homeDir);
-    const geminiRoot = join(geminiHome, ".gemini");
+    const geminiRoot = join2(geminiHome, ".gemini");
     if (await isExistingRoot(geminiRoot)) {
       const usesSharedHome = geminiHome === homeDir;
       detected.push({
         agent: "gemini-cli",
         mode: usesSharedHome ? "shared" : "link",
         rootPath: geminiRoot,
-        targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
+        targetPath: usesSharedHome ? sharedTarget : join2(geminiRoot, "skills", input.skillName)
       });
     }
-    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
-    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
+    await appendDetected(detected, "codework", "unsupported", join2(homeDir, ".codework"), () => null);
+    await appendDetected(detected, "chatgpt", "unsupported", join2(homeDir, ".chatgpt"), () => null);
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -10365,7 +11052,7 @@ async function prepareAgentPlans(input) {
       if (copyTempPath !== null && await pathEntryExists(copyTempPath)) {
         throw installError(PREPARE_FAILURE);
       }
-      const backupPath = needsBackup ? join(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
+      const backupPath = needsBackup ? join2(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
       if (backupPath !== null && await pathEntryExists(backupPath)) {
         throw installError(PREPARE_FAILURE);
       }
@@ -10450,7 +11137,7 @@ function createNoWritePlan(detected, mode) {
 function createWritePlan(preflight, input) {
   const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
   const targetPath = detected.targetPath;
-  const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
+  const backupObjectPath = backupPath === null ? null : join2(backupPath, "target");
   let appliedResult = null;
   let backupMoved = false;
   let backupVerified = false;
@@ -10576,7 +11263,7 @@ function createWritePlan(preflight, input) {
         if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
           throw new Error("installed target changed before rollback");
         }
-        await rm2(targetPath, { recursive: true, force: true });
+        await rm3(targetPath, { recursive: true, force: true });
         removedPlacedTarget = true;
       }
       placedFingerprint = null;
@@ -10648,7 +11335,7 @@ function createWritePlan(preflight, input) {
           await assertPathNamesEntry(backupPath, backupContainerEntry);
           const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
           if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
-            await rm2(backupPath, { recursive: true, force: true });
+            await rm3(backupPath, { recursive: true, force: true });
             backupMoved = false;
             backupVerified = false;
             backupContainerEntry = null;
@@ -10747,7 +11434,7 @@ async function copyDirectoryContents(sourcePath, targetPath) {
   }
   const entries = await readdir(sourcePath, { withFileTypes: true });
   for (const entry of entries) {
-    await cp(join(sourcePath, entry.name), join(targetPath, entry.name), {
+    await cp(join2(sourcePath, entry.name), join2(targetPath, entry.name), {
       recursive: true,
       dereference: false,
       errorOnExist: true,
@@ -10798,12 +11485,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
   if (backupFingerprint.type === "symlink") {
     const linkText = await readlink(backupPath);
     await symlink(linkText, targetPath, "dir");
-    await rm2(backupPath, { force: true });
+    await rm3(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "file") {
     await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
-    await rm2(backupPath, { force: true });
+    await rm3(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "directory") {
@@ -10818,12 +11505,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
       if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
         throw new Error("restored directory verification failed");
       }
-      await rm2(backupPath, { recursive: true });
+      await rm3(backupPath, { recursive: true });
       return;
     } catch (error) {
       const currentTarget = await lstatIfExists(targetPath);
       if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
-        await rm2(targetPath, { recursive: true, force: true });
+        await rm3(targetPath, { recursive: true, force: true });
       }
       throw error;
     }
@@ -10884,7 +11571,7 @@ async function inspectTarget(detected, input) {
 }
 async function managedReleaseIdentity(currentPath, resolvedTarget) {
   try {
-    const releasesRoot = await realpath(join(dirname(currentPath), ".clink", "releases"));
+    const releasesRoot = await realpath(join2(dirname(currentPath), ".clink", "releases"));
     const releasesStat = await lstat(releasesRoot);
     const targetStat = await lstat(resolvedTarget);
     if (!releasesStat.isDirectory() || !targetStat.isDirectory()) {
@@ -10950,7 +11637,7 @@ async function removeOwnedPath(filePath, expected, mode) {
   if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
     return;
   }
-  await rm2(filePath, { recursive: true, force: true });
+  await rm3(filePath, { recursive: true, force: true });
 }
 function createEntryIdentity(stats) {
   return {
@@ -10989,7 +11676,7 @@ function createFingerprint(stats, linkText, markerRaw) {
   };
 }
 async function readMarkerRecord(rootPath) {
-  const markerPath = join(rootPath, MARKER_FILE_NAME);
+  const markerPath = join2(rootPath, MARKER_FILE_NAME);
   let markerStat;
   try {
     markerStat = await lstatIfExists(markerPath);
@@ -11041,7 +11728,7 @@ function isErrorCode(error, code) {
 // dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
-import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
+import { chmod as chmod3, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm4, writeFile as writeFile3 } from "node:fs/promises";
 import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -11198,7 +11885,7 @@ async function extractSkillPackage(packagePath, destination, overrides = {}) {
     return await materializeRawSkill(classified.bytes, destinationRoot);
   } catch {
     try {
-      await rm3(destinationRoot, { recursive: true, force: true });
+      await rm4(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
@@ -11231,15 +11918,15 @@ async function classifySkillPackage(packagePath, limits) {
 }
 async function materializeRawSkill(bytes, destinationRoot) {
   await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-  await chmod2(destinationRoot, 493);
+  await chmod3(destinationRoot, 493);
   const rawRoot = resolve2(destinationRoot, "raw");
   assertPathContained(destinationRoot, rawRoot);
   await mkdir3(rawRoot, { mode: 493 });
-  await chmod2(rawRoot, 493);
+  await chmod3(rawRoot, 493);
   const skillPath = resolve2(rawRoot, "SKILL.md");
   assertPathContained(rawRoot, skillPath);
-  await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
-  await chmod2(skillPath, 420);
+  await writeFile3(skillPath, bytes, { flag: "wx", mode: 420 });
+  await chmod3(skillPath, 420);
   return {
     layout: "single",
     skillRoot: rawRoot,
@@ -11263,11 +11950,11 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       throw new Error("archive entry limit exceeded");
     }
     await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-    await chmod2(destinationRoot, 493);
+    await chmod3(destinationRoot, 493);
     const rawRoot = resolve2(destinationRoot, "raw");
     assertPathContained(destinationRoot, rawRoot);
     await mkdir3(rawRoot, { mode: 493 });
-    await chmod2(rawRoot, 493);
+    await chmod3(rawRoot, 493);
     const registeredPaths = new ArchivePathRegistry();
     const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
     const byteCount = { total: 0 };
@@ -11301,7 +11988,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       if (meter.fileBytes !== entry.uncompressedSize) {
         throw new Error("archive entry size mismatch");
       }
-      await chmod2(outputPath, mode);
+      await chmod3(outputPath, mode);
     }
     if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
       throw new Error("archive size metadata mismatch");
@@ -11316,7 +12003,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
   } catch {
     closeZip(zipFile);
     try {
-      await rm3(destinationRoot, { recursive: true, force: true });
+      await rm4(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
@@ -11485,7 +12172,7 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
       }
       knownDirectories.add(current);
     }
-    await chmod2(current, 493);
+    await chmod3(current, 493);
   }
 }
 async function selectSkillLayout(rawRoot) {
@@ -11576,7 +12263,7 @@ function closeZip(zipFile) {
 // dist/skills/download.js
 import { createHash as createHash3 } from "node:crypto";
 import { createWriteStream as createFileWriteStream } from "node:fs";
-import { lstat as lstat3, rm as rm4 } from "node:fs/promises";
+import { lstat as lstat3, rm as rm5 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 var DEFAULT_DEPENDENCIES = {
@@ -11790,7 +12477,7 @@ async function cleanupDestination(destinationPath, state) {
     return true;
   }
   try {
-    await rm4(destinationPath, { force: true });
+    await rm5(destinationPath, { force: true });
     state.createdDestination = false;
     return true;
   } catch {
@@ -11862,7 +12549,8 @@ async function reportSkillMetric(input, metric, body, overrides) {
     const response = await dependencies.fetch(url, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        [CLI_VERSION_HEADER]: CLI_VERSION
       },
       body: JSON.stringify(body),
       signal: controller.signal
@@ -11914,7 +12602,8 @@ async function requestPublicSkillsJson(input, overrides = {}) {
         method: "GET",
         headers: {
           Accept: "application/json",
-          Clientid: CLINK_PUBLIC_CLIENT_ID
+          Clientid: CLINK_PUBLIC_CLIENT_ID,
+          [CLI_VERSION_HEADER]: CLI_VERSION
         },
         signal: controller.signal
       });
@@ -12046,7 +12735,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord6(parsed) ? parsed : void 0;
+    return isRecord9(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -12056,22 +12745,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord6)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord9)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord6(body) && Array.isArray(body.items)) {
+  if (isRecord9(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord6(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord9(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord6(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -12147,13 +12836,13 @@ function isSafeFileName(value) {
 }
 
 // dist/skills/store.js
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 
 // dist/skills/store-publication.js
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm5, symlink as symlink2, utimes } from "node:fs/promises";
-import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join2, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
+import { chmod as chmod4, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm6, symlink as symlink2, utimes } from "node:fs/promises";
+import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join3, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
 var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
 var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
 var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
@@ -12362,7 +13051,7 @@ async function inspectManagedCurrent(paths, fingerprint) {
     if (!SHA256_PATTERN.test(sha256)) {
       return null;
     }
-    const marker = await readNoFollowInstallMarker(join2(canonicalReleasePath, INSTALL_MARKER_NAME2));
+    const marker = await readNoFollowInstallMarker(join3(canonicalReleasePath, INSTALL_MARKER_NAME2));
     if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
       return null;
     }
@@ -12411,7 +13100,7 @@ async function inspectExistingRelease(releasePath, releasesRoot, marker) {
   const canonicalRoot = await realpath2(releasesRoot);
   const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
   const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  const existingMarker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
+  const existingMarker = await readNoFollowInstallMarker(join3(releasePath, INSTALL_MARKER_NAME2));
   if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
     throw installError(PUBLISH_CONFLICT_MESSAGE);
   }
@@ -12447,7 +13136,7 @@ async function createImmutableRelease(paths, extractedRoot, marker) {
   if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
     throw new Error("release changed during publication");
   }
-  const installedMarker = await readNoFollowInstallMarker(join2(paths.releasePath, INSTALL_MARKER_NAME2));
+  const installedMarker = await readNoFollowInstallMarker(join3(paths.releasePath, INSTALL_MARKER_NAME2));
   if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
     throw new Error("release marker changed during publication");
   }
@@ -12455,9 +13144,9 @@ async function createImmutableRelease(paths, extractedRoot, marker) {
 }
 async function ensureReleaseParent(paths, marker) {
   await ensureRealDirectory(paths.releasesRoot);
-  const publisherPath = join2(paths.releasesRoot, marker.publisher);
+  const publisherPath = join3(paths.releasesRoot, marker.publisher);
   await ensureRealDirectory(publisherPath);
-  await ensureRealDirectory(join2(publisherPath, marker.skillName));
+  await ensureRealDirectory(join3(publisherPath, marker.skillName));
 }
 async function ensureRealDirectory(path4) {
   await mkdir4(path4, { recursive: true, mode: 448 });
@@ -12467,7 +13156,7 @@ async function ensureRealDirectory(path4) {
   }
 }
 async function writeInstallMarker(rootPath, marker) {
-  const markerPath = join2(rootPath, INSTALL_MARKER_NAME2);
+  const markerPath = join3(rootPath, INSTALL_MARKER_NAME2);
   const handle = await open4(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
   try {
     await handle.writeFile(JSON.stringify(marker), "utf8");
@@ -12523,13 +13212,13 @@ function sameInstallMarker(first, second) {
 async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
   await assertPathFingerprint(paths.currentPath, expectedCurrent);
   await ensureRealDirectory(paths.backupsRoot);
-  const containerPath = join2(paths.backupsRoot, backupName);
+  const containerPath = join3(paths.backupsRoot, backupName);
   await mkdir4(containerPath, { mode: 448 });
   const containerFingerprint = await fingerprintPath2(containerPath);
   if (containerFingerprint.kind !== "directory") {
     throw new Error("backup container is not a directory");
   }
-  const entryPath = join2(containerPath, basename(paths.currentPath));
+  const entryPath = join3(containerPath, basename(paths.currentPath));
   try {
     await assertPathFingerprint(paths.currentPath, expectedCurrent);
     await rename3(paths.currentPath, entryPath);
@@ -12562,7 +13251,7 @@ async function removeEmptyOwnedContainer(containerPath, expected) {
   try {
     const current = await fingerprintPath2(containerPath);
     if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir3(containerPath)).length === 0) {
-      await rm5(containerPath, { recursive: true });
+      await rm6(containerPath, { recursive: true });
     }
   } catch {
   }
@@ -12629,10 +13318,10 @@ async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanup
     throw new Error("current was replaced before rollback");
   }
   await ensureRealDirectory(backupsRoot);
-  const containerPath = join2(backupsRoot, cleanupName);
+  const containerPath = join3(backupsRoot, cleanupName);
   await mkdir4(containerPath, { mode: 448 });
   const containerFingerprint = await fingerprintPath2(containerPath);
-  const entryPath = join2(containerPath, basename(currentPath));
+  const entryPath = join3(containerPath, basename(currentPath));
   await rename3(currentPath, entryPath);
   const moved = await fingerprintPath2(entryPath);
   if (!samePathFingerprint(moved, expected)) {
@@ -12674,7 +13363,7 @@ async function restoreBackup(currentPath, backup) {
     case "file":
       if (backup.retained) {
         await copyFile2(backup.entryPath, currentPath, constants2.COPYFILE_EXCL);
-        await chmod3(currentPath, backup.entryFingerprint.mode & 4095);
+        await chmod4(currentPath, backup.entryFingerprint.mode & 4095);
         await assertBackupAuthenticated(backup);
         const atime = backup.entryFingerprint.atimeMs / 1e3;
         const mtime = backup.entryFingerprint.mtimeMs / 1e3;
@@ -12704,7 +13393,7 @@ async function restoreBackup(currentPath, backup) {
 async function restoreDirectory(sourcePath, destinationPath, mode) {
   await mkdir4(destinationPath, { mode: mode & 4095 });
   for (const entry of await readdir3(sourcePath)) {
-    await cp2(join2(sourcePath, entry), join2(destinationPath, entry), {
+    await cp2(join3(sourcePath, entry), join3(destinationPath, entry), {
       recursive: true,
       errorOnExist: true,
       force: false,
@@ -12712,7 +13401,7 @@ async function restoreDirectory(sourcePath, destinationPath, mode) {
       verbatimSymlinks: true
     });
   }
-  await chmod3(destinationPath, mode & 4095);
+  await chmod4(destinationPath, mode & 4095);
 }
 async function assertBackupAuthenticated(backup) {
   const container = await fingerprintPath2(backup.containerPath);
@@ -12727,7 +13416,7 @@ async function removeAuthenticatedBackup(backup) {
   const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
   await rename3(backup.containerPath, cleanupPath);
   const movedContainer = await fingerprintPath2(cleanupPath);
-  const movedEntry = await fingerprintPath2(join2(cleanupPath, basename(backup.entryPath)));
+  const movedEntry = await fingerprintPath2(join3(cleanupPath, basename(backup.entryPath)));
   if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
     try {
       await rename3(cleanupPath, backup.containerPath);
@@ -12735,11 +13424,11 @@ async function removeAuthenticatedBackup(backup) {
     }
     throw new Error("backup changed during removal");
   }
-  await rm5(cleanupPath, { recursive: true });
+  await rm6(cleanupPath, { recursive: true });
 }
 async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
   const current = await fingerprintPath2(releasePath);
-  const marker = await readNoFollowInstallMarker(join2(releasePath, INSTALL_MARKER_NAME2));
+  const marker = await readNoFollowInstallMarker(join3(releasePath, INSTALL_MARKER_NAME2));
   await canonicalExistingReleasePath(releasePath, releasesRoot);
   if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
     throw new Error("created release changed before rollback");
@@ -12747,7 +13436,7 @@ async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
   const cleanupPath = `${releasePath}.rollback-${uuid}`;
   await rename3(releasePath, cleanupPath);
   const moved = await fingerprintPath2(cleanupPath);
-  const movedMarker = await readNoFollowInstallMarker(join2(cleanupPath, INSTALL_MARKER_NAME2));
+  const movedMarker = await readNoFollowInstallMarker(join3(cleanupPath, INSTALL_MARKER_NAME2));
   if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
     try {
       await rename3(cleanupPath, releasePath);
@@ -12755,7 +13444,7 @@ async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
     }
     throw new Error("created release changed during rollback");
   }
-  await rm5(cleanupPath, { recursive: true });
+  await rm6(cleanupPath, { recursive: true });
 }
 async function fingerprintPath2(path4) {
   const before = await lstat4(path4);
@@ -12802,17 +13491,17 @@ function isErrorCode2(error, code) {
 
 // dist/skills/store.js
 function resolveStorePaths(homeDir, spec, sha256, uuid) {
-  const skillsRoot = join3(homeDir, ".agents", "skills");
-  const clinkRoot = join3(skillsRoot, ".clink");
-  const releasesRoot = join3(clinkRoot, "releases");
+  const skillsRoot = join4(homeDir, ".agents", "skills");
+  const clinkRoot = join4(skillsRoot, ".clink");
+  const releasesRoot = join4(clinkRoot, "releases");
   return {
     skillsRoot,
     clinkRoot,
-    stagingPath: join3(clinkRoot, "staging", uuid),
+    stagingPath: join4(clinkRoot, "staging", uuid),
     releasesRoot,
-    releasePath: join3(releasesRoot, spec.publisher, spec.skillName, sha256),
-    backupsRoot: join3(clinkRoot, "backups"),
-    currentPath: join3(skillsRoot, spec.skillName)
+    releasePath: join4(releasesRoot, spec.publisher, spec.skillName, sha256),
+    backupsRoot: join4(clinkRoot, "backups"),
+    currentPath: join4(skillsRoot, spec.skillName)
   };
 }
 
@@ -12829,7 +13518,7 @@ var DEFAULT_DEPENDENCIES2 = {
   prepareAgents: prepareAgentPlans,
   randomUUID: createRandomUUID,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path4) => rm6(path4, { recursive: true, force: true }),
+  remove: async (path4) => rm7(path4, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -12841,8 +13530,8 @@ async function installSkill(input, overrides = {}) {
     ...overrides
   };
   const packageSpec = toPackageSpec(input);
-  const skillsRoot = join4(input.homeDir, ".agents", "skills");
-  const installPath = join4(skillsRoot, input.skillName);
+  const skillsRoot = join5(input.homeDir, ".agents", "skills");
+  const installPath = join5(skillsRoot, input.skillName);
   const downloadTimeoutMs = Math.max(input.timeoutMs, MIN_SKILL_DOWNLOAD_TIMEOUT_MS);
   if (input.dryRun) {
     const detectedAgents = await dependencies.detectAgentRoots({
@@ -12881,7 +13570,7 @@ async function installSkill(input, overrides = {}) {
     dependencies.log("Downloading skill package");
     const downloaded = await dependencies.downloadPackage({
       ticket,
-      destinationPath: join4(preliminaryPaths.stagingPath, "package"),
+      destinationPath: join5(preliminaryPaths.stagingPath, "package"),
       timeoutMs: downloadTimeoutMs,
       refreshTicket: () => dependencies.getTicket({
         baseUrl: input.dashboardBaseUrl,
@@ -12890,7 +13579,7 @@ async function installSkill(input, overrides = {}) {
       })
     });
     dependencies.log("Materializing skill package");
-    const extracted = await dependencies.materializePackage(downloaded.path, join4(preliminaryPaths.stagingPath, "extract"));
+    const extracted = await dependencies.materializePackage(downloaded.path, join5(preliminaryPaths.stagingPath, "extract"));
     const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
     dependencies.log("Publishing skill release");
     for (const unit of installUnits) {
@@ -12943,7 +13632,7 @@ async function installSkill(input, overrides = {}) {
   }
 }
 async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, installedAt, dependencies) {
-  const skillsRoot = join4(input.homeDir, ".agents", "skills");
+  const skillsRoot = join5(input.homeDir, ".agents", "skills");
   const roots = extracted.layout === "single" ? [{ skillName: input.skillName, skillRoot: extracted.skillRoot }] : extracted.skillRoots;
   const units = [];
   for (const [index, root] of roots.entries()) {
@@ -13260,12 +13949,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord7(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord10(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord7(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord10(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -13280,7 +13969,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord7(value) {
+function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -13575,11 +14264,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord8(profile)) {
+  if (!isRecord11(profile)) {
     return [];
   }
-  const ucp = isRecord8(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord8(ucp.payment_handlers) ? ucp.payment_handlers : isRecord8(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord11(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord11(ucp.payment_handlers) ? ucp.payment_handlers : isRecord11(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -13590,10 +14279,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord8(handler) || !isRecord8(handler.config)) {
+      if (!isRecord11(handler) || !isRecord11(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord8(handler.config.merchant_info) ? handler.config.merchant_info : isRecord8(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord11(handler.config.merchant_info) ? handler.config.merchant_info : isRecord11(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -14254,11 +14943,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord8(value)) {
+  if (!isRecord11(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord8(result)) {
+  if (isRecord11(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -14274,7 +14963,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord8(runningTotal)) {
+  if (!isRecord11(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -14299,7 +14988,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord8(productJson)) {
+  if (!isRecord11(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -14321,7 +15010,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord8(variant)) {
+  if (!isRecord11(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -14357,7 +15046,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord8(option)) {
+    if (!isRecord11(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -14375,7 +15064,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord8(value)) {
+  if (!isRecord11(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -14433,14 +15122,14 @@ function asTrimmedString(value) {
 function readPath(value, path4) {
   let current = value;
   for (const key of path4) {
-    if (!isRecord8(current)) {
+    if (!isRecord11(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord8(value) {
+function isRecord11(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -14452,6 +15141,194 @@ function resolveUcpProviderFromHostname(hostname) {
 }
 function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
+}
+
+// dist/ucp-checkout-wait.js
+var DEFAULT_POLL_INTERVAL_MS2 = 3e3;
+var MAX_POLL_INTERVAL_MS = 3e4;
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
+  "completed",
+  "cancelled",
+  "canceled",
+  "expired",
+  "failed",
+  "rejected"
+]);
+var realSleep2 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+async function waitForUcpCheckoutTerminal(options2) {
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? realSleep2;
+  const deadline = now() + options2.maxWaitMs;
+  let attempts = 0;
+  while (true) {
+    const checkout = requireCheckout(options2.checkoutId, await options2.fetchCheckout());
+    attempts += 1;
+    const status = checkoutStatus(checkout);
+    const nextRetryAt = normalizedRetryAt(checkout.next_retry_at ?? checkout.nextRetryAt);
+    if (TERMINAL_STATUSES.has(status)) {
+      return {
+        checkout,
+        status,
+        attempts,
+        timedOut: false,
+        ...nextRetryAt ? { nextRetryAt } : {}
+      };
+    }
+    const currentTime = now();
+    if (currentTime >= deadline) {
+      return {
+        checkout,
+        status,
+        attempts,
+        timedOut: true,
+        ...nextRetryAt ? { nextRetryAt } : {}
+      };
+    }
+    await sleep3(Math.min(resolvePollDelayMs(nextRetryAt, currentTime), deadline - currentTime));
+  }
+}
+function requireCheckout(checkoutId, value) {
+  if (!isRecord12(value)) {
+    throw apiError("UCP Checkout response must be an object.");
+  }
+  const observedId = normalizedText(value.id ?? value.checkoutId ?? value.checkout_id);
+  if (!observedId) {
+    throw apiError("UCP Checkout response is missing id.");
+  }
+  if (observedId !== checkoutId) {
+    throw apiError("UCP Checkout response id does not match the requested Checkout.");
+  }
+  return value;
+}
+function checkoutStatus(checkout) {
+  return normalizedText(checkout.status)?.toLowerCase() ?? "unknown";
+}
+function normalizedRetryAt(value) {
+  const text = normalizedText(value);
+  if (!text) {
+    return void 0;
+  }
+  const timestamp = Date.parse(text);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
+}
+function resolvePollDelayMs(nextRetryAt, now) {
+  if (!nextRetryAt) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  const delay = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay)) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay));
+}
+function normalizedText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function isRecord12(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/ucp-order.js
+var DEFAULT_POLL_INTERVAL_MS3 = 3e3;
+var MAX_POLL_INTERVAL_MS2 = 3e4;
+var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
+var realSleep3 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+async function waitForUcpDigitalDelivery(options2) {
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? realSleep3;
+  const deadline = now() + options2.maxWaitMs;
+  let attempts = 0;
+  while (true) {
+    const order = requireOrder(options2.orderId, await options2.fetchOrder());
+    attempts += 1;
+    const delivery = classifyUcpDigitalDelivery(order);
+    if (delivery.status === "ready" || delivery.status === "failed") {
+      return {
+        ready: delivery.status === "ready",
+        timedOut: false,
+        deliveryStatus: delivery.status,
+        attempts,
+        order,
+        ...delivery.nextRetryAt ? { nextRetryAt: delivery.nextRetryAt } : {}
+      };
+    }
+    const currentTime = now();
+    if (currentTime >= deadline) {
+      return {
+        ready: false,
+        timedOut: true,
+        deliveryStatus: "pending",
+        attempts,
+        order,
+        ...delivery.nextRetryAt ? { nextRetryAt: delivery.nextRetryAt } : {}
+      };
+    }
+    const delayMs = Math.min(resolvePollDelayMs2(delivery.nextRetryAt, currentTime), deadline - currentTime);
+    await sleep3(delayMs);
+  }
+}
+function classifyUcpDigitalDelivery(order) {
+  const rawDelivery = order.digital_delivery;
+  if (rawDelivery === void 0 || rawDelivery === null) {
+    return { status: "pending" };
+  }
+  if (!isRecord13(rawDelivery)) {
+    throw apiError("UCP order digital_delivery must be an object.");
+  }
+  const rawStatus = rawDelivery.status;
+  if (typeof rawStatus !== "string" || !rawStatus.trim()) {
+    throw apiError("UCP order digital_delivery.status is missing.");
+  }
+  const status = rawStatus.trim().toLowerCase();
+  const nextRetryAt = normalizedRetryAt2(rawDelivery.next_retry_at);
+  if (status === "ready") {
+    if (!Array.isArray(rawDelivery.artifacts) || rawDelivery.artifacts.length === 0) {
+      throw apiError("UCP order digital delivery is ready without artifacts.");
+    }
+    return { status: "ready" };
+  }
+  if (status === "failed") {
+    return { status: "failed" };
+  }
+  if (PENDING_DELIVERY_STATUSES.has(status)) {
+    return {
+      status: "pending",
+      ...nextRetryAt ? { nextRetryAt } : {}
+    };
+  }
+  throw apiError(`unsupported UCP digital delivery status: ${status}`);
+}
+function requireOrder(orderId, value) {
+  if (!isRecord13(value)) {
+    throw apiError("UCP order response must be an object.");
+  }
+  if (typeof value.id !== "string" || !value.id.trim()) {
+    throw apiError("UCP order response is missing id.");
+  }
+  if (value.id.trim() !== orderId) {
+    throw apiError("UCP order response id does not match the requested order.");
+  }
+  return value;
+}
+function normalizedRetryAt2(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
+}
+function resolvePollDelayMs2(nextRetryAt, now) {
+  if (!nextRetryAt) {
+    return DEFAULT_POLL_INTERVAL_MS3;
+  }
+  const delay = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay)) {
+    return DEFAULT_POLL_INTERVAL_MS3;
+  }
+  return Math.min(MAX_POLL_INTERVAL_MS2, Math.max(DEFAULT_POLL_INTERVAL_MS3, delay));
+}
+function isRecord13(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/cli.js
@@ -14468,8 +15345,6 @@ var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
   "EXPIRED",
   "DECLINED"
 ]);
-var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
-var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
 var UCP_ORDER_PATH = "/agent/ucp/orders";
@@ -14481,6 +15356,7 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
   "partially_refunded",
   "refunded"
 ]);
+var DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
 var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
@@ -14503,8 +15379,9 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  validateEnvironmentFlagScope(command, subcommand, args.flags, edition.environmentSelectingInitCommands ?? []);
+  const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
   validateEventPollSelector(command, subcommand, args.flags);
+  validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, args.flags);
   const editionCommandNames = new Set(edition.commandNames ?? []);
   if (getBooleanFlag(args.flags, "help")) {
     if (command && !BASE_COMMAND_NAMES.has(command) && !editionCommandNames.has(command)) {
@@ -14517,11 +15394,20 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     process.stdout.write((edition.getHelpText ?? getHelpText)());
     return EXIT_CODES.OK;
   }
-  const storedConfig = await readStoredConfig();
-  const runtimeConfig = resolveRuntimeConfig(storedConfig, args.flags);
+  const preparedCommand = await edition.prepareCommand?.(command, subcommand, args);
+  const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand);
+  const storedConfig = usesPublicCatalogEnvironment ? defaultConfig() : await readStoredConfig();
+  const runtimeConfig = usesPublicCatalogEnvironment ? {
+    baseUrl: resolvePublicCatalogBaseUrl(args.flags),
+    defaultOpenLinks: false
+  } : resolveRuntimeConfig(storedConfig, args.flags);
+  if (selectedCommandEnvironment) {
+    runtimeConfig.baseUrl = API_BASE_URLS[selectedCommandEnvironment];
+  }
   const globalOptions = resolveGlobalOptions(args, storedConfig);
   const context = {
     args,
+    ...preparedCommand !== void 0 ? { preparedCommand } : {},
     storedConfig,
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
@@ -14530,7 +15416,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
     configLifecycle: edition.configLifecycle ?? {}
   };
-  await prepareOAuthAuthorization(command, subcommand, context);
+  await prepareOAuthAuthorization(command, subcommand, context, edition);
   switch (command) {
     case "wallet":
       return handleWalletCommand(subcommand, context);
@@ -14568,31 +15454,64 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   throw validationError(`unsupported command: ${command}`);
 }
 function validateEventPollSelector(command, subcommand, flags) {
-  if (command !== "events" || subcommand !== "poll" || !("checkout-id" in flags)) {
+  if (command !== "events" || subcommand !== "poll") {
     return;
   }
-  const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
-  if (!checkoutId) {
+  if ("checkout-id" in flags && !getStringFlag(flags, "checkout-id")?.trim()) {
     throw validationError("invalid --checkout-id: expected a non-blank id");
   }
+  if ("payment-instrument-id" in flags && !getStringFlag(flags, "payment-instrument-id")?.trim()) {
+    throw validationError("invalid --payment-instrument-id: expected a non-blank id");
+  }
   const type = parseEventTypeFlag(getStringFlag(flags, "type"));
-  if (type !== "agent_order.succeeded" && type !== "agent_order.failed") {
+  if ("checkout-id" in flags && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
   }
-}
-function validateEnvironmentFlagScope(command, subcommand, flags, editionCommands) {
-  const environmentCommands = ["wallet", ...editionCommands];
-  const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
-  if (isEnvironmentSelectingInit) {
-    resolveSelectedEnvironment(flags);
+  if ("payment-instrument-id" in flags && !type) {
+    throw validationError("--payment-instrument-id requires --type");
   }
-  const supportedBy = environmentCommands.map((name) => `${name} init`).join(" or ");
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "sandbox")) {
+  if ("checkout-id" in flags && "payment-instrument-id" in flags) {
+    throw validationError("--checkout-id and --payment-instrument-id are mutually exclusive");
+  }
+}
+function validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, flags) {
+  if (command === "ucp-checkout" && subcommand === "run" && !getBooleanFlag(flags, "help") && !getBooleanFlag(flags, "dry-run") && !getBooleanFlag(flags, "confirm-purchase")) {
+    throw validationError("ucp-checkout run requires explicit --confirm-purchase before any live request");
+  }
+}
+function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags, editionInitCommands, editionCommands) {
+  if (isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand)) {
+    resolvePublicCatalogBaseUrl(flags);
+    return void 0;
+  }
+  const environmentCommands = [
+    { command: "wallet", subcommand: "init" },
+    ...editionInitCommands.map((name) => ({ command: name, subcommand: "init" })),
+    ...editionCommands
+  ];
+  const selectedCommand = environmentCommands.find((candidate) => command === candidate.command && subcommand === candidate.subcommand);
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (selectedCommand) {
+    return resolveSelectedEnvironment(flags);
+  }
+  const publicCatalogCommands = [
+    "ucp-catalog search",
+    "ucp-catalog product",
+    "catalog search",
+    "tool internal-ucp get-merchant-list"
+  ];
+  const supportedBy = environmentCommands.map(({ command: name, subcommand: action }) => `${name} ${action}`).concat(publicCatalogCommands).join(" or ");
+  if (!selectedCommand && sandbox) {
     throw validationError(`--sandbox is only supported by ${supportedBy}`);
   }
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
+  if (!selectedCommand && test) {
     throw validationError(`--test is only supported by ${supportedBy}`);
   }
+  return void 0;
+}
+function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
+  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -14679,8 +15598,8 @@ async function skillsTip(context) {
   }
   return EXIT_CODES.OK;
 }
-async function prepareOAuthAuthorization(command, subcommand, context) {
-  if (context.globalOptions.dryRun || !context.storedConfig.authorization || !commandUsesCustomerAuthorization(command, subcommand)) {
+async function prepareOAuthAuthorization(command, subcommand, context, edition) {
+  if (context.globalOptions.dryRun || !context.storedConfig.authorization || !(commandUsesCustomerAuthorization(command, subcommand) || edition.commandUsesCustomerAuthorization?.(command, subcommand))) {
     return;
   }
   await refreshOAuthAuthorization(context);
@@ -14741,6 +15660,10 @@ function assertCommandAuthorizationUnchanged(original, latest) {
 async function requestOAuthBusinessJson(context, buildRequest) {
   return requestJsonWithOAuthRetry(createOAuthRequestRuntime(context), buildRequest);
 }
+async function requestOAuthBusinessJsonOnce(context, buildRequest) {
+  const runtimeConfig = await createRuntimeConfigLoader(context)();
+  return requestJson(buildRequest(runtimeConfig));
+}
 function commandUsesCustomerAuthorization(command, subcommand) {
   switch (command) {
     case "card":
@@ -14753,8 +15676,6 @@ function commandUsesCustomerAuthorization(command, subcommand) {
       return true;
     case "refund":
     case "ucp-checkout":
-    case "ucp-catalog":
-    case "catalog":
     case "ucp-order":
     case "instruction":
     case "events":
@@ -14885,6 +15806,7 @@ async function toolInternalUcp(context) {
   const configuredEnvironment = clinkEnvironmentForApiBaseUrl(baseUrl);
   switch (nestedCommand) {
     case "get-merchant-list": {
+      rejectPublicCatalogAuthenticationFlags(context.args.flags);
       const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
       if (!configuredEnvironment && !hasMerchantListOverride) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
@@ -15005,12 +15927,26 @@ async function eventsPoll(context) {
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
   const type = parseEventTypeFlag(getStringFlag(flags, "type"));
   const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
+  const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id")?.trim();
+  const nextToken = getStringFlag(flags, "next-token")?.trim();
   const ack = !getBooleanFlag(flags, "no-ack");
   if ("checkout-id" in flags && !checkoutId) {
     throw validationError("invalid --checkout-id: expected a non-blank id");
   }
   if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
+  if (checkoutId && paymentInstrumentId) {
+    throw validationError("--checkout-id and --payment-instrument-id are mutually exclusive");
+  }
+  if (paymentInstrumentId && !type) {
+    throw validationError("--payment-instrument-id requires --type");
+  }
+  if ("next-token" in flags && !nextToken) {
+    throw validationError("invalid --next-token: expected a non-blank token");
+  }
+  if (nextToken && !checkoutId) {
+    throw validationError("--next-token requires --checkout-id");
   }
   if (context.globalOptions.dryRun) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
@@ -15032,15 +15968,18 @@ async function eventsPoll(context) {
     maxDurationMs,
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {},
-    ...checkoutId ? { checkoutId } : {}
+    ...checkoutId ? { checkoutId } : {},
+    ...paymentInstrumentId ? { expectedResource: { paymentInstrumentId } } : {},
+    ...nextToken ? { nextToken } : {}
   });
   printSuccess({
     ready: result.ready,
     timedOut: result.timedOut,
     events: result.events,
     ackedEventIds: result.ackedEventIds,
+    ...result.nextToken ? { nextToken: result.nextToken } : {},
     ...result.timedOut ? {
-      resumeCommand: buildResumeCommand(type, checkoutId, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
+      resumeCommand: buildResumeCommand(type, checkoutId, paymentInstrumentId, result.nextToken, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
     } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -15065,13 +16004,19 @@ function parseEventTypeFlag(value) {
   }
   return [...new Set(types)].join(",");
 }
-function buildResumeCommand(type, checkoutId, ack, format, baseUrlOverride) {
+function buildResumeCommand(type, checkoutId, paymentInstrumentId, nextToken, ack, format, baseUrlOverride) {
   const parts = ["clink events poll"];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
   }
   if (checkoutId) {
     parts.push(`--checkout-id ${quoteShellArgument(checkoutId)}`);
+  }
+  if (paymentInstrumentId) {
+    parts.push(`--payment-instrument-id ${quoteShellArgument(paymentInstrumentId)}`);
+  }
+  if (nextToken) {
+    parts.push(`--next-token ${quoteShellArgument(nextToken)}`);
   }
   if (!ack) {
     parts.push("--no-ack");
@@ -15094,6 +16039,21 @@ function quoteShellArgument(value) {
     return `"${value.replaceAll('"', '\\"')}"`;
   }
   return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+function buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, format, baseUrlOverride) {
+  const command = [
+    "clink ucp-order wait-delivery",
+    `--order-id ${quoteShellArgument(orderId)}`,
+    `--max-wait ${maxWaitSeconds}`,
+    `--format ${format}`
+  ].join(" ");
+  if (baseUrlOverride === void 0) {
+    return command;
+  }
+  if (process.platform === "win32") {
+    return `set "CLINK_BASE_URL=${baseUrlOverride.replaceAll('"', '""')}" && ${command}`;
+  }
+  return `CLINK_BASE_URL=${quoteShellArgument(baseUrlOverride)} ${command}`;
 }
 async function handleWalletCommand(subcommand, context) {
   if (!subcommand) {
@@ -15133,7 +16093,7 @@ async function walletInit(context) {
   if (getStringFlag(context.args.flags, "otp")) {
     throw validationError("--otp is no longer used by wallet init; complete email verification in the browser");
   }
-  const instructionContext = instructionContextBody(context);
+  const instructionContext = await buildQuickInstructionContext(context.args.flags, "wallet init");
   const baseUrl = resolveWalletInitBaseUrl(context.args.flags);
   const deviceId = resolveOAuthDeviceId(context.storedConfig);
   const agentClient = await resolveAgentClientBootstrap(deviceId);
@@ -15528,9 +16488,14 @@ async function handlePayCommand(context) {
   if (sessionId && merchantId) {
     throw validationError("pay accepts either --merchant-id or --session-id, not both");
   }
+  const paymentMethodApi = createPaymentMethodApi(context);
+  const requiresTypeMatch = requiresTypeMatchedPaymentInstrument(paymentMethodType);
+  const typeValidationMethods = requiresTypeMatch ? context.globalOptions.dryRun ? getStoredPaymentMethods(context) : await paymentMethodApi.refreshPaymentMethods() : void 0;
   let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
   if (!paymentInstrumentId) {
-    paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
+    paymentInstrumentId = requiresTypeMatch ? selectPaymentInstrumentByType(typeValidationMethods, paymentMethodType) : await resolveDefaultPaymentInstrumentId(context);
+  } else if (requiresTypeMatch) {
+    paymentInstrumentId = validatePaymentInstrumentType(typeValidationMethods, paymentInstrumentId, paymentMethodType);
   }
   const legacyPurchaseInstructionId = getStringFlag(flags, "purchase-instruction-id");
   const explicitInstructionId = getStringFlag(flags, "instruction-id");
@@ -15539,7 +16504,7 @@ async function handlePayCommand(context) {
     throw validationError("--instruction-id and --purchase-instruction-id must match when both are provided");
   }
   const mandateId = getStringFlag(flags, "mandate-id");
-  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
+  const shippingAddress = optionalJsonObjectFlag2(flags, "shipping-address");
   const products = optionalJsonArrayFlag(flags, "products");
   const authorization = instructionId || mandateId || legacyPurchaseInstructionId ? {
     ...instructionId ? { instructionId } : {},
@@ -15565,7 +16530,6 @@ async function handlePayCommand(context) {
     ...shippingAddress ? { shippingAddress } : {},
     ...products ? { products } : {}
   };
-  const paymentMethodApi = createPaymentMethodApi(context);
   const getRuntimeConfig = createRuntimeConfigLoader(context);
   const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
   const execution = await executeCharge(chargeInput, {
@@ -15580,14 +16544,21 @@ async function handlePayCommand(context) {
     printSuccess(execution.request, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
+  const safePaymentData = redactPngDataUrls(execution.data);
   const staleEventCutoffMs = Date.now();
-  printSuccess(addPaymentMethodsRefreshWarning(execution.data, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
   if (execution.requires3ds && execution.redirectUrl) {
+    printSuccess(addPaymentMethodsRefreshWarning(safePaymentData, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
     await maybeWatchEvents(context, execution.redirectUrl, "3-D Secure authentication", {
       staleEventCutoffMs
     });
     return EXIT_CODES.THREE_DS;
   }
+  if (execution.qrCode) {
+    const customerAction = await materializeQrCodeCustomerAction(execution.qrCode);
+    printSuccess(addPaymentMethodsRefreshWarning(buildQrCodePaymentOutput(execution.data, customerAction), execution.paymentMethodsRefreshWarning), context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  printSuccess(addPaymentMethodsRefreshWarning(safePaymentData, execution.paymentMethodsRefreshWarning), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function resolveDefaultPaymentInstrumentId(context) {
@@ -15638,6 +16609,8 @@ async function handleUcpCheckoutCommand(subcommand, context) {
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
+    case "run":
+      return ucpCheckoutRun(context);
     case "create":
       return ucpCheckoutCreate(context);
     case "get":
@@ -15668,6 +16641,7 @@ async function handleUcpCatalogCommand(subcommand, context) {
 }
 async function ucpCatalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "search", ["product-id"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const query = requireNonBlankFlag(flags, "query", "missing --query");
@@ -15679,62 +16653,67 @@ async function ucpCatalogSearch(context) {
   const pagination = compact3({ cursor, limit });
   const body = compact3({
     query,
-    context: optionalJsonObjectFlag(flags, "context"),
-    signals: optionalJsonObjectFlag(flags, "signals"),
-    attribution: optionalJsonObjectFlag(flags, "attribution"),
-    filters: optionalJsonObjectFlag(flags, "filters"),
+    context: optionalJsonObjectFlag2(flags, "context"),
+    signals: optionalJsonObjectFlag2(flags, "signals"),
+    attribution: optionalJsonObjectFlag2(flags, "attribution"),
+    filters: optionalJsonObjectFlag2(flags, "filters"),
     pagination: Object.keys(pagination).length > 0 ? pagination : void 0
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function ucpCatalogProduct(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "product", ["query", "cursor", "limit"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
   const body = compact3({
     id: productId,
-    context: optionalJsonObjectFlag(flags, "context"),
-    signals: optionalJsonObjectFlag(flags, "signals"),
-    attribution: optionalJsonObjectFlag(flags, "attribution"),
-    filters: optionalJsonObjectFlag(flags, "filters")
+    context: optionalJsonObjectFlag2(flags, "context"),
+    signals: optionalJsonObjectFlag2(flags, "signals"),
+    attribution: optionalJsonObjectFlag2(flags, "attribution"),
+    filters: optionalJsonObjectFlag2(flags, "filters")
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/product`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   const unsupported = unsupportedFlags.find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by ucp-catalog ${subcommand}`);
+  }
+}
+function rejectPublicCatalogAuthenticationFlags(flags) {
+  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
+  if (unsupported) {
+    throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
 }
 async function handleCatalogCommand(subcommand, context) {
@@ -15751,6 +16730,7 @@ async function handleCatalogCommand(subcommand, context) {
 }
 async function catalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   if ("merchant-id" in flags) {
     throw validationError("--merchant-id is not supported by catalog search; use ucp-catalog search");
   }
@@ -15761,30 +16741,29 @@ async function catalogSearch(context) {
   const query = requireNonBlankFlag(flags, "query", "missing --query");
   const body = compact3({
     query,
-    context: optionalJsonObjectFlag(flags, "context"),
-    signals: optionalJsonObjectFlag(flags, "signals"),
-    attribution: optionalJsonObjectFlag(flags, "attribution"),
-    filters: optionalJsonObjectFlag(flags, "filters"),
+    context: optionalJsonObjectFlag2(flags, "context"),
+    signals: optionalJsonObjectFlag2(flags, "signals"),
+    attribution: optionalJsonObjectFlag2(flags, "attribution"),
+    filters: optionalJsonObjectFlag2(flags, "filters"),
     channel_type: getStringFlag(flags, "channel-type")?.trim() || void 0,
     form_type: getStringFlag(flags, "form-type")?.trim() || void 0,
-    ext: optionalJsonObjectFlag(flags, "ext")
+    ext: optionalJsonObjectFlag2(flags, "ext")
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: EXTRA_CATALOG_SEARCH_PATH,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function handleUcpOrderCommand(subcommand, context) {
   if (!subcommand) {
@@ -15794,6 +16773,8 @@ async function handleUcpOrderCommand(subcommand, context) {
   switch (subcommand) {
     case "get":
       return ucpOrderGet(context);
+    case "wait-delivery":
+      return ucpOrderWaitDelivery(context);
     case "list":
       return ucpOrderList(context);
     default:
@@ -15802,7 +16783,44 @@ async function handleUcpOrderCommand(subcommand, context) {
 }
 async function ucpOrderGet(context) {
   const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+  const result = await requestUcpOrder(context, orderId);
+  return finishApiCommand(result, context);
+}
+async function ucpOrderWaitDelivery(context) {
+  const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
+  const maxWaitSeconds = parseIntFlag(getStringFlag(context.args.flags, "max-wait"), "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
+  if (context.globalOptions.dryRun) {
+    return finishApiCommand(await requestUcpOrder(context, orderId), context);
+  }
+  const result = await waitForUcpOrderDigitalDelivery(context, orderId, maxWaitSeconds);
+  printSuccess({
+    ...result,
+    ...result.timedOut ? {
+      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, process.env.CLINK_BASE_URL)
+    } : {}
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function waitForUcpOrderDigitalDelivery(context, orderId, maxWaitSeconds) {
+  const maxWaitMs = maxWaitSeconds * 1e3;
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: maxWaitMs + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  return waitForUcpDigitalDelivery({
+    orderId,
+    maxWaitMs,
+    fetchOrder: async () => {
+      const response = await requestUcpOrder(context, orderId);
+      if (isDryRun3(response)) {
+        throw validationError("ucp-order wait-delivery cannot poll a dry-run response");
+      }
+      assertApiSuccess(response.status, response.body);
+      return unwrapApiData(response.body);
+    }
+  });
+}
+function requestUcpOrder(context, orderId) {
+  return requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: `${UCP_ORDER_PATH}/${encodeURIComponent(orderId)}`,
@@ -15810,7 +16828,6 @@ async function ucpOrderGet(context) {
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
-  return finishApiCommand(result, context);
 }
 async function ucpOrderList(context) {
   const flags = context.args.flags;
@@ -15878,13 +16895,341 @@ function requireNonBlankFlag(flags, name, missingMessage) {
   }
   return value;
 }
-async function ucpCheckoutCreate(context) {
+async function ucpCheckoutRun(context) {
+  printSuccess(await executeUcpCheckoutRun(context), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function executeUcpCheckoutRun(context, options2 = {}) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
+  if ("checkout-id" in flags) {
+    throw validationError("--checkout-id is not supported by ucp-checkout run; checkout is created by this command");
+  }
+  if ("credential-token" in flags) {
+    throw validationError("--credential-token is not supported on external ucp-checkout run; pass --payment-instrument-id");
+  }
+  const waitDelivery = getBooleanFlag(flags, "wait-delivery");
+  if ("max-wait" in flags && !waitDelivery) {
+    throw validationError("--max-wait requires --wait-delivery on ucp-checkout run");
+  }
+  const maxWaitSeconds = waitDelivery ? parseIntFlag(getStringFlag(flags, "max-wait"), "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS : DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
+  const preparedCreate = prepareUcpCheckoutCreate(context);
+  const createResult = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCreateRequest(context, runtimeConfig, preparedCreate));
+  if (isDryRun3(createResult)) {
+    const checkoutIdTemplate = "{checkoutId}";
+    const preparedComplete2 = await prepareUcpCheckoutComplete(context, checkoutIdTemplate);
+    const completeResult = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, preparedComplete2));
+    if (!isDryRun3(completeResult)) {
+      throw apiError("ucp-checkout run dry-run unexpectedly produced a live complete response");
+    }
+    return buildUcpCheckoutRunDryRunPlan({
+      create: createResult,
+      complete: completeResult,
+      endpoint: ucpCheckoutEndpointPrefix(preparedCreate.target),
+      waitDelivery,
+      maxWaitSeconds,
+      confirmedPurchase: getBooleanFlag(flags, "confirm-purchase")
+    });
+  }
+  assertApiSuccess(createResult.status, createResult.body);
+  const create = requireUcpCheckoutRunData(createResult.body, "create");
+  const checkoutId = requireUcpCheckoutRunCheckoutId(create);
+  const createStatus = normalizedUcpCheckoutRunStatus(create);
+  const endpoint = ucpCheckoutEndpointPrefix(preparedCreate.target);
+  if (createStatus !== "ready_for_complete") {
+    return {
+      stage: "create",
+      status: createStatus,
+      checkoutId,
+      endpoint,
+      attempts: {
+        create: 1,
+        complete: 0
+      },
+      create,
+      ...isUcpCheckoutRunTerminalStatus(createStatus) ? {} : {
+        resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format)
+      }
+    };
+  }
+  let preparedComplete;
+  let refreshed;
+  try {
+    preparedComplete = await prepareUcpCheckoutComplete(context, checkoutId);
+    refreshed = await executePaymentRequestWithRefresh({
+      request: () => requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, preparedComplete)),
+      refreshPaymentMethods: preparedComplete.refreshPaymentMethods,
+      dryRun: false
+    });
+    if (isDryRun3(refreshed.result)) {
+      throw apiError("ucp-checkout run unexpectedly produced a dry-run complete response");
+    }
+    assertApiSuccess(refreshed.result.status, refreshed.result.body);
+  } catch (error) {
+    if (!options2.returnSafeCompleteFailure) {
+      throw error;
+    }
+    if (options2.readOnlyRecovery) {
+      return recoverUcpCheckoutRun(context, {
+        checkoutId,
+        endpoint,
+        create,
+        initialCompleteError: safeWorkflowError(error),
+        waitDelivery,
+        maxWaitSeconds: options2.readOnlyRecovery.maxWaitSeconds
+      }, options2.readOnlyRecovery);
+    }
+    return {
+      stage: "complete",
+      status: "unknown",
+      checkoutId,
+      endpoint,
+      attempts: {
+        create: 1,
+        complete: 1
+      },
+      create,
+      paymentRetryAllowed: false,
+      reconciliationRequired: true,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format),
+      error: safeWorkflowError(error)
+    };
+  }
+  const complete = requireUcpCheckoutRunData(refreshed.result.body, "complete");
+  assertUcpCheckoutRunResponseIdentity(complete, checkoutId, "complete");
+  const completeStatus = normalizedUcpCheckoutRunStatus(complete);
+  const commonOutput = {
+    checkoutId,
+    endpoint,
+    attempts: {
+      create: 1,
+      complete: 1
+    },
+    create,
+    complete,
+    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
+  };
+  if (completeStatus !== "completed") {
+    if (!isUcpCheckoutRunTerminalStatus(completeStatus) && options2.readOnlyRecovery) {
+      return recoverUcpCheckoutRun(context, {
+        checkoutId,
+        endpoint,
+        create,
+        initialComplete: complete,
+        ...refreshed.paymentMethodsRefreshWarning ? {
+          paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning
+        } : {},
+        waitDelivery,
+        maxWaitSeconds: options2.readOnlyRecovery.maxWaitSeconds
+      }, options2.readOnlyRecovery);
+    }
+    return {
+      stage: "complete",
+      status: completeStatus,
+      ...commonOutput,
+      ...isUcpCheckoutRunTerminalStatus(completeStatus) ? {} : {
+        resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format)
+      }
+    };
+  }
+  const orderId = ucpCheckoutRunOrderId(complete);
+  if (!waitDelivery) {
+    return {
+      stage: "complete",
+      status: completeStatus,
+      ...commonOutput,
+      ...orderId ? { orderId } : {}
+    };
+  }
+  if (!orderId) {
+    return {
+      stage: "complete",
+      status: completeStatus,
+      ...commonOutput,
+      deliveryWait: {
+        requested: true,
+        started: false,
+        reason: "completed checkout response is missing data.order.id"
+      }
+    };
+  }
+  const deliveryResult = await waitForUcpOrderDigitalDelivery(context, orderId, maxWaitSeconds);
+  const deliveryStatus = deliveryResult.timedOut ? "timeout" : deliveryResult.deliveryStatus;
+  return {
+    stage: "delivery",
+    status: deliveryStatus,
+    ...commonOutput,
+    orderId,
+    attempts: {
+      create: 1,
+      complete: 1,
+      delivery: deliveryResult.attempts
+    },
+    ready: deliveryResult.ready,
+    timedOut: deliveryResult.timedOut,
+    order: deliveryResult.order,
+    delivery: deliveryResult.order.digital_delivery ?? null,
+    ...deliveryResult.nextRetryAt ? { nextRetryAt: deliveryResult.nextRetryAt } : {},
+    ...deliveryResult.timedOut ? {
+      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, process.env.CLINK_BASE_URL)
+    } : {}
+  };
+}
+async function recoverUcpCheckoutRun(context, input, recovery) {
+  const continuation = await continueUcpCheckoutReadOnly(context, {
+    checkoutId: input.checkoutId,
+    endpoint: input.endpoint,
+    waitDelivery: input.waitDelivery,
+    maxWaitSeconds: input.maxWaitSeconds,
+    ...recovery.now ? { now: recovery.now } : {},
+    ...recovery.sleep ? { sleep: recovery.sleep } : {}
+  });
+  const continuationAttempts = isJsonObject2(continuation.attempts) ? continuation.attempts : {};
+  return {
+    ...continuation,
+    attempts: {
+      create: 1,
+      complete: 1,
+      ...continuationAttempts
+    },
+    create: input.create,
+    ...input.initialComplete ? { initialComplete: input.initialComplete } : {},
+    ...input.initialCompleteError ? { initialCompleteError: input.initialCompleteError } : {},
+    ...input.paymentMethodsRefreshWarning ? {
+      paymentMethodsRefreshWarning: input.paymentMethodsRefreshWarning
+    } : {},
+    paymentRetryAllowed: false,
+    reconciliationRequired: continuation.terminal === false
+  };
+}
+async function continueUcpCheckoutReadOnly(context, input) {
+  const now = input.now ?? Date.now;
+  const startedAt = now();
+  const wait = await waitForUcpCheckoutTerminal({
+    checkoutId: input.checkoutId,
+    maxWaitMs: input.maxWaitSeconds * 1e3,
+    fetchCheckout: () => getCommandUcpCheckout(context, input.checkoutId, input.endpoint),
+    ...input.now ? { now: input.now } : {},
+    ...input.sleep ? { sleep: input.sleep } : {}
+  });
+  const common = {
+    checkoutId: input.checkoutId,
+    endpoint: input.endpoint,
+    checkout: wait.checkout,
+    attempts: {
+      checkoutRead: wait.attempts
+    },
+    paymentRetryAllowed: false
+  };
+  if (wait.timedOut) {
+    return {
+      stage: "complete",
+      status: wait.status,
+      terminal: false,
+      timedOut: true,
+      ...common,
+      resumeReadOnly: true,
+      ...wait.nextRetryAt ? { nextRetryAt: wait.nextRetryAt } : {},
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: input.waitDelivery
+      })
+    };
+  }
+  if (wait.status !== "completed") {
+    return {
+      stage: "complete",
+      status: wait.status,
+      terminal: true,
+      ...common
+    };
+  }
+  const orderId = ucpCheckoutRunOrderId(wait.checkout);
+  if (!input.waitDelivery) {
+    return {
+      stage: "complete",
+      status: "completed",
+      terminal: true,
+      ...common,
+      ...orderId ? { orderId } : {}
+    };
+  }
+  if (!orderId) {
+    return {
+      stage: "complete",
+      status: "completed",
+      terminal: true,
+      ...common,
+      deliveryWait: {
+        requested: true,
+        started: false,
+        reason: "completed checkout response is missing data.order.id"
+      }
+    };
+  }
+  const remainingMs = input.maxWaitSeconds * 1e3 - Math.max(0, now() - startedAt);
+  if (remainingMs <= 0) {
+    return {
+      stage: "delivery",
+      status: "timeout",
+      terminal: false,
+      timedOut: true,
+      ready: false,
+      ...common,
+      resumeReadOnly: true,
+      orderId,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: true
+      })
+    };
+  }
+  const deliveryResult = await waitForUcpOrderDigitalDelivery(context, orderId, Math.max(1, Math.floor(remainingMs / 1e3)));
+  const deliveryStatus = deliveryResult.timedOut ? "timeout" : deliveryResult.deliveryStatus;
+  return {
+    stage: "delivery",
+    status: deliveryStatus,
+    terminal: !deliveryResult.timedOut,
+    ...common,
+    orderId,
+    attempts: {
+      checkoutRead: wait.attempts,
+      delivery: deliveryResult.attempts
+    },
+    ready: deliveryResult.ready,
+    timedOut: deliveryResult.timedOut,
+    order: deliveryResult.order,
+    delivery: deliveryResult.order.digital_delivery ?? null,
+    ...deliveryResult.nextRetryAt ? { nextRetryAt: deliveryResult.nextRetryAt } : {},
+    ...deliveryResult.timedOut ? {
+      resumeReadOnly: true,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: true
+      })
+    } : {}
+  };
+}
+function safeWorkflowError(error) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return {
+    name: value.name,
+    message: value.message.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/giu, "Bearer [REDACTED]").replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[REDACTED_EMAIL]").replace(/((?:access|refresh|api|device)[_-]?token|api[_-]?key|secret|password)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+  };
+}
+async function ucpCheckoutCreate(context) {
+  rejectUcpCheckoutUnsupportedFlags(context.args.flags);
+  rejectUcpCheckoutRunOnlyFlags(context.args.flags);
+  const prepared = prepareUcpCheckoutCreate(context);
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => buildUcpCheckoutCreateRequest(context, runtimeConfig, prepared));
+  return finishApiCommand(result, context);
+}
+function prepareUcpCheckoutCreate(context) {
+  const flags = context.args.flags;
   const currency = requireStringFlag(flags, "missing --currency", "currency");
   const customerId = asRequiredString(context.storedConfig.customerId, "missing customerId; run `clink wallet init` or run `clink config set customer-id <customerId>`");
   const email = asRequiredString(context.storedConfig.email, "missing email; run `clink wallet init` or run `clink config set email <email>`");
-  const buyer = withWalletStatusEmail(optionalJsonObjectFlag(flags, "buyer"), email);
+  const buyer = withWalletStatusEmail(optionalJsonObjectFlag2(flags, "buyer"), email);
   const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
@@ -15897,17 +17242,133 @@ async function ucpCheckoutCreate(context) {
     shipping_address: optionalJsonFlag(flags, "shipping-address"),
     metadata: optionalJsonFlag(flags, "metadata")
   });
-  const target = resolveUcpCheckoutRequestTarget(context, "");
-  const idempotencyKey = randomUUID4();
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    ...target,
-    method: "POST",
-    headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
+  return {
+    target: resolveUcpCheckoutRequestTarget(context, ""),
     body,
+    idempotencyKey: randomUUID4()
+  };
+}
+function buildUcpCheckoutCreateRequest(context, runtimeConfig, prepared) {
+  return {
+    ...prepared.target,
+    method: "POST",
+    headers: buildUcpCheckoutHeaders(runtimeConfig, prepared.target.baseUrl, prepared.idempotencyKey),
+    body: prepared.body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  };
+}
+function buildUcpCheckoutRunDryRunPlan(input) {
+  return {
+    dryRun: true,
+    command: "ucp-checkout run",
+    sideEffects: false,
+    confirmedPurchase: input.confirmedPurchase,
+    endpoint: input.endpoint,
+    retryPolicy: {
+      create: "never",
+      complete: "never"
+    },
+    steps: [
+      {
+        stage: "create",
+        effect: "create_checkout",
+        request: input.create.request
+      },
+      {
+        stage: "complete",
+        effect: "submit_payment",
+        dependsOn: "create.data.id",
+        exactlyOnce: true,
+        request: {
+          ...input.complete.request,
+          url: input.complete.request.url.replace(/%7BcheckoutId%7D/giu, "{checkoutId}")
+        }
+      },
+      {
+        stage: "delivery",
+        enabled: input.waitDelivery,
+        readOnly: true,
+        condition: "complete.data.status is completed and complete.data.order.id is present",
+        maxWaitSeconds: input.maxWaitSeconds
+      }
+    ]
+  };
+}
+function requireUcpCheckoutRunData(body, stage) {
+  const data = unwrapApiData(body);
+  if (!isJsonObject2(data)) {
+    throw apiError(`ucp-checkout run ${stage} response data must be an object`, 502);
+  }
+  return data;
+}
+function requireUcpCheckoutRunCheckoutId(create) {
+  const checkoutId = consistentUcpCheckoutRunId([create.id, create.checkoutId, create.checkout_id], "create");
+  if (!checkoutId) {
+    throw apiError("ucp-checkout run create response is missing data.id", 502);
+  }
+  return checkoutId;
+}
+function assertUcpCheckoutRunResponseIdentity(response, expectedCheckoutId, stage) {
+  const checkoutId = consistentUcpCheckoutRunId([response.id, response.checkoutId, response.checkout_id], stage);
+  if (!checkoutId) {
+    throw apiError(`ucp-checkout run ${stage} response is missing Checkout ID`, 502);
+  }
+  if (checkoutId !== expectedCheckoutId) {
+    throw apiError(`ucp-checkout run ${stage} response Checkout ID does not match the created Checkout`, 502);
+  }
+}
+function consistentUcpCheckoutRunId(values, stage) {
+  const present = values.filter((value) => value !== void 0 && value !== null);
+  if (present.some((value) => typeof value !== "string" || !value.trim())) {
+    throw apiError(`ucp-checkout run ${stage} response has an invalid Checkout ID`, 502);
+  }
+  const unique = [...new Set(present.map((value) => value.trim()))];
+  if (unique.length > 1) {
+    throw apiError(`ucp-checkout run ${stage} response has conflicting Checkout IDs`, 502);
+  }
+  return unique[0];
+}
+function normalizedUcpCheckoutRunStatus(data) {
+  return asOptionalString(data.status)?.trim().toLowerCase() || "unknown";
+}
+function isUcpCheckoutRunTerminalStatus(status) {
+  return (/* @__PURE__ */ new Set([
+    "cancelled",
+    "canceled",
+    "expired",
+    "failed",
+    "rejected"
+  ])).has(status);
+}
+function ucpCheckoutRunOrderId(complete) {
+  if (!isJsonObject2(complete.order)) {
+    return void 0;
+  }
+  return asOptionalString(complete.order.id)?.trim() || void 0;
+}
+function ucpCheckoutEndpointPrefix(target) {
+  const url = new URL(target.path, target.baseUrl);
+  const suffix = "/checkout-sessions";
+  if (!url.pathname.endsWith(suffix)) {
+    throw apiError("invalid UCP checkout request target", 500);
+  }
+  url.pathname = url.pathname.slice(0, -suffix.length);
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/u, "");
+}
+function buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, format, options2) {
+  return [
+    "clink ucp-checkout get",
+    `--checkout-id ${quoteShellArgument(checkoutId)}`,
+    `--endpoint ${quoteShellArgument(endpoint)}`,
+    ...options2 ? [
+      ...options2.waitDelivery ? ["--wait-delivery"] : [],
+      `--max-wait ${options2.maxWaitSeconds}`
+    ] : [],
+    `--format ${format}`
+  ].join(" ");
 }
 function withWalletStatusEmail(buyer, email) {
   return {
@@ -15918,20 +17379,77 @@ function withWalletStatusEmail(buyer, email) {
 async function ucpCheckoutGet(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
+  if ("confirm-purchase" in flags) {
+    throw validationError("--confirm-purchase is only supported by ucp-checkout run");
+  }
   const checkoutId = requireCheckoutId(flags);
+  const waitDelivery = getBooleanFlag(flags, "wait-delivery");
+  const maxWait = getStringFlag(flags, "max-wait");
+  if (!waitDelivery && maxWait === void 0) {
+    const result = await requestCommandUcpCheckout(context, checkoutId);
+    return finishApiCommand(result, context);
+  }
+  const maxWaitSeconds = parseIntFlag(maxWait, "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
+  if (context.globalOptions.dryRun) {
+    const result = await requestCommandUcpCheckout(context, checkoutId);
+    return finishApiCommand(result, context);
+  }
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+  printSuccess(await continueUcpCheckoutReadOnly(context, {
+    checkoutId,
+    endpoint: ucpCheckoutReadEndpointPrefix(target, checkoutId),
+    waitDelivery,
+    maxWaitSeconds
+  }), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function requestCommandUcpCheckout(context, checkoutId) {
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
+  return requestOAuthBusinessJson(context, (runtimeConfig) => ({
     ...target,
     method: "GET",
     headers: buildCustomerApiKeyHeaders(runtimeConfig, target.baseUrl),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
-  return finishApiCommand(result, context);
+}
+async function getCommandUcpCheckout(context, checkoutId, endpoint) {
+  const result = await requestCommandUcpCheckout({
+    ...context,
+    args: {
+      positionals: ["ucp-checkout", "get"],
+      flags: {
+        "checkout-id": checkoutId,
+        endpoint,
+        format: context.globalOptions.format
+      }
+    }
+  }, checkoutId);
+  if (isDryRun3(result)) {
+    throw apiError("ucp-checkout get unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isJsonObject2(data)) {
+    throw apiError("ucp-checkout get response data must be an object", 502);
+  }
+  return data;
+}
+function ucpCheckoutReadEndpointPrefix(target, checkoutId) {
+  const url = new URL(target.path, target.baseUrl);
+  const suffix = `/checkout-sessions/${encodeURIComponent(checkoutId)}`;
+  if (!url.pathname.endsWith(suffix)) {
+    throw apiError("invalid UCP checkout read target", 500);
+  }
+  url.pathname = url.pathname.slice(0, -suffix.length);
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/u, "");
 }
 async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
+  rejectUcpCheckoutRunOnlyFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const lineItems = requireJsonArrayFlag(flags, "line-items");
   const currencyHint = "currency" in flags ? requireNonBlankFlag(flags, "currency", "missing --currency") : void 0;
@@ -15983,7 +17501,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord9(checkout)) {
+  if (!isRecord14(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -15991,7 +17509,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord9(checkoutContext)) {
+  if (!isRecord14(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -16000,10 +17518,21 @@ function extractUcpCheckoutCurrency(body) {
 async function ucpCheckoutComplete(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
+  rejectUcpCheckoutRunOnlyFlags(flags);
   if ("credential-token" in flags) {
     throw validationError("--credential-token is not supported on external ucp-checkout complete; pass --payment-instrument-id");
   }
   const checkoutId = requireCheckoutId(flags);
+  const prepared = await prepareUcpCheckoutComplete(context, checkoutId);
+  const refreshed = await executePaymentRequestWithRefresh({
+    request: () => requestOAuthBusinessJson(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, prepared)),
+    refreshPaymentMethods: prepared.refreshPaymentMethods,
+    dryRun: context.globalOptions.dryRun
+  });
+  return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
+}
+async function prepareUcpCheckoutComplete(context, checkoutId) {
+  const flags = context.args.flags;
   let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
   if (!paymentInstrumentId) {
     paymentInstrumentId = await resolveDefaultPaymentInstrumentId(context);
@@ -16012,20 +17541,22 @@ async function ucpCheckoutComplete(context) {
   const paymentMethodApi = createPaymentMethodApi(context);
   const card = await resolveUcpCheckoutCardContext(context, paymentMethodApi, paymentInstrumentId);
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/complete`);
-  const idempotencyKey = randomUUID4();
-  const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestOAuthBusinessJson(context, (runtimeConfig) => ({
-      ...target,
-      method: "POST",
-      headers: buildUcpCheckoutHeaders(runtimeConfig, target.baseUrl, idempotencyKey),
-      body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card),
-      timeoutMs: context.globalOptions.timeoutMs,
-      dryRun: context.globalOptions.dryRun
-    })),
-    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods,
+  return {
+    target,
+    body: buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card),
+    idempotencyKey: randomUUID4(),
+    refreshPaymentMethods: paymentMethodApi.refreshPaymentMethods
+  };
+}
+function buildUcpCheckoutCompleteRequest(context, runtimeConfig, prepared) {
+  return {
+    ...prepared.target,
+    method: "POST",
+    headers: buildUcpCheckoutHeaders(runtimeConfig, prepared.target.baseUrl, prepared.idempotencyKey),
+    body: prepared.body,
+    timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  });
-  return finishApiCommand(refreshed.result, context, refreshed.paymentMethodsRefreshWarning);
+  };
 }
 async function resolveUcpCheckoutCardContext(context, paymentMethodApi, paymentInstrumentId) {
   const cached = getStoredPaymentMethods(context).map((item) => ({ ...item }));
@@ -16075,6 +17606,7 @@ function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card) {
 async function ucpCheckoutCancel(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
+  rejectUcpCheckoutRunOnlyFlags(flags);
   const checkoutId = requireCheckoutId(flags);
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}/cancel`);
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
@@ -16128,7 +17660,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord9(value)) {
+  if (!isRecord14(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -16145,7 +17677,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
     ];
   }));
 }
-function isRecord9(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -16225,6 +17757,12 @@ function rejectUcpCheckoutUnsupportedFlags(flags) {
     throw validationError("--idempotency-key is generated by clink and cannot be provided");
   }
 }
+function rejectUcpCheckoutRunOnlyFlags(flags) {
+  const runOnlyFlag = ["confirm-purchase", "wait-delivery", "max-wait"].find((name) => name in flags);
+  if (runOnlyFlag) {
+    throw validationError(`--${runOnlyFlag} is only supported by ucp-checkout run`);
+  }
+}
 function buildUcpCheckoutHeaders(runtimeConfig, requestBaseUrl, idempotencyKey) {
   return {
     ...buildCustomerApiKeyHeaders(runtimeConfig, requestBaseUrl),
@@ -16255,7 +17793,7 @@ async function handleInstructionCommand(subcommand, context) {
 async function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring);
+  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring, { requireCoreFields: true });
   const body = compact3({
     paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
     title: requireNonBlankStringFlag(flags, "missing --title", "title"),
@@ -16267,164 +17805,11 @@ async function instructionBody(context) {
   if (isRecurring) {
     body.isRecurring = true;
   }
-  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
+  const shippingAddress = optionalJsonObjectFlag2(flags, "shipping-address");
   if (shippingAddress !== void 0) {
     body.shippingAddress = shippingAddress;
   }
   return body;
-}
-async function readInstructionMandates(flags) {
-  const inlineJson = getStringFlag(flags, "mandates");
-  const filePath = getStringFlag(flags, "mandates-file");
-  if (inlineJson !== void 0 && filePath !== void 0) {
-    throw validationError("--mandates and --mandates-file cannot be used together");
-  }
-  if (inlineJson === void 0 && filePath === void 0) {
-    throw validationError("missing --mandates or --mandates-file (JSON array)");
-  }
-  let source = inlineJson;
-  let sourceName = "--mandates";
-  if (filePath !== void 0) {
-    if (!filePath.trim()) {
-      throw validationError("--mandates-file path must not be blank");
-    }
-    sourceName = "--mandates-file";
-    try {
-      source = await readFile3(filePath, "utf8");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
-    }
-  }
-  const parsed = parseJsonFlag(source, sourceName);
-  if (!Array.isArray(parsed)) {
-    throw validationError(`${sourceName} must be a JSON array`);
-  }
-  return parsed;
-}
-var INSTRUCTION_CONTEXT_FLAGS = [
-  "title",
-  "description",
-  "mandates",
-  "is-recurring",
-  "shipping-address",
-  "effective-until-time"
-];
-function instructionContextBody(context) {
-  const flags = context.args.flags;
-  if ("payment-instrument-id" in flags) {
-    throw validationError("--payment-instrument-id is not supported by wallet init; the card is bound after login");
-  }
-  if ("extra" in flags) {
-    throw validationError("--extra is not supported by the wallet init instruction context");
-  }
-  if (!INSTRUCTION_CONTEXT_FLAGS.some((name) => name in flags)) {
-    return void 0;
-  }
-  const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(requireJsonArrayFlag(flags, "mandates"), isRecurring, { maxEntries: 10 });
-  const title = requireNonBlankStringFlag(flags, "missing --title", "title");
-  if (title.length > 256) {
-    throw validationError(`--title must be at most 256 characters, got ${title.length}`);
-  }
-  const description = getStringFlag(flags, "description");
-  if (description !== void 0 && description.length > 1024) {
-    throw validationError(`--description must be at most 1024 characters, got ${description.length}`);
-  }
-  const body = compact3({
-    title,
-    description,
-    effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
-    mandates
-  });
-  if (isRecurring) {
-    body.isRecurring = true;
-  }
-  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
-  if (shippingAddress !== void 0) {
-    body.shippingAddress = shippingAddress;
-  }
-  const contextBytes = Buffer.byteLength(JSON.stringify(body), "utf8");
-  if (contextBytes > 16 * 1024) {
-    throw validationError(`wallet init instruction context must be at most 16384 UTF-8 bytes, got ${contextBytes}`);
-  }
-  return body;
-}
-var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
-function normalizeInstructionMandates(mandates, isRecurring, options2 = {}) {
-  if (mandates.length === 0) {
-    throw validationError("--mandates must contain at least one entry");
-  }
-  if (options2.maxEntries !== void 0 && mandates.length > options2.maxEntries) {
-    throw validationError(`--mandates cannot exceed ${options2.maxEntries} entries, got ${mandates.length}`);
-  }
-  return mandates.map((mandate, index) => {
-    if (!isJsonObject(mandate)) {
-      throw validationError(`--mandates[${index}] must be a JSON object`);
-    }
-    requireMandateText(mandate, "description", index);
-    requireMandateAmountLimit(mandate, index);
-    requireMandateText(mandate, "currencyCode", index);
-    const effectiveUntilTime = mandate.effectiveUntilTime;
-    if (effectiveUntilTime !== void 0 && effectiveUntilTime !== null && (typeof effectiveUntilTime !== "string" || !UTC_DATETIME_FORMAT.test(effectiveUntilTime))) {
-      throw validationError(`--mandates[${index}].effectiveUntilTime must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
-    }
-    if (!isRecurring) {
-      return mandate;
-    }
-    const frequency = mandate.recurringFrequency;
-    if (typeof frequency !== "string" || frequency.trim().length === 0) {
-      throw validationError(`--mandates[${index}].recurringFrequency is required when --is-recurring is set`);
-    }
-    const normalizedFrequency = frequency.trim().toUpperCase();
-    if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
-      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
-    }
-    return {
-      ...mandate,
-      recurringFrequency: normalizedFrequency
-    };
-  });
-}
-function requireMandateText(mandate, field, index) {
-  const value = mandate[field];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw validationError(`--mandates[${index}].${field} is required and cannot be blank`);
-  }
-}
-function requireMandateAmountLimit(mandate, index) {
-  const value = mandate.amountLimit;
-  if (value === void 0 || value === null) {
-    throw validationError(`--mandates[${index}].amountLimit is required`);
-  }
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
-    throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
-  }
-  if (typeof value === "number") {
-    const [integerPart, fractionPart = ""] = text.split(".");
-    const minorUnits = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
-    if (!Number.isSafeInteger(minorUnits)) {
-      throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
-    }
-  }
-}
-function requireNonBlankStringFlag(flags, missingMessage, name) {
-  const value = requireStringFlag(flags, missingMessage, name);
-  if (!value.trim()) {
-    throw validationError(`--${name} is required and cannot be blank`);
-  }
-  return value;
-}
-function utcDateTimeFlag(flags, name) {
-  const value = getStringFlag(flags, name);
-  if (value === void 0) {
-    return void 0;
-  }
-  if (!UTC_DATETIME_FORMAT.test(value)) {
-    throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
-  }
-  return value;
 }
 function requireJsonArrayFlag(flags, name) {
   const parsed = parseJsonFlag(requireStringFlag(flags, `missing --${name} (JSON array)`, name), `--${name}`);
@@ -16572,7 +17957,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord9(data)) {
+  if (!isRecord14(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -16585,7 +17970,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord9(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord14(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -16610,7 +17995,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord9(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord14(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -16804,8 +18189,29 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord9(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord14(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function finishPublicCatalogCommand(result, context) {
+  if (isDryRun3(result)) {
+    printSuccess(result, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  printSuccess(unwrapApiData(result.body), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function assertPublicCatalogApiSuccess(status, body) {
+  if (status < 200 || status >= 300) {
+    throw apiError(extractMessage(body) ?? `request failed with status ${status}`, status);
+  }
+  if (typeof body !== "object" || body === null || !("code" in body)) {
+    return;
+  }
+  const code = Number(body.code);
+  if (!Number.isNaN(code) && code !== 200) {
+    throw apiError(extractMessage(body) ?? `request failed with code ${code}`, code);
+  }
 }
 function createPaymentMethodApi(context) {
   const getRuntimeConfig = createRuntimeConfigLoader(context);
@@ -16844,13 +18250,13 @@ function optionalJsonFlag(flags, name) {
   }
   return parseJsonFlag(value, `--${name}`);
 }
-function optionalJsonObjectFlag(flags, name) {
+function optionalJsonObjectFlag2(flags, name) {
   const value = getStringFlag(flags, name);
   if (value === void 0) {
     return void 0;
   }
   const parsed = parseJsonFlag(value, `--${name}`);
-  if (!isJsonObject(parsed)) {
+  if (!isJsonObject2(parsed)) {
     throw validationError(`--${name} must be a JSON object`);
   }
   return parsed;
@@ -16866,7 +18272,7 @@ function optionalJsonArrayFlag(flags, name) {
   }
   return parsed;
 }
-function isJsonObject(value) {
+function isJsonObject2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function compact3(value) {
@@ -16886,7 +18292,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord9(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord14(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {

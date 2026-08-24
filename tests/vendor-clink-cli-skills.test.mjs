@@ -1463,8 +1463,10 @@ test('vendored CLI exposes the strict checkout event selector', () => {
   assert.match(eventsHelp, /--checkout-id <id>/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
-  assert.match(bundleSource, /data\.checkout_id/u);
-  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /data\?\.checkout_id/u);
+  assert.match(bundleSource, /agentInstructionInfo", "ucpCheckoutId"/u);
+  assert.match(bundleSource, /nextToken: checkoutNextToken/u);
+  assert.match(bundleSource, /cursor-backed selector support is required/u);
   assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
   assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
   assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
@@ -1816,11 +1818,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.16');
+  assert.equal(vendorPackage.version, '0.2.22');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '0e63974ad26daa94640c5c3132069695b91e9336',
+    'f11618047b7266fc869fc51b5697130b5e169b23',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
