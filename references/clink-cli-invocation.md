@@ -39,13 +39,28 @@ Every example in this skill uses `clink` as the stable command name. This reposi
 
 **Resolve `clink` to this repository's `bin/clink` by absolute path, once, at the start of every workflow. Never invoke a bare `clink` (or `clink-cli`) resolved from `PATH`.** The name on `PATH` may belong to a different build — a globally installed or `npm link`ed CLI from another checkout — and that build does not carry this distribution's production pin. Every build on the machine shares one global config file, `~/.clink-cli/config.json`, so a different build is not merely a different binary: it is a different environment writing the same state.
 
-**Environment selection belongs to `wallet init`, not to per-command flags.** This distribution pins `wallet init` to production through `CLINK_WALLET_INIT_ENVIRONMENT`, so `wallet init --sandbox` and `wallet init --test` exit 2 with `wallet init environment is fixed to production by this CLI distribution`. Other distributions pin sandbox/UAT or test the same way. Every command other than `wallet init` rejects `--sandbox`/`--test` with exit code 2, and there is no `--base-url` flag. Initialize with the plain wrapper:
+**Environment selection belongs to `wallet init` for authenticated commands, not to their per-command flags.** This distribution pins `wallet init` to production through `CLINK_WALLET_INIT_ENVIRONMENT`, so `wallet init --sandbox` and `wallet init --test` exit 2 with `wallet init environment is fixed to production by this CLI distribution`. Other distributions pin sandbox/UAT or test the same way. Authenticated commands reject `--sandbox`/`--test` with exit code 2, and there is no `--base-url` flag. Initialize with the plain wrapper:
 
 ```bash
 bin/clink wallet init --email <email> --open --format json
 ```
 
-A successful initialization saves the selected environment, so every later command reuses it with no environment flag. `CLINK_BASE_URL` remains an advanced process-level override for custom endpoints; keep one fixed value for the whole workflow if used at all.
+A successful initialization saves the selected environment, so every later authenticated command reuses it with no environment flag. `CLINK_BASE_URL` remains an advanced process-level override for custom authenticated endpoints; keep one fixed value for the whole authenticated workflow if used at all.
+
+Public Catalog discovery is the deliberate exception. These commands are anonymous and do not read `~/.clink-cli/config.json`, saved OAuth/CSK state, the saved wallet `baseUrl`, or `CLINK_BASE_URL`:
+
+```text
+tool internal-ucp get-merchant-list
+ucp-catalog search
+ucp-catalog product
+catalog search
+```
+
+For Gateway Catalog API calls, no environment flag means production (`https://api.clinkbill.com`), `--sandbox` means sandbox/UAT (`https://uat-api.clinkbill.com`), and `--test` means test (`https://api.clinkbill.dev`). The flags are mutually exclusive. Choose one `catalogEnvironment` at the start of discovery and carry its same flag through the merchant list, merchant-scoped search, broad search, and product lookup. They send no `Authorization`, `X-Customer-API-Key`, `X-Customer-ID`, or timestamp signature and do not refresh OAuth or retry a `401`. A requested BCP47 language is carried only in Catalog `--context`; it is never read from wallet config. Without one, search leaves language detection to the query.
+
+The merchant-list source is different from the search API origin. Production `get-merchant-list` fetches `https://www.clinkbill.com/.well-known/ucp-merchants.json`; preflight `https://www.clinkbill.com` before that first remote command, then preflight the selected Catalog API origin before search. Sandbox/UAT and test read their bundled merchant-list documents locally, so their list step needs no network preflight; preflight only their Catalog API origin before search.
+
+`tool internal-ucp get-endpoint`, `tool parse-item`, checkout, payment, and order commands are not part of this exception. They continue to use the authenticated wallet environment lock. Before a Catalog candidate enters checkout, compare that wallet origin with the candidate's frozen `catalogEnvironment`; a mismatch stops checkout until the environments align. Never carry a test or sandbox candidate silently into production payment.
 
 The wrapper is:
 
@@ -55,7 +70,7 @@ bin/clink
 
 OAuth authorization is bound to its issuer origin. Initialize under the environment this distribution pins. Never send credentials across environments.
 
-**The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every other command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for every later command run through this production wrapper, including `pay`, `ucp-checkout complete`, `skills tip`, and `refund create`.
+**The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every later authenticated command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for authenticated commands run through this production wrapper, including `pay`, `ucp-checkout complete`, `skills tip`, and `refund create`. Public Catalog discovery remains independent as described above.
 
 That state is not self-announcing. `wallet status` reports `authorizationEnvironmentMatches: true` whenever the stored `issuerOrigin` agrees with the effective `baseUrl`, which is exactly what a consistently-UAT wallet looks like. A wallet can therefore report fully OAuth-ready while pointed at the wrong environment.
 
@@ -123,12 +138,14 @@ Before OAuth completion, the running `wallet init` process polls the OAuth devic
 | 7 | 3DS required | Send redirect URL and wait for order event. |
 | 8 | Install error | Surface the installation conflict or transaction failure; do not claim success. |
 
+The three Gateway Catalog API actions — `ucp-catalog search`, `ucp-catalog product`, and `catalog search` — are anonymous. Their HTTP `401` or `403` is mapped to API error exit 5 and means the Gateway public-access configuration is wrong. Surface it and stop; the authenticated-command exit-4 recovery rule does not apply, and wallet status, OAuth refresh, or re-login cannot repair it. Production `tool internal-ucp get-merchant-list` is instead a static document fetch: any non-2xx preserves its network-error exit 6 contract. Sandbox/UAT and test read that document from the local bundle.
+
 ## Global Options
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--format json` | `json` | Required for agent parsing. |
-| `--sandbox` / `--test` | false | Accepted only by `wallet init`, and rejected there too when the distribution pins an environment (this one pins production). Mutually exclusive. Every other command rejects them with exit code 2. |
+| `--sandbox` / `--test` | false | Mutually exclusive. On the four public Catalog discovery commands, select sandbox/UAT or test; omission deterministically selects production without reading wallet config. On `wallet init`, select an environment only when the distribution does not pin one. Other commands reject them with exit code 2. |
 | `--timeout <ms>` | `30000` | Request timeout. |
 | `--dry-run` | false | Print request without executing when supported. |
 | `--open` | false | Open the generated link in the system browser. Required for every `wallet init` invocation. |
@@ -139,7 +156,7 @@ For UCP order completion, `events poll` also accepts `--checkout-id <id>` togeth
 `--type agent_order.succeeded` or `--type agent_order.failed`. The CLI filters before ACK: it ACKs
 the matching checkout event and leaves same-type events for other concurrent checkouts queued.
 
-`wallet init` resolves its distribution-pinned environment first, then `CLINK_BASE_URL`, then production. Later commands resolve `CLINK_BASE_URL` and then the saved base URL. There is no `--base-url` option; passing it returns `unknown option: --base-url`. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
+`wallet init` resolves its distribution-pinned environment first, then `CLINK_BASE_URL`, then production. Authenticated later commands resolve `CLINK_BASE_URL` and then the saved base URL. Public Catalog discovery instead resolves its own `--sandbox`/`--test` flag and otherwise production, independent of both sources. There is no `--base-url` option; passing it returns `unknown option: --base-url`. Stored OAuth authorization is never sent outside its issuer origin. `wallet status` exposes `hasStoredAuthorization` and `authorizationEnvironmentMatches` so the agent can distinguish a saved login from one effective for the selected origin. When `oauthRequired=true`, stored/env/flag CSK is ignored. Only a wallet that has never completed OAuth resolves legacy customer credentials from flags, then environment variables (`CLINK_CUSTOMER_ID`, `CLINK_CUSTOMER_API_KEY`), then `~/.clink-cli/config.json`.
 
 The CLI binds each long-running command to the authorization identity observed when it starts. OAuth refresh/retry, payment-method caching, event polling/ACK, and logout stop if another process replaces the customer, device, or OAuth session. A customer-mismatched webhook is neither cached nor acknowledged. Surface these authentication-change errors, re-run `wallet status` under the same environment lock, and never automatically retry a state-changing payment, Tip, checkout, refund, or logout.
 

@@ -6,7 +6,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, publ
 
 - Node.js >= 20
 - The skill ships a vendored CLI bundle at `vendor/clink-cli/clink-cli.bundle.mjs` and exposes it as `clink` through `bin/clink`, which pins `wallet init` to production
-- Always invoke `bin/clink` **by path**. A globally installed `clink` or `clink-cli` on `PATH` can be a different, unpinned build, and every build shares the same global `~/.clink-cli/config.json` — so an unpinned build that initialized against UAT leaves this distribution reading a UAT `baseUrl` for every later command
+- Always invoke `bin/clink` **by path**. A globally installed `clink` or `clink-cli` on `PATH` can be a different, unpinned build, and every build shares the same global `~/.clink-cli/config.json` — so an unpinned build that initialized against UAT leaves this distribution reading a UAT `baseUrl` for every later authenticated command
 - New wallet initialization uses OAuth Device Authorization and derives the name from the email text before `@`; an existing complete legacy CSK wallet remains supported only if that local wallet has never completed OAuth authorization
 
 ## Install Clink Payment Skills
@@ -34,6 +34,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Explicit fresh wallet login and reauthorization
 - Card binding and management
 - Payment execution (direct and session mode)
+- Anonymous public Catalog discovery without wallet initialization or `~/.clink-cli/config.json`: production by default, with explicit `--test` or `--sandbox`, plus optional BCP47 result language carried in Catalog context
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - Explicitly authorized public Skill installs with `clink skills install publisher/name[@version]`: omit version for latest, use `@version` for an exact release, or resolve a Number from the newest same-context two-hour list and confirm the frozen publisher/name/version before installation

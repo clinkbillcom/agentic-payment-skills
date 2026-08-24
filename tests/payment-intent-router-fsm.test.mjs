@@ -7,6 +7,7 @@ import {
   PaymentIntentAction,
   classifyPaymentIntent,
 } from '../lib/payment-intent-router-fsm.mjs';
+import { classifyCatalogDiscovery } from '../lib/catalog-discovery-fsm.mjs';
 
 test('routes explicit wallet relogin before payment-target classification', () => {
   const result = classifyPaymentIntent({
@@ -1471,6 +1472,7 @@ test('routes a described product purchase with no link to catalog discovery', ()
   assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
   assert.equal(result.reason, 'product_purchase_intent_without_product_url');
   assert.equal(result.catalogQuery, '我想买一件李小龙的 T 恤');
+  assert.equal(result.catalogEnvironment, 'production');
 });
 
 test('prefers a structured product name as the catalog query', () => {
@@ -1484,6 +1486,94 @@ test('prefers a structured product name as the catalog query', () => {
   assert.equal(result.productName, 'Bruce Lee T-shirt');
   assert.equal(result.catalogQuery, 'Bruce Lee T-shirt');
 });
+
+test('initial catalog purchase routing canonicalizes and preserves test environment and language aliases', () => {
+  const result = classifyPaymentIntent({
+    text: 'buy this for me',
+    productName: 'Bruce Lee T-shirt',
+    catalogEnvironment: 'TEST',
+    catalog_environment: 'test',
+    catalogLanguage: 'zh-hant-hk',
+    catalog_language: 'zh-Hant-HK',
+    language: 'zh-hant-hk',
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.catalogEnvironment, 'test');
+  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+
+  const discovery = classifyCatalogDiscovery({
+    query: result.catalogQuery,
+    catalogEnvironment: result.catalogEnvironment,
+    catalogLanguage: result.catalogLanguage,
+  });
+  assert.equal(
+    discovery.command,
+    'clink tool internal-ucp get-merchant-list --test --format json',
+  );
+  assert.equal(discovery.catalogLanguage, 'zh-Hant-HK');
+});
+
+for (const [name, catalogContext, expected] of [
+  [
+    'environment alias conflict',
+    {
+      catalogEnvironment: 'sandbox',
+      catalog_environment: 'test',
+      catalogLanguage: 'zh-hant-hk',
+    },
+    {
+      reason: 'catalog_environment_conflict',
+      values: ['sandbox', 'test'],
+      catalogLanguage: 'zh-Hant-HK',
+    },
+  ],
+  [
+    'invalid environment',
+    { catalogEnvironment: 'uat', language: 'zh-hant-hk' },
+    {
+      reason: 'catalog_environment_invalid',
+      value: 'uat',
+      catalogLanguage: 'zh-Hant-HK',
+    },
+  ],
+  [
+    'language alias conflict',
+    { catalogLanguage: 'zh-Hans', catalog_language: 'en-US' },
+    {
+      reason: 'catalog_language_conflict',
+      values: ['zh-Hans', 'en-US'],
+      catalogEnvironment: 'production',
+    },
+  ],
+  [
+    'invalid language',
+    { language: 'zh_Hans' },
+    {
+      reason: 'catalog_language_invalid',
+      value: 'zh_Hans',
+      catalogEnvironment: 'production',
+    },
+  ],
+]) {
+  test(`initial catalog purchase routing fails closed on ${name}`, () => {
+    const result = classifyPaymentIntent({
+      text: 'buy this for me',
+      productName: 'Bruce Lee T-shirt',
+      ...catalogContext,
+    });
+
+    assert.equal(result.state, PaymentIntentState.CATALOG_DISCOVERY_INPUT_MISSING);
+    assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+    assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_DISCOVERY_INPUT);
+    assert.equal(result.reason, expected.reason);
+    assert.equal(result.catalogQuery, 'Bruce Lee T-shirt');
+    assert.equal(result.value, expected.value);
+    assert.deepEqual(result.values, expected.values);
+    assert.equal(result.catalogEnvironment, expected.catalogEnvironment);
+    assert.equal(result.catalogLanguage, expected.catalogLanguage);
+  });
+}
 
 for (const resolvedTarget of [
   { productUrl: 'https://shop.test/products/sku_1' },
@@ -1512,6 +1602,9 @@ test('a described product without purchase intent still asks for purchase intent
 
 const pendingCatalogSelection = {
   status: 'AWAITING_SELECTION',
+  catalogQuery: 'Bruce Lee tee',
+  catalog_environment: 'sandbox',
+  catalog_language: 'zh-Hant-HK',
   candidates: [
     {
       product_id: 'product_1',
@@ -1542,6 +1635,237 @@ test('resolves a bare ordinal reply into the matching catalog product', () => {
   assert.equal(result.selectedProduct.productId, 'product_2');
   assert.equal(result.selectedProduct.storeId, 'HK081034');
   assert.equal(result.selectedProduct.channelType, 'eats365');
+  assert.equal(result.selectedProduct.catalogEnvironment, 'sandbox');
+  assert.equal(result.selectedProduct.catalogLanguage, 'zh-Hant-HK');
+  assert.equal(result.pendingCatalogProductSelection.catalog_environment, 'sandbox');
+  assert.equal(result.pendingCatalogProductSelection.catalog_language, 'zh-Hant-HK');
+});
+
+test('candidate-level catalog context conflict invalidates the pending selection and restarts discovery', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      candidates: [{
+        ...pendingCatalogSelection.candidates[0],
+        catalog_environment: 'test',
+        catalog_language: 'en-US',
+      }],
+    },
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PURCHASE_SELECTED);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_conflict');
+  assert.deepEqual(result.conflictingFields, ['catalogEnvironment', 'catalogLanguage']);
+  assert.equal(result.catalogQuery, 'Bruce Lee tee');
+  assert.equal(result.catalogEnvironment, 'sandbox');
+  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+  assert.equal(result.pendingCatalogProductSelection.status, 'INVALID');
+  assert.equal(result.selectedProduct, undefined);
+
+  const merchantListRestart = classifyCatalogDiscovery({
+    query: result.catalogQuery,
+    catalogEnvironment: result.catalogEnvironment,
+    catalogLanguage: result.catalogLanguage,
+  });
+  assert.equal(
+    merchantListRestart.command,
+    'clink tool internal-ucp get-merchant-list --sandbox --format json',
+  );
+
+  const scopedSearchRestart = classifyCatalogDiscovery({
+    query: result.catalogQuery,
+    catalogEnvironment: result.catalogEnvironment,
+    catalogLanguage: result.catalogLanguage,
+    merchantListOutput: {
+      merchants: [{
+        merchant_id: 'mcht_frnz6yfrz1sd',
+        enabled: true,
+        description: 'Bruce Lee apparel',
+      }],
+    },
+    matchedMerchantId: 'mcht_frnz6yfrz1sd',
+  });
+  assert.equal(
+    scopedSearchRestart.command,
+    'clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd'
+      + ` --query 'Bruce Lee tee' --context '{"language":"zh-Hant-HK"}'`
+      + ' --sandbox --format json',
+  );
+});
+
+test('a damaged candidate preserves a trusted test discovery environment instead of defaulting to production', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      catalog_environment: 'test',
+      candidates: [{
+        ...pendingCatalogSelection.candidates[0],
+        catalog_environment: 'production',
+      }],
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_conflict');
+  assert.equal(result.catalogEnvironment, 'test');
+  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+
+  const restarted = classifyCatalogDiscovery({
+    query: result.catalogQuery,
+    catalogEnvironment: result.catalogEnvironment,
+    catalogLanguage: result.catalogLanguage,
+  });
+  assert.equal(
+    restarted.command,
+    'clink tool internal-ucp get-merchant-list --test --format json',
+  );
+});
+
+test('conflicting pending environment aliases are not inherited by restarted discovery', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      catalogEnvironment: 'sandbox',
+      catalog_environment: 'test',
+      candidates: [pendingCatalogSelection.candidates[0]],
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_conflict');
+  assert.deepEqual(result.conflictingFields, ['catalogEnvironment']);
+  assert.equal(Object.hasOwn(result, 'catalogEnvironment'), false);
+  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+});
+
+for (const [name, languageFields, expectedReason] of [
+  [
+    'conflicting',
+    { catalogLanguage: 'en-US', catalog_language: 'zh-Hant-HK' },
+    'catalog_selection_context_conflict',
+  ],
+  [
+    'invalid',
+    { catalog_language: 'not_a_language' },
+    'catalog_selection_context_invalid',
+  ],
+]) {
+  test(`${name} pending language aliases are not inherited while the valid environment is preserved`, () => {
+    const result = classifyPaymentIntent({
+      text: '1',
+      pendingCatalogProductSelection: {
+        ...pendingCatalogSelection,
+        ...languageFields,
+        candidates: [pendingCatalogSelection.candidates[0]],
+      },
+    });
+
+    assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+    assert.equal(result.reason, expectedReason);
+    assert.equal(result.catalogEnvironment, 'sandbox');
+    assert.equal(Object.hasOwn(result, 'catalogLanguage'), false);
+
+    const restarted = classifyCatalogDiscovery({
+      query: result.catalogQuery,
+      catalogEnvironment: result.catalogEnvironment,
+    });
+    assert.equal(
+      restarted.command,
+      'clink tool internal-ucp get-merchant-list --sandbox --format json',
+    );
+    assert.equal(Object.hasOwn(restarted, 'catalogLanguage'), false);
+  });
+}
+
+test('a pending selection without a frozen environment is invalidated instead of trusting the candidate', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      status: 'AWAITING_SELECTION',
+      query: 'Bruce Lee tee',
+      candidates: [{
+        ...pendingCatalogSelection.candidates[0],
+        catalogEnvironment: 'production',
+      }],
+    },
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PURCHASE_SELECTED);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_missing');
+  assert.equal(result.catalogQuery, 'Bruce Lee tee');
+  assert.equal(result.pendingCatalogProductSelection.status, 'INVALID');
+  assert.equal(result.selectedProduct, undefined);
+});
+
+test('an out-of-range reply cannot keep a pending selection with an invalid frozen environment alive', () => {
+  const result = classifyPaymentIntent({
+    text: '99',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      catalog_environment: 'uat',
+    },
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_PURCHASE_SELECTED);
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_invalid');
+  assert.equal(result.value, 'uat');
+  assert.equal(result.pendingCatalogProductSelection.status, 'INVALID');
+});
+
+test('an ambiguous reply cannot keep conflicting frozen language aliases alive', () => {
+  const result = classifyPaymentIntent({
+    text: '那个便宜点的吧',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      catalogLanguage: 'en-US',
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_context_conflict');
+  assert.deepEqual(result.conflictingFields, ['catalogLanguage']);
+  assert.equal(result.catalogEnvironment, 'sandbox');
+  assert.equal(Object.hasOwn(result, 'catalogLanguage'), false);
+  assert.equal(result.pendingCatalogProductSelection.status, 'INVALID');
+});
+
+test('a damaged pending selection without its original query asks for discovery input, not reselection', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      status: 'AWAITING_SELECTION',
+      candidates: [pendingCatalogSelection.candidates[0]],
+    },
+  });
+
+  assert.equal(result.state, PaymentIntentState.CATALOG_DISCOVERY_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_DISCOVERY_INPUT);
+  assert.equal(result.reason, 'catalog_selection_context_missing');
+  assert.deepEqual(result.missing, ['catalogQuery']);
+  assert.equal(result.pendingCatalogProductSelection.status, 'INVALID');
+});
+
+test('a raw candidate language field is product data and cannot override frozen Catalog language', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      candidates: [{
+        ...pendingCatalogSelection.candidates[0],
+        language: 'en-US',
+      }],
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
+  assert.equal(result.selectedProduct.catalogEnvironment, 'sandbox');
+  assert.equal(result.selectedProduct.catalogLanguage, 'zh-Hant-HK');
 });
 
 test('resolves a Chinese ordinal reply into the matching catalog product', () => {
@@ -1615,10 +1939,25 @@ test('cancels a pending catalog selection without starting checkout', () => {
   assert.equal(result.terminal, true);
 });
 
+test('catalog cancellation takes priority over a damaged frozen context', () => {
+  const result = classifyPaymentIntent({
+    text: '取消',
+    pendingCatalogProductSelection: {
+      ...pendingCatalogSelection,
+      catalogEnvironment: 'test',
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.CANCEL_PENDING_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'catalog_product_selection_rejected');
+  assert.equal(result.pendingCatalogProductSelection.status, 'AWAITING_SELECTION');
+  assert.equal(result.restartDiscovery, undefined);
+});
+
 test('asks again when a pending selection carries no candidates', () => {
   const result = classifyPaymentIntent({
     text: '1',
-    pendingCatalogProductSelection: { status: 'AWAITING_SELECTION', candidates: [] },
+    pendingCatalogProductSelection: { ...pendingCatalogSelection, candidates: [] },
   });
 
   assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
@@ -1640,5 +1979,7 @@ test('leaves an ambiguous free-text reply unresolved instead of guessing a produ
     pendingCatalogProductSelection: pendingCatalogSelection,
   });
 
-  assert.notEqual(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
+  assert.equal(result.state, PaymentIntentState.CATALOG_PRODUCT_SELECTION_INPUT_MISSING);
+  assert.equal(result.action, PaymentIntentAction.ASK_FOR_CATALOG_PRODUCT_SELECTION);
+  assert.equal(result.reason, 'catalog_product_selection_unresolved');
 });

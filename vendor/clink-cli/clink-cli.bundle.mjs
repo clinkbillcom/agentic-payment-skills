@@ -4888,6 +4888,7 @@ var OPTION_DEFINITIONS = [
   { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
   { name: "idempotency-key", flags: "--idempotency-key <key>" },
   { name: "checkout-id", flags: "--checkout-id <id>" },
+  { name: "next-token", flags: "--next-token <token>" },
   { name: "endpoint", flags: "--endpoint <url>" },
   { name: "endpont", flags: "--endpont <url>" },
   { name: "merchant-url", flags: "--merchant-url <url>" },
@@ -5698,18 +5699,24 @@ function resolveWalletInitBaseUrl(flags) {
   const selectedEnvironment = resolveSelectedEnvironment(flags);
   return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
 }
+function resolvePublicCatalogBaseUrl(flags) {
+  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
+}
 function resolveSelectedEnvironment(flags) {
-  const sandbox = getBooleanFlag(flags, "sandbox");
-  const test = getBooleanFlag(flags, "test");
-  if (sandbox && test) {
-    throw validationError("--sandbox and --test cannot be used together");
-  }
-  const explicitEnvironment = sandbox ? "sandbox" : test ? "test" : void 0;
+  const explicitEnvironment = resolveExplicitEnvironment(flags);
   const distributionEnvironment = walletInitDistributionEnvironment();
   if (explicitEnvironment && distributionEnvironment && explicitEnvironment !== distributionEnvironment) {
     throw validationError(`wallet init environment is fixed to ${distributionEnvironment} by this CLI distribution`);
   }
   return explicitEnvironment ?? distributionEnvironment;
+}
+function resolveExplicitEnvironment(flags) {
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (sandbox && test) {
+    throw validationError("--sandbox and --test cannot be used together");
+  }
+  return sandbox ? "sandbox" : test ? "test" : void 0;
 }
 function walletInitDistributionEnvironment() {
   const value = process.env.CLINK_WALLET_INIT_ENVIRONMENT?.trim().toLowerCase();
@@ -6059,7 +6066,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.15";
+var CLI_VERSION = "0.2.17";
 
 // dist/device-identity.js
 var DEFAULT_RUNTIME = {
@@ -6784,6 +6791,9 @@ var stderrLog = (message) => {
 `);
 };
 async function pollWebhookEvents(options2) {
+  return (await pollWebhookEventPage(options2)).records;
+}
+async function pollWebhookEventPage(options2) {
   const result = await requestJsonWithOAuthRetry({
     getRuntimeConfig: options2.getRuntimeConfig ?? (() => options2.runtimeConfig),
     ...options2.getRuntimeConfig ? { reloadRuntimeConfig: options2.getRuntimeConfig } : {},
@@ -6796,24 +6806,33 @@ async function pollWebhookEvents(options2) {
     body: {
       pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE,
       ...options2.eventTypes && options2.eventTypes.length > 0 ? { eventTypes: options2.eventTypes } : {},
-      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {}
+      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {},
+      ...options2.nextToken ? { nextToken: options2.nextToken } : {}
     },
     timeoutMs: options2.timeoutMs,
     dryRun: false
   }));
   if ("dryRun" in result) {
-    return [];
+    return { records: [] };
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  const records = typeof data === "object" && data !== null ? data.records : void 0;
+  const dataObject = typeof data === "object" && data !== null ? data : void 0;
+  const records = dataObject ? dataObject.records : void 0;
   if (!Array.isArray(records)) {
     throw apiError("invalid Event Hub poll response: expected data.records to be an array", 502);
   }
   if (!records.every(isWebhookEventRecord)) {
     throw apiError("invalid Event Hub poll response: expected every record to contain non-empty eventId and eventType", 502);
   }
-  return records;
+  const nextTokenValue = dataObject?.nextToken;
+  if (nextTokenValue === void 0 || nextTokenValue === null) {
+    return { records };
+  }
+  if (typeof nextTokenValue !== "string" || nextTokenValue.trim().length === 0) {
+    throw apiError("invalid Event Hub poll response: expected data.nextToken to be a non-empty string", 502);
+  }
+  return { records, nextToken: nextTokenValue.trim() };
 }
 async function ackWebhookEvents(options2, eventIds) {
   const requestedEventIds = [...new Set(eventIds)];
@@ -7142,6 +7161,12 @@ function assertValidCollectTarget(options2) {
   if (options2.checkoutId !== void 0 && normalizedValue(options2.checkoutId) === void 0) {
     throw validationError("checkoutId must be a non-blank string when provided");
   }
+  if (options2.nextToken !== void 0 && normalizedValue(options2.nextToken) === void 0) {
+    throw validationError("nextToken must be a non-blank string when provided");
+  }
+  if (options2.nextToken !== void 0 && options2.checkoutId === void 0) {
+    throw validationError("nextToken requires checkoutId");
+  }
   assertValidExpectedResource(options2.expectedResource);
 }
 function assertValidExpectedResource(expectedResource) {
@@ -7217,6 +7242,7 @@ async function collectWebhookEvents(options2) {
   const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
   const checkoutId = normalizedValue(options2.checkoutId);
   const hasCheckoutFilter = checkoutId !== void 0;
+  const effectivePageSize = options2.pageSize ?? DEFAULT_PAGE_SIZE;
   const checkoutEventType = [...requestedTypes][0];
   if (hasCheckoutFilter && (requestedTypes.size !== 1 || checkoutEventType !== "agent_order.succeeded" && checkoutEventType !== "agent_order.failed")) {
     throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
@@ -7229,39 +7255,65 @@ async function collectWebhookEvents(options2) {
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
+  let checkoutNextToken = normalizedValue(options2.nextToken);
   const targetReached = () => collected.length > 0;
+  const processPolledRecords = async (records) => {
+    if (records.length === 0) {
+      return false;
+    }
+    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+    const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
+    const matchingEvents = events.filter((event, index) => matchesTarget(event, records[index]));
+    const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+    const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
+    const confirmedAckedEventIds = await ackWebhookEvents({
+      runtimeConfig: runtimeState.value,
+      ...getRuntimeConfig ? { getRuntimeConfig } : {},
+      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+      expectedIdentity: polledIdentity,
+      timeoutMs: options2.timeoutMs
+    }, ids);
+    ackedEventIds.push(...confirmedAckedEventIds);
+    if (ack) {
+      const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
+      collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
+    } else {
+      collected.push(...matchingEvents);
+    }
+    return targetReached();
+  };
   const deadline = now() + maxDurationMs;
   for (; ; ) {
-    const records = await pollWebhookEvents({
+    const page = hasCheckoutFilter ? await pollWebhookEventPage({
       runtimeConfig: runtimeState.value,
       ...getRuntimeConfig ? { getRuntimeConfig } : {},
       ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
       timeoutMs: options2.timeoutMs,
-      ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
-      ...hasCheckoutFilter ? { eventTypes: [...requestedTypes], checkoutId } : {}
-    });
-    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-    if (records.length > 0) {
-      const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-      const matchingEvents = events.filter((event, index) => matchesTarget(event, records[index]));
-      const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
-      const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-      const confirmedAckedEventIds = await ackWebhookEvents({
+      pageSize: effectivePageSize,
+      eventTypes: [...requestedTypes],
+      checkoutId,
+      ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+    }) : {
+      records: await pollWebhookEvents({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-        expectedIdentity: polledIdentity,
-        timeoutMs: options2.timeoutMs
-      }, ids);
-      ackedEventIds.push(...confirmedAckedEventIds);
-      if (ack) {
-        const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
-        collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
-      } else {
-        collected.push(...matchingEvents);
-      }
-      if (targetReached()) {
-        return { ready: true, timedOut: false, events: collected, ackedEventIds };
+        timeoutMs: options2.timeoutMs,
+        pageSize: effectivePageSize
+      })
+    };
+    const records = page.records;
+    if (await processPolledRecords(records)) {
+      return { ready: true, timedOut: false, events: collected, ackedEventIds };
+    }
+    if (hasCheckoutFilter) {
+      if (page.nextToken !== void 0) {
+        if (records.length > 0 && page.nextToken === checkoutNextToken) {
+          throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+        }
+        checkoutNextToken = page.nextToken;
+      } else if (records.length >= effectivePageSize) {
+        throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
       }
     }
     if (now() + pollIntervalMs >= deadline) {
@@ -7269,26 +7321,61 @@ async function collectWebhookEvents(options2) {
     }
     await sleep3(pollIntervalMs);
   }
-  return { ready: false, timedOut: true, events: collected, ackedEventIds };
+  return {
+    ready: false,
+    timedOut: true,
+    events: collected,
+    ackedEventIds,
+    ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+  };
 }
 function recordMatchesCheckoutId(record, expectedCheckoutId) {
-  const data = strictPayloadData(record?.payload);
-  if (!data) {
+  const payload = strictPayloadObject(record?.payload);
+  if (!payload) {
     return false;
   }
-  return resolvedTypedIdentifierAliases([data.checkoutId, data.checkout_id]) === expectedCheckoutId;
+  const dataValue = strictObjectValue(payload, "data");
+  const data = isRecord4(dataValue) ? dataValue : void 0;
+  return resolvedTypedIdentifierAliases([
+    ...dataValue === null ? [null] : [],
+    data?.checkoutId,
+    data?.checkout_id,
+    strictNestedValue(payload, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"]),
+    ...data ? [
+      strictNestedValue(data, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"])
+    ] : []
+  ]) === expectedCheckoutId;
 }
-function strictPayloadData(payload) {
+function strictObjectValue(record, key) {
+  if (!(key in record)) {
+    return void 0;
+  }
+  const value = record[key];
+  return isRecord4(value) ? value : null;
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function strictNestedValue(record, path4) {
+  let current = record;
+  for (const key of path4) {
+    if (!isRecord4(current)) {
+      return null;
+    }
+    if (!(key in current)) {
+      return void 0;
+    }
+    current = current[key];
+  }
+  return current;
+}
+function strictPayloadObject(payload) {
   if (!payload) {
     return null;
   }
   try {
     const parsed = JSON.parse(payload);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return null;
-    }
-    const data = parsed.data;
-    return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
+    return isRecord4(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -7543,6 +7630,15 @@ var CUSTOMER_API_KEY_REQUEST_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --dry-run                     Print the request without executing it
 ${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_ENVIRONMENT_OPTIONS = `  --sandbox                    Use the sandbox/UAT API for this command
+  --test                       Use the test API for this command; cannot be combined with --sandbox`;
+var PUBLIC_CATALOG_REQUEST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_LIST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+${OUTPUT_OPTIONS}`;
 var CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --open                        Open the generated link in the browser
@@ -7566,7 +7662,7 @@ Commands:
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
   ucp-catalog       Search merchant UCP catalogs
   catalog           Search catalogs across merchants without naming one
-  ucp-order         Query UCP orders by ID or list them by status and time range
+  ucp-order         Query UCP orders and wait for digital delivery
   instruction       Manage purchase instruction mandates (agentic authorization)
   events            Poll the webhook-event queue for state-change events
   tool              Utility tools for UCP and checkout workflows
@@ -7578,8 +7674,8 @@ Global Options:
   --open                        Open generated link in browser
   --no-open                     Do not open generated links; overrides --open and saved defaults
   --no-watch                    Do not poll for webhook events after printing a link
-  --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only
+  --customer-id <id>            Override customer ID for authenticated commands
+  --customer-api-key <key>      Legacy API key override for authenticated never-OAuth wallets only
   --timeout <ms>                Request timeout in milliseconds
   --help, -h                    Show help
 
@@ -7587,7 +7683,12 @@ Wallet Environment:
   Select an official environment with wallet init: --sandbox uses sandbox and --test uses test.
   The main distribution uses production when neither is present; packaged distributions may fix
   their wallet-init environment internally. Successful initialization saves the environment, and
-  later commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced process override.
+  later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
+  process override for those authenticated commands.
+
+Public Catalog Environment:
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
 
 Event Watching:
   Link commands normally print the browser handoff and then poll
@@ -7614,6 +7715,7 @@ Examples:
   clink catalog search --query "iced latte" --format json
   clink ucp-checkout get --checkout-id chk_xxx
   clink ucp-order get --order-id order_xxx
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900
   clink ucp-order list --status paid --start-time 2026-07-01T00:00:00Z
   clink tool item-id --url https://shop.example/products/t-shirt?variant=123
   clink refund create --order-id order_xxx
@@ -7919,15 +8021,15 @@ Usage:
 
 Subcommands:
   get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
-  get-merchant-list  Return the supported merchant-list document for the configured environment
+  get-merchant-list  Return the supported merchant-list document for a public environment
 
 Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Reads the merchant list for the configured environment, normally saved by wallet init.
-  get-merchant-list returns the document; get-endpoint generates an endpoint from the effective API
-  base. Production is fetched on every call; sandbox/UAT and test use their bundled lists.
+  get-endpoint uses the effective wallet API base and does not accept environment flags.
+  get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
+  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
 
 Examples:
@@ -7968,11 +8070,13 @@ Usage:
   clink tool internal-ucp get-merchant-list [options]
 
 Options:
-${TOOL_NETWORK_OPTIONS}
+${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
   Returns the complete merchant-list document after validating its merchant entries.
-  The environment normally comes from wallet init; CLINK_BASE_URL can override it for the process.
+  The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
+  It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
+  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
   The output preserves list metadata, descriptions, enabled flags, and disabled entries.
@@ -8465,12 +8569,16 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/search using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/search. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
+  CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
+  refresh or a wallet-login recovery prompt.
+  Set context.language to an IETF BCP 47 tag for localized results. When Search omits it, UCP may
+  infer the result language from the query; there is no separate --language option.
 
 Examples:
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
@@ -8494,12 +8602,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/product using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
+  Set context.language to an IETF BCP 47 tag for localized results; there is no separate
+  --language option.
 
 Examples:
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
@@ -8541,12 +8651,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Endpoint:
   POST /agent/ucp/extra/catalog/search
 
 Behavior:
+  Sends an anonymous request, defaults to production, and accepts --sandbox or --test for this
+  invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
   address_country is a discovery hint, not a strict filter. Published external-store mappings
@@ -8556,6 +8668,8 @@ Behavior:
   Results come back grouped by target, each group carrying channel_type plus either merchant_id
   (internal merchant) or store_id (external platform store). The shape does not change with
   --channel-type; only the number of groups does.
+  Set context.language to an IETF BCP 47 tag for localized results. When omitted, UCP may infer the
+  result language from the query; there is no separate --language option.
 
 Examples:
   clink catalog search --query "iced latte" --format json
@@ -8572,14 +8686,16 @@ Examples:
 var UCP_ORDER_HELP = `clink ucp-order
 
 Usage:
-  clink ucp-order <get|list> [options]
+  clink ucp-order <get|wait-delivery|list> [options]
 
 Actions:
-  get        Get one UCP order's current status by order ID
-  list       List the calling wallet's orders, newest first
+  get             Get one UCP order's current status by order ID
+  wait-delivery   Poll an expected digital delivery until ready, failed, or timed out
+  list            List the calling wallet's orders, newest first
 
 Examples:
   clink ucp-order get --order-id order_xxx --format json
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
   clink ucp-order list --status paid --format json
   clink ucp-order list --status paid,refunded --start-time 2026-07-01T00:00:00Z --format pretty
 `;
@@ -8609,6 +8725,38 @@ Behavior:
 
 Examples:
   clink ucp-order get --order-id order_xxx --format json
+`;
+var UCP_ORDER_WAIT_DELIVERY_HELP = `clink ucp-order wait-delivery
+
+Usage:
+  clink ucp-order wait-delivery --order-id <id> [--max-wait <seconds>] [options]
+
+Required Arguments:
+  --order-id <id>             UCP Order ID whose digital delivery is expected
+
+Optional Arguments:
+  --max-wait <seconds>        Bounded wait across order reads (default 900)
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  Repeated GET /agent/ucp/orders/{orderId}
+
+Behavior:
+  Use only when the frozen product context expects a digital delivery such as a voucher, coupon,
+  card secret, redemption link, or image. A missing digital_delivery field is treated as pending
+  because the asynchronous payment projection may not have initialized it yet. Pending reads honor
+  digital_delivery.next_retry_at with a 3-to-30-second local clamp. The command stops at ready or
+  failed; ready requires at least one artifact. It never retries payment, checkout completion, or
+  order creation.
+
+  Output contains ready, timedOut, deliveryStatus, attempts, and the last authoritative order.
+  A timeout also contains resumeCommand. Payment success and delivery status remain independent:
+  failed or timed-out delivery must not downgrade an already confirmed payment.
+
+Examples:
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
 `;
 var UCP_ORDER_LIST_HELP = `clink ucp-order list
 
@@ -9100,15 +9248,18 @@ Options:
   --max-wait <seconds>         Bounded window across retries (default 60)
   --limit <n>                  Max events per poll (pageSize, default 20)
   --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
-  --checkout-id <id>           Match one agent_order event by data.checkoutId/data.checkout_id;
-                               preserve every event that is not an exact local match
+  --checkout-id <id>           Match one agent_order event by canonical checkout aliases or the
+                               UCP agentInstructionInfo checkout ID; preserve every nonmatch
+  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
 
 Output (data):
-  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...] }
-  On timeout, "resumeCommand" is included \u2014 rerun it to continue (acked events are
-  removed server-side, so no offset is needed).
+  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...],
+    "nextToken"?: string }
+  On timeout, "resumeCommand" is included. Ordinary polls need no cursor because ACKed
+  events are removed server-side. Checkout polls may also return nextToken, which the
+  generated resumeCommand carries automatically.
 
 Notes:
   Every record read is processed: payment_method.* events refresh cached payment methods
@@ -9119,9 +9270,11 @@ Notes:
   With both --type and --no-ack, matching records stay queued but unrelated records are still
   acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
   --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The request sends
-  eventTypes plus selectors.checkoutId to Event Hub before pagination, then checks the payload
-  locally. Missing/conflicting checkout aliases fail closed; resourceId/orderId never substitute.
-  Only an exact match is ACKed by default, and resumeCommand preserves the selector.
+  eventTypes plus selectors.checkoutId to Event Hub before pagination. Event Hub returns nextToken
+  so the CLI can continue past unacknowledged events owned by another Checkout. Missing, malformed,
+  or conflicting checkout aliases fail closed; resourceId/orderId never substitute. A full page
+  without nextToken fails explicitly instead of polling the same page forever. Only an exact match
+  is ACKed, and resumeCommand preserves the selector and nextToken.
 
 Examples:
   clink events poll --format json
@@ -9280,6 +9433,8 @@ function getHelpText(command, subcommand, nestedCommand) {
       switch (subcommand) {
         case "get":
           return UCP_ORDER_GET_HELP;
+        case "wait-delivery":
+          return UCP_ORDER_WAIT_DELIVERY_HELP;
         case "list":
           return UCP_ORDER_LIST_HELP;
         default:
@@ -10120,7 +10275,7 @@ function unwrapResponse(result, invalidMessage) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  if (!isRecord4(data)) {
+  if (!isRecord5(data)) {
     throw apiError(invalidMessage, 502);
   }
   return data;
@@ -10129,7 +10284,7 @@ function normalizePaymentMethods(value) {
   if (!Array.isArray(value)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
-  if (!value.every((item) => isRecord4(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+  if (!value.every((item) => isRecord5(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((item) => ({ ...item }));
@@ -10137,7 +10292,7 @@ function normalizePaymentMethods(value) {
 function optionalString2(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -10206,8 +10361,8 @@ function buildChargeBody(input) {
   };
 }
 function classifyChargeData(data) {
-  const channel = isRecord5(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord5(channel.action) ? channel.action : {};
+  const channel = isRecord6(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord6(channel.action) ? channel.action : {};
   const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
   const status = finiteNumber2(channel.status);
   return {
@@ -10247,7 +10402,7 @@ async function executeCharge(input, runtime) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function finiteNumber2(value) {
@@ -12046,7 +12201,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord6(parsed) ? parsed : void 0;
+    return isRecord7(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -12056,22 +12211,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord6)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord7)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord6(body) && Array.isArray(body.items)) {
+  if (isRecord7(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord6(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord7(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -13260,12 +13415,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord7(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord8(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord7(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord8(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -13280,7 +13435,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -13575,11 +13730,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord8(profile)) {
+  if (!isRecord9(profile)) {
     return [];
   }
-  const ucp = isRecord8(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord8(ucp.payment_handlers) ? ucp.payment_handlers : isRecord8(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord9(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord9(ucp.payment_handlers) ? ucp.payment_handlers : isRecord9(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -13590,10 +13745,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord8(handler) || !isRecord8(handler.config)) {
+      if (!isRecord9(handler) || !isRecord9(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord8(handler.config.merchant_info) ? handler.config.merchant_info : isRecord8(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord9(handler.config.merchant_info) ? handler.config.merchant_info : isRecord9(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -14254,11 +14409,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord8(value)) {
+  if (!isRecord9(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord8(result)) {
+  if (isRecord9(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -14274,7 +14429,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord8(runningTotal)) {
+  if (!isRecord9(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -14299,7 +14454,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord8(productJson)) {
+  if (!isRecord9(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -14321,7 +14476,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord8(variant)) {
+  if (!isRecord9(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -14357,7 +14512,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord8(option)) {
+    if (!isRecord9(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -14375,7 +14530,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord8(value)) {
+  if (!isRecord9(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -14433,14 +14588,14 @@ function asTrimmedString(value) {
 function readPath(value, path4) {
   let current = value;
   for (const key of path4) {
-    if (!isRecord8(current)) {
+    if (!isRecord9(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -14452,6 +14607,109 @@ function resolveUcpProviderFromHostname(hostname) {
 }
 function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
+}
+
+// dist/ucp-order.js
+var DEFAULT_POLL_INTERVAL_MS2 = 3e3;
+var MAX_POLL_INTERVAL_MS = 3e4;
+var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
+var realSleep2 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+async function waitForUcpDigitalDelivery(options2) {
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? realSleep2;
+  const deadline = now() + options2.maxWaitMs;
+  let attempts = 0;
+  while (true) {
+    const order = requireOrder(options2.orderId, await options2.fetchOrder());
+    attempts += 1;
+    const delivery = classifyUcpDigitalDelivery(order);
+    if (delivery.status === "ready" || delivery.status === "failed") {
+      return {
+        ready: delivery.status === "ready",
+        timedOut: false,
+        deliveryStatus: delivery.status,
+        attempts,
+        order,
+        ...delivery.nextRetryAt ? { nextRetryAt: delivery.nextRetryAt } : {}
+      };
+    }
+    const currentTime = now();
+    if (currentTime >= deadline) {
+      return {
+        ready: false,
+        timedOut: true,
+        deliveryStatus: "pending",
+        attempts,
+        order,
+        ...delivery.nextRetryAt ? { nextRetryAt: delivery.nextRetryAt } : {}
+      };
+    }
+    const delayMs = Math.min(resolvePollDelayMs(delivery.nextRetryAt, currentTime), deadline - currentTime);
+    await sleep3(delayMs);
+  }
+}
+function classifyUcpDigitalDelivery(order) {
+  const rawDelivery = order.digital_delivery;
+  if (rawDelivery === void 0 || rawDelivery === null) {
+    return { status: "pending" };
+  }
+  if (!isRecord10(rawDelivery)) {
+    throw apiError("UCP order digital_delivery must be an object.");
+  }
+  const rawStatus = rawDelivery.status;
+  if (typeof rawStatus !== "string" || !rawStatus.trim()) {
+    throw apiError("UCP order digital_delivery.status is missing.");
+  }
+  const status = rawStatus.trim().toLowerCase();
+  const nextRetryAt = normalizedRetryAt(rawDelivery.next_retry_at);
+  if (status === "ready") {
+    if (!Array.isArray(rawDelivery.artifacts) || rawDelivery.artifacts.length === 0) {
+      throw apiError("UCP order digital delivery is ready without artifacts.");
+    }
+    return { status: "ready" };
+  }
+  if (status === "failed") {
+    return { status: "failed" };
+  }
+  if (PENDING_DELIVERY_STATUSES.has(status)) {
+    return {
+      status: "pending",
+      ...nextRetryAt ? { nextRetryAt } : {}
+    };
+  }
+  throw apiError(`unsupported UCP digital delivery status: ${status}`);
+}
+function requireOrder(orderId, value) {
+  if (!isRecord10(value)) {
+    throw apiError("UCP order response must be an object.");
+  }
+  if (typeof value.id !== "string" || !value.id.trim()) {
+    throw apiError("UCP order response is missing id.");
+  }
+  if (value.id.trim() !== orderId) {
+    throw apiError("UCP order response id does not match the requested order.");
+  }
+  return value;
+}
+function normalizedRetryAt(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
+}
+function resolvePollDelayMs(nextRetryAt, now) {
+  if (!nextRetryAt) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  const delay = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay)) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay));
+}
+function isRecord10(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/cli.js
@@ -14481,6 +14739,7 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
   "partially_refunded",
   "refunded"
 ]);
+var DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
 var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
@@ -14503,7 +14762,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  validateEnvironmentFlagScope(command, subcommand, args.flags, edition.environmentSelectingInitCommands ?? []);
+  validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? []);
   validateEventPollSelector(command, subcommand, args.flags);
   const editionCommandNames = new Set(edition.commandNames ?? []);
   if (getBooleanFlag(args.flags, "help")) {
@@ -14517,8 +14776,12 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     process.stdout.write((edition.getHelpText ?? getHelpText)());
     return EXIT_CODES.OK;
   }
-  const storedConfig = await readStoredConfig();
-  const runtimeConfig = resolveRuntimeConfig(storedConfig, args.flags);
+  const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand);
+  const storedConfig = usesPublicCatalogEnvironment ? defaultConfig() : await readStoredConfig();
+  const runtimeConfig = usesPublicCatalogEnvironment ? {
+    baseUrl: resolvePublicCatalogBaseUrl(args.flags),
+    defaultOpenLinks: false
+  } : resolveRuntimeConfig(storedConfig, args.flags);
   const globalOptions = resolveGlobalOptions(args, storedConfig);
   const context = {
     args,
@@ -14580,7 +14843,11 @@ function validateEventPollSelector(command, subcommand, flags) {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
   }
 }
-function validateEnvironmentFlagScope(command, subcommand, flags, editionCommands) {
+function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags, editionCommands) {
+  if (isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand)) {
+    resolvePublicCatalogBaseUrl(flags);
+    return;
+  }
   const environmentCommands = ["wallet", ...editionCommands];
   const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
   if (isEnvironmentSelectingInit) {
@@ -14593,6 +14860,9 @@ function validateEnvironmentFlagScope(command, subcommand, flags, editionCommand
   if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
     throw validationError(`--test is only supported by ${supportedBy}`);
   }
+}
+function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
+  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -14753,8 +15023,6 @@ function commandUsesCustomerAuthorization(command, subcommand) {
       return true;
     case "refund":
     case "ucp-checkout":
-    case "ucp-catalog":
-    case "catalog":
     case "ucp-order":
     case "instruction":
     case "events":
@@ -14885,6 +15153,7 @@ async function toolInternalUcp(context) {
   const configuredEnvironment = clinkEnvironmentForApiBaseUrl(baseUrl);
   switch (nestedCommand) {
     case "get-merchant-list": {
+      rejectPublicCatalogAuthenticationFlags(context.args.flags);
       const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
       if (!configuredEnvironment && !hasMerchantListOverride) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
@@ -15005,12 +15274,19 @@ async function eventsPoll(context) {
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
   const type = parseEventTypeFlag(getStringFlag(flags, "type"));
   const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
+  const nextToken = getStringFlag(flags, "next-token")?.trim();
   const ack = !getBooleanFlag(flags, "no-ack");
   if ("checkout-id" in flags && !checkoutId) {
     throw validationError("invalid --checkout-id: expected a non-blank id");
   }
   if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
+  if ("next-token" in flags && !nextToken) {
+    throw validationError("invalid --next-token: expected a non-blank token");
+  }
+  if (nextToken && !checkoutId) {
+    throw validationError("--next-token requires --checkout-id");
   }
   if (context.globalOptions.dryRun) {
     printSuccess({ ready: false, timedOut: false, events: [], ackedEventIds: [], dryRun: true }, context.globalOptions.format);
@@ -15032,15 +15308,17 @@ async function eventsPoll(context) {
     maxDurationMs,
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {},
-    ...checkoutId ? { checkoutId } : {}
+    ...checkoutId ? { checkoutId } : {},
+    ...nextToken ? { nextToken } : {}
   });
   printSuccess({
     ready: result.ready,
     timedOut: result.timedOut,
     events: result.events,
     ackedEventIds: result.ackedEventIds,
+    ...result.nextToken ? { nextToken: result.nextToken } : {},
     ...result.timedOut ? {
-      resumeCommand: buildResumeCommand(type, checkoutId, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
+      resumeCommand: buildResumeCommand(type, checkoutId, result.nextToken, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
     } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -15065,13 +15343,16 @@ function parseEventTypeFlag(value) {
   }
   return [...new Set(types)].join(",");
 }
-function buildResumeCommand(type, checkoutId, ack, format, baseUrlOverride) {
+function buildResumeCommand(type, checkoutId, nextToken, ack, format, baseUrlOverride) {
   const parts = ["clink events poll"];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
   }
   if (checkoutId) {
     parts.push(`--checkout-id ${quoteShellArgument(checkoutId)}`);
+  }
+  if (nextToken) {
+    parts.push(`--next-token ${quoteShellArgument(nextToken)}`);
   }
   if (!ack) {
     parts.push("--no-ack");
@@ -15094,6 +15375,21 @@ function quoteShellArgument(value) {
     return `"${value.replaceAll('"', '\\"')}"`;
   }
   return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+function buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, format, baseUrlOverride) {
+  const command = [
+    "clink ucp-order wait-delivery",
+    `--order-id ${quoteShellArgument(orderId)}`,
+    `--max-wait ${maxWaitSeconds}`,
+    `--format ${format}`
+  ].join(" ");
+  if (baseUrlOverride === void 0) {
+    return command;
+  }
+  if (process.platform === "win32") {
+    return `set "CLINK_BASE_URL=${baseUrlOverride.replaceAll('"', '""')}" && ${command}`;
+  }
+  return `CLINK_BASE_URL=${quoteShellArgument(baseUrlOverride)} ${command}`;
 }
 async function handleWalletCommand(subcommand, context) {
   if (!subcommand) {
@@ -15668,6 +15964,7 @@ async function handleUcpCatalogCommand(subcommand, context) {
 }
 async function ucpCatalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "search", ["product-id"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const query = requireNonBlankFlag(flags, "query", "missing --query");
@@ -15687,23 +15984,23 @@ async function ucpCatalogSearch(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function ucpCatalogProduct(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "product", ["query", "cursor", "limit"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
@@ -15716,25 +16013,30 @@ async function ucpCatalogProduct(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/product`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   const unsupported = unsupportedFlags.find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by ucp-catalog ${subcommand}`);
+  }
+}
+function rejectPublicCatalogAuthenticationFlags(flags) {
+  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
+  if (unsupported) {
+    throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
 }
 async function handleCatalogCommand(subcommand, context) {
@@ -15751,6 +16053,7 @@ async function handleCatalogCommand(subcommand, context) {
 }
 async function catalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   if ("merchant-id" in flags) {
     throw validationError("--merchant-id is not supported by catalog search; use ucp-catalog search");
   }
@@ -15771,20 +16074,19 @@ async function catalogSearch(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: EXTRA_CATALOG_SEARCH_PATH,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function handleUcpOrderCommand(subcommand, context) {
   if (!subcommand) {
@@ -15794,6 +16096,8 @@ async function handleUcpOrderCommand(subcommand, context) {
   switch (subcommand) {
     case "get":
       return ucpOrderGet(context);
+    case "wait-delivery":
+      return ucpOrderWaitDelivery(context);
     case "list":
       return ucpOrderList(context);
     default:
@@ -15802,7 +16106,41 @@ async function handleUcpOrderCommand(subcommand, context) {
 }
 async function ucpOrderGet(context) {
   const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+  const result = await requestUcpOrder(context, orderId);
+  return finishApiCommand(result, context);
+}
+async function ucpOrderWaitDelivery(context) {
+  const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
+  const maxWaitSeconds = parseIntFlag(getStringFlag(context.args.flags, "max-wait"), "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
+  if (context.globalOptions.dryRun) {
+    return finishApiCommand(await requestUcpOrder(context, orderId), context);
+  }
+  const maxWaitMs = maxWaitSeconds * 1e3;
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: maxWaitMs + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  const result = await waitForUcpDigitalDelivery({
+    orderId,
+    maxWaitMs,
+    fetchOrder: async () => {
+      const response = await requestUcpOrder(context, orderId);
+      if (isDryRun3(response)) {
+        throw validationError("ucp-order wait-delivery cannot poll a dry-run response");
+      }
+      assertApiSuccess(response.status, response.body);
+      return unwrapApiData(response.body);
+    }
+  });
+  printSuccess({
+    ...result,
+    ...result.timedOut ? {
+      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, process.env.CLINK_BASE_URL)
+    } : {}
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function requestUcpOrder(context, orderId) {
+  return requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
     method: "GET",
     path: `${UCP_ORDER_PATH}/${encodeURIComponent(orderId)}`,
@@ -15810,7 +16148,6 @@ async function ucpOrderGet(context) {
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
-  return finishApiCommand(result, context);
 }
 async function ucpOrderList(context) {
   const flags = context.args.flags;
@@ -15983,7 +16320,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord9(checkout)) {
+  if (!isRecord11(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -15991,7 +16328,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord9(checkoutContext)) {
+  if (!isRecord11(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -16128,7 +16465,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord9(value)) {
+  if (!isRecord11(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -16145,7 +16482,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
     ];
   }));
 }
-function isRecord9(value) {
+function isRecord11(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -16572,7 +16909,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord9(data)) {
+  if (!isRecord11(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -16585,7 +16922,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord9(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord11(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -16610,7 +16947,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord9(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord11(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -16804,8 +17141,29 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord9(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord11(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function finishPublicCatalogCommand(result, context) {
+  if (isDryRun3(result)) {
+    printSuccess(result, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  printSuccess(unwrapApiData(result.body), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function assertPublicCatalogApiSuccess(status, body) {
+  if (status < 200 || status >= 300) {
+    throw apiError(extractMessage(body) ?? `request failed with status ${status}`, status);
+  }
+  if (typeof body !== "object" || body === null || !("code" in body)) {
+    return;
+  }
+  const code = Number(body.code);
+  if (!Number.isNaN(code) && code !== 200) {
+    throw apiError(extractMessage(body) ?? `request failed with code ${code}`, code);
+  }
 }
 function createPaymentMethodApi(context) {
   const getRuntimeConfig = createRuntimeConfigLoader(context);
@@ -16886,7 +17244,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord9(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord11(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {

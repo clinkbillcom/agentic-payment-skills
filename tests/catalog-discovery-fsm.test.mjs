@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  CatalogEnvironment,
   CatalogDiscoveryState,
   CatalogDiscoveryAction,
   CATALOG_CHANNEL_EATS365,
   CATALOG_SUPPORTED_COUNTRIES,
   classifyCatalogDiscovery,
+  resolveCatalogEnvironment,
+  resolveCatalogLanguage,
   resolveCatalogExt,
   resolveContextCountry,
   formatCatalogDiscoveryFsmMarker,
@@ -43,7 +46,199 @@ test('loads the supported merchant list before any catalog search', () => {
   assert.equal(result.state, CatalogDiscoveryState.MERCHANT_LIST_REQUIRED);
   assert.equal(result.action, CatalogDiscoveryAction.GET_MERCHANT_LIST);
   assert.equal(result.reason, 'merchant_list_required');
+  assert.equal(result.catalogEnvironment, CatalogEnvironment.PRODUCTION);
   assert.equal(result.command, 'clink tool internal-ucp get-merchant-list --format json');
+});
+
+test('uses one explicit catalog environment across merchant-list, scoped, and broad commands', () => {
+  for (const [catalogEnvironment, flag] of [
+    [CatalogEnvironment.TEST, '--test'],
+    [CatalogEnvironment.SANDBOX, '--sandbox'],
+  ]) {
+    const merchantList = classifyCatalogDiscovery({
+      query: 'bruce lee t-shirt',
+      catalogEnvironment,
+    });
+    assert.equal(merchantList.catalogEnvironment, catalogEnvironment);
+    assert.equal(
+      merchantList.command,
+      `clink tool internal-ucp get-merchant-list ${flag} --format json`,
+    );
+
+    const scoped = classifyCatalogDiscovery({
+      query: 'bruce lee t-shirt',
+      catalogEnvironment,
+      merchantListOutput,
+      matchedMerchantId: 'mcht_frnz6yfrz1sd',
+    });
+    assert.equal(scoped.catalogEnvironment, catalogEnvironment);
+    assert.equal(
+      scoped.command,
+      `clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd`
+        + ` --query 'bruce lee t-shirt' ${flag} --format json`,
+    );
+
+    const broad = classifyCatalogDiscovery({
+      query: 'iced matcha latte',
+      catalogEnvironment,
+      merchantListOutput,
+      merchantMatch: false,
+    });
+    assert.equal(broad.catalogEnvironment, catalogEnvironment);
+    assert.equal(
+      broad.command,
+      `clink catalog search --query 'iced matcha latte' ${flag} --format json`,
+    );
+  }
+});
+
+test('rejects unsupported catalog environments instead of inheriting wallet state', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'bruce lee t-shirt',
+    catalogEnvironment: 'uat',
+  });
+
+  assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_INVALID);
+  assert.equal(result.action, CatalogDiscoveryAction.ASK_FOR_CATALOG_INPUT);
+  assert.equal(result.reason, 'catalog_environment_invalid');
+  assert.equal(result.command, undefined);
+  assert.deepEqual(resolveCatalogEnvironment({}), {
+    valid: true,
+    catalogEnvironment: CatalogEnvironment.PRODUCTION,
+    flag: '',
+  });
+});
+
+test('catalog environment aliases ignore blanks and accept one canonical value', () => {
+  assert.deepEqual(resolveCatalogEnvironment({
+    catalogEnvironment: '   ',
+    catalog_environment: 'SANDBOX',
+  }), {
+    valid: true,
+    catalogEnvironment: CatalogEnvironment.SANDBOX,
+    flag: '--sandbox',
+  });
+  assert.deepEqual(resolveCatalogEnvironment({
+    catalogEnvironment: 'TEST',
+    catalog_environment: 'test',
+  }), {
+    valid: true,
+    catalogEnvironment: CatalogEnvironment.TEST,
+    flag: '--test',
+  });
+});
+
+test('catalog environment aliases fail closed when non-empty values conflict', () => {
+  const resolution = resolveCatalogEnvironment({
+    catalogEnvironment: 'sandbox',
+    catalog_environment: 'test',
+  });
+  const result = classifyCatalogDiscovery({
+    query: 'gift card',
+    catalogEnvironment: 'sandbox',
+    catalog_environment: 'test',
+  });
+
+  assert.deepEqual(resolution, {
+    valid: false,
+    reason: 'catalog_environment_conflict',
+    values: ['sandbox', 'test'],
+  });
+  assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_INVALID);
+  assert.equal(result.reason, 'catalog_environment_conflict');
+  assert.equal(result.command, undefined);
+});
+
+test('adds a canonical BCP47 language to scoped catalog search context', () => {
+  const result = classifyCatalogDiscovery({
+    query: '屈臣氏',
+    catalogEnvironment: CatalogEnvironment.TEST,
+    language: 'zh-hans',
+    merchantListOutput,
+    matchedMerchantId: 'mcht_frnz6yfrz1sd',
+  });
+
+  assert.equal(result.catalogLanguage, 'zh-Hans');
+  assert.equal(
+    result.command,
+    'clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd'
+      + ' --query \'屈臣氏\' --context \'{"language":"zh-Hans"}\''
+      + ' --test --format json',
+  );
+  assert.deepEqual(resolveCatalogLanguage({ catalogLanguage: 'zh-hans' }), {
+    valid: true,
+    catalogLanguage: 'zh-Hans',
+  });
+});
+
+test('merges catalog language and buyer country into one broad-search context', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'iced matcha latte',
+    catalogEnvironment: CatalogEnvironment.SANDBOX,
+    catalogLanguage: 'zh-Hant-HK',
+    addressCountry: 'HK',
+    merchantListOutput,
+    merchantMatch: false,
+  });
+
+  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+  assert.equal(
+    result.command,
+    'clink catalog search --query \'iced matcha latte\''
+      + ' --context \'{"address_country":"HK","language":"zh-Hant-HK"}\''
+      + ' --sandbox --format json',
+  );
+});
+
+test('rejects a non-BCP47 catalog language before running a command', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'gift card',
+    catalogLanguage: 'zh_Hans',
+  });
+
+  assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_INVALID);
+  assert.equal(result.reason, 'catalog_language_invalid');
+  assert.equal(result.catalogEnvironment, CatalogEnvironment.PRODUCTION);
+  assert.equal(result.command, undefined);
+});
+
+test('catalog language aliases ignore blanks and require one canonical BCP47 value', () => {
+  assert.deepEqual(resolveCatalogLanguage({
+    catalogLanguage: '',
+    catalog_language: 'zh-hans',
+    language: 'zh-Hans',
+  }), {
+    valid: true,
+    catalogLanguage: 'zh-Hans',
+  });
+  assert.deepEqual(resolveCatalogLanguage({
+    catalogLanguage: 'iw',
+    catalog_language: 'he',
+  }), {
+    valid: true,
+    catalogLanguage: 'he',
+  });
+});
+
+test('catalog language aliases fail closed when canonical values conflict', () => {
+  const resolution = resolveCatalogLanguage({
+    catalogLanguage: 'zh-Hans',
+    catalog_language: 'en-US',
+  });
+  const result = classifyCatalogDiscovery({
+    query: 'gift card',
+    catalogLanguage: 'zh-Hans',
+    catalog_language: 'en-US',
+  });
+
+  assert.deepEqual(resolution, {
+    valid: false,
+    reason: 'catalog_language_conflict',
+    values: ['zh-Hans', 'en-US'],
+  });
+  assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_INVALID);
+  assert.equal(result.reason, 'catalog_language_conflict');
+  assert.equal(result.command, undefined);
 });
 
 test('hands merchant descriptions to intent matching instead of guessing', () => {

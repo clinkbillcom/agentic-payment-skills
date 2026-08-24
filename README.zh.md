@@ -6,7 +6,7 @@
 
 - Node.js >= 20
 - Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 钉在生产环境
-- **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续所有命令都会读到 UAT 的 `baseUrl`
+- **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续认证命令都会读到 UAT 的 `baseUrl`
 - 新的钱包初始化使用 OAuth Device Authorization，并默认取邮箱 `@` 前部分作为姓名；仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
 
 ## 安装 Clink Payment Skills
@@ -34,6 +34,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包重新登录与重新授权
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
+- 无需初始化钱包、也不依赖 `~/.clink-cli/config.json` 的匿名公共 Catalog 搜索：默认生产环境，可显式传 `--test` 或 `--sandbox`，并可通过 Catalog context 携带 BCP47 结果语言
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行

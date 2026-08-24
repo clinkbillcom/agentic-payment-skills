@@ -285,6 +285,8 @@ test('the payment router selected-product shape is screened without remapping', 
     text: '第一个',
     pendingCatalogProductSelection: {
       status: 'AWAITING_SELECTION',
+      catalogQuery: 'casino chips',
+      catalogEnvironment: 'production',
       candidates: [{
         productId: 'product_1',
         productName: 'Casino chips',

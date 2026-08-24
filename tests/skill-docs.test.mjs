@@ -486,8 +486,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.0"/u);
-  assert.equal(packageJson.version, '1.12.0');
+  assert.match(skill, /version:\s*"1\.12\.1"/u);
+  assert.equal(packageJson.version, '1.12.1');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -692,26 +692,62 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list --format json/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text> --format json/u);
-  assert.match(skill, /clink catalog search --query <text> --format json/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--test/u);
+  assert.match(skill, /clink catalog search --query <text>[^\n]*--test/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--test/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] \[--test\|--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
+});
+
+test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
+  assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
+  assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
+  assert.match(cliInvocation, /no environment flag means production/u);
+  assert.match(cliInvocation, /`--sandbox` means sandbox\/UAT/u);
+  assert.match(cliInvocation, /`--test` means test/u);
+  assert.match(cliInvocation, /send no `Authorization`/u);
+  assert.match(cliInvocation, /three Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
+  assert.match(cliInvocation, /Production `tool internal-ucp get-merchant-list`[\s\S]*network-error exit 6/u);
+  assert.match(cliInvocation, /preflight `https:\/\/www\.clinkbill\.com`[\s\S]*preflight the selected Catalog API origin/u);
+  assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
+
+  assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
+  assert.match(catalogDiscovery, /valid BCP47 tag/u);
+  assert.match(catalogDiscovery, /let search infer language from the query/u);
+  assert.match(catalogDiscovery, /"address_country":"HK","language":"zh-Hans"/u);
+  assert.match(catalogDiscovery, /Preserve `catalogEnvironment` on every candidate/u);
+  assert.match(catalogDiscovery, /pending selection is authoritative/u);
+  assert.match(catalogDiscovery, /current `wallet status`/u);
+  assert.match(catalogDiscovery, /test or sandbox candidate must never flow silently into production checkout/u);
+  assert.match(catalogDiscovery, /production merchant-list non-2xx[\s\S]*network error exit 6/u);
+  assert.match(ucpCheckout, /anonymous `POST \/agent\/ucp/u);
+  assert.match(ucpCheckout, /require a successful current `wallet status`[\s\S]*verify that its API origin matches[\s\S]*Stop if/u);
+  assert.match(ucpCheckout, /selected product without that frozen environment is invalid/u);
+  assert.match(
+    ucpCheckout,
+    /explicit `walletBaseUrl` may only corroborate[\s\S]*never replace missing, malformed, error, or missing-origin status/u,
+  );
+
+  assert.match(skill, /catalogEnvironment[\s\S]*catalogLanguage/u);
+  assert.match(skill, /Gateway Catalog API[\s\S]*`401`\/`403`[\s\S]*not a wallet-login problem/u);
+  assert.match(skill, /pending selection is authoritative[\s\S]*candidate copy/u);
+  assert.match(readme, /Anonymous public Catalog discovery/u);
+  assert.match(readmeZh, /匿名公共 Catalog 搜索/u);
 });
 
 test('catalog search uses the channel selector and location hint plus exact local store filtering', () => {
@@ -793,11 +829,15 @@ test('described product purchase routes through catalog discovery before checkou
 
 test('catalog product selection belongs to the user and resolves only presented candidates', () => {
   assert.match(skill, /ASK_FOR_CATALOG_PRODUCT_SELECTION/u);
+  assert.match(skill, /ASK_FOR_CATALOG_DISCOVERY_INPUT/u);
   assert.match(skill, /CANCEL_PENDING_CATALOG_PRODUCT_SELECTION/u);
   assert.match(skill, /structured product id, structured index, or a bare ordinal/u);
   assert.match(skill, /never auto-select/u);
 
   assert.match(catalogDiscovery, /AWAITING_SELECTION/u);
+  assert.match(catalogDiscovery, /original `catalogQuery`/u);
+  assert.match(catalogDiscovery, /marks the pending object `INVALID`/u);
+  assert.match(catalogDiscovery, /never loop by showing the same candidates again/u);
   assert.match(catalogDiscovery, /selected_product_not_in_candidates/u);
   assert.match(catalogDiscovery, /selected_index_out_of_range/u);
   assert.match(catalogDiscovery, /Do not preselect a product/u);

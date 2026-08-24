@@ -1427,8 +1427,7 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.match(productHelp, /\/agent\/ucp\/\{merchantId\}\/catalog\/product/u);
 
   // catalog is the cross-merchant path that answers "who carries this"; naming a merchant is the
-  // scoped question, so help must route the caller to ucp-catalog instead. Asserted through help
-  // rather than a run, because config checks fire before flag validation under the test env.
+  // scoped question, so help must route the caller to ucp-catalog instead.
   const crossMerchantHelp = runBundle(['catalog', 'search', '--help']);
   assert.match(crossMerchantHelp, /Takes no --merchant-id/u);
   assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
@@ -1437,6 +1436,70 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.match(crossMerchantHelp, /other ISO codes may leave results un-narrowed/u);
   assert.match(crossMerchantHelp, /bounded, non-exhaustive result window and currently exposes no pagination/u);
   assert.doesNotMatch(crossMerchantHelp, /--cursor <cursor>|--limit <n>/u);
+});
+
+test('vendored public Catalog commands ignore wallet config and select their own environment', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-vendored-public-catalog-'));
+  const configDirectory = join(home, '.clink-cli');
+  await mkdir(configDirectory, { recursive: true });
+  await writeFile(join(configDirectory, 'config.json'), '{ malformed config', 'utf8');
+
+  const publicEnv = {
+    HOME: home,
+    CLINK_BASE_URL: 'https://custom-api.example.com',
+    CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+    CLINK_CUSTOMER_ID: 'customer_must_not_be_sent',
+    CLINK_CUSTOMER_API_KEY: 'key_must_not_be_sent',
+  };
+  const cases = [
+    {
+      args: [
+        'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', 'watch',
+        '--dry-run', '--format', 'json',
+      ],
+      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
+    },
+    {
+      args: [
+        'ucp-catalog', 'product', '--merchant-id', 'merchant_1', '--product-id', 'product_1',
+        '--sandbox', '--dry-run', '--format', 'json',
+      ],
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/product',
+    },
+    {
+      args: [
+        'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
+      ],
+      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/extra/catalog/search',
+    },
+  ];
+
+  try {
+    for (const { args, expectedUrl } of cases) {
+      const result = runBundleRaw(args, publicEnv);
+      assert.equal(result.status, 0, result.stderr);
+      const request = JSON.parse(result.stdout).data.request;
+      assert.equal(request.url, expectedUrl);
+      assert.equal(request.headers.Authorization, undefined);
+      assert.equal(request.headers['X-Customer-API-Key'], undefined);
+      assert.equal(request.headers['X-Customer-ID'], undefined);
+      assert.equal(request.headers['X-Timestamp'], undefined);
+    }
+
+    const merchantList = runBundleRaw([
+      'tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json',
+    ], publicEnv);
+    assert.equal(merchantList.status, 0, merchantList.stderr);
+    assert.ok(JSON.parse(merchantList.stdout).merchants.length > 0);
+
+    const credentials = runBundleRaw([
+      'catalog', 'search', '--query', 'watch', '--customer-api-key', 'must-not-be-used',
+    ], publicEnv);
+    assert.equal(credentials.status, 2);
+    assert.match(credentials.stderr, /--customer-api-key is not supported by public Catalog commands/u);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test('vendored CLI exposes the complete instruction status set', () => {
@@ -1463,8 +1526,10 @@ test('vendored CLI exposes the strict checkout event selector', () => {
   assert.match(eventsHelp, /--checkout-id <id>/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
-  assert.match(bundleSource, /data\.checkout_id/u);
-  assert.match(bundleSource, /resolvedTypedIdentifierAliases\(\[data\.checkoutId, data\.checkout_id\]\)/u);
+  assert.match(bundleSource, /data\?\.checkout_id/u);
+  assert.match(bundleSource, /agentInstructionInfo", "ucpCheckoutId"/u);
+  assert.match(bundleSource, /nextToken: checkoutNextToken/u);
+  assert.match(bundleSource, /cursor-backed selector support is required/u);
   assert.match(bundleSource, /assertValidWatchTarget\(options2\)/u);
   assert.match(bundleSource, /assertValidCollectTarget\(options2\)/u);
   assert.doesNotMatch(bundleSource, /checkoutIds\.every\(\(candidate\) => candidate === expectedCheckoutId\)/u);
@@ -1816,11 +1881,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.16');
+  assert.equal(vendorPackage.version, '0.2.17');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '0e63974ad26daa94640c5c3132069695b91e9336',
+    '9fc123a4b88e6d95544bc25d3e8df1859e129b0c',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
