@@ -2068,3 +2068,22 @@ test('vendored CLI rejects a literal latest Skill install version', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /invalid skill package/u);
 });
+
+test('vendored CLI exposes the aggregate UCP checkout contract', () => {
+  const result = runBundleRaw(['ucp-checkout', 'run', '--help']);
+  assert.equal(result.status, 0, result.stderr);
+  for (const contract of [
+    /ucp-checkout run/u,
+    /--endpoint/u,
+    /--merchant-url/u,
+    /--merchant-category-code/u,
+    /--currency/u,
+    /--line-items/u,
+    /--payment-instrument-id/u,
+    /--confirm-purchase/u,
+    /--wait-delivery/u,
+    /--max-wait/u,
+  ]) {
+    assert.match(result.stdout, contract);
+  }
+});

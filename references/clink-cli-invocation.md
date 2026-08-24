@@ -31,7 +31,7 @@ Treat `DNS`, `TIMEOUT`, `CONNECT`, `TLS`, and `TRANSPORT_UNREACHABLE` as transpo
 
 Do not recommend a Clink-only domain allowlist as sufficient. Public Skill installation currently may reach `s3.us-west-2.amazonaws.com`, while UCP discovery and checkout may reach workflow-resolved merchant origins. Preflight each origin that is known before an invocation when practical, but allow runtime access to the dynamic HTTPS destinations the selected workflow requires. An external preflight cannot intercept a destination that one CLI invocation resolves and immediately fetches internally; do not claim it covered that internal origin, and rely on the CLI's transport/error safeguards for that hop.
 
-Exit status 6 or a `network_error` envelope alone cannot distinguish host sandbox denial, DNS, TLS, proxy, connection, timeout, or service failure. Retry only the preflight while diagnosing. Never blindly resubmit `clink pay`, `clink skills tip`, `clink refund create`, `clink ucp-checkout complete`, or another state-changing command. Preserve each workflow's documented status/idempotency verification and its explicitly bounded read-only GET or poll retries.
+Exit status 6 or a `network_error` envelope alone cannot distinguish host sandbox denial, DNS, TLS, proxy, connection, timeout, or service failure. Retry only the preflight while diagnosing. Never blindly resubmit `clink pay`, `clink skills tip`, `clink refund create`, `clink ucp-checkout run`, or another state-changing command. Preserve each workflow's documented status/idempotency verification and execute only an explicitly returned, validated read-only resume command.
 
 ## Command Resolution
 
@@ -55,7 +55,7 @@ bin/clink
 
 OAuth authorization is bound to its issuer origin. Initialize under the environment this distribution pins. Never send credentials across environments.
 
-**The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every other command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for every later command run through this production wrapper, including `pay`, `ucp-checkout complete`, `skills tip`, and `refund create`.
+**The pin constrains only `wallet init`, and only through this wrapper. It does not validate a base URL that is already saved.** `wallet init` resolves the pinned environment first; every other command resolves `CLINK_BASE_URL`, then the saved `baseUrl`, with no pin check. So a config written by an unpinned build — or by an intentional sandbox/UAT session — stays in force for every later command run through this production wrapper, including `pay`, `ucp-checkout run`, `skills tip`, and `refund create`.
 
 That state is not self-announcing. `wallet status` reports `authorizationEnvironmentMatches: true` whenever the stored `issuerOrigin` agrees with the effective `baseUrl`, which is exactly what a consistently-UAT wallet looks like. A wallet can therefore report fully OAuth-ready while pointed at the wrong environment.
 
@@ -76,17 +76,7 @@ clink config set default-open-links false --format json
 
 Which pages the user must complete in their own browser, and which the agent may open, is in `references/clink-browser-handoff.md`. The `wallet init --open` system-browser handoff is the only exception to CLI-side suppression; an agent browser must not navigate a Passkey, 3DS, card, or OAuth page.
 
-To inspect help without installing a global binary, call the bundle directly:
-
-```bash
-node vendor/clink-cli/clink-cli.bundle.mjs --help
-node vendor/clink-cli/clink-cli.bundle.mjs wallet --help
-node vendor/clink-cli/clink-cli.bundle.mjs instruction --help
-node vendor/clink-cli/clink-cli.bundle.mjs skills --help
-node vendor/clink-cli/clink-cli.bundle.mjs skills list --help
-node vendor/clink-cli/clink-cli.bundle.mjs skills install --help
-node vendor/clink-cli/clink-cli.bundle.mjs skills tip --help
-```
+The shipped references are the runtime command contract. Do not spend a workflow turn probing `--help`, especially before a payment mutation. Capability/version compatibility is verified by repository tests and the vendored bundle contract, not rediscovered by the Agent during a user request.
 
 ## JSON Output
 

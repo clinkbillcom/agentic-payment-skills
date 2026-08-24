@@ -74,14 +74,14 @@ test('network execution contract distinguishes host sandbox failures and protect
   assert.match(cliInvocation, /Any HTTP response[\s\S]*proves DNS\/TCP\/TLS\/HTTP reachability/u);
   assert.match(cliInvocation, /ENOTFOUND[\s\S]*EAI_AGAIN[\s\S]*ETIMEDOUT[\s\S]*TLS/u);
   assert.match(cliInvocation, /Exit status 6[\s\S]*cannot distinguish host sandbox denial/u);
-  assert.match(cliInvocation, /Never blindly resubmit `clink pay`[\s\S]*`clink skills tip`[\s\S]*`clink refund create`[\s\S]*`clink ucp-checkout complete`/u);
+  assert.match(cliInvocation, /Never blindly resubmit `clink pay`[\s\S]*`clink skills tip`[\s\S]*`clink refund create`[\s\S]*`clink ucp-checkout run`/u);
   assert.match(cliInvocation, /s3\.us-west-2\.amazonaws\.com/u);
   assert.match(cliInvocation, /workflow-resolved merchant origins/u);
   assert.match(cliInvocation, /cannot intercept a destination that one CLI invocation resolves and immediately fetches internally/u);
   assert.doesNotMatch(cliInvocation, /(?:only|solely).*\*\*?\.clinkbill\.com/iu);
 
   assert.match(paymentRefund, /refund create` exits 6 or times out[\s\S]*Never resubmit automatically/u);
-  assert.match(ucpCheckout, /never resubmit complete merely because that GET is inconclusive/u);
+  assert.match(ucpCheckout, /Never rerun the aggregate command/u);
   assert.match(networkPreflight, /method: 'HEAD'/u);
   assert.match(networkPreflight, /redirect: 'manual'/u);
   assert.doesNotMatch(networkPreflight, /Authorization|Cookie|api[_-]?key/iu);
@@ -94,6 +94,13 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(skill, /Visa \+ VIC ready/u);
   assert.match(skill, /non-Visa or Visa without VIC readiness/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
+});
+
+test('Instruction mandate descriptions stay within the CLI limit', () => {
+  for (const document of [skill, instruction]) {
+    assert.match(document, /mandate `description`[\s\S]*150 characters or fewer/iu);
+    assert.match(document, /never silently truncate/iu);
+  }
 });
 
 test('payment reference documents Visa VIC resolver bypass branch', () => {
@@ -365,32 +372,24 @@ test('UCP checkout workflow uses parse-item as the product analysis command', ()
   assert.doesNotMatch(ucpCheckout, /clink tool item-id/u);
 });
 
-test('UCP order lookup keeps payment and UCP order identifiers type-safe', () => {
-  assert.match(skill, /checkout create\/update\/complete\/get `data\.ucp\.ucp_order_id` is `ucpOrderId`/u);
-  assert.match(skill, /completed checkout `data\.order\.id` is a compatibility alias/u);
-  assert.match(skill, /agent_order\.succeeded\.data\.orderId\/resourceId` is `paymentOrderId`/u);
-  assert.match(skill, /never pass `paymentOrderId` to `ucp-order get`/u);
-  assert.match(skill, /only nested payload `data\.checkoutId` \/ `data\.checkout_id`/u);
-  assert.match(skill, /classifyUcpOrderResolutionObservation/u);
-  assert.match(skill, /classifyUcpOrderFetchObservation/u);
-  assert.match(skill, /original internal endpoint/u);
-  assert.match(skill, /data\.ucp\.success_info/u);
-  assert.match(skill, /events poll --type agent_order\.succeeded --checkout-id <checkoutId>/u);
+test('UCP aggregate result keeps identifiers, attempts, and recovery type-safe', () => {
+  assert.match(skill, /lib\/ucp-checkout-run-fsm\.mjs/u);
+  assert.match(skill, /classifyUcpCheckoutRunExecution/u);
+  assert.match(skill, /classifyUcpCheckoutRunObservation/u);
+  assert.match(skill, /same-checkout and same-endpoint `ucp-checkout get`/u);
+  assert.match(skill, /classifyUcpCheckoutRunResumeObservation/u);
+  assert.match(skill, /same-order `ucp-order wait-delivery --max-wait 900`/u);
+  assert.match(skill, /No result authorizes create, complete, or payment retry/u);
 
-  assert.match(ucpCheckout, /`ucpOrderId`[\s\S]*data\.ucp\.ucp_order_id/u);
-  assert.match(ucpCheckout, /`paymentOrderId`[\s\S]*agent_order\.succeeded/u);
-  assert.match(ucpCheckout, /clink ucp-checkout get[\s\S]*original_rest_endpoint/u);
-  assert.match(ucpCheckout, /clink ucp-order get --order-id <ucpOrderId>/u);
-  assert.match(ucpCheckout, /Never fall back to event top-level checkout fields or `resourceId`/u);
-  assert.match(ucpCheckout, /Do not re-poll the acknowledged event, re-run complete, or retry payment/u);
-  assert.match(ucpCheckout, /data\.ucp\.success_info/u);
-  assert.match(ucpCheckout, /same-type event for another checkout stays queued/u);
-  assert.match(ucpCheckout, /`merchantOrderId` is an external merchant reference, never a UCP ID alias/u);
+  assert.match(ucpCheckout, /stage=create\|complete,status=completed/u);
+  assert.match(ucpCheckout, /stage=delivery,status=ready/u);
+  assert.match(ucpCheckout, /same checkout ID and frozen endpoint/u);
+  assert.match(ucpCheckout, /same_ucp_order_id/u);
+  assert.match(ucpCheckout, /Never rerun the aggregate command/u);
+  assert.match(ucpCheckout, /read-only resume validator rejects `ucp-checkout run`/u);
 
-  assert.match(asyncEvents, /Event `orderId`\/`resourceId` is the Clink Payment `paymentOrderId`/u);
-  assert.match(asyncEvents, /Only `ucpOrderId` may be passed to `ucp-order get`/u);
-  assert.match(asyncEvents, /event payload's nested `data\.checkoutId` \/ `data\.checkout_id`/u);
-  assert.match(asyncEvents, /filtering happens before ACK/u);
+  assert.match(asyncEvents, /CLI owns payment-event correlation/u);
+  assert.match(asyncEvents, /does not start a second UCP event poll/u);
 });
 
 test('skill documents intent routing and checkout route FSMs', () => {
@@ -498,14 +497,15 @@ test('Skill install reference freezes Number context before atomic confirmation'
   assert.doesNotMatch(skillInstall, /skills install[^\n]*(?:--number|--version|@latest)/iu);
 });
 
-test('CLI invocation reference documents Skill install help and exit code 8', () => {
-  assert.match(cliInvocation, /skills install --help/u);
+test('CLI invocation reference uses shipped contracts instead of runtime help and documents exit code 8', () => {
+  assert.match(cliInvocation, /shipped references are the runtime command contract/u);
+  assert.doesNotMatch(cliInvocation, /(?:^|\s)--help(?:\s|$)/mu);
   assert.match(cliInvocation, /\| 8 \| Install error/u);
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.1"/u);
-  assert.equal(packageJson.version, '1.12.1');
+  assert.match(skill, /version:\s*"1\.12\.2"/u);
+  assert.equal(packageJson.version, '1.12.2');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -665,7 +665,7 @@ test('UCP checkout route delegates internal detection to clink before profile fa
   assert.match(ucpCheckout, /services\.\*\.endpoint/u);
   assert.match(ucpCheckout, /provider.*clinkbill/u);
   assert.match(ucpCheckout, /provider.*not.*clinkbill.*external/u);
-  assert.match(ucpCheckout, /--endpoint <rest_endpoint>/u);
+  assert.match(ucpCheckout, /--endpoint <frozen_rest_endpoint>/u);
   assert.match(ucpCheckout, /standard_ucp_profile_absent/u);
   assert.doesNotMatch(skill, /STANDARD_UCP_DOMAINS/u);
   assert.doesNotMatch(skill, /STANDARD_UCP_CHECKOUT/u);
