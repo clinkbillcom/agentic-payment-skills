@@ -486,8 +486,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.0"/u);
-  assert.equal(packageJson.version, '1.12.0');
+  assert.match(skill, /version:\s*"1\.13\.0"/u);
+  assert.equal(packageJson.version, '1.13.0');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -701,21 +701,23 @@ test('catalog discovery loads the merchant list before matching intent on descri
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text> --format json/u);
-  assert.match(skill, /clink catalog search --query <text> --format json/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text> --language <tag> --format json/u);
+  assert.match(skill, /clink catalog search --query <text> --language <tag> --format json/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format json/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <tag> --format json/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
+    /clink catalog search --query <text> --language <tag> \[--channel-type <channel>\] \[--context <json>\] --format json/u,
   );
+  assert.match(catalogDiscovery, /backend no longer infers the target display language/u);
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
 });
 
 test('catalog search uses the channel selector and location hint plus exact local store filtering', () => {
   assert.match(skill, /--channel-type eats365/u);
+  assert.match(skill, /--language <tag> --channel-type eats365/u);
   assert.match(skill, /eats365/u);
   assert.match(skill, /normalize the `eat365` spelling/u);
   assert.match(skill, /context\.address_country` only for established HK\/SG/u);

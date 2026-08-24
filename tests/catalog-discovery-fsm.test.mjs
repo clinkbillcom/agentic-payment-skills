@@ -104,6 +104,31 @@ test('runs a merchant-scoped search when intent matches one merchant', () => {
   );
 });
 
+test('passes the locked language to merchant-scoped and broad searches', () => {
+  const scoped = classifyCatalogDiscovery({
+    query: '熊猫外卖',
+    language: 'zh-CN',
+    merchantListOutput,
+    merchantMatch: { merchantId: 'mcht_frnz6yfrz1sd' },
+  });
+  assert.equal(
+    scoped.command,
+    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query '熊猫外卖' --language zh-CN --format json",
+  );
+
+  const broad = classifyCatalogDiscovery({
+    query: 'watsons',
+    languageTag: 'en',
+    addressCountry: 'HK',
+    merchantListOutput,
+    merchantMatch: false,
+  });
+  assert.equal(
+    broad.command,
+    "clink catalog search --query watsons --language en --context '{\"address_country\":\"HK\"}' --format json",
+  );
+});
+
 test('rejects a matched merchant id that is not in the loaded candidate set', () => {
   const result = classifyCatalogDiscovery({
     query: 'bruce lee t-shirt',

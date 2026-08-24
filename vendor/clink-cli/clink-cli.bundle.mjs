@@ -4904,6 +4904,7 @@ var OPTION_DEFINITIONS = [
   { name: "merchant-id", flags: "--merchant-id <id>" },
   { name: "product-id", flags: "--product-id <id>" },
   { name: "query", flags: "--query <text>" },
+  { name: "language", flags: "--language <tag>" },
   { name: "context", flags: "--context <json>" },
   { name: "filters", flags: "--filters <json>" },
   { name: "signals", flags: "--signals <json>" },
@@ -6067,7 +6068,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.22";
+var CLI_VERSION = "0.2.23";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -8602,6 +8603,7 @@ Optional Request Fields:
                               - address_country: ISO 3166-1 alpha-2 context hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8619,12 +8621,13 @@ Behavior:
   It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
   CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
   refresh or a wallet-login recovery prompt.
-  Set context.language to an IETF BCP 47 tag for localized results. When Search omits it, UCP may
-  infer the result language from the query; there is no separate --language option.
+  Set --language to an IETF BCP 47 tag for localized results. The CLI writes it to
+  context.language and preserves every other --context field. When omitted, the backend does not
+  infer a target display language from the query.
 
 Examples:
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --language en-US --context '{"currency":"USD"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
 `;
 var UCP_CATALOG_PRODUCT_HELP = `clink ucp-catalog product
 
@@ -8637,6 +8640,7 @@ Required Arguments:
 
 Optional Request Fields:
   --context <json>            UCP Catalog context JSON object
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8650,11 +8654,11 @@ Behavior:
   Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
   production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
   It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
-  Set context.language to an IETF BCP 47 tag for localized results; there is no separate
-  --language option.
+  Set --language to an IETF BCP 47 tag for localized results. The CLI writes it to
+  context.language and preserves every other --context field.
 
 Examples:
-  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
+  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
 `;
 var CATALOG_HELP = `clink catalog
 
@@ -8686,6 +8690,7 @@ Optional Request Fields:
                               - address_country: ISO 3166-1 alpha-2 region hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8710,19 +8715,20 @@ Behavior:
   Results come back grouped by target, each group carrying channel_type plus either merchant_id
   (internal merchant) or store_id (external platform store). The shape does not change with
   --channel-type; only the number of groups does.
-  Set context.language to an IETF BCP 47 tag for localized results. When omitted, UCP may infer the
-  result language from the query; there is no separate --language option.
+  Set --language to an IETF BCP 47 tag for localized results. The CLI writes it to
+  context.language and preserves every other --context field. When omitted, the backend does not
+  infer a target display language from the query.
 
 Examples:
   clink catalog search --query "iced latte" --format json
   clink catalog search \\
     --query shoes --channel-type shopify \\
     --ext '{"trace":"demo-1"}' \\
-    --context '{"currency":"USD","language":"en-US"}' \\
+    --language en-US --context '{"currency":"USD"}' \\
     --format pretty
   clink catalog search \\
     --query coffee \\
-    --context '{"address_country":"SG","currency":"SGD","language":"en"}' \\
+    --language en --context '{"address_country":"SG","currency":"SGD"}' \\
     --format json
 `;
 var UCP_ORDER_HELP = `clink ucp-order
@@ -15380,6 +15386,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
   const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
+  validateCatalogLanguageFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
   validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, args.flags);
   const editionCommandNames = new Set(edition.commandNames ?? []);
@@ -15509,6 +15516,15 @@ function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags,
     throw validationError(`--test is only supported by ${supportedBy}`);
   }
   return void 0;
+}
+function validateCatalogLanguageFlagScope(command, subcommand, flags) {
+  if (!("language" in flags)) {
+    return;
+  }
+  const supported = command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "visa" && subcommand === "product-search";
+  if (!supported) {
+    throw validationError("--language is only supported by ucp-catalog search, ucp-catalog product, catalog search, or visa product-search");
+  }
 }
 function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
   return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
@@ -16653,7 +16669,7 @@ async function ucpCatalogSearch(context) {
   const pagination = compact3({ cursor, limit });
   const body = compact3({
     query,
-    context: optionalJsonObjectFlag2(flags, "context"),
+    context: catalogContextFlag(flags),
     signals: optionalJsonObjectFlag2(flags, "signals"),
     attribution: optionalJsonObjectFlag2(flags, "attribution"),
     filters: optionalJsonObjectFlag2(flags, "filters"),
@@ -16683,7 +16699,7 @@ async function ucpCatalogProduct(context) {
   const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
   const body = compact3({
     id: productId,
-    context: optionalJsonObjectFlag2(flags, "context"),
+    context: catalogContextFlag(flags),
     signals: optionalJsonObjectFlag2(flags, "signals"),
     attribution: optionalJsonObjectFlag2(flags, "attribution"),
     filters: optionalJsonObjectFlag2(flags, "filters")
@@ -16741,7 +16757,7 @@ async function catalogSearch(context) {
   const query = requireNonBlankFlag(flags, "query", "missing --query");
   const body = compact3({
     query,
-    context: optionalJsonObjectFlag2(flags, "context"),
+    context: catalogContextFlag(flags),
     signals: optionalJsonObjectFlag2(flags, "signals"),
     attribution: optionalJsonObjectFlag2(flags, "attribution"),
     filters: optionalJsonObjectFlag2(flags, "filters"),
@@ -18260,6 +18276,21 @@ function optionalJsonObjectFlag2(flags, name) {
     throw validationError(`--${name} must be a JSON object`);
   }
   return parsed;
+}
+function catalogContextFlag(flags) {
+  const context = optionalJsonObjectFlag2(flags, "context");
+  const rawLanguage = getStringFlag(flags, "language");
+  if (rawLanguage === void 0) {
+    return context;
+  }
+  const language = rawLanguage.trim();
+  if (!language) {
+    throw validationError("--language must not be blank");
+  }
+  return {
+    ...context ?? {},
+    language
+  };
 }
 function optionalJsonArrayFlag(flags, name) {
   const value = getStringFlag(flags, name);

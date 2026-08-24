@@ -77,7 +77,7 @@ Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent,
 When a merchant is already known by `merchantId` and the user is browsing rather than naming a URL, the merchant's registered UCP Catalog can be queried directly instead of scraping storefront pages:
 
 ```bash
-clink ucp-catalog search --merchant-id <merchant_id> --query <text> --limit <n> --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <tag> --limit <n> --format json
 clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --format json
 ```
 

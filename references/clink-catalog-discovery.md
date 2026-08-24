@@ -10,6 +10,12 @@ This flow is discovery only. It does not decide to buy, does not resolve a payme
 
 Catalog search covers merchants Clink has onboarded. It is not a web search. When the catalogs genuinely have no match, hand product discovery back to the agent's own tools rather than reporting the product as unavailable.
 
+Lock one Catalog result language before the first search. Prefer an explicit
+user request; otherwise use the current request and conversation language.
+Pass that BCP 47 tag to every scoped and broad Catalog command as
+`--language <tag>`. The backend no longer infers the target display language
+from the query text.
+
 ## Described Product Purchase Route
 
 When the user wants to buy a product they described but gave no link, `classifyPaymentIntent` routes to `CATALOG_PURCHASE` rather than `UCP_CHECKOUT`. UCP checkout begins at `clink tool parse-item`, which needs a product detail URL, so discovery has to resolve one first.
@@ -96,7 +102,7 @@ Match only when the description genuinely covers the request. A weak match that 
 ## Step 3 - Merchant-Scoped Search
 
 ```bash
-clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <tag> --format json
 ```
 
 `--merchant-id` is required: this path is merchant-scoped by contract. Products come back as a flat `products` array. A non-empty array is terminal for discovery; an empty array falls through to the broad search rather than reporting the product as unavailable.
@@ -104,7 +110,7 @@ clink ucp-catalog search --merchant-id <merchant_id> --query <text> --format jso
 ## Step 4 - Broad Search Across Merchants And Stores
 
 ```bash
-clink catalog search --query <text> [--channel-type <channel>] [--context <json>] --format json
+clink catalog search --query <text> --language <tag> [--channel-type <channel>] [--context <json>] --format json
 ```
 
 This path is not merchant-scoped and takes no `--merchant-id`. Results come back grouped by target, where each group identifies either an internal merchant (`merchant_id`) or an external platform store (`store_id` plus `region`); the two are mutually exclusive. The response `region` and `store_id` remain candidate identity and must survive into product selection and checkout.
