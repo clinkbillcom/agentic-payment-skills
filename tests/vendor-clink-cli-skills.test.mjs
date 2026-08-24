@@ -7,6 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  PageHandoffAction,
+  PageHandoffKind,
+  classifyPageHandoff,
+} from '../lib/page-handoff.mjs';
+
 const bundlePath = fileURLToPath(
   new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
 );
@@ -816,6 +822,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
         defaultOpenLinks: false,
         customerId: 'cus_card_watch',
         customerApiKey: 'csk_card_watch',
+        email: 'wallet+binding@example.com',
       }),
       { encoding: 'utf8', mode: 0o600 },
     );
@@ -853,15 +860,28 @@ test('vendored card binding-link exposes its URL only after the default watch is
       '/agent/cwallet/card/bindingLink',
       '/agent/event-hub/webhook-events/poll',
     ]);
-    assert.deepEqual(jsonLines(ready.stdout), [{
+    const readyLines = jsonLines(ready.stdout);
+    assert.deepEqual(readyLines, [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        bindingUrl:
+          'https://agent.clinkbill.com/payment-method-setup'
+          + '?email=wallet%2Bbinding%40example.com',
         paymentMethodsVoList: [],
         watchReady: true,
         watchEventType: 'payment_method.added',
       },
     }]);
+    const handoff = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url: readyLines[0].data.bindingUrl,
+      watchReady: readyLines[0].data.watchReady,
+      watchEventType: readyLines[0].data.watchEventType,
+      processRunning: ready.status === undefined,
+    });
+    assert.equal(handoff.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
+    assert.equal(handoff.emitUrl, true);
+    assert.equal(handoff.url, readyLines[0].data.bindingUrl);
     assert.doesNotMatch(ready.stdout, /card-binding|watch-secret|fragment/u);
     assert.match(ready.stderr, /https:\/\/agent\.clinkbill\.com/u);
 
