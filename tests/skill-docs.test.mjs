@@ -503,8 +503,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.1"/u);
-  assert.equal(packageJson.version, '1.12.1');
+  assert.match(skill, /version:\s*"1\.12\.2"/u);
+  assert.equal(packageJson.version, '1.12.2');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 

@@ -11,8 +11,8 @@ const [packageJson, skill, reference, readme, readmeZh] = await Promise.all([
 ]);
 
 test('feature version is synchronized across package and Skill metadata', () => {
-  assert.equal(packageJson.version, '1.12.1');
-  assert.match(skill, /version: "1\.12\.1"/u);
+  assert.equal(packageJson.version, '1.12.2');
+  assert.match(skill, /version: "1\.12\.2"/u);
 });
 
 test('Skill documents the single foreground aggregate checkout contract', () => {
