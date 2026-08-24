@@ -305,6 +305,37 @@ test('rejects prices that exceed currency precision or the safe minor-unit range
   }
 });
 
+test('recursively validates every nested amount and price field the CLI will normalize', () => {
+  for (const nestedField of [
+    { adjustment: { amount: '1.001' } },
+    { metadata: { quoted: { price: '1.001' } } },
+    { adjustment: { amount: Number.POSITIVE_INFINITY } },
+    { adjustment: { amount: '90071992547409.92' } },
+  ]) {
+    const result = classifyUcpCheckoutRunRequest(readyRequest({
+      lineItems: [{
+        id: 'li_1',
+        item: { id: 'sku_1', title: 'Demo', price: '1.00' },
+        quantity: 1,
+        ...nestedField,
+      }],
+    }));
+    assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_RUN_INPUT_INVALID);
+    assert.ok(result.invalid.includes('lineItems'));
+  }
+
+  const ready = classifyUcpCheckoutRunRequest(readyRequest({
+    lineItems: [{
+      id: 'li_1',
+      item: { id: 'sku_1', title: 'Demo', price: '1.00' },
+      quantity: 1,
+      adjustment: { amount: '0.50' },
+      metadata: { quoted: { price: 2.25 } },
+    }],
+  }));
+  assert.equal(ready.state, UcpCheckoutRunState.CHECKOUT_RUN_READY);
+});
+
 test('legacy workflow exposes the aggregate run only after all gates pass', () => {
   const missingCard = classifyUcpCheckoutRunExecution(readyRequest({
     paymentInstrumentReady: false,
