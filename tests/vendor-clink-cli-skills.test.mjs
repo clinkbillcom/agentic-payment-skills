@@ -1818,11 +1818,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.18');
+  assert.equal(vendorPackage.version, '0.2.22');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c66961a77be86759e1f5116edf46c955b6160147',
+    'f11618047b7266fc869fc51b5697130b5e169b23',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
@@ -2049,15 +2049,7 @@ test('vendored CLI rejects a literal latest Skill install version', () => {
   assert.match(result.stderr, /invalid skill package/u);
 });
 
-const hasAggregateUcpCheckoutRun = bundleSource.includes('clink ucp-checkout run')
-  && bundleSource.includes('--confirm-purchase')
-  && bundleSource.includes('--wait-delivery');
-
-test('vendored CLI aggregate UCP checkout contract after official upstream sync', {
-  skip: hasAggregateUcpCheckoutRun
-    ? false
-    : 'awaiting official clink-cli bundle sync; source/FSM/docs tests remain authoritative',
-}, () => {
+test('vendored CLI exposes the aggregate UCP checkout contract', () => {
   const result = runBundleRaw(['ucp-checkout', 'run', '--help']);
   assert.equal(result.status, 0, result.stderr);
   for (const contract of [

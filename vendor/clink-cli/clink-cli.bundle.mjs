@@ -5700,18 +5700,24 @@ function resolveWalletInitBaseUrl(flags) {
   const selectedEnvironment = resolveSelectedEnvironment(flags);
   return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
 }
+function resolvePublicCatalogBaseUrl(flags) {
+  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
+}
 function resolveSelectedEnvironment(flags) {
-  const sandbox = getBooleanFlag(flags, "sandbox");
-  const test = getBooleanFlag(flags, "test");
-  if (sandbox && test) {
-    throw validationError("--sandbox and --test cannot be used together");
-  }
-  const explicitEnvironment = sandbox ? "sandbox" : test ? "test" : void 0;
+  const explicitEnvironment = resolveExplicitEnvironment(flags);
   const distributionEnvironment = walletInitDistributionEnvironment();
   if (explicitEnvironment && distributionEnvironment && explicitEnvironment !== distributionEnvironment) {
     throw validationError(`wallet init environment is fixed to ${distributionEnvironment} by this CLI distribution`);
   }
   return explicitEnvironment ?? distributionEnvironment;
+}
+function resolveExplicitEnvironment(flags) {
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (sandbox && test) {
+    throw validationError("--sandbox and --test cannot be used together");
+  }
+  return sandbox ? "sandbox" : test ? "test" : void 0;
 }
 function walletInitDistributionEnvironment() {
   const value = process.env.CLINK_WALLET_INIT_ENVIRONMENT?.trim().toLowerCase();
@@ -6061,7 +6067,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.18";
+var CLI_VERSION = "0.2.22";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -7304,7 +7310,8 @@ async function collectWebhookEvents(options2) {
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         timeoutMs: options2.timeoutMs,
-        pageSize: effectivePageSize
+        pageSize: effectivePageSize,
+        ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
       })
     };
     const records = page.records;
@@ -7635,6 +7642,15 @@ var CUSTOMER_API_KEY_REQUEST_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --dry-run                     Print the request without executing it
 ${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_ENVIRONMENT_OPTIONS = `  --sandbox                    Use the sandbox/UAT API for this command
+  --test                       Use the test API for this command; cannot be combined with --sandbox`;
+var PUBLIC_CATALOG_REQUEST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+var PUBLIC_CATALOG_LIST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+${OUTPUT_OPTIONS}`;
 var CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
   --timeout <ms>                Request timeout in milliseconds
   --open                        Open the generated link in the browser
@@ -7670,8 +7686,8 @@ Global Options:
   --open                        Open generated link in browser
   --no-open                     Do not open generated links; overrides --open and saved defaults
   --no-watch                    Do not poll for webhook events after printing a link
-  --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only
+  --customer-id <id>            Override customer ID for authenticated commands
+  --customer-api-key <key>      Legacy API key override for authenticated never-OAuth wallets only
   --timeout <ms>                Request timeout in milliseconds
   --help, -h                    Show help
 
@@ -7679,7 +7695,12 @@ Wallet Environment:
   Select an official environment with wallet init: --sandbox uses sandbox and --test uses test.
   The main distribution uses production when neither is present; packaged distributions may fix
   their wallet-init environment internally. Successful initialization saves the environment, and
-  later commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced process override.
+  later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
+  process override for those authenticated commands.
+
+Public Catalog Environment:
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
 
 Event Watching:
   Link commands normally print the browser handoff and then poll
@@ -8012,15 +8033,15 @@ Usage:
 
 Subcommands:
   get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
-  get-merchant-list  Return the supported merchant-list document for the configured environment
+  get-merchant-list  Return the supported merchant-list document for a public environment
 
 Options:
 ${TOOL_NETWORK_OPTIONS}
 
 Behavior:
-  Reads the merchant list for the configured environment, normally saved by wallet init.
-  get-merchant-list returns the document; get-endpoint generates an endpoint from the effective API
-  base. Production is fetched on every call; sandbox/UAT and test use their bundled lists.
+  get-endpoint uses the effective wallet API base and does not accept environment flags.
+  get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
+  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
 
 Examples:
@@ -8061,11 +8082,13 @@ Usage:
   clink tool internal-ucp get-merchant-list [options]
 
 Options:
-${TOOL_NETWORK_OPTIONS}
+${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
   Returns the complete merchant-list document after validating its merchant entries.
-  The environment normally comes from wallet init; CLINK_BASE_URL can override it for the process.
+  The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
+  It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
+  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
   The output preserves list metadata, descriptions, enabled flags, and disabled entries.
@@ -8588,12 +8611,16 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/search using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/search. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
+  CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
+  refresh or a wallet-login recovery prompt.
+  Set context.language to an IETF BCP 47 tag for localized results. When Search omits it, UCP may
+  infer the result language from the query; there is no separate --language option.
 
 Examples:
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
@@ -8617,12 +8644,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Behavior:
-  Sends POST /agent/ucp/{merchantId}/catalog/product using the environment saved by wallet init.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key. Request-Id remains stable if an OAuth retry occurs.
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
+  Set context.language to an IETF BCP 47 tag for localized results; there is no separate
+  --language option.
 
 Examples:
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
@@ -8664,12 +8693,14 @@ Optional Request Fields:
   --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
 
 Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
 
 Endpoint:
   POST /agent/ucp/extra/catalog/search
 
 Behavior:
+  Sends an anonymous request, defaults to production, and accepts --sandbox or --test for this
+  invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
   address_country is a discovery hint, not a strict filter. Published external-store mappings
@@ -8679,6 +8710,8 @@ Behavior:
   Results come back grouped by target, each group carrying channel_type plus either merchant_id
   (internal merchant) or store_id (external platform store). The shape does not change with
   --channel-type; only the number of groups does.
+  Set context.language to an IETF BCP 47 tag for localized results. When omitted, UCP may infer the
+  result language from the query; there is no separate --language option.
 
 Examples:
   clink catalog search --query "iced latte" --format json
@@ -8903,6 +8936,8 @@ Required Arguments:
 
 Optional Arguments:
   --endpoint <url>                Optional checkout endpoint prefix
+  --max-wait <seconds>            Poll only this Checkout until terminal; defaults to 900
+  --wait-delivery                 After completed + data.order.id, also wait for digital delivery
 
 Options:
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -8912,12 +8947,17 @@ Endpoint:
 
 Notes:
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Without wait flags, performs one GET. With --max-wait, polls only the same Checkout by GET and
+  never creates, completes, or submits payment. --wait-delivery continues from an authoritative
+  completed Checkout into the same order's digital-delivery wait. A timeout returns one bound
+  ucp-checkout get resumeCommand; callers must not append ucp-order commands.
   Once completed, data.order.id is the OMS/UCP order ID accepted by ucp-order get. Do not use an
   agent_order event's resourceId, data.orderId, or data.paymentOrderId; those are Clink Payment
   order IDs, and an order_ prefix does not distinguish the two ID domains.
 
 Examples:
   clink ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout get --checkout-id chk_xxx --wait-delivery --max-wait 900 --format json
 `;
 var UCP_CHECKOUT_UPDATE_HELP = `clink ucp-checkout update
 
@@ -9312,6 +9352,7 @@ Options:
   --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
   --checkout-id <id>           Match one agent_order event by canonical checkout aliases or the
                                UCP agentInstructionInfo checkout ID; preserve every nonmatch
+  --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
   --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -9337,10 +9378,14 @@ Notes:
   or conflicting checkout aliases fail closed; resourceId/orderId never substitute. A full page
   without nextToken fails explicitly instead of polling the same page forever. Only an exact match
   is ACKed, and resumeCommand preserves the selector and nextToken.
+  --payment-instrument-id requires --type, is mutually exclusive with --checkout-id, and matches
+  canonical payload aliases or the event resourceId. Same-type events for another card remain
+  unacknowledged, and resumeCommand preserves the card selector.
 
 Examples:
   clink events poll --format json
   clink events poll --type payment_method.updated --format json
+  clink events poll --type payment_method.update,vic_device.binding_succeeded --payment-instrument-id pi_123 --format json
   clink events poll --type account-created,account-reloaded --format json
   clink events poll --type agent_order.succeeded --checkout-id checkout_123 --format json
   clink events poll --no-ack --format json
@@ -9547,7 +9592,7 @@ var ucp_merchants_default = {
       domain_name: "vtravel.link2shops.com",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
-      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com/yiyuan/#/exitPage URL is an SPA storefront entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. The known UAT catalog includes HungryPanda (United States), item ID cf1c321c4d5a4754ad099fa01aa2f9a4. Catalog APIs remain the source of truth for title, price, currency, availability, and the orderable URL."
+      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
     }
   ]
 };
@@ -15098,14 +15143,99 @@ function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
 
-// dist/ucp-order.js
+// dist/ucp-checkout-wait.js
 var DEFAULT_POLL_INTERVAL_MS2 = 3e3;
 var MAX_POLL_INTERVAL_MS = 3e4;
-var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
+  "completed",
+  "cancelled",
+  "canceled",
+  "expired",
+  "failed",
+  "rejected"
+]);
 var realSleep2 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
-async function waitForUcpDigitalDelivery(options2) {
+async function waitForUcpCheckoutTerminal(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? realSleep2;
+  const deadline = now() + options2.maxWaitMs;
+  let attempts = 0;
+  while (true) {
+    const checkout = requireCheckout(options2.checkoutId, await options2.fetchCheckout());
+    attempts += 1;
+    const status = checkoutStatus(checkout);
+    const nextRetryAt = normalizedRetryAt(checkout.next_retry_at ?? checkout.nextRetryAt);
+    if (TERMINAL_STATUSES.has(status)) {
+      return {
+        checkout,
+        status,
+        attempts,
+        timedOut: false,
+        ...nextRetryAt ? { nextRetryAt } : {}
+      };
+    }
+    const currentTime = now();
+    if (currentTime >= deadline) {
+      return {
+        checkout,
+        status,
+        attempts,
+        timedOut: true,
+        ...nextRetryAt ? { nextRetryAt } : {}
+      };
+    }
+    await sleep3(Math.min(resolvePollDelayMs(nextRetryAt, currentTime), deadline - currentTime));
+  }
+}
+function requireCheckout(checkoutId, value) {
+  if (!isRecord12(value)) {
+    throw apiError("UCP Checkout response must be an object.");
+  }
+  const observedId = normalizedText(value.id ?? value.checkoutId ?? value.checkout_id);
+  if (!observedId) {
+    throw apiError("UCP Checkout response is missing id.");
+  }
+  if (observedId !== checkoutId) {
+    throw apiError("UCP Checkout response id does not match the requested Checkout.");
+  }
+  return value;
+}
+function checkoutStatus(checkout) {
+  return normalizedText(checkout.status)?.toLowerCase() ?? "unknown";
+}
+function normalizedRetryAt(value) {
+  const text = normalizedText(value);
+  if (!text) {
+    return void 0;
+  }
+  const timestamp = Date.parse(text);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
+}
+function resolvePollDelayMs(nextRetryAt, now) {
+  if (!nextRetryAt) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  const delay = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay)) {
+    return DEFAULT_POLL_INTERVAL_MS2;
+  }
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay));
+}
+function normalizedText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function isRecord12(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/ucp-order.js
+var DEFAULT_POLL_INTERVAL_MS3 = 3e3;
+var MAX_POLL_INTERVAL_MS2 = 3e4;
+var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
+var realSleep3 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+async function waitForUcpDigitalDelivery(options2) {
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? realSleep3;
   const deadline = now() + options2.maxWaitMs;
   let attempts = 0;
   while (true) {
@@ -15133,7 +15263,7 @@ async function waitForUcpDigitalDelivery(options2) {
         ...delivery.nextRetryAt ? { nextRetryAt: delivery.nextRetryAt } : {}
       };
     }
-    const delayMs = Math.min(resolvePollDelayMs(delivery.nextRetryAt, currentTime), deadline - currentTime);
+    const delayMs = Math.min(resolvePollDelayMs2(delivery.nextRetryAt, currentTime), deadline - currentTime);
     await sleep3(delayMs);
   }
 }
@@ -15142,7 +15272,7 @@ function classifyUcpDigitalDelivery(order) {
   if (rawDelivery === void 0 || rawDelivery === null) {
     return { status: "pending" };
   }
-  if (!isRecord12(rawDelivery)) {
+  if (!isRecord13(rawDelivery)) {
     throw apiError("UCP order digital_delivery must be an object.");
   }
   const rawStatus = rawDelivery.status;
@@ -15150,7 +15280,7 @@ function classifyUcpDigitalDelivery(order) {
     throw apiError("UCP order digital_delivery.status is missing.");
   }
   const status = rawStatus.trim().toLowerCase();
-  const nextRetryAt = normalizedRetryAt(rawDelivery.next_retry_at);
+  const nextRetryAt = normalizedRetryAt2(rawDelivery.next_retry_at);
   if (status === "ready") {
     if (!Array.isArray(rawDelivery.artifacts) || rawDelivery.artifacts.length === 0) {
       throw apiError("UCP order digital delivery is ready without artifacts.");
@@ -15169,7 +15299,7 @@ function classifyUcpDigitalDelivery(order) {
   throw apiError(`unsupported UCP digital delivery status: ${status}`);
 }
 function requireOrder(orderId, value) {
-  if (!isRecord12(value)) {
+  if (!isRecord13(value)) {
     throw apiError("UCP order response must be an object.");
   }
   if (typeof value.id !== "string" || !value.id.trim()) {
@@ -15180,24 +15310,24 @@ function requireOrder(orderId, value) {
   }
   return value;
 }
-function normalizedRetryAt(value) {
+function normalizedRetryAt2(value) {
   if (typeof value !== "string" || !value.trim()) {
     return void 0;
   }
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
 }
-function resolvePollDelayMs(nextRetryAt, now) {
+function resolvePollDelayMs2(nextRetryAt, now) {
   if (!nextRetryAt) {
-    return DEFAULT_POLL_INTERVAL_MS2;
+    return DEFAULT_POLL_INTERVAL_MS3;
   }
   const delay = Date.parse(nextRetryAt) - now;
   if (!Number.isFinite(delay)) {
-    return DEFAULT_POLL_INTERVAL_MS2;
+    return DEFAULT_POLL_INTERVAL_MS3;
   }
-  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay));
+  return Math.min(MAX_POLL_INTERVAL_MS2, Math.max(DEFAULT_POLL_INTERVAL_MS3, delay));
 }
-function isRecord12(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -15249,7 +15379,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  validateEnvironmentFlagScope(command, subcommand, args.flags, edition.environmentSelectingInitCommands ?? []);
+  const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
   validateEventPollSelector(command, subcommand, args.flags);
   validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, args.flags);
   const editionCommandNames = new Set(edition.commandNames ?? []);
@@ -15264,11 +15394,20 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     process.stdout.write((edition.getHelpText ?? getHelpText)());
     return EXIT_CODES.OK;
   }
-  const storedConfig = await readStoredConfig();
-  const runtimeConfig = resolveRuntimeConfig(storedConfig, args.flags);
+  const preparedCommand = await edition.prepareCommand?.(command, subcommand, args);
+  const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand);
+  const storedConfig = usesPublicCatalogEnvironment ? defaultConfig() : await readStoredConfig();
+  const runtimeConfig = usesPublicCatalogEnvironment ? {
+    baseUrl: resolvePublicCatalogBaseUrl(args.flags),
+    defaultOpenLinks: false
+  } : resolveRuntimeConfig(storedConfig, args.flags);
+  if (selectedCommandEnvironment) {
+    runtimeConfig.baseUrl = API_BASE_URLS[selectedCommandEnvironment];
+  }
   const globalOptions = resolveGlobalOptions(args, storedConfig);
   const context = {
     args,
+    ...preparedCommand !== void 0 ? { preparedCommand } : {},
     storedConfig,
     runtimeConfig,
     authorizationIdentity: runtimeAuthorizationIdentity(runtimeConfig),
@@ -15277,7 +15416,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
     configLifecycle: edition.configLifecycle ?? {}
   };
-  await prepareOAuthAuthorization(command, subcommand, context);
+  await prepareOAuthAuthorization(command, subcommand, context, edition);
   switch (command) {
     case "wallet":
       return handleWalletCommand(subcommand, context);
@@ -15315,16 +15454,24 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   throw validationError(`unsupported command: ${command}`);
 }
 function validateEventPollSelector(command, subcommand, flags) {
-  if (command !== "events" || subcommand !== "poll" || !("checkout-id" in flags)) {
+  if (command !== "events" || subcommand !== "poll") {
     return;
   }
-  const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
-  if (!checkoutId) {
+  if ("checkout-id" in flags && !getStringFlag(flags, "checkout-id")?.trim()) {
     throw validationError("invalid --checkout-id: expected a non-blank id");
   }
+  if ("payment-instrument-id" in flags && !getStringFlag(flags, "payment-instrument-id")?.trim()) {
+    throw validationError("invalid --payment-instrument-id: expected a non-blank id");
+  }
   const type = parseEventTypeFlag(getStringFlag(flags, "type"));
-  if (type !== "agent_order.succeeded" && type !== "agent_order.failed") {
+  if ("checkout-id" in flags && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
+  if ("payment-instrument-id" in flags && !type) {
+    throw validationError("--payment-instrument-id requires --type");
+  }
+  if ("checkout-id" in flags && "payment-instrument-id" in flags) {
+    throw validationError("--checkout-id and --payment-instrument-id are mutually exclusive");
   }
 }
 function validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, flags) {
@@ -15332,19 +15479,39 @@ function validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, flags) 
     throw validationError("ucp-checkout run requires explicit --confirm-purchase before any live request");
   }
 }
-function validateEnvironmentFlagScope(command, subcommand, flags, editionCommands) {
-  const environmentCommands = ["wallet", ...editionCommands];
-  const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
-  if (isEnvironmentSelectingInit) {
-    resolveSelectedEnvironment(flags);
+function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags, editionInitCommands, editionCommands) {
+  if (isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand)) {
+    resolvePublicCatalogBaseUrl(flags);
+    return void 0;
   }
-  const supportedBy = environmentCommands.map((name) => `${name} init`).join(" or ");
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "sandbox")) {
+  const environmentCommands = [
+    { command: "wallet", subcommand: "init" },
+    ...editionInitCommands.map((name) => ({ command: name, subcommand: "init" })),
+    ...editionCommands
+  ];
+  const selectedCommand = environmentCommands.find((candidate) => command === candidate.command && subcommand === candidate.subcommand);
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (selectedCommand) {
+    return resolveSelectedEnvironment(flags);
+  }
+  const publicCatalogCommands = [
+    "ucp-catalog search",
+    "ucp-catalog product",
+    "catalog search",
+    "tool internal-ucp get-merchant-list"
+  ];
+  const supportedBy = environmentCommands.map(({ command: name, subcommand: action }) => `${name} ${action}`).concat(publicCatalogCommands).join(" or ");
+  if (!selectedCommand && sandbox) {
     throw validationError(`--sandbox is only supported by ${supportedBy}`);
   }
-  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
+  if (!selectedCommand && test) {
     throw validationError(`--test is only supported by ${supportedBy}`);
   }
+  return void 0;
+}
+function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
+  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -15431,8 +15598,8 @@ async function skillsTip(context) {
   }
   return EXIT_CODES.OK;
 }
-async function prepareOAuthAuthorization(command, subcommand, context) {
-  if (context.globalOptions.dryRun || !context.storedConfig.authorization || !commandUsesCustomerAuthorization(command, subcommand)) {
+async function prepareOAuthAuthorization(command, subcommand, context, edition) {
+  if (context.globalOptions.dryRun || !context.storedConfig.authorization || !(commandUsesCustomerAuthorization(command, subcommand) || edition.commandUsesCustomerAuthorization?.(command, subcommand))) {
     return;
   }
   await refreshOAuthAuthorization(context);
@@ -15509,8 +15676,6 @@ function commandUsesCustomerAuthorization(command, subcommand) {
       return true;
     case "refund":
     case "ucp-checkout":
-    case "ucp-catalog":
-    case "catalog":
     case "ucp-order":
     case "instruction":
     case "events":
@@ -15641,6 +15806,7 @@ async function toolInternalUcp(context) {
   const configuredEnvironment = clinkEnvironmentForApiBaseUrl(baseUrl);
   switch (nestedCommand) {
     case "get-merchant-list": {
+      rejectPublicCatalogAuthenticationFlags(context.args.flags);
       const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
       if (!configuredEnvironment && !hasMerchantListOverride) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
@@ -15761,6 +15927,7 @@ async function eventsPoll(context) {
   const pageSize = parseIntFlag(getStringFlag(flags, "limit"), "invalid --limit", 1);
   const type = parseEventTypeFlag(getStringFlag(flags, "type"));
   const checkoutId = getStringFlag(flags, "checkout-id")?.trim();
+  const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id")?.trim();
   const nextToken = getStringFlag(flags, "next-token")?.trim();
   const ack = !getBooleanFlag(flags, "no-ack");
   if ("checkout-id" in flags && !checkoutId) {
@@ -15768,6 +15935,12 @@ async function eventsPoll(context) {
   }
   if (checkoutId && type !== "agent_order.succeeded" && type !== "agent_order.failed") {
     throw validationError("--checkout-id requires --type agent_order.succeeded or --type agent_order.failed");
+  }
+  if (checkoutId && paymentInstrumentId) {
+    throw validationError("--checkout-id and --payment-instrument-id are mutually exclusive");
+  }
+  if (paymentInstrumentId && !type) {
+    throw validationError("--payment-instrument-id requires --type");
   }
   if ("next-token" in flags && !nextToken) {
     throw validationError("invalid --next-token: expected a non-blank token");
@@ -15796,6 +15969,7 @@ async function eventsPoll(context) {
     ...pageSize !== void 0 ? { pageSize } : {},
     ...type ? { type } : {},
     ...checkoutId ? { checkoutId } : {},
+    ...paymentInstrumentId ? { expectedResource: { paymentInstrumentId } } : {},
     ...nextToken ? { nextToken } : {}
   });
   printSuccess({
@@ -15805,7 +15979,7 @@ async function eventsPoll(context) {
     ackedEventIds: result.ackedEventIds,
     ...result.nextToken ? { nextToken: result.nextToken } : {},
     ...result.timedOut ? {
-      resumeCommand: buildResumeCommand(type, checkoutId, result.nextToken, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
+      resumeCommand: buildResumeCommand(type, checkoutId, paymentInstrumentId, result.nextToken, ack, context.globalOptions.format, process.env.CLINK_BASE_URL)
     } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -15830,13 +16004,16 @@ function parseEventTypeFlag(value) {
   }
   return [...new Set(types)].join(",");
 }
-function buildResumeCommand(type, checkoutId, nextToken, ack, format, baseUrlOverride) {
+function buildResumeCommand(type, checkoutId, paymentInstrumentId, nextToken, ack, format, baseUrlOverride) {
   const parts = ["clink events poll"];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
   }
   if (checkoutId) {
     parts.push(`--checkout-id ${quoteShellArgument(checkoutId)}`);
+  }
+  if (paymentInstrumentId) {
+    parts.push(`--payment-instrument-id ${quoteShellArgument(paymentInstrumentId)}`);
   }
   if (nextToken) {
     parts.push(`--next-token ${quoteShellArgument(nextToken)}`);
@@ -16464,6 +16641,7 @@ async function handleUcpCatalogCommand(subcommand, context) {
 }
 async function ucpCatalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "search", ["product-id"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const query = requireNonBlankFlag(flags, "query", "missing --query");
@@ -16483,23 +16661,23 @@ async function ucpCatalogSearch(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function ucpCatalogProduct(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "product", ["query", "cursor", "limit"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
   const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
@@ -16512,25 +16690,30 @@ async function ucpCatalogProduct(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/product`,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   const unsupported = unsupportedFlags.find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by ucp-catalog ${subcommand}`);
+  }
+}
+function rejectPublicCatalogAuthenticationFlags(flags) {
+  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
+  if (unsupported) {
+    throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
 }
 async function handleCatalogCommand(subcommand, context) {
@@ -16547,6 +16730,7 @@ async function handleCatalogCommand(subcommand, context) {
 }
 async function catalogSearch(context) {
   const flags = context.args.flags;
+  rejectPublicCatalogAuthenticationFlags(flags);
   if ("merchant-id" in flags) {
     throw validationError("--merchant-id is not supported by catalog search; use ucp-catalog search");
   }
@@ -16567,20 +16751,19 @@ async function catalogSearch(context) {
   });
   const requestId = getStringFlag(flags, "request-id")?.trim() || randomUUID4();
   const ucpAgent = getStringFlag(flags, "ucp-agent")?.trim() || DEFAULT_UCP_AGENT;
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
     path: EXTRA_CATALOG_SEARCH_PATH,
     headers: {
-      ...buildCustomerApiKeyHeaders(runtimeConfig),
       "Request-Id": requestId,
       "UCP-Agent": ucpAgent
     },
     body,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
-  }));
-  return finishApiCommand(result, context);
+  });
+  return finishPublicCatalogCommand(result, context);
 }
 async function handleUcpOrderCommand(subcommand, context) {
   if (!subcommand) {
@@ -16713,6 +16896,10 @@ function requireNonBlankFlag(flags, name, missingMessage) {
   return value;
 }
 async function ucpCheckoutRun(context) {
+  printSuccess(await executeUcpCheckoutRun(context), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function executeUcpCheckoutRun(context, options2 = {}) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   if ("checkout-id" in flags) {
@@ -16735,15 +16922,14 @@ async function ucpCheckoutRun(context) {
     if (!isDryRun3(completeResult)) {
       throw apiError("ucp-checkout run dry-run unexpectedly produced a live complete response");
     }
-    printSuccess(buildUcpCheckoutRunDryRunPlan({
+    return buildUcpCheckoutRunDryRunPlan({
       create: createResult,
       complete: completeResult,
       endpoint: ucpCheckoutEndpointPrefix(preparedCreate.target),
       waitDelivery,
       maxWaitSeconds,
       confirmedPurchase: getBooleanFlag(flags, "confirm-purchase")
-    }), context.globalOptions.format);
-    return EXIT_CODES.OK;
+    });
   }
   assertApiSuccess(createResult.status, createResult.body);
   const create = requireUcpCheckoutRunData(createResult.body, "create");
@@ -16751,7 +16937,7 @@ async function ucpCheckoutRun(context) {
   const createStatus = normalizedUcpCheckoutRunStatus(create);
   const endpoint = ucpCheckoutEndpointPrefix(preparedCreate.target);
   if (createStatus !== "ready_for_complete") {
-    printSuccess({
+    return {
       stage: "create",
       status: createStatus,
       checkoutId,
@@ -16764,19 +16950,51 @@ async function ucpCheckoutRun(context) {
       ...isUcpCheckoutRunTerminalStatus(createStatus) ? {} : {
         resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format)
       }
-    }, context.globalOptions.format);
-    return EXIT_CODES.OK;
+    };
   }
-  const preparedComplete = await prepareUcpCheckoutComplete(context, checkoutId);
-  const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, preparedComplete)),
-    refreshPaymentMethods: preparedComplete.refreshPaymentMethods,
-    dryRun: false
-  });
-  if (isDryRun3(refreshed.result)) {
-    throw apiError("ucp-checkout run unexpectedly produced a dry-run complete response");
+  let preparedComplete;
+  let refreshed;
+  try {
+    preparedComplete = await prepareUcpCheckoutComplete(context, checkoutId);
+    refreshed = await executePaymentRequestWithRefresh({
+      request: () => requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, preparedComplete)),
+      refreshPaymentMethods: preparedComplete.refreshPaymentMethods,
+      dryRun: false
+    });
+    if (isDryRun3(refreshed.result)) {
+      throw apiError("ucp-checkout run unexpectedly produced a dry-run complete response");
+    }
+    assertApiSuccess(refreshed.result.status, refreshed.result.body);
+  } catch (error) {
+    if (!options2.returnSafeCompleteFailure) {
+      throw error;
+    }
+    if (options2.readOnlyRecovery) {
+      return recoverUcpCheckoutRun(context, {
+        checkoutId,
+        endpoint,
+        create,
+        initialCompleteError: safeWorkflowError(error),
+        waitDelivery,
+        maxWaitSeconds: options2.readOnlyRecovery.maxWaitSeconds
+      }, options2.readOnlyRecovery);
+    }
+    return {
+      stage: "complete",
+      status: "unknown",
+      checkoutId,
+      endpoint,
+      attempts: {
+        create: 1,
+        complete: 1
+      },
+      create,
+      paymentRetryAllowed: false,
+      reconciliationRequired: true,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format),
+      error: safeWorkflowError(error)
+    };
   }
-  assertApiSuccess(refreshed.result.status, refreshed.result.body);
   const complete = requireUcpCheckoutRunData(refreshed.result.body, "complete");
   assertUcpCheckoutRunResponseIdentity(complete, checkoutId, "complete");
   const completeStatus = normalizedUcpCheckoutRunStatus(complete);
@@ -16792,28 +17010,39 @@ async function ucpCheckoutRun(context) {
     ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
   };
   if (completeStatus !== "completed") {
-    printSuccess({
+    if (!isUcpCheckoutRunTerminalStatus(completeStatus) && options2.readOnlyRecovery) {
+      return recoverUcpCheckoutRun(context, {
+        checkoutId,
+        endpoint,
+        create,
+        initialComplete: complete,
+        ...refreshed.paymentMethodsRefreshWarning ? {
+          paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning
+        } : {},
+        waitDelivery,
+        maxWaitSeconds: options2.readOnlyRecovery.maxWaitSeconds
+      }, options2.readOnlyRecovery);
+    }
+    return {
       stage: "complete",
       status: completeStatus,
       ...commonOutput,
       ...isUcpCheckoutRunTerminalStatus(completeStatus) ? {} : {
         resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format)
       }
-    }, context.globalOptions.format);
-    return EXIT_CODES.OK;
+    };
   }
   const orderId = ucpCheckoutRunOrderId(complete);
   if (!waitDelivery) {
-    printSuccess({
+    return {
       stage: "complete",
       status: completeStatus,
       ...commonOutput,
       ...orderId ? { orderId } : {}
-    }, context.globalOptions.format);
-    return EXIT_CODES.OK;
+    };
   }
   if (!orderId) {
-    printSuccess({
+    return {
       stage: "complete",
       status: completeStatus,
       ...commonOutput,
@@ -16822,12 +17051,11 @@ async function ucpCheckoutRun(context) {
         started: false,
         reason: "completed checkout response is missing data.order.id"
       }
-    }, context.globalOptions.format);
-    return EXIT_CODES.OK;
+    };
   }
   const deliveryResult = await waitForUcpOrderDigitalDelivery(context, orderId, maxWaitSeconds);
   const deliveryStatus = deliveryResult.timedOut ? "timeout" : deliveryResult.deliveryStatus;
-  printSuccess({
+  return {
     stage: "delivery",
     status: deliveryStatus,
     ...commonOutput,
@@ -16845,8 +17073,149 @@ async function ucpCheckoutRun(context) {
     ...deliveryResult.timedOut ? {
       resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, process.env.CLINK_BASE_URL)
     } : {}
-  }, context.globalOptions.format);
-  return EXIT_CODES.OK;
+  };
+}
+async function recoverUcpCheckoutRun(context, input, recovery) {
+  const continuation = await continueUcpCheckoutReadOnly(context, {
+    checkoutId: input.checkoutId,
+    endpoint: input.endpoint,
+    waitDelivery: input.waitDelivery,
+    maxWaitSeconds: input.maxWaitSeconds,
+    ...recovery.now ? { now: recovery.now } : {},
+    ...recovery.sleep ? { sleep: recovery.sleep } : {}
+  });
+  const continuationAttempts = isJsonObject2(continuation.attempts) ? continuation.attempts : {};
+  return {
+    ...continuation,
+    attempts: {
+      create: 1,
+      complete: 1,
+      ...continuationAttempts
+    },
+    create: input.create,
+    ...input.initialComplete ? { initialComplete: input.initialComplete } : {},
+    ...input.initialCompleteError ? { initialCompleteError: input.initialCompleteError } : {},
+    ...input.paymentMethodsRefreshWarning ? {
+      paymentMethodsRefreshWarning: input.paymentMethodsRefreshWarning
+    } : {},
+    paymentRetryAllowed: false,
+    reconciliationRequired: continuation.terminal === false
+  };
+}
+async function continueUcpCheckoutReadOnly(context, input) {
+  const now = input.now ?? Date.now;
+  const startedAt = now();
+  const wait = await waitForUcpCheckoutTerminal({
+    checkoutId: input.checkoutId,
+    maxWaitMs: input.maxWaitSeconds * 1e3,
+    fetchCheckout: () => getCommandUcpCheckout(context, input.checkoutId, input.endpoint),
+    ...input.now ? { now: input.now } : {},
+    ...input.sleep ? { sleep: input.sleep } : {}
+  });
+  const common = {
+    checkoutId: input.checkoutId,
+    endpoint: input.endpoint,
+    checkout: wait.checkout,
+    attempts: {
+      checkoutRead: wait.attempts
+    },
+    paymentRetryAllowed: false
+  };
+  if (wait.timedOut) {
+    return {
+      stage: "complete",
+      status: wait.status,
+      terminal: false,
+      timedOut: true,
+      ...common,
+      resumeReadOnly: true,
+      ...wait.nextRetryAt ? { nextRetryAt: wait.nextRetryAt } : {},
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: input.waitDelivery
+      })
+    };
+  }
+  if (wait.status !== "completed") {
+    return {
+      stage: "complete",
+      status: wait.status,
+      terminal: true,
+      ...common
+    };
+  }
+  const orderId = ucpCheckoutRunOrderId(wait.checkout);
+  if (!input.waitDelivery) {
+    return {
+      stage: "complete",
+      status: "completed",
+      terminal: true,
+      ...common,
+      ...orderId ? { orderId } : {}
+    };
+  }
+  if (!orderId) {
+    return {
+      stage: "complete",
+      status: "completed",
+      terminal: true,
+      ...common,
+      deliveryWait: {
+        requested: true,
+        started: false,
+        reason: "completed checkout response is missing data.order.id"
+      }
+    };
+  }
+  const remainingMs = input.maxWaitSeconds * 1e3 - Math.max(0, now() - startedAt);
+  if (remainingMs <= 0) {
+    return {
+      stage: "delivery",
+      status: "timeout",
+      terminal: false,
+      timedOut: true,
+      ready: false,
+      ...common,
+      resumeReadOnly: true,
+      orderId,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: true
+      })
+    };
+  }
+  const deliveryResult = await waitForUcpOrderDigitalDelivery(context, orderId, Math.max(1, Math.floor(remainingMs / 1e3)));
+  const deliveryStatus = deliveryResult.timedOut ? "timeout" : deliveryResult.deliveryStatus;
+  return {
+    stage: "delivery",
+    status: deliveryStatus,
+    terminal: !deliveryResult.timedOut,
+    ...common,
+    orderId,
+    attempts: {
+      checkoutRead: wait.attempts,
+      delivery: deliveryResult.attempts
+    },
+    ready: deliveryResult.ready,
+    timedOut: deliveryResult.timedOut,
+    order: deliveryResult.order,
+    delivery: deliveryResult.order.digital_delivery ?? null,
+    ...deliveryResult.nextRetryAt ? { nextRetryAt: deliveryResult.nextRetryAt } : {},
+    ...deliveryResult.timedOut ? {
+      resumeReadOnly: true,
+      resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, {
+        maxWaitSeconds: input.maxWaitSeconds,
+        waitDelivery: true
+      })
+    } : {}
+  };
+}
+function safeWorkflowError(error) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return {
+    name: value.name,
+    message: value.message.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/giu, "Bearer [REDACTED]").replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[REDACTED_EMAIL]").replace(/((?:access|refresh|api|device)[_-]?token|api[_-]?key|secret|password)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+  };
 }
 async function ucpCheckoutCreate(context) {
   rejectUcpCheckoutUnsupportedFlags(context.args.flags);
@@ -16989,11 +17358,15 @@ function ucpCheckoutEndpointPrefix(target) {
   url.hash = "";
   return url.toString().replace(/\/$/u, "");
 }
-function buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, format) {
+function buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, format, options2) {
   return [
     "clink ucp-checkout get",
     `--checkout-id ${quoteShellArgument(checkoutId)}`,
     `--endpoint ${quoteShellArgument(endpoint)}`,
+    ...options2 ? [
+      ...options2.waitDelivery ? ["--wait-delivery"] : [],
+      `--max-wait ${options2.maxWaitSeconds}`
+    ] : [],
     `--format ${format}`
   ].join(" ");
 }
@@ -17006,17 +17379,72 @@ function withWalletStatusEmail(buyer, email) {
 async function ucpCheckoutGet(context) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
-  rejectUcpCheckoutRunOnlyFlags(flags);
+  if ("confirm-purchase" in flags) {
+    throw validationError("--confirm-purchase is only supported by ucp-checkout run");
+  }
   const checkoutId = requireCheckoutId(flags);
+  const waitDelivery = getBooleanFlag(flags, "wait-delivery");
+  const maxWait = getStringFlag(flags, "max-wait");
+  if (!waitDelivery && maxWait === void 0) {
+    const result = await requestCommandUcpCheckout(context, checkoutId);
+    return finishApiCommand(result, context);
+  }
+  const maxWaitSeconds = parseIntFlag(maxWait, "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
+  if (context.globalOptions.dryRun) {
+    const result = await requestCommandUcpCheckout(context, checkoutId);
+    return finishApiCommand(result, context);
+  }
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
-  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+  printSuccess(await continueUcpCheckoutReadOnly(context, {
+    checkoutId,
+    endpoint: ucpCheckoutReadEndpointPrefix(target, checkoutId),
+    waitDelivery,
+    maxWaitSeconds
+  }), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function requestCommandUcpCheckout(context, checkoutId) {
+  const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
+  return requestOAuthBusinessJson(context, (runtimeConfig) => ({
     ...target,
     method: "GET",
     headers: buildCustomerApiKeyHeaders(runtimeConfig, target.baseUrl),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
-  return finishApiCommand(result, context);
+}
+async function getCommandUcpCheckout(context, checkoutId, endpoint) {
+  const result = await requestCommandUcpCheckout({
+    ...context,
+    args: {
+      positionals: ["ucp-checkout", "get"],
+      flags: {
+        "checkout-id": checkoutId,
+        endpoint,
+        format: context.globalOptions.format
+      }
+    }
+  }, checkoutId);
+  if (isDryRun3(result)) {
+    throw apiError("ucp-checkout get unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isJsonObject2(data)) {
+    throw apiError("ucp-checkout get response data must be an object", 502);
+  }
+  return data;
+}
+function ucpCheckoutReadEndpointPrefix(target, checkoutId) {
+  const url = new URL(target.path, target.baseUrl);
+  const suffix = `/checkout-sessions/${encodeURIComponent(checkoutId)}`;
+  if (!url.pathname.endsWith(suffix)) {
+    throw apiError("invalid UCP checkout read target", 500);
+  }
+  url.pathname = url.pathname.slice(0, -suffix.length);
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/u, "");
 }
 async function ucpCheckoutUpdate(context) {
   const flags = context.args.flags;
@@ -17073,7 +17501,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord13(checkout)) {
+  if (!isRecord14(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -17081,7 +17509,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord13(checkoutContext)) {
+  if (!isRecord14(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -17232,7 +17660,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits));
   }
-  if (!isRecord13(value)) {
+  if (!isRecord14(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -17249,7 +17677,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
     ];
   }));
 }
-function isRecord13(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -17529,7 +17957,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord13(data)) {
+  if (!isRecord14(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -17542,7 +17970,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord13(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord14(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -17567,7 +17995,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord13(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord14(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -17761,8 +18189,29 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord13(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord14(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function finishPublicCatalogCommand(result, context) {
+  if (isDryRun3(result)) {
+    printSuccess(result, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  printSuccess(unwrapApiData(result.body), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function assertPublicCatalogApiSuccess(status, body) {
+  if (status < 200 || status >= 300) {
+    throw apiError(extractMessage(body) ?? `request failed with status ${status}`, status);
+  }
+  if (typeof body !== "object" || body === null || !("code" in body)) {
+    return;
+  }
+  const code = Number(body.code);
+  if (!Number.isNaN(code) && code !== 200) {
+    throw apiError(extractMessage(body) ?? `request failed with code ${code}`, code);
+  }
 }
 function createPaymentMethodApi(context) {
   const getRuntimeConfig = createRuntimeConfigLoader(context);
@@ -17843,7 +18292,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord13(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord14(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
