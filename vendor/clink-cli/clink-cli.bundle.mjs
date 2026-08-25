@@ -5490,6 +5490,16 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// dist/command-branding.js
+var MAIN_EXECUTABLE_NAME = "clink";
+var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
+  if (executableName === MAIN_EXECUTABLE_NAME) {
+    return value;
+  }
+  return value.replace(/^clink(?=\r?\n)/u, executableName).replace(CLI_COMMAND_PATTERN, executableName);
+}
+
 // dist/auth-identity.js
 function runtimeAuthorizationIdentity(config) {
   if (config.authorization) {
@@ -6070,7 +6080,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.23";
+var CLI_VERSION = "0.2.27";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -8139,7 +8149,9 @@ Behavior:
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
-  The output preserves list metadata, descriptions, enabled flags, and disabled entries.
+  The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
+  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry with no
+  fragment whose hostname must exactly match domain_name; callers must not construct a replacement URL.
   CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
@@ -8235,7 +8247,8 @@ Usage:
 
 Behavior:
   Best-effort revokes the current OAuth Refresh Token, then removes both OAuth credentials
-  and any legacy customer API key from local config. Customer metadata and caches are retained.
+  and any legacy customer API key from local config. It also removes customerId, payment-method
+  cache, and risk-rule cache so a later login may safely bind a different customer.
 
 Options:
   --timeout <ms>               Request timeout in milliseconds
@@ -8652,6 +8665,7 @@ Optional Request Fields:
                               - address_country: ISO 3166-1 alpha-2 context hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8676,7 +8690,7 @@ Behavior:
 Examples:
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
   clink ucp-catalog search --merchant-id merchant_xxx --query \u718A\u732B\u5916\u5356 --language en --format json
-  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --context '{"currency":"USD","language":"en-US"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --language en-US --context '{"currency":"USD"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
 `;
 var UCP_CATALOG_PRODUCT_HELP = `clink ucp-catalog product
 
@@ -8691,6 +8705,7 @@ Optional Request Fields:
   --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
                               zh-Hans, or fr-CA. Omitted means results are not translated
   --context <json>            UCP Catalog context JSON object
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8709,7 +8724,7 @@ Behavior:
   description. Pass the same language Search used, or the two views disagree.
 
 Examples:
-  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --context '{"currency":"USD","language":"en-US"}'     --format json
+  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en     --format json
 `;
 var CATALOG_HELP = `clink catalog
@@ -8744,6 +8759,7 @@ Optional Request Fields:
                               - address_country: ISO 3166-1 alpha-2 region hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
   --filters <json>            UCP Catalog filters JSON object; prices use minor units
   --signals <json>            UCP Catalog signals JSON object
   --attribution <json>        UCP Catalog attribution JSON object
@@ -8779,11 +8795,11 @@ Examples:
   clink catalog search \\
     --query shoes --channel-type shopify \\
     --ext '{"trace":"demo-1"}' \\
-    --context '{"currency":"USD","language":"en-US"}' \\
+    --language en-US --context '{"currency":"USD"}' \\
     --format pretty
   clink catalog search \\
     --query coffee \\
-    --context '{"address_country":"SG","currency":"SGD","language":"en"}' \\
+    --language en --context '{"address_country":"SG","currency":"SGD"}' \\
     --format json
 `;
 var UCP_ORDER_HELP = `clink ucp-order
@@ -9471,11 +9487,15 @@ Examples:
   clink events poll --type agent_order.succeeded --checkout-id checkout_123 --ucp-order-id ucp_order_123 --max-wait 900 --format json
   clink events poll --no-ack --format json
 `;
-function printHelp(command, subcommand, nestedCommand) {
-  const output = getHelpText(command, subcommand, nestedCommand);
+function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
+  const output = getHelpText(command, subcommand, nestedCommand, executableName);
   process.stdout.write(output);
 }
-function getHelpText(command, subcommand, nestedCommand) {
+function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
+  const help = getRawHelpText(command, subcommand, nestedCommand);
+  return renderCliCommandText(help, executableName);
+}
+function getRawHelpText(command, subcommand, nestedCommand) {
   switch (command) {
     case "skills":
       switch (subcommand) {
@@ -9653,24 +9673,28 @@ var ucp_merchants_default = {
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
     },
     {
       domain_name: "uat-magento.clinkpay.team",
+      merchant_url: "https://uat-magento.clinkpay.team/",
       merchant_id: "mcht_f5d0rys1hjxe",
       enabled: true,
       description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     },
     {
       domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     },
     {
       domain_name: "vtravel.link2shops.com",
+      merchant_url: "https://vtravel.link2shops.com/yiyuan/",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
@@ -9685,12 +9709,14 @@ var ucp_merchants_default2 = {
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
     },
     {
       domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
       merchant_id: "mcht_f5xuyduv1a0j",
       enabled: true,
       description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
@@ -9718,6 +9744,9 @@ function validateInternalUcpMerchants(value, source) {
     const merchantId = stringValue(fields.merchant_id);
     if (!domainName || !merchantId) {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (fields.merchant_url !== void 0) {
+      validateMerchantUrl(fields.merchant_url, domainName, source, index);
     }
     if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
@@ -9853,6 +9882,18 @@ async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_
 }
 function stringValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function validateMerchantUrl(value, domainName, source, index) {
+  const rawUrl = stringValue(value);
+  let merchantUrl;
+  try {
+    merchantUrl = new URL(rawUrl ?? "");
+  } catch {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+  }
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password || merchantUrl.hash) {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+  }
 }
 function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
@@ -10487,8 +10528,9 @@ function printJson(value, format) {
 }
 function printError(error, options2) {
   const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
+  const message = renderCliCommandText(cliError.message, options2.executableName ?? MAIN_EXECUTABLE_NAME);
   if (!options2.explicitFormat) {
-    process.stderr.write(renderHumanError(cliError, options2.helpHint));
+    process.stderr.write(renderHumanError(message, options2.helpHint));
     return cliError.exitCode;
   }
   const envelope = {
@@ -10496,7 +10538,7 @@ function printError(error, options2) {
     error: {
       type: cliError.type,
       code: cliError.code,
-      message: cliError.message
+      message
     }
   };
   process.stderr.write(serialize(envelope, options2.format));
@@ -10510,8 +10552,8 @@ function serialize(value, format) {
   return `${JSON.stringify(value)}
 `;
 }
-function renderHumanError(error, helpHint) {
-  const lines = [`Error: ${error.message}`];
+function renderHumanError(message, helpHint) {
+  const lines = [`Error: ${message}`];
   if (helpHint) {
     lines.push(`Hint: ${helpHint}`);
   }
@@ -15457,11 +15499,15 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "tool",
   "config"
 ]);
+function printContextHelp(context, command, subcommand, nestedCommand) {
+  printHelp(command, subcommand, nestedCommand, context.executableName);
+}
 async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = {}) {
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
   const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
+  validateCatalogLanguageFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
   validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, args.flags);
   const editionCommandNames = new Set(edition.commandNames ?? []);
@@ -15496,6 +15542,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     globalOptions,
     startedAt,
     oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
+    executableName: edition.executableName ?? MAIN_EXECUTABLE_NAME,
     configLifecycle: edition.configLifecycle ?? {}
   };
   await prepareOAuthAuthorization(command, subcommand, context, edition);
@@ -15592,12 +15639,21 @@ function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags,
   }
   return void 0;
 }
+function validateCatalogLanguageFlagScope(command, subcommand, flags) {
+  if (!("language" in flags)) {
+    return;
+  }
+  const supported = command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "visa" && subcommand === "product-search";
+  if (!supported) {
+    throw validationError("--language is only supported by ucp-catalog search, ucp-catalog product, catalog search, or visa product-search");
+  }
+}
 function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
   return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("skills");
+    printContextHelp(context, "skills");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -15768,7 +15824,7 @@ function commandUsesCustomerAuthorization(command, subcommand) {
 }
 async function handleToolCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("tool");
+    printContextHelp(context, "tool");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -15881,7 +15937,7 @@ async function toolGetRestEndpoint(context) {
 async function toolInternalUcp(context) {
   const nestedCommand = context.args.positionals[2];
   if (!nestedCommand) {
-    printHelp("tool", "internal-ucp");
+    printContextHelp(context, "tool", "internal-ucp");
     return EXIT_CODES.OK;
   }
   const baseUrl = context.runtimeConfig.baseUrl;
@@ -15961,7 +16017,7 @@ function resolveWatchFlag(flags) {
 async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
-      printPendingWatchHandoff(url, watchTarget.eventType);
+      printPendingWatchHandoff(url, watchTarget.eventType, context.executableName);
     }
     return;
   }
@@ -15983,17 +16039,17 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) 
   });
   printSuccess(result, context.globalOptions.format);
 }
-function printPendingWatchHandoff(url, eventType) {
+function printPendingWatchHandoff(url, eventType, executableName) {
   if (!url || !eventType) {
     return;
   }
   process.stderr.write(`Watch not started (--no-watch). This link needs a listener before the user acts on it.
-Run now: clink-cli events poll --type ${eventType} --no-ack --format json
+Run now: ${executableName} events poll --type ${eventType} --no-ack --format json
 `);
 }
 async function handleEventsCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("events");
+    printContextHelp(context, "events");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -16111,7 +16167,7 @@ async function eventsPoll(context) {
     ...eventAckWarning ? { eventAckWarning } : {},
     ...result.nextToken ? { nextToken: result.nextToken } : {},
     ...result.timedOut ? {
-      resumeCommand: buildResumeCommand(type, checkoutId, paymentInstrumentId, result.nextToken, ack, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), ucpOrderId, checkoutEndpoint, eventOnly)
+      resumeCommand: buildResumeCommand(type, checkoutId, paymentInstrumentId, result.nextToken, ack, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), context.executableName, ucpOrderId, checkoutEndpoint, eventOnly)
     } : {}
   };
   printSuccess({
@@ -16123,7 +16179,7 @@ async function eventsPoll(context) {
 async function fetchUcpOrderAfterPaymentEvent(context, checkoutId, frozenUcpOrderId, checkoutEndpoint) {
   let ucpOrderId = frozenUcpOrderId;
   if (!ucpOrderId) {
-    const checkoutResumeCommand = buildUcpCheckoutGetResumeCommand(checkoutId, checkoutEndpoint, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl));
+    const checkoutResumeCommand = buildUcpCheckoutGetResumeCommand(checkoutId, checkoutEndpoint, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), context.executableName);
     const resolution = await resolveUcpOrderProjection({
       checkoutId,
       fetchCheckout: async () => {
@@ -16152,7 +16208,7 @@ async function fetchUcpOrderAfterPaymentEvent(context, checkoutId, frozenUcpOrde
     }
     ucpOrderId = resolution.ucpOrderId;
   }
-  const orderResumeCommand = buildUcpOrderGetResumeCommand(ucpOrderId, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl));
+  const orderResumeCommand = buildUcpOrderGetResumeCommand(ucpOrderId, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), context.executableName);
   try {
     const orderResult = await requestUcpOrder(context, ucpOrderId);
     if (isDryRun3(orderResult)) {
@@ -16354,8 +16410,8 @@ function parseEventTypeFlag(value) {
   }
   return [...new Set(types)].join(",");
 }
-function buildResumeCommand(type, checkoutId, paymentInstrumentId, nextToken, ack, format, baseUrlOverride, ucpOrderId, checkoutEndpoint, eventOnly = false) {
-  const parts = ["clink events poll"];
+function buildResumeCommand(type, checkoutId, paymentInstrumentId, nextToken, ack, format, baseUrlOverride, executableName = MAIN_EXECUTABLE_NAME, ucpOrderId, checkoutEndpoint, eventOnly = false) {
+  const parts = [`${executableName} events poll`];
   if (type) {
     parts.push(`--type ${quoteShellArgument(type)}`);
   }
@@ -16399,17 +16455,17 @@ function quoteShellArgument(value) {
   }
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
-function buildUcpCheckoutGetResumeCommand(checkoutId, endpoint, format, baseUrlOverride) {
-  const parts = ["clink ucp-checkout get"];
+function buildUcpCheckoutGetResumeCommand(checkoutId, endpoint, format, baseUrlOverride, executableName = MAIN_EXECUTABLE_NAME) {
+  const parts = [`${executableName} ucp-checkout get`];
   if (endpoint) {
     parts.push(`--endpoint ${quoteShellArgument(endpoint)}`);
   }
   parts.push(`--checkout-id ${quoteShellArgument(checkoutId)}`, `--format ${format}`);
   return preserveBaseUrlOverride(parts.join(" "), baseUrlOverride);
 }
-function buildUcpOrderGetResumeCommand(orderId, format, baseUrlOverride) {
+function buildUcpOrderGetResumeCommand(orderId, format, baseUrlOverride, executableName = MAIN_EXECUTABLE_NAME) {
   return preserveBaseUrlOverride([
-    "clink ucp-order get",
+    `${executableName} ucp-order get`,
     `--order-id ${quoteShellArgument(orderId)}`,
     `--format ${format}`
   ].join(" "), baseUrlOverride);
@@ -16435,9 +16491,9 @@ function canonicalWalletOriginForResume(baseUrl) {
   }
   return parsed.origin;
 }
-function buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, format, baseUrlOverride) {
+function buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, format, baseUrlOverride, executableName = MAIN_EXECUTABLE_NAME) {
   const command = [
-    "clink ucp-order wait-delivery",
+    `${executableName} ucp-order wait-delivery`,
     `--order-id ${quoteShellArgument(orderId)}`,
     `--max-wait ${maxWaitSeconds}`,
     `--format ${format}`
@@ -16446,7 +16502,7 @@ function buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, format, bas
 }
 async function handleWalletCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("wallet");
+    printContextHelp(context, "wallet");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -16656,7 +16712,8 @@ async function walletLogout(context) {
       printSuccess({
         dryRun: true,
         wouldRemoveAuthorization: false,
-        wouldRemoveCustomerApiKey: Boolean(context.storedConfig.customerApiKey)
+        wouldRemoveCustomerApiKey: Boolean(context.storedConfig.customerApiKey),
+        wouldRemoveCustomerId: Boolean(context.storedConfig.customerId)
       }, context.globalOptions.format);
     }
     return EXIT_CODES.OK;
@@ -16675,6 +16732,7 @@ async function walletLogout(context) {
     }
   }
   const hadCustomerApiKey = Boolean(context.storedConfig.customerApiKey);
+  const hadCustomerId = Boolean(context.storedConfig.customerId);
   await updateStoredConfig((current) => {
     const currentIdentity = runtimeAuthorizationIdentity(resolveRuntimeConfig(current, context.args.flags));
     const legacyOAuthChanged = Boolean(authorization && !authorization.sessionId && current.authorization && current.authorization.accessToken !== authorization.accessToken);
@@ -16683,6 +16741,9 @@ async function walletLogout(context) {
     }
     delete current.authorization;
     delete current.customerApiKey;
+    delete current.customerId;
+    delete current.paymentMethods;
+    delete current.riskRules;
     return context.configLifecycle.afterWalletLogout?.(current) ?? current;
   });
   printSuccess({
@@ -16690,6 +16751,7 @@ async function walletLogout(context) {
     serverRevocation,
     authorizationRemoved: Boolean(authorization),
     customerApiKeyRemoved: hadCustomerApiKey,
+    customerIdRemoved: hadCustomerId,
     configPath: "~/.clink-cli/config.json"
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -16719,7 +16781,7 @@ async function walletStatus(context) {
 }
 async function handleCardCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("card");
+    printContextHelp(context, "card");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -16834,7 +16896,7 @@ async function cardGet(context) {
 }
 async function handleRiskRuleCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("risk");
+    printContextHelp(context, "risk");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -16955,7 +17017,7 @@ async function resolveDefaultPaymentInstrumentId(context) {
 }
 async function handleRefundCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("refund");
+    printContextHelp(context, "refund");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -16994,7 +17056,7 @@ async function refundGet(context) {
 }
 async function handleUcpCheckoutCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("ucp-checkout");
+    printContextHelp(context, "ucp-checkout");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -17016,7 +17078,7 @@ async function handleUcpCheckoutCommand(subcommand, context) {
 }
 async function handleUcpCatalogCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("ucp-catalog");
+    printContextHelp(context, "ucp-catalog");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -17180,7 +17242,7 @@ function publicCatalogAcceptLanguage(requestContext) {
 }
 async function handleCatalogCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("catalog");
+    printContextHelp(context, "catalog");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -17231,7 +17293,7 @@ async function catalogSearch(context) {
 }
 async function handleUcpOrderCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("ucp-order");
+    printContextHelp(context, "ucp-order");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -17260,7 +17322,7 @@ async function ucpOrderWaitDelivery(context) {
   printSuccess({
     ...result,
     ...result.timedOut ? {
-      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, context.runtimeConfig.baseUrl)
+      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, context.runtimeConfig.baseUrl, context.executableName)
     } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
@@ -17467,7 +17529,7 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
       paymentRetryAllowed: false,
       reconciliationRequired: true,
       resumeReadOnly: true,
-      resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl),
+      resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl, void 0, context.executableName),
       error: safeWorkflowError(error)
     };
   }
@@ -17503,7 +17565,7 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
       status: completeStatus,
       ...commonOutput,
       ...isUcpCheckoutRunTerminalStatus(completeStatus) ? {} : {
-        resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl)
+        resumeCommand: buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl, void 0, context.executableName)
       }
     };
   }
@@ -17544,7 +17606,7 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
     delivery: ucpCheckoutRunDeliveryEvidence(deliveryResult),
     ...deliveryResult.nextRetryAt ? { nextRetryAt: deliveryResult.nextRetryAt } : {},
     ...deliveryResult.timedOut ? {
-      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, context.runtimeConfig.baseUrl)
+      resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, context.runtimeConfig.baseUrl, context.executableName)
     } : {}
   };
 }
@@ -17608,7 +17670,7 @@ async function continueUcpCheckoutReadOnly(context, input) {
       resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl, {
         maxWaitSeconds: input.maxWaitSeconds,
         waitDelivery: input.waitDelivery
-      })
+      }, context.executableName)
     };
   }
   if (wait.status !== "completed") {
@@ -17657,7 +17719,7 @@ async function continueUcpCheckoutReadOnly(context, input) {
       resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl, {
         maxWaitSeconds: input.maxWaitSeconds,
         waitDelivery: true
-      })
+      }, context.executableName)
     };
   }
   const deliveryResult = await waitForUcpOrderDigitalDelivery(context, orderId, Math.max(1, Math.floor(remainingMs / 1e3)));
@@ -17682,7 +17744,7 @@ async function continueUcpCheckoutReadOnly(context, input) {
       resumeCommand: buildUcpCheckoutReadResumeCommand(input.checkoutId, input.endpoint, context.globalOptions.format, context.runtimeConfig.baseUrl, {
         maxWaitSeconds: input.maxWaitSeconds,
         waitDelivery: true
-      })
+      }, context.executableName)
     } : {}
   };
 }
@@ -17881,9 +17943,9 @@ function ucpCheckoutEndpointPrefix(target) {
   url.hash = "";
   return url.toString().replace(/\/$/u, "");
 }
-function buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, format, baseUrlOverride, options2) {
+function buildUcpCheckoutReadResumeCommand(checkoutId, endpoint, format, baseUrlOverride, options2, executableName = MAIN_EXECUTABLE_NAME) {
   return preserveBaseUrlOverride([
-    "clink ucp-checkout get",
+    `${executableName} ucp-checkout get`,
     `--checkout-id ${quoteShellArgument(checkoutId)}`,
     `--endpoint ${quoteShellArgument(endpoint)}`,
     ...options2 ? [
@@ -18300,7 +18362,7 @@ function buildUcpCheckoutHeaders(runtimeConfig, requestBaseUrl, idempotencyKey) 
 }
 async function handleInstructionCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("instruction");
+    printContextHelp(context, "instruction");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -18542,7 +18604,7 @@ async function instructionAgentPageUrl(context) {
 }
 async function handleConfigCommand(subcommand, context) {
   if (!subcommand) {
-    printHelp("config");
+    printContextHelp(context, "config");
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
@@ -18850,21 +18912,22 @@ var MAIN_HELP_COMMANDS = [
   "tool",
   "config"
 ];
-async function runEntrypoint(runner, argv, helpCommands) {
+async function runEntrypoint(runner, argv, helpCommands, executableName = MAIN_EXECUTABLE_NAME) {
   try {
     const exitCode = await runner(argv);
     process.exitCode = exitCode;
   } catch (error) {
-    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands));
+    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands, executableName));
   }
 }
-function detectErrorPresentation(argv, helpCommands) {
+function detectErrorPresentation(argv, helpCommands, executableName) {
   const format = detectFormat(argv);
   const explicitFormat = hasExplicitFormat(argv);
-  const helpHint = detectHelpHint(argv, helpCommands);
+  const helpHint = detectHelpHint(argv, helpCommands, executableName);
   return {
     format,
     explicitFormat,
+    executableName,
     ...!explicitFormat && helpHint ? { helpHint } : {}
   };
 }
@@ -18889,15 +18952,15 @@ function detectFormat(argv) {
 function hasExplicitFormat(argv) {
   return argv.some((token) => token === "--format" || token.startsWith("--format="));
 }
-function detectHelpHint(argv, helpCommands) {
+function detectHelpHint(argv, helpCommands, executableName) {
   const command = argv.find((token) => !token.startsWith("-"));
   if (!command) {
-    return "Run `clink --help`.";
+    return `Run \`${executableName} --help\`.`;
   }
   if (helpCommands.includes(command)) {
-    return `Run \`clink ${command} --help\`.`;
+    return `Run \`${executableName} ${command} --help\`.`;
   }
-  return "Run `clink --help`.";
+  return `Run \`${executableName} --help\`.`;
 }
 
 // dist/index.js
