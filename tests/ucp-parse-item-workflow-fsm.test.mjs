@@ -87,6 +87,47 @@ test('catalog candidate checkout continues only when wallet and Catalog origins 
   assert.equal(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
 });
 
+test('internal Catalog checkout uses the frozen item and merchant URL without productUrl', () => {
+  const { productUrl: _productUrl, ...internalPrerequisites } = checkoutPrerequisites;
+  const result = classifyUcpCheckoutPrerequisites({
+    ...internalPrerequisites,
+    itemId: '571d217de068498f8ba545a286900a16',
+    source: 'INTERNAL_UCP_CATALOG',
+    selectedProduct: {
+      source: 'INTERNAL_UCP_CATALOG',
+      productId: '571d217de068498f8ba545a286900a16',
+      merchantId: 'mcht_ftmse61a6az0',
+      merchantUrl: 'https://testa.link2shops.com/',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
+});
+
+test('internal Catalog checkout still requires its authoritative merchant URL', () => {
+  const { productUrl: _productUrl, merchantUrl: _merchantUrl, ...internalPrerequisites } =
+    checkoutPrerequisites;
+  const result = classifyUcpCheckoutPrerequisites({
+    ...internalPrerequisites,
+    itemId: 'voucher_1',
+    source: 'INTERNAL_UCP_CATALOG',
+    selectedProduct: {
+      source: 'INTERNAL_UCP_CATALOG',
+      productId: 'voucher_1',
+      catalogEnvironment: 'sandbox',
+    },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.PRODUCT_INPUT_MISSING);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.ASK_FOR_PRODUCT_INPUT);
+  assert.ok(result.missing.includes('merchantUrl'));
+});
+
 test('catalog candidate checkout fails closed on an environment mismatch', () => {
   const result = classifyUcpCheckoutPrerequisites({
     ...checkoutPrerequisites,
