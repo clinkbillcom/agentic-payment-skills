@@ -4,6 +4,13 @@ set -eu
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 BUNDLE="$SCRIPT_DIR/../vendor/clink-cli/clink-cli.bundle.mjs"
 
-CLINK_WALLET_INIT_ENVIRONMENT=production
+CLINK_WALLET_INIT_ENVIRONMENT=sandbox
 export CLINK_WALLET_INIT_ENVIRONMENT
+
+case "${1-}:${2-}:${3-}" in
+  ucp-catalog:search:*|ucp-catalog:product:*|catalog:search:*|tool:internal-ucp:get-merchant-list)
+    set -- "$@" --sandbox
+    ;;
+esac
+
 exec node "$BUNDLE" "$@"
