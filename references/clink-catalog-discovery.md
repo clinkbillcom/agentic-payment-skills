@@ -137,7 +137,7 @@ CATALOG_QUERY
 clink tool internal-ucp get-merchant-list [--test|--sandbox] --format json
 ```
 
-The explicit Catalog flag selects the document; omission means production. This command does not need a wallet and does not read its saved environment. For production, run the network preflight against `https://www.clinkbill.com` before invoking it because it fetches the well-known document there. Sandbox/UAT and test read the bundled list and need no preflight for this step. Each entry carries `merchant_id`, `domain_name`, `enabled`, and `description`.
+This UAT wrapper adds `--sandbox`, so the bundled sandbox merchant list is always selected and needs no network preflight for this step. The command does not need a wallet and does not read its saved environment. Each entry carries `merchant_id`, `domain_name`, `enabled`, and `description`.
 
 The FSM keeps a merchant as a candidate only when it has a `merchant_id`, is not `enabled:false`, and has a non-empty `description`. A merchant without a description cannot be intent-matched on anything but a guess, so it is excluded from matching rather than matched blindly. This mirrors the server-side candidate rule for cross-merchant search.
 

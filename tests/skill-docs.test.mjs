@@ -77,13 +77,13 @@ test('skill frontmatter stays compact and trigger-focused', () => {
   assert.match(description, /^Use when/u);
 });
 
-test('environment guidance matches the production wallet-init distribution wrapper', () => {
-  assert.doesNotMatch(cliWrapper, /--sandbox|--test/u);
-  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=production/u);
+test('environment guidance matches the sandbox wallet-init distribution wrapper', () => {
+  assert.match(cliWrapper, /set -- "\$@" --sandbox/u);
+  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=sandbox/u);
   assert.match(cliInvocation, /Environment selection belongs to `wallet init`/u);
-  assert.match(cliInvocation, /pins `wallet init` to production/u);
+  assert.match(cliInvocation, /pins `wallet init` to sandbox/u);
   assert.match(cliInvocation, /there is no `--base-url` flag/u);
-  assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
+  assert.match(skill, /pins init to sandbox\/UAT/u);
 });
 
 test('UCP checkout docs leave idempotency-key generation to the CLI', () => {
@@ -884,13 +884,13 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
 test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
   assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
   assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
-  assert.match(cliInvocation, /no environment flag means production/u);
-  assert.match(cliInvocation, /`--sandbox` means sandbox\/UAT/u);
-  assert.match(cliInvocation, /`--test` means test/u);
+  assert.match(cliInvocation, /wrapper appends `--sandbox`/u);
+  assert.match(cliInvocation, /explicit `--test` conflicts and exits 2/u);
+  assert.match(cliInvocation, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(cliInvocation, /send no `Authorization`/u);
   assert.match(cliInvocation, /three Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
-  assert.match(cliInvocation, /Production `tool internal-ucp get-merchant-list`[\s\S]*network-error exit 6/u);
-  assert.match(cliInvocation, /preflight `https:\/\/www\.clinkbill\.com`[\s\S]*preflight the selected Catalog API origin/u);
+  assert.match(cliInvocation, /bundled sandbox merchant-list document/u);
+  assert.match(cliInvocation, /preflight only `https:\/\/uat-api\.clinkbill\.com`/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
   assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);

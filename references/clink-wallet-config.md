@@ -14,7 +14,7 @@ clink wallet init --email <email> --open --format json
 
 The CLI derives the display name from the email text before `@`. There is no `--name` flag on `wallet init`; passing it exits 2. Use `config set name` to change the local name afterwards.
 
-This distribution pins `wallet init` to production, so `--sandbox` and `--test` exit 2 here; other distributions pin sandbox/UAT or test the same way. The selected environment is saved, so later commands carry no environment flag. Verify it through `wallet status` and use credentials that belong to that environment, never mixing production with sandbox/UAT/test credentials.
+This UAT distribution pins `wallet init` to sandbox. Plain init or `--sandbox` uses UAT, while `--test` exits 2. The selected environment is saved, so later commands carry no environment flag. Verify it through `wallet status` and use only UAT credentials.
 
 Before the ordinary status-first setup path, classify wallet-login language with `classifyWalletIntent` from `lib/wallet-intent-fsm.mjs`. An affirmative request such as `重新登录`, `再登录一次`, `重新授权钱包`, `登录链接过期了`, `忘记登录了`, `log in again`, or `fresh login link` is `WALLET_RELOGIN`: start a fresh init even if `wallet status` is ready or an older init is pending. Prefer an email stated in the current request, then the current wallet-status email; ask only for email when neither exists. Negated, questioned, hypothetical, historical, and bug/test discussion language starts no command.
 

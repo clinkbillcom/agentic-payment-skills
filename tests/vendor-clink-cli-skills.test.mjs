@@ -1517,7 +1517,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
         'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', '手表',
         '--dry-run', '--format', 'json',
       ],
-      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
     },
     {
       args: [
@@ -1525,12 +1525,6 @@ test('vendored public Catalog commands ignore wallet config and select their own
         '--sandbox', '--dry-run', '--format', 'json',
       ],
       expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/product',
-    },
-    {
-      args: [
-        'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
-      ],
-      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/extra/catalog/search',
     },
   ];
 
@@ -1548,8 +1542,14 @@ test('vendored public Catalog commands ignore wallet config and select their own
       assert.equal(request.body.context?.language, undefined);
     }
 
+    const testConflict = runBundleRaw([
+      'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
+    ], publicEnv);
+    assert.equal(testConflict.status, 2);
+    assert.match(testConflict.stderr, /fixed to sandbox|--sandbox and --test/u);
+
     const merchantList = runBundleRaw([
-      'tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json',
+      'tool', 'internal-ucp', 'get-merchant-list', '--format', 'json',
     ], publicEnv);
     assert.equal(merchantList.status, 0, merchantList.stderr);
     assert.ok(JSON.parse(merchantList.stdout).merchants.length > 0);
