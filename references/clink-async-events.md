@@ -134,7 +134,7 @@ If the right event type appears for a different resource, keep the current workf
 | VIC registration | `vic_device.binding_succeeded` or canonical `payment_method.update` with `visaRegistrationSucceeded=true` for the same payment method |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
-| UCP aggregate checkout | The CLI owns payment-event correlation inside the one foreground `clink ucp-checkout run`; the Agent does not start a second UCP event poll |
+| UCP aggregate checkout | The authoritative one-foreground-command `ucp-checkout run` result is checkout evidence, not an Agent-managed Event Hub event; the Agent does not start a second UCP event poll |
 | Refund result | `agent_refund.succeeded`, `agent_refund.failed`, or `agent_refund.rejected` for the refund |
 | Optional Agent Pay account evidence | CLI filters `account-created` or `account-reloaded`; body types `account.created` or `account.reloaded`; the two are mutually exclusive and merchants may emit neither |
 | Optional skill-tip account evidence | `account-created` or `account-reloaded` for the correlated tip; these events are mutually exclusive and merchants may emit neither |
@@ -149,9 +149,10 @@ If the right event type appears for a different resource, keep the current workf
 - A synchronous successful skill tip is already paid. Missing or failed optional `account-created` / `account-reloaded` monitoring must not downgrade that payment.
 - A synchronous successful Agent Pay is already `PAID`. Run one `account-created,account-reloaded` any-of poll immediately, then classify the same result for both wait specs with `classifyAgentPayAccountEventCandidate`; only a unique candidate may produce an account/order-confirmation claim.
 - For Agent Pay, timeout, poll error, and `AMBIGUOUS` attribution all preserve `PAID`; do not retry payment or claim merchant-order confirmation. Amount/currency are mandatory correlation fields, while `customerEmail`, `webSite`, and `userId` are optional conflict checks and tie-breakers.
+- The one foreground `ucp-checkout run` is the authoritative UCP path. The UCP event-poll rules below exist only for direct or legacy `events poll` compatibility; the Agent must not schedule them after an aggregate run.
 - For UCP, keep `paymentOrderId` from `agent_order.succeeded.data.orderId/resourceId` separate from `ucpOrderId` from checkout create/update/complete/get `data.ucp.ucp_order_id` (or matching completed-checkout `data.order.id`). Prefixes may look identical. Only `ucpOrderId` may be passed to `ucp-order get`.
-- Use `--checkout-id <checkoutId>` for the UCP success poll so filtering happens before ACK. Same-type events for other checkouts remain queued; never use a generic type-only UCP success poll.
-- After a correlated UCP success event, a missing `ucpOrderId` is resolved by bounded, read-only `ucp-checkout get` against the original endpoint. Do not poll the acknowledged event again, retry complete/payment, or downgrade confirmed payment when order projection/fetch is unavailable.
-- On timeout, return the timeout state and resume command; do not claim success.
+- Use `--checkout-id <checkoutId>` for the UCP success poll so filtering happens before ACK. Pass the frozen UCP ID as `--ucp-order-id` for the direct order path and the original `--endpoint` for legacy fallback. Same-type events for other checkouts remain queued; never use a generic type-only UCP success poll.
+- After a correlated UCP success event, `events poll` itself runs `ucp-order get` in the same process while the event remains queued, then ACKs immediately before output. A missing `ucpOrderId` is resolved internally by bounded, read-only checkout GET against the original endpoint. The Agent must not schedule either intermediate command. An uncertain ACK returns payment evidence plus `eventAckWarning` and may cause a harmless duplicate; do not downgrade payment, retry complete/payment, or mix this warning with an order-lookup warning.
+- On timeout, return the timeout state and safely rebuilt resume command, including the opaque Event Hub `nextToken`; do not claim success or restart from the first page.
 - A watch killed by a runtime timeout is not a failure; resume with `events poll` and confirm via authoritative status.
 - For refund status, direct `refund get` polling is also acceptable.

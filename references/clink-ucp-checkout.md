@@ -2,9 +2,9 @@
 
 Read this before ordering a discovered product through `clink ucp-checkout`.
 
-This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing. First run `clink tool internal-ucp get-endpoint --product-url <item_url> --format json`. A resolved endpoint uses internal UCP checkout. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `https://domain/.well-known/ucp-clink`; a successful parseable JSON profile must then run `clink tool get-rest-endpoint --url <standard_ucp_url> --format json`. Fallback provider `clinkbill` uses internal checkout, while other providers and discovery failures use external checkout.
+This flow is for product orders discovered by an agent, such as a Shopify storefront. Route selection happens after product parsing. First run `clink tool internal-ucp get-endpoint --product-url <item_url> --format json`. A resolved endpoint uses internal UCP checkout. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `https://domain/.well-known/ucp-clink`; a successful parseable JSON profile must then run `clink tool get-rest-endpoint --url <standard_ucp_url> --format json`. Every final route—direct internal, fallback `clinkbill`, non-clinkbill, or derived external gateway—requires successful current wallet-status evidence plus a canonical HTTPS endpoint on that exact wallet origin. HTTP, credentials, query/fragment, missing evidence, or a cross-origin endpoint stops routing before any wallet credential is sent.
 
-The Agent never orchestrates checkout create, complete, payment-event polling, or initial order fetch. After every precondition below is frozen, `lib/ucp-checkout-run-fsm.mjs` constructs exactly one mutation command: `clink ucp-checkout run ... --confirm-purchase`. The CLI owns the internal create/complete/payment/order state machine, idempotency, and bounded waits.
+The Agent never orchestrates checkout create, complete, payment-event polling, or initial order fetch. After every precondition below is frozen, the runtime atomically claims one unique `checkoutAttemptId`; only that claim winner may let `lib/ucp-checkout-run-fsm.mjs` construct exactly one environment-locked mutation command: `CLINK_BASE_URL=<frozen_wallet_origin> clink ucp-checkout run ... --confirm-purchase`. The CLI owns the internal create/complete flow, idempotency, and optional bounded digital-delivery wait.
 
 Checkout authentication uses OAuth Bearer after OAuth has ever been enabled. Only a never-OAuth legacy configuration where `oauthRequired` is absent or exactly `false` may use the legacy customer API key.
 
@@ -12,7 +12,7 @@ Checkout authentication uses OAuth Bearer after OAuth has ever been enabled. Onl
 
 Product discovery and price truth belong to the merchant/product tool. Agent owns product exploration for product URL checkout: use browser tools, page extraction, or a page request to read product details before asking the user for fields that the page can expose. This skill only runs the payment-side control flow after the target product is clear.
 
-Do not use plain `clink pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, instruction binding, and external automation context.
+Do not use plain `clink pay` for this flow. UCP checkout is the order path because it carries line items, merchant URL, authorization-gate context, and external automation context.
 
 UCP checkout completion is not merchant fulfillment. A `completed` checkout proves only the checkout/order-side action returned terminal success; fulfillment, delivery, entitlement, or merchant receipt confirmation still belongs to the merchant/product runtime.
 
@@ -33,6 +33,8 @@ Before the aggregate checkout command, have all of these in the current request:
 - standard complete shipping address for physical goods that ship
 - an explicit current-request purchase confirmation for the frozen product, quantity, total, and currency
 - completed product, address, Instruction, restricted-category/safety, and route gates
+- one nonempty unique frozen `checkoutAttemptId` in runtime state `AWAITING_EXECUTION`
+- a successful current wallet status whose canonical HTTPS origin is frozen as `walletBaseUrl`
 - `digitalDeliveryExpected=true` only when the selected product or merchant contract explicitly promises a voucher, code, redemption link, QR/image, or equivalent artifact
 
 Never invent missing values. Ask the caller or user when product identity, amount, currency, merchant context, fulfillment type, shipping address, or payment instrument is missing.
@@ -58,7 +60,9 @@ DISCOVER_PRODUCT
   -> IF_PROFILE_JSON_GET_REST_ENDPOINT_AND_RECLASSIFY
   -> REQUIRE_EXPLICIT_PURCHASE_CONFIRMATION
   -> VERIFY_PRODUCT_ADDRESS_INSTRUCTION_SAFETY_ROUTE_GATES
-  -> BUILD_ONE_AGGREGATE_COMMAND_WITH classifyUcpCheckoutRunRequest
+  -> REQUEST_CLAIM_WITH classifyUcpCheckoutRunExecution
+  -> ATOMICALLY_CLAIM_AWAITING_EXECUTION_TO_EXECUTING
+  -> BUILD_ONE_AGGREGATE_COMMAND_FOR_THE_UNIQUE_CLAIM_WINNER
   -> RUN_UCP_CHECKOUT_ONCE
   -> CLASSIFY_AGGREGATE_RESULT_WITH classifyUcpCheckoutRunObservation
   -> RETURN_COMPLETED_OR_DELIVERY_READY_FAILED_PENDING
@@ -76,11 +80,15 @@ Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent,
 When a merchant is already known by `merchantId` and the user is browsing rather than naming a URL, the merchant's registered UCP Catalog can be queried directly instead of scraping storefront pages:
 
 ```bash
-clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <tag> --limit <n> --format json
-clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <BCP47> --limit <n> [--context <json>] [--test|--sandbox] --format json
+clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --language <same_BCP47_as_search> [--context <json>] [--test|--sandbox] --format json
 ```
 
-Both send `POST /agent/ucp/{merchantId}/catalog/{search,product}` using the environment saved by `wallet init`. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID and stays stable across an OAuth refresh retry; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
+Both send anonymous `POST /agent/ucp/{merchantId}/catalog/{search,product}` requests. They do not require `wallet init`, do not read `~/.clink-cli/config.json`, and send no OAuth or CSK credentials. No environment flag deterministically selects production; `--sandbox` selects UAT and `--test` selects test, and the two flags are mutually exclusive. Freeze one `catalogEnvironment` and use its same flag on search and product.
+
+The Agent must also determine one target result language before search, following `references/clink-payment-intent-contract.md`, and freeze the CLI-normalized BCP47 value. Pass it with `--language` on both search and product; never put it in `context.language`, infer it from query/product keywords, or read it from wallet config. Reusing the same flag matters because merchant-scoped search and product implement Catalog translation and otherwise the two views can disagree. The CLI sends the normalized value in request `context.language` and `Accept-Language`. A legacy caller that omits language receives merchant-original text and sends no language header; the backend/query does not guess a target language. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
+
+Catalog's public environment is separate from checkout's authenticated wallet environment. Preserve the candidate's `catalogEnvironment`; the pending selection is authoritative and a conflicting candidate copy must not replace it. A supplied selected product without that frozen environment is invalid and cannot fall back to a top-level value. Then require a successful current `wallet status` and verify that its API origin matches before `tool internal-ucp get-endpoint`, aggregate checkout, or payment. Every supplied `walletStatus` alias must be successful, parseable, carry a base URL, and agree. An explicit `walletBaseUrl` may only corroborate that status or create a conflict; it can never replace missing, malformed, error, or missing-origin status. Stop if top-level input conflicts with the selected candidate, an explicit wallet URL conflicts with wallet status, or the final origins mismatch. Never use a test or sandbox candidate in production checkout.
 
 Catalog access is merchant-scoped and optional. A merchant without Catalog enabled returns an API error carrying the backend `catalog_not_supported` message ("Catalog is not available for this merchant") with exit code 5. Treat that specific code as "this merchant has no Catalog" and continue with normal product-URL exploration instead of reporting a failure to the user; surface every other Catalog error normally. Catalog results are a product-discovery aid only; they do not replace `tool parse-item`, which remains the source of the frozen item facts used by checkout.
 
@@ -124,13 +132,13 @@ Fields supplied by agent/FSM, not by `parse-item`:
 - `totalAmountMinor`: computed as `unitPriceMinor * quantity`
 - `merchantCategoryCode`: agent classification from merchant/product context, confirmed when confidence is low
 - `fulfillmentType`: agent classification; ask when unclear
-- `paymentInstrumentId`, `instructionId`, `mandateId`, and `checkoutId`: payment/checkout FSM state
+- `paymentInstrumentId`, `instructionId`, and `mandateId`: payment/authorization FSM state; the exact instruction pair is preflight evidence and is not passed as a UCP CLI flag. `checkoutId` is created and frozen inside `ucp-checkout run`, never supplied by the Agent
 
 quantity comes from the user intent. merchantCategoryCode comes from agent classification, not from `parse-item`.
 
 Classify the `parse-item` output with `classifyUcpParseItemObservation`. If there is one available item, select it. If there are multiple available items and the user is present, ask the user to choose. If there are multiple available items in a long task where the user is absent, select by frozen user intent and record the reason. Stop if no available item exists or required fields are missing.
 
-Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching and checkout validation. `clink ucp-checkout run --line-items` accepts `item.price` as a user-facing major-unit decimal string and converts it to the external UCP minor-unit long. Do not treat a different product total as "close enough".
+Amount hard match means the checkout line-item total must equal the intended product total exactly after currency normalization. Carry `totalAmountMinor` through matching and checkout validation. `clink ucp-checkout run --line-items` accepts `item.price` as a user-facing major-unit decimal string and converts it to the external UCP minor-unit long. Every nested field named `amount` or `price` that enters this normalization must also be a decimal string, never a JavaScript Number whose original decimal spelling may already be lost. Do not treat a different product total as "close enough".
 
 ## Step 0.5: Classify Fulfillment And Shipping
 
@@ -201,7 +209,7 @@ For physical goods, collect one standard complete shipping address but serialize
 Use the `clink` prefix defined for this workflow (see `references/clink-cli-invocation.md`); the prefix already fixes the environment, so do not add environment flags here.
 
 ```bash
-clink card binding-link --no-watch --format json
+clink card binding-link --no-watch --no-open --format json
 ```
 
 Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Freeze this exact `paymentInstrumentId` into the aggregate command. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
@@ -261,6 +269,8 @@ For this product-order flow, prefer exact amount matches. Do not select a broad 
 
 For a pinned scheduled authorization, the limit-style scope is the per-run cap written into the mandate `description` at creation, and the order total must be within it. A recurring mandate's `amountLimit` is the cycle budget, not the per-order ceiling, so never treat `amountLimit` as the per-order cap. This does not relax the rule above for any other flow: a mandate that was not pinned by this schedule is still matched by the ordinary exact/authorized-cap rules.
 
+The selected or pinned `instructionId` + `mandateId` pair is the evidence allowed to set `authorizationGatePassed=true`; it is not a transport parameter. `ucp-checkout run` intentionally rejects `--instruction-id` and `--mandate-id`, so never add those flags or claim the checkout result proves that the backend consumed a particular pair. For an unattended run, verify only the pinned pair and never substitute another candidate before entering the aggregate command; backend authorization enforcement remains authoritative.
+
 ### Merchant semantic match
 
 Merchant semantic match must cover the requested merchant or product context. Compare the available instruction and mandate fields such as title, description, merchant name, merchant URL/domain, merchant category code, product title, and product description.
@@ -277,7 +287,7 @@ First run the `GET_INTERNAL_UCP_ENDPOINT` action returned by the FSM. Use the ex
 clink tool internal-ucp get-endpoint --product-url <selected_item_url> --format json
 ```
 
-- A result containing `endpoint`, `provider=clinkbill`, and `merchantId` selects `INTERNAL_UCP_CHECKOUT`. Freeze the returned endpoint into the aggregate run request.
+- A result containing `endpoint`, `provider=clinkbill`, and `merchantId` is only a route candidate. It selects `INTERNAL_UCP_CHECKOUT` after the endpoint passes the HTTPS, canonicalization, and wallet-origin checks below.
 - Only `{ "error_code": "NOT_IN_INTERNAL_UCP_LIST" }` starts standard UCP profile discovery.
 - Any other error, error envelope, or malformed output stops the route and is surfaced. Do not silently probe or select external checkout.
 
@@ -288,7 +298,7 @@ curl -fsSL -XGET -H 'Accept: application/json' https://<domain>/.well-known/ucp-
 ```
 
 - If that probe returns a successful parseable JSON response, reclassify and run `GET_REST_ENDPOINT`.
-- If the probe fails, returns a non-2xx response, or returns a non-JSON body, reclassify with checked/failed evidence and route to external UCP checkout (`standard_ucp_profile_absent`).
+- If the probe fails, returns a non-2xx response, or returns a non-JSON body, reclassify with checked/failed evidence. This can select external UCP checkout (`standard_ucp_profile_absent`) only after the current wallet-status origin passes the checks below.
 - If no domain can be resolved, stop and ask for product/merchant input; do not guess.
 
 For a successful profile, the `<standard_ucp_url>` must come from the profile shopping service endpoint (`services.*.endpoint`) when present; otherwise use the selected item/product URL:
@@ -297,13 +307,20 @@ For a successful profile, the `<standard_ucp_url>` must come from the profile sh
 clink tool get-rest-endpoint --url <standard_ucp_url> --format json
 ```
 
-Reclassify with the `provider` and `endpoint` from that output. If `provider` is `clinkbill`, route to internal UCP checkout and freeze `rest_endpoint` into the aggregate command. If provider is not `clinkbill`, route to external UCP checkout and freeze that resolved external endpoint. If endpoint discovery returns `NO_UCP_REST_ENDPOINT`, another failure payload, or no trusted endpoint, do not enter aggregate checkout until the effective external checkout endpoint has been resolved and frozen. An external route with `endpoint=null` is invalid.
+Reclassify with the `provider` and `endpoint` from that output:
+
+- Every supplied `walletStatus` / `wallet_status` alias must be successful and parseable, include an HTTPS base URL, and normalize to one origin. An explicit `walletBaseUrl` / `wallet_base_url` can only corroborate that status, never replace it. Missing, failed, malformed, unsafe, or conflicting wallet evidence returns `SURFACE_ERROR` for every final route, including a direct internal endpoint.
+- Every resolved endpoint, regardless of provider, must be an absolute HTTPS URL with a hostname and no credentials, query, or fragment. Canonicalize it exactly as the CLI target builder does: URL parsing lowercases/canonicalizes the hostname, removes the default HTTPS port and dot segments, preserves the normalized path, and strips trailing slashes. Freeze this canonical string rather than the raw spelling.
+- The canonical endpoint origin must exactly equal the canonical current wallet-status origin. This applies to direct internal, fallback `clinkbill`, and non-clinkbill endpoints. A cross-origin non-clinkbill endpoint is terminal; never preserve it, fall back around it, or send OAuth/CSK credentials to it.
+- Only when the resolved endpoint is missing, REST discovery returns an error, or the standard profile is absent may the FSM derive `<wallet_origin>/agent/ucp/external`; that derived URL goes through the same validation.
+
+Every selected route therefore freezes both a canonical `walletOrigin` and a non-null canonical same-origin HTTPS `endpoint` before aggregate checkout.
 
 Route resolution must not mutate the selected item, amount, authorization, or merchant facts.
 
 ## Step 5: Build And Run One Aggregate Checkout Command
 
-Call `classifyUcpCheckoutRunRequest` with the frozen product, route, payment instrument, fulfillment, and gate evidence:
+Call `classifyUcpCheckoutRunExecution` with the frozen product, route, payment instrument, fulfillment, and gate evidence:
 
 - `productSelectionFrozen=true`
 - `fulfillmentAndAddressReady=true`
@@ -311,20 +328,26 @@ Call `classifyUcpCheckoutRunRequest` with the frozen product, route, payment ins
 - `authorizationGatePassed=true` after either the non-Visa/VIC bypass or an exact ACTIVE Instruction match
 - `restrictedCategoryGatePassed=true`
 - `checkoutRouteResolved=true`
+- `checkoutExecutionClaimed=false` on the pre-claim classification
 - `explicitPurchaseAuthorized=true`
-- exact `checkoutRoute`, `merchantUrl`, resolved `endpoint` for either route, `merchantCategoryCode`, `currency`, `lineItems`, and `paymentInstrumentId`
+- one nonempty unique frozen `checkoutAttemptId`
+- exact `checkoutRoute`, `merchantUrl`, canonical same-wallet-origin HTTPS `endpoint`, canonical `walletBaseUrl`, `merchantCategoryCode`, `currency`, `lineItems`, and `paymentInstrumentId`
+- canonical `buyer` JSON when the merchant requires buyer fields beyond the wallet-owned email
 - UCP Postal Address only for shipped physical goods
 - `digitalDeliveryExpected=true` plus `digitalDeliveryContractVerified=true` only for an explicit artifact-delivery contract
 
-The helper canonicalizes JSON and shell-quotes every dynamic value. Execute only its returned `command`; do not copy fields into a second hand-built command:
+The first valid pre-claim result is `CLAIM_UCP_CHECKOUT_ATTEMPT`, not a command. The pure FSM does not perform or infer atomic state changes. The stateful runtime must compare-and-set that exact attempt from `AWAITING_EXECUTION` to `EXECUTING`; only the unique winner may reclassify with `checkoutExecutionClaimed=true` and execute the returned command. An already `EXECUTING` or `CONSUMED` attempt, a lost claim, a duplicate callback, or any replay returns no command. Keep the same frozen attempt ID through observation and mark it `CONSUMED`; never generate a replacement ID to bypass the claim.
+
+The helper canonicalizes JSON and shell-quotes every dynamic value. The returned command also freezes the wallet environment with `CLINK_BASE_URL=<canonical_wallet_origin>`. Execute only that exact returned command; do not strip its prefix or copy fields into a second hand-built command:
 
 ```bash
-clink ucp-checkout run \
+CLINK_BASE_URL=<frozen_wallet_origin> clink ucp-checkout run \
   --endpoint <frozen_rest_endpoint> \
   --merchant-url <frozen_selected_item_url> \
   --merchant-category-code <frozen_mcc> \
   --currency <frozen_currency> \
   --line-items '<frozen_canonical_line_items_json>' \
+  [--buyer '<frozen_canonical_buyer_json>'] \
   --payment-instrument-id <frozen_payment_instrument_id> \
   [--shipping-address '<frozen_ucp_postal_address_json>'] \
   --confirm-purchase \
@@ -332,7 +355,11 @@ clink ucp-checkout run \
   --format json
 ```
 
-This is the only checkout mutation the Agent runs. The CLI owns checkout creation, exactly-once completion submission, and the optional initial digital-delivery wait. Never run a second aggregate command for the same attempt.
+This is the only checkout mutation the Agent runs. The CLI owns checkout creation, exactly-once completion submission, and the optional initial digital-delivery wait. Never run a second aggregate command for the same attempt, including after process loss or an inconclusive response.
+
+The CLI generates the create idempotency key internally. The CLI also generates the complete idempotency key internally. Do not pass `--idempotency-key` or construct a second mutation command; `ucp-checkout run` rejects caller-supplied keys.
+
+For `ucp-checkout run`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
 For a digital product, `--wait-delivery` and `--max-wait 900` are part of this same command. Do not run a later hand-built delivery command unless the aggregate result returns a validated read-only `resumeCommand`.
 
@@ -343,16 +370,29 @@ Pass the aggregate `{ok:true,data:{...}}` envelope and the exact `frozenRequest`
 | Aggregate result | Required action |
 | --- | --- |
 | `stage=create|complete,status=completed`, no expected digital delivery | Return payment/order completion. Run no additional Agent command. |
-| `stage=create|complete,status=complete_in_progress|processing|pending` | Return pending with immutable `resumeContext`. Execute only the classifier-validated `resumeCommand`, which must be `clink ucp-checkout get` bound to the same checkout ID and frozen endpoint. Classify its ordinary checkout envelope with `classifyUcpCheckoutRunResumeObservation`. |
-| `stage=delivery,status=ready` | Require completed checkout context and nonempty `digital_delivery.artifacts`; only then return delivery evidence. |
-| `stage=delivery,status=failed` | Return payment success and delivery failure separately. Do not retry payment or checkout. |
-| `stage=delivery,status=timeout` | Preserve payment success, the last order snapshot, and immutable `resumeContext`. Execute only the validated `clink ucp-order wait-delivery --order-id <same_ucp_order_id> --max-wait 900 --format json` resume command, then classify its ordinary delivery envelope with `classifyUcpCheckoutRunResumeObservation`. |
-| `requires_escalation`, `failed`, `cancelled`, or `expired` | Stop and surface the checkout failure. |
-| malformed envelope, unknown status, mismatched ID/endpoint, or unsafe resume | Fail closed with `paymentConfirmed=false`; do not synthesize a recovery mutation. |
+| `stage=create,status=ready_for_complete|processing|pending` | The create request returned a checkout, but payment was not submitted (`attempts.complete=0`, `paymentConfirmed=false`). Never construct or execute `complete` or another `run`. A returned same-checkout GET is read-only reconciliation only; it cannot become permission to submit payment. |
+| `stage=complete,status=unknown` | Complete transport/submission outcome is unknown. Execute only the classifier-validated same-checkout GET reconciliation. Never rerun the aggregate or complete command, even if GET remains inconclusive. |
+| `stage=complete,status=complete_in_progress|processing|pending|ready_for_complete` | Return pending with immutable `resumeContext`, including any already observed UCP order ID. Execute only the classifier-validated `resumeCommand`, which must be `clink ucp-checkout get` bound to the same checkout ID, canonical endpoint, and frozen wallet environment. Classify its ordinary checkout envelope with `classifyUcpCheckoutRunResumeObservation`; a different returned order ID fails closed, while a response that omits the ID cannot erase the frozen value. |
+| `stage=delivery,status=ready` | Require `ready=true`, `timedOut=false`, completed checkout context, a delivery object with `status=ready`, and nonempty `digital_delivery.artifacts`; only then return delivery evidence. |
+| `stage=delivery,status=failed` | Require `ready=false`, `timedOut=false`, and delivery `status=failed`. Return payment success and delivery failure separately. Do not retry payment or checkout. |
+| `stage=delivery,status=timeout` | Require `ready=false` and `timedOut=true`. `delivery` may be null (the order can omit `digital_delivery`) or a pending/syncing/retryable object; it must not claim ready/failed. Preserve payment success, the last order snapshot, and immutable `resumeContext`. Execute only the validated environment-locked `clink ucp-order wait-delivery --order-id <same_ucp_order_id> --max-wait 900 --format json` resume command, then classify its ordinary delivery envelope with `classifyUcpCheckoutRunResumeObservation`. |
+| `requires_escalation`, `failed`, `cancelled`, `canceled`, `rejected`, or `expired` | Stop and surface the checkout failure. |
+| malformed envelope, unsupported status, inconsistent delivery tuple, mismatched ID/environment/endpoint, or unsafe resume | Fail closed with `paymentConfirmed=false`; do not synthesize a recovery mutation. |
 
-The read-only resume validator rejects `ucp-checkout run`, create, complete, update, cancel, `pay`, event polling, shell operators, a different checkout/order ID, endpoint drift, and a delivery wait other than 900 seconds. Never pass a resume output back to the aggregate classifier: use its `resumeContext` with `classifyUcpCheckoutRunResumeObservation` until the same resource reaches a terminal state.
+Identifier evidence is strict at every stage. Top-level `checkoutId` / `checkout_id`, create `id` / `checkoutId` / `checkout_id`, and complete `id` / `checkoutId` / `checkout_id` must all be nonempty strings and agree with the frozen checkout. UCP order aliases across top level, `order`, and `complete.order` must also agree; a normal completed bundle places the order under `complete.order`, so do not require a duplicate top-level order. Any supplied blank, null, non-string, or conflicting alias fails closed before payment confirmation. Never substitute `paymentOrderId` or `merchantOrderId`.
 
-Legacy event evidence remains type-safe: checkout correlation accepts only nested payload `data.checkoutId` / `data.checkout_id`; a payment event order ID is never a UCP order ID and must not be used for order lookup.
+The read-only resume validator requires and preserves the exact `CLINK_BASE_URL=<frozen_wallet_origin>` prefix. It rejects a missing/different environment lock, `ucp-checkout run`, create, complete, update, cancel, `pay`, event polling, shell operators or unquoted shell expansions, parser/argv drift, a different checkout/order ID, endpoint drift, and a delivery wait other than 900 seconds. Never strip or rebuild the returned prefix. Never pass a resume output back to the aggregate classifier: use its `resumeContext` with `classifyUcpCheckoutRunResumeObservation` until the same resource reaches a terminal state.
+
+### Legacy/direct event compatibility only
+
+The current aggregate run result is authoritative for checkout payment/order state; the Agent must not start a second UCP poll. The rules below apply only when interoperating with an older event-only bundle:
+
+- Freeze `ucpOrderId` only from checkout `data.ucp.ucp_order_id`; a mutually consistent completed-checkout `data.order.id` is a compatibility alias. Freeze `paymentOrderId` separately from the `agent_order.succeeded` payload. A payment event order ID is never a UCP order ID and must not be used for order lookup.
+- Correlate checkout only through canonical nested payload `data.checkoutId` / `data.checkout_id`. Never fall back to event top-level checkout fields or `resourceId`.
+- If the old classifier returns a read-only checkout fallback, execute only its bound `clink ucp-checkout get --endpoint <original_rest_endpoint> --checkout-id <checkoutId> --format json`, then execute its exact `clink ucp-order get --order-id <ucpOrderId> --format json` only after resolving that checkout-frozen identifier.
+- During a composite legacy poll, a same-type event for another checkout stays queued. For the exact match, the CLI keeps it unacknowledged while it fetches the UCP order and ACKs immediately before output; an uncertain ACK returns `eventAckWarning` and may produce a harmless duplicate.
+- A timed-out legacy poll resumes only with the safely quoted opaque cursor, preserving `nextToken` exactly.
+- Preserve the full order, including OMS data at `data.ucp.success_info` when present. `merchantOrderId` is an external merchant reference, never a UCP ID alias. Do not re-poll the acknowledged event, re-run complete, or retry payment.
 
 ## Failure And Recovery Rules
 
@@ -361,19 +401,25 @@ Legacy event evidence remains type-safe: checkout correlation accepts only neste
 - Partial authorization match: do not select it.
 - More than one equally specific match: ask the user to choose.
 - Missing explicit purchase confirmation or any incomplete gate: produce no checkout command.
+- Missing, blank, conflicting, already executing, or consumed `checkoutAttemptId`: produce no checkout command. Only the atomic `AWAITING_EXECUTION -> EXECUTING` winner may dispatch once.
 - Aggregate command timeout or exit 6 without a trusted read-only resume: state is unknown. Do not rerun the aggregate command.
 - Never rerun the aggregate command merely because its result is incomplete or inconclusive.
-- `complete_in_progress`: use only the returned same-checkout GET. Never rerun create, complete, payment, or `ucp-checkout run`.
+- Create-stage `ready_for_complete`, `processing`, or `pending`: payment was not submitted. Use at most the returned read-only same-checkout GET; never invent a mutation continuation.
+- Complete-stage `unknown`, `ready_for_complete`, `complete_in_progress`, `processing`, or `pending`: use only the returned same-checkout GET reconciliation. Never rerun create, complete, payment, or `ucp-checkout run`.
 - Never resubmit complete merely because that GET is inconclusive.
-- Digital delivery timeout/pending: use only the returned same-order `wait-delivery --max-wait 900`.
+- Every run and read-only resume remains bound to the frozen `CLINK_BASE_URL`; environment drift is terminal.
+- Digital delivery timeout/pending: require `ready=false,timedOut=true`; use only the returned same-order `wait-delivery --max-wait 900`. A null delivery is valid while the order still lacks `digital_delivery`.
 - Digital delivery failure: payment remains successful; report fulfillment failure separately.
+- Backend `NO_AUTHORIZATION` or `UCP_AUTHORIZATION_BINDING_INVALID`: the instruction/mandate is not valid for this checkout. Stop and request a corrected instruction.
 - Never use a fixed `sleep`, runtime `--help`, terminal log scraping, or manual create-to-complete-to-wait orchestration.
 
 ## Minimal End-To-End Skeleton
 
 ```bash
 clink tool parse-item --url <item_url> --format json
-clink card binding-link --no-watch --format json
+# Finish fulfillment classification and freeze any required address
+# before touching payment readiness.
+clink card binding-link --no-watch --no-open --format json
 classifyInstructionRestriction <frozen_purchase_context>
 clink instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json
 clink tool internal-ucp get-endpoint --product-url <selected_item_url> --format json

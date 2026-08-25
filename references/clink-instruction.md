@@ -84,6 +84,7 @@ clink instruction create \
   --effective-until-time "2026-06-30 23:59:59" \
   --mandates '[{"title":"Hotel","description":"Hotel booking","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-30 23:59:59"}]' \
   --shipping-address '{"name":"Clink User","line1":"One Apple Park Way","city":"Cupertino","state":"CA","zip":"95014","countryCode":"US","deliveryContactDetails":{}}' \
+  --no-open \
   --format json
 ```
 
@@ -164,6 +165,7 @@ clink instruction create \
   --is-recurring \
   --mandates '[{"title":"Lunch set","description":"Daily 11:00 lunch order, at most 40 CNY per order","amountLimit":280.00,"currencyCode":"CNY","merchantCategoryCode":"5812","recurringFrequency":"WEEKLY"}]' \
   --shipping-address '<real delivery address>' \
+  --no-open \
   --format json
 ```
 

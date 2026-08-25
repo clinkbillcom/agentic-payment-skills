@@ -19,6 +19,8 @@ import {
 
 const checkoutId = 'checkout_aggregate_123';
 const ucpOrderId = 'order_ucp_aggregate_123';
+const walletBaseUrl = 'https://api.clinkbill.com';
+const clinkCommand = `CLINK_BASE_URL=${walletBaseUrl} clink`;
 const endpoint = 'https://api.clinkbill.com/agent/ucp/mcht_123';
 const externalEndpoint = 'https://api.clinkbill.com/agent/ucp/external';
 
@@ -40,9 +42,12 @@ function readyRequest(overrides = {}) {
     authorizationGatePassed: true,
     restrictedCategoryGatePassed: true,
     checkoutRouteResolved: true,
+    checkoutExecutionClaimed: true,
     explicitPurchaseAuthorized: true,
+    checkoutAttemptId: 'attempt_aggregate_123',
     checkoutRoute: 'INTERNAL_UCP_CHECKOUT',
     endpoint,
+    walletBaseUrl,
     merchantUrl: 'https://shop.example/products/demo?variant=123',
     merchantCategoryCode: '5812',
     currency: 'USD',
@@ -93,7 +98,7 @@ test('builds one deterministic aggregate checkout command and freezes its parame
   assert.equal(result.action, UcpCheckoutRunAction.RUN_UCP_CHECKOUT);
   assert.equal(
     result.command,
-    'clink ucp-checkout run'
+    `${clinkCommand} ucp-checkout run`
       + ` --endpoint ${endpoint}`
       + ' --merchant-url \'https://shop.example/products/demo?variant=123\''
       + ' --merchant-category-code 5812'
@@ -121,6 +126,36 @@ test('canonical JSON makes equivalent line-item objects produce the same command
   }));
 
   assert.equal(first, second);
+});
+
+test('freezes and forwards required buyer data without changing the wallet-owned email rule', () => {
+  const result = classifyUcpCheckoutRunRequest(readyRequest({
+    buyer: {
+      last_name: 'Buyer',
+      first_name: 'Test',
+      preferences: { locale: 'en-US' },
+    },
+  }));
+
+  assert.deepEqual(result.frozenRequest.buyer, {
+    first_name: 'Test',
+    last_name: 'Buyer',
+    preferences: { locale: 'en-US' },
+  });
+  assert.equal(Object.isFrozen(result.frozenRequest.buyer), true);
+  assert.match(
+    result.command,
+    /--buyer '\{"first_name":"Test","last_name":"Buyer","preferences":\{"locale":"en-US"\}\}'/u,
+  );
+});
+
+test('rejects malformed buyer data instead of silently dropping it', () => {
+  for (const buyer of ['not-json', [], 42]) {
+    const result = classifyUcpCheckoutRunRequest(readyRequest({ buyer }));
+    assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_RUN_INPUT_INVALID);
+    assert.ok(result.invalid.includes('buyer'));
+    assert.equal(result.command, undefined);
+  }
 });
 
 test('quotes shell metacharacters and apostrophes without executing embedded input', () => {
@@ -244,6 +279,34 @@ test('internal and external routes both freeze an exact endpoint', () => {
   assert.deepEqual(externalWithoutEndpoint.invalid, ['endpoint']);
 });
 
+test('freezes one HTTPS wallet environment into the initial command', () => {
+  const ready = classifyUcpCheckoutRunRequest(readyRequest({
+    walletBaseUrl: `${walletBaseUrl}/`,
+  }));
+  assert.equal(ready.state, UcpCheckoutRunState.CHECKOUT_RUN_READY);
+  assert.equal(ready.frozenRequest.walletBaseUrl, walletBaseUrl);
+  assert.match(ready.command, new RegExp(`^CLINK_BASE_URL=${walletBaseUrl} clink `, 'u'));
+
+  for (const override of [
+    { walletBaseUrl: undefined },
+    { walletBaseUrl: 'http://api.clinkbill.com' },
+    { walletBaseUrl: 'https://user:pass@api.clinkbill.com' },
+    { walletBaseUrl: 'https://api.clinkbill.com/other' },
+    { walletBaseUrl: 'https://api.clinkbill.com/?other=1' },
+  ]) {
+    const rejected = classifyUcpCheckoutRunRequest(readyRequest(override));
+    assert.equal(rejected.state, UcpCheckoutRunState.CHECKOUT_RUN_INPUT_INVALID);
+    assert.ok(rejected.invalid.includes('walletBaseUrl'));
+    assert.equal(rejected.command, undefined);
+  }
+
+  const drifted = classifyUcpCheckoutRunRequest(readyRequest({
+    walletBaseUrl: 'https://other.example',
+  }));
+  assert.ok(drifted.invalid.includes('endpointWalletOrigin'));
+  assert.equal(drifted.command, undefined);
+});
+
 test('strictly rejects unsafe URLs, zero price, invalid currency, MCC, and card IDs', () => {
   const cases = [
     ['merchantUrl', { merchantUrl: 'https://user:pass@shop.example/item' }],
@@ -330,10 +393,30 @@ test('recursively validates every nested amount and price field the CLI will nor
       item: { id: 'sku_1', title: 'Demo', price: '1.00' },
       quantity: 1,
       adjustment: { amount: '0.50' },
-      metadata: { quoted: { price: 2.25 } },
+      metadata: { quoted: { price: '2.25' } },
     }],
   }));
   assert.equal(ready.state, UcpCheckoutRunState.CHECKOUT_RUN_READY);
+});
+
+test('requires decimal strings for nested money before JSON parsing can change precision', () => {
+  for (const lineItemsInput of [
+    [{
+      id: 'li_1',
+      item: { id: 'sku_1', title: 'Demo', price: '1.00' },
+      quantity: 1,
+      adjustment: { amount: 0.5 },
+    }],
+    '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"1.00"},'
+      + '"quantity":1,"metadata":{"quoted":{"price":0.10000000000000001}}}]',
+  ]) {
+    const result = classifyUcpCheckoutRunRequest(readyRequest({
+      lineItems: lineItemsInput,
+    }));
+    assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_RUN_INPUT_INVALID);
+    assert.ok(result.invalid.includes('lineItems'));
+    assert.equal(result.command, undefined);
+  }
 });
 
 test('legacy workflow exposes the aggregate run only after all gates pass', () => {
@@ -357,7 +440,10 @@ test('legacy workflow exposes the aggregate run only after all gates pass', () =
   const ready = classifyUcpCheckoutRunExecution(readyRequest());
   assert.equal(ready.state, UcpCheckoutWorkflowState.CHECKOUT_RUN_READY);
   assert.equal(ready.action, UcpCheckoutWorkflowAction.RUN_UCP_CHECKOUT);
-  assert.match(ready.runCommand, /^clink ucp-checkout run /u);
+  assert.match(
+    ready.runCommand,
+    /^CLINK_BASE_URL=https:\/\/api\.clinkbill\.com clink ucp-checkout run /u,
+  );
 });
 
 test('maps an ordinary aggregate completed result without another Agent command', () => {
@@ -382,7 +468,122 @@ test('maps an ordinary aggregate completed result without another Agent command'
   assert.equal(result.terminal, true);
   assert.equal(result.checkoutId, checkoutId);
   assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.equal(result.checkoutAttemptId, 'attempt_aggregate_123');
+  assert.equal(result.checkoutAttemptState, 'CONSUMED');
+  assert.equal(result.replayAllowed, false);
   assert.equal(result.resumeCommand, undefined);
+});
+
+test('requires the observation to remain bound to one claimed checkout attempt', () => {
+  const data = {
+    stage: 'complete',
+    status: 'completed',
+    checkoutId,
+    endpoint,
+    attempts: { create: 1, complete: 1 },
+    create: { id: checkoutId, status: 'ready_for_complete' },
+    complete: { id: checkoutId, status: 'completed' },
+  };
+  for (const expected of [
+    { ...readyRequest(), checkoutAttemptId: undefined },
+    { ...readyRequest(), checkoutExecutionClaimed: false },
+    { ...readyRequest(), checkoutAttemptId: 'attempt\nother' },
+  ]) {
+    const result = classifyUcpCheckoutRunObservation({
+      stdout: successEnvelope(data),
+    }, expected);
+    assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(result.reason, 'checkout_run_attempt_claim_invalid');
+    assert.equal(result.paymentConfirmed, false);
+  }
+});
+
+test('accepts the parsed CLI envelope shape documented for aggregate classification', () => {
+  const result = classifyUcpCheckoutRunObservation({
+    ok: true,
+    data: {
+      stage: 'complete',
+      status: 'completed',
+      checkoutId,
+      orderId: ucpOrderId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
+    },
+  }, classifyUcpCheckoutRunRequest(readyRequest()));
+
+  assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_COMPLETED);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.ucpOrderId, ucpOrderId);
+  assert.deepEqual(result.order, { id: ucpOrderId });
+});
+
+test('canonicalizes observed endpoints exactly like the frozen CLI request', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest({
+    endpoint: 'https://API.CLINKBILL.COM:443/agent/ucp/mcht_123///',
+  }));
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'completed',
+      checkoutId,
+      endpoint: 'https://API.CLINKBILL.COM:443/agent/ucp/mcht_123/',
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
+    }),
+  }, expected);
+
+  assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_COMPLETED);
+  assert.equal(result.endpoint, endpoint);
+  assert.deepEqual(result.order, { id: ucpOrderId });
+});
+
+test('accepts consistent UCP order aliases across aggregate stages and rejects drift', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest());
+  const consistent = {
+    stage: 'complete',
+    status: 'completed',
+    checkoutId,
+    ucp: { ucp_order_id: ucpOrderId },
+    ucpOrderId,
+    omsOrderId: ucpOrderId,
+    endpoint,
+    attempts: { create: 1, complete: 1 },
+    create: {
+      id: checkoutId,
+      status: 'ready_for_complete',
+      ucp_order_id: ucpOrderId,
+    },
+    complete: {
+      id: checkoutId,
+      status: 'completed',
+      ucp: { ucp_order_id: ucpOrderId },
+      order: { id: ucpOrderId },
+    },
+  };
+  const accepted = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope(consistent),
+  }, expected);
+  assert.equal(accepted.state, UcpCheckoutRunState.CHECKOUT_COMPLETED);
+  assert.equal(accepted.ucpOrderId, ucpOrderId);
+
+  for (const conflicting of [
+    { ...consistent, ucpOrderId: 'order_other' },
+    {
+      ...consistent,
+      complete: { ...consistent.complete, ucp: { ucp_order_id: 'order_other' } },
+    },
+    { ...consistent, ucp: null },
+  ]) {
+    const rejected = classifyUcpCheckoutRunObservation({
+      stdout: successEnvelope(conflicting),
+    }, expected);
+    assert.equal(rejected.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(rejected.reason, 'checkout_run_identifier_invalid');
+    assert.equal(rejected.paymentConfirmed, false);
+  }
 });
 
 test('requires nested create and complete evidence before confirming payment', () => {
@@ -424,8 +625,64 @@ test('requires nested create and complete evidence before confirming payment', (
   }
 });
 
+test('requires create and complete stages to carry their own checkout IDs', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest());
+  for (const [reason, data] of [
+    ['checkout_run_create_identifier_missing', {
+      stage: 'complete',
+      status: 'completed',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'completed' },
+    }],
+    ['checkout_run_complete_identifier_missing', {
+      stage: 'complete',
+      status: 'completed',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { status: 'completed' },
+    }],
+  ]) {
+    const result = classifyUcpCheckoutRunObservation({
+      stdout: successEnvelope(data),
+    }, expected);
+    assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(result.reason, reason);
+  }
+});
+
+test('maps an ambiguous complete failure only to same-checkout read-only reconciliation', () => {
+  const resumeCommand = `${clinkCommand} ucp-checkout get --checkout-id ${checkoutId}`
+    + ` --endpoint ${endpoint} --format json`;
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'unknown',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      paymentRetryAllowed: false,
+      reconciliationRequired: true,
+      resumeReadOnly: true,
+      resumeCommand,
+      error: { name: 'NetworkError', message: 'state unknown' },
+    }),
+  }, classifyUcpCheckoutRunRequest(readyRequest()));
+
+  assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_COMPLETE_IN_PROGRESS);
+  assert.equal(result.action, UcpCheckoutRunAction.RESUME_UCP_CHECKOUT_READ_ONLY);
+  assert.equal(result.paymentConfirmed, false);
+  assert.equal(result.resumeCommand, resumeCommand);
+  assert.equal(result.resumeContext.checkoutId, checkoutId);
+});
+
 test('maps complete_in_progress only to a bound read-only checkout GET', () => {
-  const resumeCommand = `clink ucp-checkout get --endpoint ${endpoint}`
+  const resumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
     + ` --checkout-id ${checkoutId} --format json`;
   const result = classifyUcpCheckoutRunObservation({
     stdout: successEnvelope({
@@ -447,10 +704,30 @@ test('maps complete_in_progress only to a bound read-only checkout GET', () => {
   assert.doesNotMatch(result.resumeCommand, /ucp-checkout run|create|complete|events poll| pay /u);
 });
 
+test('maps a post-complete ready_for_complete result only to the bound read-only GET', () => {
+  const resumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+    + ` --checkout-id ${checkoutId} --format json`;
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'ready_for_complete',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'ready_for_complete' },
+      resumeCommand,
+    }),
+  }, classifyUcpCheckoutRunRequest(readyRequest()));
+
+  assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_COMPLETE_IN_PROGRESS);
+  assert.equal(result.action, UcpCheckoutRunAction.RESUME_UCP_CHECKOUT_READ_ONLY);
+  assert.equal(result.paymentConfirmed, false);
+  assert.equal(result.resumeCommand, resumeCommand);
+});
+
 for (const status of ['processing', 'pending']) {
-  test(`maps ${status} only to a bound read-only checkout GET`, () => {
-    const resumeCommand = `clink ucp-checkout get --endpoint ${endpoint}`
-      + ` --checkout-id ${checkoutId} --format json`;
+  test(`stops a create-stage ${status} result because payment was not submitted`, () => {
     const result = classifyUcpCheckoutRunObservation({
       stdout: successEnvelope({
         stage: 'create',
@@ -459,16 +736,38 @@ for (const status of ['processing', 'pending']) {
         endpoint,
         attempts: { create: 1, complete: 0 },
         create: { id: checkoutId, status },
-        resumeCommand,
+        paymentSubmitted: false,
       }),
     }, classifyUcpCheckoutRunRequest(readyRequest()));
 
-    assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_COMPLETE_IN_PROGRESS);
-    assert.equal(result.action, UcpCheckoutRunAction.RESUME_UCP_CHECKOUT_READ_ONLY);
+    assert.equal(result.state, UcpCheckoutRunState.CHECKOUT_FAILED);
+    assert.equal(result.action, UcpCheckoutRunAction.STOP_CHECKOUT_FAILURE);
+    assert.equal(result.terminal, true);
     assert.equal(result.paymentConfirmed, false);
-    assert.equal(result.resumeCommand, resumeCommand);
+    assert.equal(result.paymentSubmitted, false);
+    assert.equal(result.resumeCommand, undefined);
   });
 }
+
+test('rejects a create-pending result that exposes a misleading resume command', () => {
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'create',
+      status: 'pending',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 0 },
+      create: { id: checkoutId, status: 'pending' },
+      paymentSubmitted: false,
+      resumeCommand: `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+        + ` --checkout-id ${checkoutId} --format json`,
+    }),
+  }, classifyUcpCheckoutRunRequest(readyRequest()));
+
+  assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+  assert.equal(result.reason, 'checkout_create_resume_not_allowed');
+  assert.equal(result.paymentConfirmed, false);
+});
 
 test('accepts an authoritative checkout completed during create without completing again', () => {
   const result = classifyUcpCheckoutRunObservation({
@@ -510,10 +809,12 @@ for (const status of ['failed', 'cancelled', 'expired', 'requires_escalation']) 
 
 test('rejects mutation, shell injection, endpoint drift, and identifier drift in resume commands', () => {
   const unsafeCommands = [
-    `clink ucp-checkout complete --checkout-id ${checkoutId} --format json`,
-    `clink ucp-checkout get --checkout-id ${checkoutId} --format json; clink pay --amount 1`,
-    `clink ucp-checkout get --endpoint https://other.example --checkout-id ${checkoutId} --format json`,
-    `clink ucp-checkout get --endpoint ${endpoint} --checkout-id checkout_other --format json`,
+    `${clinkCommand} ucp-checkout complete --checkout-id ${checkoutId} --format json`,
+    `${clinkCommand} ucp-checkout get --checkout-id ${checkoutId} --format json; clink pay --amount 1`,
+    `${clinkCommand} ucp-checkout get --endpoint https://other.example`
+      + ` --checkout-id ${checkoutId} --format json`,
+    `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+      + ' --checkout-id checkout_other --format json',
   ];
 
   for (const resumeCommand of unsafeCommands) {
@@ -549,7 +850,7 @@ test('rejects external endpoint drift before exposing a credential-bearing resum
       attempts: { create: 1, complete: 1 },
       create: { id: checkoutId, status: 'ready_for_complete' },
       complete: { id: checkoutId, status: 'complete_in_progress' },
-      resumeCommand: `clink ucp-checkout get --endpoint ${evilEndpoint}`
+      resumeCommand: `${clinkCommand} ucp-checkout get --endpoint ${evilEndpoint}`
         + ` --checkout-id ${checkoutId} --format json`,
     }),
   }, expected);
@@ -572,6 +873,8 @@ test('maps verified digital delivery ready only when artifacts exist', () => {
       orderId: ucpOrderId,
       endpoint,
       attempts: { create: 1, complete: 1, delivery: 2 },
+      ready: true,
+      timedOut: false,
       create: { id: checkoutId, status: 'ready_for_complete' },
       complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
       delivery: {
@@ -607,6 +910,8 @@ test('delivery results require completed checkout evidence and consistent nested
     orderId: ucpOrderId,
     endpoint,
     attempts: { create: 1, complete: 1, delivery: 2 },
+    ready: true,
+    timedOut: false,
     create: { id: checkoutId, status: 'ready_for_complete' },
     delivery: {
       status: 'ready',
@@ -665,6 +970,8 @@ test('fails closed when digital delivery says ready without artifacts', () => {
       orderId: ucpOrderId,
       endpoint,
       attempts: { create: 1, complete: 1, delivery: 2 },
+      ready: true,
+      timedOut: false,
       create: { id: checkoutId, status: 'ready_for_complete' },
       complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
       delivery: { status: 'ready', artifacts: [] },
@@ -690,6 +997,8 @@ test('maps digital delivery failure separately without downgrading payment', () 
       orderId: ucpOrderId,
       endpoint,
       attempts: { create: 1, complete: 1, delivery: 2 },
+      ready: false,
+      timedOut: false,
       create: { id: checkoutId, status: 'ready_for_complete' },
       complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
       delivery: { status: 'failed' },
@@ -709,7 +1018,7 @@ test('maps digital delivery timeout to only the frozen read-only wait command', 
     digitalDeliveryExpected: true,
     digitalDeliveryContractVerified: true,
   }));
-  const resumeCommand = `clink ucp-order wait-delivery --order-id ${ucpOrderId}`
+  const resumeCommand = `${clinkCommand} ucp-order wait-delivery --order-id ${ucpOrderId}`
     + ' --max-wait 900 --format json';
   const result = classifyUcpCheckoutRunObservation({
     stdout: successEnvelope({
@@ -723,6 +1032,7 @@ test('maps digital delivery timeout to only the frozen read-only wait command', 
       complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
       delivery: { status: 'pending' },
       order: { id: ucpOrderId, digital_delivery: { status: 'pending' } },
+      ready: false,
       timedOut: true,
       resumeCommand,
     }),
@@ -736,22 +1046,99 @@ test('maps digital delivery timeout to only the frozen read-only wait command', 
   assert.doesNotMatch(result.resumeCommand, /ucp-checkout run|create|complete|events poll| pay /u);
 });
 
+test('accepts delivery null only for a consistent timeout tuple', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest({
+    digitalDeliveryExpected: true,
+    digitalDeliveryContractVerified: true,
+  }));
+  const resumeCommand = `${clinkCommand} ucp-order wait-delivery --order-id ${ucpOrderId}`
+    + ' --max-wait 900 --format json';
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'delivery',
+      status: 'timeout',
+      checkoutId,
+      orderId: ucpOrderId,
+      endpoint,
+      attempts: { create: 1, complete: 1, delivery: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
+      order: { id: ucpOrderId, status: 'paid' },
+      delivery: null,
+      ready: false,
+      timedOut: true,
+      resumeCommand,
+    }),
+  }, expected);
+
+  assert.equal(result.state, UcpCheckoutRunState.DIGITAL_DELIVERY_PENDING);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.delivery, null);
+  assert.equal(result.resumeCommand, resumeCommand);
+});
+
+test('rejects non-native or contradictory aggregate delivery booleans', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest({
+    digitalDeliveryExpected: true,
+    digitalDeliveryContractVerified: true,
+  }));
+  const base = {
+    stage: 'delivery',
+    status: 'ready',
+    checkoutId,
+    orderId: ucpOrderId,
+    endpoint,
+    attempts: { create: 1, complete: 1, delivery: 1 },
+    create: { id: checkoutId, status: 'ready_for_complete' },
+    complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
+    delivery: { status: 'ready', artifacts: [{ type: 'code', value: 'redacted' }] },
+    order: {
+      id: ucpOrderId,
+      digital_delivery: {
+        status: 'ready',
+        artifacts: [{ type: 'code', value: 'redacted' }],
+      },
+    },
+  };
+  for (const [reason, evidence] of [
+    ['digital_delivery_boolean_invalid', { ready: 'true', timedOut: false }],
+    ['digital_delivery_boolean_invalid', { ready: true, timedOut: 0 }],
+    ['digital_delivery_boolean_invalid', { ready: true, timedOut: false, timed_out: true }],
+    ['digital_delivery_boolean_status_mismatch', { ready: false, timedOut: false }],
+  ]) {
+    const result = classifyUcpCheckoutRunObservation({
+      stdout: successEnvelope({ ...base, ...evidence }),
+    }, expected);
+    assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(result.reason, reason);
+    assert.equal(result.paymentConfirmed, false);
+  }
+});
+
 test('pending checkout resumes through authoritative GET to terminal completion', () => {
   const expected = classifyUcpCheckoutRunRequest(readyRequest());
-  const resumeCommand = `clink ucp-checkout get --endpoint ${endpoint}`
+  const resumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
     + ` --checkout-id ${checkoutId} --format json`;
   const pending = classifyUcpCheckoutRunObservation({
     stdout: successEnvelope({
       stage: 'complete',
       status: 'complete_in_progress',
       checkoutId,
+      orderId: ucpOrderId,
       endpoint,
       attempts: { create: 1, complete: 1 },
       create: { id: checkoutId, status: 'ready_for_complete' },
-      complete: { id: checkoutId, status: 'complete_in_progress' },
+      complete: {
+        id: checkoutId,
+        status: 'complete_in_progress',
+        order: { id: ucpOrderId },
+      },
       resumeCommand,
     }),
   }, expected);
+
+  assert.equal(pending.ucpOrderId, ucpOrderId);
+  assert.equal(pending.resumeContext.ucpOrderId, ucpOrderId);
 
   const completed = classifyUcpCheckoutRunResumeObservation({
     stdout: successEnvelope({
@@ -768,14 +1155,50 @@ test('pending checkout resumes through authoritative GET to terminal completion'
   assert.equal(completed.resumeCommand, undefined);
 });
 
-test('pending digital checkout resumes through GET and delivery wait to ready', () => {
+test('fails closed when checkout GET drifts from the aggregate-frozen UCP order ID', () => {
   const expected = classifyUcpCheckoutRunRequest(readyRequest({
     digitalDeliveryExpected: true,
     digitalDeliveryContractVerified: true,
   }));
-  const checkoutResumeCommand = `clink ucp-checkout get --endpoint ${endpoint}`
+  const resumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
     + ` --checkout-id ${checkoutId} --format json`;
   const pending = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'complete_in_progress',
+      checkoutId,
+      orderId: ucpOrderId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: {
+        id: checkoutId,
+        status: 'complete_in_progress',
+        order: { id: ucpOrderId },
+      },
+      resumeCommand,
+    }),
+  }, expected);
+
+  const drifted = classifyUcpCheckoutRunResumeObservation({
+    stdout: successEnvelope({
+      id: checkoutId,
+      status: 'completed',
+      order: { id: 'order_drifted', status: 'paid' },
+    }),
+  }, pending.resumeContext);
+
+  assert.equal(drifted.state, UcpCheckoutRunState.CLI_ERROR);
+  assert.equal(drifted.paymentConfirmed, false);
+  assert.equal(drifted.reason, 'checkout_resume_order_id_mismatch');
+  assert.equal(drifted.resumeCommand, undefined);
+});
+
+test('freezes the first UCP order ID observed by a same-checkout pending GET', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest());
+  const resumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+    + ` --checkout-id ${checkoutId} --format json`;
+  const aggregatePending = classifyUcpCheckoutRunObservation({
     stdout: successEnvelope({
       stage: 'complete',
       status: 'complete_in_progress',
@@ -784,6 +1207,50 @@ test('pending digital checkout resumes through GET and delivery wait to ready', 
       attempts: { create: 1, complete: 1 },
       create: { id: checkoutId, status: 'ready_for_complete' },
       complete: { id: checkoutId, status: 'complete_in_progress' },
+      resumeCommand,
+    }),
+  }, expected);
+  assert.equal(aggregatePending.resumeContext.ucpOrderId, null);
+
+  const getPending = classifyUcpCheckoutRunResumeObservation({
+    stdout: successEnvelope({
+      id: checkoutId,
+      status: 'processing',
+      ucp: { ucp_order_id: ucpOrderId },
+    }),
+  }, aggregatePending.resumeContext);
+  assert.equal(getPending.state, UcpCheckoutRunState.CHECKOUT_COMPLETE_IN_PROGRESS);
+  assert.equal(getPending.resumeContext.ucpOrderId, ucpOrderId);
+
+  const completedWithoutOrder = classifyUcpCheckoutRunResumeObservation({
+    stdout: successEnvelope({ id: checkoutId, status: 'completed' }),
+  }, getPending.resumeContext);
+  assert.equal(completedWithoutOrder.state, UcpCheckoutRunState.CHECKOUT_COMPLETED);
+  assert.equal(completedWithoutOrder.paymentConfirmed, true);
+  assert.equal(completedWithoutOrder.ucpOrderId, ucpOrderId);
+});
+
+test('pending digital checkout resumes through GET and delivery wait to ready', () => {
+  const expected = classifyUcpCheckoutRunRequest(readyRequest({
+    digitalDeliveryExpected: true,
+    digitalDeliveryContractVerified: true,
+  }));
+  const checkoutResumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+    + ` --checkout-id ${checkoutId} --format json`;
+  const pending = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'complete_in_progress',
+      checkoutId,
+      orderId: ucpOrderId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: {
+        id: checkoutId,
+        status: 'complete_in_progress',
+        order: { id: ucpOrderId },
+      },
       resumeCommand: checkoutResumeCommand,
     }),
   }, expected);
@@ -791,12 +1258,16 @@ test('pending digital checkout resumes through GET and delivery wait to ready', 
     stdout: successEnvelope({
       id: checkoutId,
       status: 'completed',
-      order: { id: ucpOrderId, status: 'paid' },
     }),
   }, pending.resumeContext);
   assert.equal(deliveryPending.state, UcpCheckoutRunState.DIGITAL_DELIVERY_PENDING);
   assert.equal(deliveryPending.paymentConfirmed, true);
-  assert.match(deliveryPending.resumeCommand, /ucp-order wait-delivery/u);
+  assert.equal(deliveryPending.ucpOrderId, ucpOrderId);
+  assert.equal(
+    deliveryPending.resumeCommand,
+    `${clinkCommand} ucp-order wait-delivery`
+      + ` --order-id ${ucpOrderId} --max-wait 900 --format json`,
+  );
 
   const ready = classifyUcpCheckoutRunResumeObservation({
     stdout: successEnvelope({
@@ -823,7 +1294,7 @@ test('delivery timeout resume output can remain pending without authorizing a re
     digitalDeliveryExpected: true,
     digitalDeliveryContractVerified: true,
   }));
-  const resumeCommand = `clink ucp-order wait-delivery --order-id ${ucpOrderId}`
+  const resumeCommand = `${clinkCommand} ucp-order wait-delivery --order-id ${ucpOrderId}`
     + ' --max-wait 900 --format json';
   const timeout = classifyUcpCheckoutRunObservation({
     stdout: successEnvelope({
@@ -837,6 +1308,7 @@ test('delivery timeout resume output can remain pending without authorizing a re
       complete: { id: checkoutId, status: 'completed', order: { id: ucpOrderId } },
       delivery: { status: 'pending' },
       order: { id: ucpOrderId, digital_delivery: { status: 'pending' } },
+      ready: false,
       timedOut: true,
       resumeCommand,
     }),
@@ -856,6 +1328,130 @@ test('delivery timeout resume output can remain pending without authorizing a re
   assert.equal(stillPending.paymentConfirmed, true);
   assert.equal(stillPending.paymentRetryAllowed, false);
   assert.equal(stillPending.resumeCommand, resumeCommand);
+});
+
+test('accepts only native boolean evidence from a delivery resume', () => {
+  const resumeCommand = `${clinkCommand} ucp-order wait-delivery --order-id ${ucpOrderId}`
+    + ' --max-wait 900 --format json';
+  const continuation = {
+    kind: 'DELIVERY_WAIT',
+    checkoutAttemptId: 'attempt_aggregate_123',
+    checkoutId,
+    endpoint,
+    walletBaseUrl,
+    ucpOrderId,
+    maxWaitSeconds: 900,
+    paymentConfirmed: true,
+    resumeCommand,
+  };
+  const baseData = {
+    deliveryStatus: 'pending',
+    order: { id: ucpOrderId, digital_delivery: { status: 'pending' } },
+    resumeCommand,
+  };
+
+  for (const evidence of [
+    { ready: 'false', timedOut: true },
+    { ready: 0, timedOut: true },
+    { ready: false, timedOut: 'true' },
+    { ready: false, timedOut: 1 },
+    { ready: false, timedOut: true, timed_out: false },
+  ]) {
+    const result = classifyUcpCheckoutRunResumeObservation({
+      stdout: successEnvelope({ ...baseData, ...evidence }),
+    }, continuation);
+    assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(result.reason, 'delivery_resume_status_invalid');
+    assert.equal(result.paymentConfirmed, false);
+  }
+});
+
+test('rejects conflicting checkout and delivery status aliases on read-only resumes', () => {
+  const checkoutResumeCommand = `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+    + ` --checkout-id ${checkoutId} --format json`;
+  const checkoutContinuation = {
+    kind: 'CHECKOUT_GET',
+    checkoutAttemptId: 'attempt_aggregate_123',
+    checkoutId,
+    endpoint,
+    walletBaseUrl,
+    ucpOrderId: null,
+    digitalDeliveryExpected: false,
+    maxWaitSeconds: null,
+    resumeCommand: checkoutResumeCommand,
+  };
+  const checkoutConflict = classifyUcpCheckoutRunResumeObservation({
+    stdout: successEnvelope({
+      id: checkoutId,
+      status: 'processing',
+      checkout_status: 'completed',
+    }),
+  }, checkoutContinuation);
+  assert.equal(checkoutConflict.state, UcpCheckoutRunState.CLI_ERROR);
+  assert.equal(checkoutConflict.reason, 'checkout_resume_status_invalid');
+
+  const deliveryResumeCommand = `${clinkCommand} ucp-order wait-delivery`
+    + ` --order-id ${ucpOrderId} --max-wait 900 --format json`;
+  const deliveryContinuation = {
+    kind: 'DELIVERY_WAIT',
+    checkoutAttemptId: 'attempt_aggregate_123',
+    checkoutId,
+    endpoint,
+    walletBaseUrl,
+    ucpOrderId,
+    maxWaitSeconds: 900,
+    paymentConfirmed: true,
+    resumeCommand: deliveryResumeCommand,
+  };
+  for (const data of [
+    {
+      ready: false,
+      timedOut: false,
+      deliveryStatus: 'failed',
+      delivery_status: 'ready',
+      order: { id: ucpOrderId, digital_delivery: { status: 'failed' } },
+    },
+    {
+      ready: false,
+      timedOut: false,
+      deliveryStatus: 'failed',
+      order: { id: ucpOrderId, digital_delivery: { status: 'ready' } },
+    },
+  ]) {
+    const result = classifyUcpCheckoutRunResumeObservation({
+      stdout: successEnvelope(data),
+    }, deliveryContinuation);
+    assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+    assert.equal(result.reason, 'delivery_resume_status_invalid');
+  }
+});
+
+test('rejects missing or drifted wallet environments on every resume command', () => {
+  const missingEnvironment = `clink ucp-checkout get --endpoint ${endpoint}`
+    + ` --checkout-id ${checkoutId} --format json`;
+  assert.equal(classifyUcpCheckoutResumeCommand(missingEnvironment).safe, false);
+
+  const driftedEnvironment = 'CLINK_BASE_URL=https://other.example clink ucp-checkout get'
+    + ` --endpoint ${endpoint} --checkout-id ${checkoutId} --format json`;
+  assert.equal(classifyUcpCheckoutResumeCommand(driftedEnvironment).safe, false);
+
+  const expected = classifyUcpCheckoutRunRequest(readyRequest());
+  const sameOriginButDrifted = 'CLINK_BASE_URL=https://api.clinkbill.com/other clink ucp-checkout get'
+    + ` --endpoint ${endpoint} --checkout-id ${checkoutId} --format json`;
+  const result = classifyUcpCheckoutRunObservation({
+    stdout: successEnvelope({
+      stage: 'complete',
+      status: 'complete_in_progress',
+      checkoutId,
+      endpoint,
+      attempts: { create: 1, complete: 1 },
+      create: { id: checkoutId, status: 'ready_for_complete' },
+      complete: { id: checkoutId, status: 'complete_in_progress' },
+      resumeCommand: sameOriginButDrifted,
+    }),
+  }, expected);
+  assert.equal(result.state, UcpCheckoutRunState.CLI_ERROR);
+  assert.equal(result.reason, 'resume_command_environment_invalid');
 });
 
 test('keeps completed payment authoritative when digital delivery could not start', () => {
@@ -892,30 +1488,66 @@ test('keeps completed payment authoritative when digital delivery could not star
 test('read-only resume classifier accepts only checkout GET and bounded delivery wait', () => {
   assert.deepEqual(
     classifyUcpCheckoutResumeCommand(
-      `clink ucp-checkout get --endpoint ${endpoint} --checkout-id ${checkoutId} --format json`,
+      `${clinkCommand} ucp-checkout get`
+        + ` --endpoint ${endpoint} --checkout-id ${checkoutId} --format json`,
     ),
     {
       safe: true,
       kind: 'CHECKOUT_GET',
       checkoutId,
       endpoint,
-      command: `clink ucp-checkout get --endpoint ${endpoint}`
+      baseUrlOverride: walletBaseUrl,
+      command: `${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
         + ` --checkout-id ${checkoutId} --format json`,
     },
   );
   assert.equal(
     classifyUcpCheckoutResumeCommand(
-      `clink ucp-order wait-delivery --order-id ${ucpOrderId} --max-wait 900 --format json`,
+      `${clinkCommand} ucp-order wait-delivery`
+        + ` --order-id ${ucpOrderId} --max-wait 900 --format json`,
     ).safe,
     true,
   );
   for (const command of [
-    `clink ucp-order wait-delivery --order-id ${ucpOrderId} --max-wait 60 --format json`,
-    `clink ucp-order get --order-id ${ucpOrderId} --format json`,
-    `clink ucp-checkout run --checkout-id ${checkoutId} --confirm-purchase --format json`,
-    `clink ucp-checkout get --checkout-id ${checkoutId} --format json | clink pay`,
+    `${clinkCommand} ucp-order wait-delivery`
+      + ` --order-id ${ucpOrderId} --max-wait 60 --format json`,
+    `${clinkCommand} ucp-order get --order-id ${ucpOrderId} --format json`,
+    `${clinkCommand} ucp-checkout run`
+      + ` --checkout-id ${checkoutId} --confirm-purchase --format json`,
+    `${clinkCommand} ucp-checkout get --checkout-id ${checkoutId} --format json | clink pay`,
+    `${clinkCommand} ucp-order wait-delivery --order-id ~ --max-wait 900 --format json`,
+    `${clinkCommand} ucp-order wait-delivery --order-id order_* --max-wait 900 --format json`,
+    `${clinkCommand} ucp-order wait-delivery --order-id order_\u0001 --max-wait 900 --format json`,
   ]) {
     assert.equal(classifyUcpCheckoutResumeCommand(command).safe, false, command);
+  }
+});
+
+test('resume shell parsing preserves POSIX backslashes instead of weakening ID binding', () => {
+  const checkoutCommand = String.raw`${clinkCommand} ucp-checkout get --endpoint ${endpoint}`
+    + String.raw` --checkout-id "checkout\_123" --format json`;
+  const deliveryCommand = String.raw`${clinkCommand} ucp-order wait-delivery --order-id "order\_123"`
+    + ' --max-wait 900 --format json';
+
+  const parsedCheckout = classifyUcpCheckoutResumeCommand(checkoutCommand);
+  const parsedDelivery = classifyUcpCheckoutResumeCommand(deliveryCommand);
+  assert.equal(parsedCheckout.safe, true);
+  assert.equal(parsedCheckout.checkoutId, String.raw`checkout\_123`);
+  assert.equal(parsedDelivery.safe, true);
+  assert.equal(parsedDelivery.ucpOrderId, String.raw`order\_123`);
+
+  for (const [command, parsedId, argumentIndex] of [
+    [checkoutCommand, parsedCheckout.checkoutId, 5],
+    [deliveryCommand, parsedDelivery.ucpOrderId, 3],
+  ]) {
+    const shell = spawnSync('/bin/sh', ['-c', `
+clink() {
+  printf '%s\n' "$@"
+}
+${command}
+`], { encoding: 'utf8' });
+    assert.equal(shell.status, 0, shell.stderr);
+    assert.equal(shell.stdout.trim().split('\n')[argumentIndex], parsedId);
   }
 });
 
