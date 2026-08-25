@@ -67,7 +67,7 @@ test('OAuth delegates URL exposure to the wallet workflow', () => {
 test('card binding hands off only with the built-in payment-method watch', () => {
   const result = classifyPageHandoff({
     kind: PageHandoffKind.CARD_BINDING,
-    url: 'https://agent.example.test',
+    url: 'https://agent.clinkbill.com/payment-method-setup',
     watchReady: true,
     watchEventType: 'payment_method.added',
     processRunning: true,
@@ -79,16 +79,40 @@ test('card binding hands off only with the built-in payment-method watch', () =>
   assert.equal(result.watch, 'built-in');
   assert.equal(result.emitUrl, true);
   assert.equal(result.bindingUrlRequired, true);
-  assert.equal(result.url, 'https://agent.example.test');
+  assert.equal(result.url, 'https://agent.clinkbill.com/payment-method-setup');
 });
 
-test('card binding accepts only a sanitized HTTPS origin', () => {
+test('card binding accepts only a trusted card-setup URL with optional email', () => {
   for (const url of [
-    'http://agent.example.test',
-    'https://user:pass@agent.example.test',
-    'https://agent.example.test/card-binding',
-    'https://agent.example.test/?token=secret',
-    'https://agent.example.test/#fragment',
+    'https://agent.clinkbill.com/payment-method-setup',
+    'https://uat-agent.clinkbill.com/payment-method-setup?email=alice%2Bcards%40example.com',
+    'https://agent.clinkbill.dev/payment-method-setup?email=test%40example.com',
+  ]) {
+    const result = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url,
+      watchReady: true,
+      watchEventType: 'payment_method.added',
+      processRunning: true,
+    });
+    assert.equal(result.state, PageHandoffState.USER_DEVICE_HANDOFF_REQUIRED, url);
+    assert.equal(result.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE, url);
+    assert.equal(result.url, url);
+    assert.equal(result.emitUrl, true, url);
+  }
+
+  for (const url of [
+    'http://agent.clinkbill.com/payment-method-setup',
+    'https://user:pass@agent.clinkbill.com/payment-method-setup',
+    'https://evil.example/payment-method-setup',
+    'https://agent.clinkbill.com',
+    'https://agent.clinkbill.com/payment-method-setup/',
+    'https://agent.clinkbill.com/card-binding',
+    'https://agent.clinkbill.com/payment-method-setup?token=secret',
+    'https://agent.clinkbill.com/payment-method-setup?email=alice%40example.com&token=secret',
+    'https://agent.clinkbill.com/payment-method-setup?email=',
+    'https://agent.clinkbill.com/payment-method-setup?email=a%40example.com&email=b%40example.com',
+    'https://agent.clinkbill.com/payment-method-setup#fragment',
     'javascript:alert(1)',
     'not-a-url',
   ]) {
@@ -100,7 +124,7 @@ test('card binding accepts only a sanitized HTTPS origin', () => {
       processRunning: true,
     });
     assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID, url);
-    assert.equal(result.reason, 'card_binding_url_not_https_origin', url);
+    assert.equal(result.reason, 'card_binding_url_not_trusted_setup', url);
     assert.equal(result.emitUrl, false, url);
     assert.equal(result.detail, null, 'the rejected URL must not be copied into diagnostics');
   }
@@ -113,7 +137,7 @@ test('unattended card binding rejects unsafe URLs before constructing diagnostic
   ]) {
     const result = classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.example.test/card-binding?token=secret',
+      url: 'https://agent.clinkbill.com/payment-method-setup?token=secret',
       watchReady: true,
       watchEventType: 'payment_method.added',
       processRunning: true,
@@ -121,11 +145,11 @@ test('unattended card binding rejects unsafe URLs before constructing diagnostic
     });
 
     assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
-    assert.equal(result.reason, 'card_binding_url_not_https_origin');
+    assert.equal(result.reason, 'card_binding_url_not_trusted_setup');
     assert.equal(result.emitUrl, false);
     assert.equal(result.url, undefined);
     assert.equal(result.detail, null);
-    assert.doesNotMatch(JSON.stringify(result), /card-binding|token|secret/u);
+    assert.doesNotMatch(JSON.stringify(result), /payment-method-setup|token|secret/u);
   }
 });
 
@@ -152,7 +176,7 @@ test('card binding never emits before its scoped watch is ready and still runnin
   ]) {
     const result = classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.example.test',
+      url: 'https://agent.clinkbill.com/payment-method-setup',
       ...request,
     });
     assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
@@ -193,7 +217,7 @@ test('an unattended run never emits a page only a human can finish', () => {
     const request = kind === PageHandoffKind.CARD_BINDING
       ? {
         kind,
-        url: 'https://agent.example.test',
+        url: 'https://agent.clinkbill.com/payment-method-setup',
         watchReady: true,
         watchEventType: 'payment_method.added',
         processRunning: true,
@@ -280,7 +304,7 @@ test('single-load pages are marked so they are never re-sent as a nudge', () => 
     const request = kind === PageHandoffKind.CARD_BINDING
       ? {
         kind,
-        url: 'https://agent.example.test',
+        url: 'https://agent.clinkbill.com/payment-method-setup',
         watchReady: true,
         watchEventType: 'payment_method.added',
         processRunning: true,
@@ -306,7 +330,7 @@ test('completion events match the flows that prove them', () => {
   assert.deepEqual(
     classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.example.test',
+      url: 'https://agent.clinkbill.com/payment-method-setup',
       watchReady: true,
       watchEventType: 'payment_method.added',
       processRunning: true,
@@ -327,7 +351,7 @@ test('the prohibition enumerates channels and verbs, not just opening', () => {
 
   const result = classifyPageHandoff({
     kind: PageHandoffKind.CARD_BINDING,
-    url: 'https://agent.example.test',
+    url: 'https://agent.clinkbill.com/payment-method-setup',
     watchReady: true,
     watchEventType: 'payment_method.added',
     processRunning: true,

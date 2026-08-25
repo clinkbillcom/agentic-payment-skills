@@ -2,10 +2,46 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+  PageHandoffAction,
+  PageHandoffKind,
+  classifyPageHandoff,
+} from '../lib/page-handoff.mjs';
+
+const testTlsPrivateKey = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgZGKP+ev1O+iv4wNm
+NBU35ondT9YDAMbPR9JN3rwUieShRANCAAQwLVxHn7vQgeF/cJNUrTaefiezHIZ+
+Y+IbHc/1VNvJaapF7bL2bHD4xkur8FRLF/T7D2/ZxUTZ+Iawcpd+DZcZ
+-----END PRIVATE KEY-----`;
+const testTlsCertificate = `-----BEGIN CERTIFICATE-----
+MIIBjjCCATSgAwIBAgIUOM/CuF8Dzv3KRica4+m5/IHhCZUwCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJMTI3LjAuMC4xMB4XDTI2MDgyNTA1MDIzMVoXDTM2MDgyMjA1
+MDIzMVowFDESMBAGA1UEAwwJMTI3LjAuMC4xMFkwEwYHKoZIzj0CAQYIKoZIzj0D
+AQcDQgAEMC1cR5+70IHhf3CTVK02nn4nsxyGfmPiGx3P9VTbyWmqRe2y9mxw+MZL
+q/BUSxf0+w9v2cVE2fiGsHKXfg2XGaNkMGIwHQYDVR0OBBYEFMSY9jlaDuM5x0BP
+rLuU3ufNTf2PMB8GA1UdIwQYMBaAFMSY9jlaDuM5x0BPrLuU3ufNTf2PMA8GA1Ud
+EwEB/wQFMAMBAf8wDwYDVR0RBAgwBocEfwAAATAKBggqhkjOPQQDAgNIADBFAiEA
+5vfXt2PQ10wWEMv2Y9TS43yWsW26GaqDBzIxtJ/a1ZkCIAhj3bBnYtv+M6UFXe4E
+OfdAApeRXd4jW724hPCA3BeH
+-----END CERTIFICATE-----`;
+const testTlsDirectory = await mkdtemp(join(tmpdir(), 'clink-vendor-tls-'));
+const testTlsCertificatePath = join(testTlsDirectory, 'certificate.pem');
+await writeFile(testTlsCertificatePath, `${testTlsCertificate}\n`, 'utf8');
+test.after(async () => {
+  await rm(testTlsDirectory, { recursive: true, force: true });
+});
+
+function createServer(listener) {
+  return createHttpsServer(
+    { key: testTlsPrivateKey, cert: testTlsCertificate },
+    listener,
+  );
+}
 
 const bundlePath = fileURLToPath(
   new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
@@ -56,6 +92,7 @@ const testEnv = {
   CLINK_BASE_URL: 'https://uat-api.clinkbill.com',
   CLINK_CUSTOMER_ID: 'cust_bundle_contract',
   CLINK_CUSTOMER_API_KEY: 'test_bundle_contract_key',
+  NODE_EXTRA_CA_CERTS: testTlsCertificatePath,
 };
 
 function runBundle(args) {
@@ -267,7 +304,7 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
   let live;
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     live = spawnBundleLive([
       'wallet', 'init',
       '--email', 'wallet-pending@example.com',
@@ -379,7 +416,7 @@ test('vendored wallet init treats missing or malformed paymentMethodsVoList as u
     const home = await mkdtemp(join(tmpdir(), `clink-wallet-invalid-cards-${fixture.name}-`));
 
     try {
-      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const baseUrl = `https://127.0.0.1:${address.port}`;
       const result = await runBundleAsync([
         'wallet', 'init',
         '--email', `wallet-invalid-cards-${fixture.name}@example.com`,
@@ -486,7 +523,7 @@ test('vendored wallet init cannot emit success after a post-commit takeover', as
   let second;
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const env = {
       HOME: home,
       CLINK_BASE_URL: baseUrl,
@@ -601,7 +638,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
   const home = await mkdtemp(join(tmpdir(), 'clink-wallet-init-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const stubBin = join(home, 'bin');
     await mkdir(stubBin, { recursive: true });
     for (const executable of ['open', 'xdg-open']) {
@@ -806,7 +843,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
   let live;
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(
@@ -816,6 +853,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
         defaultOpenLinks: false,
         customerId: 'cus_card_watch',
         customerApiKey: 'csk_card_watch',
+        email: 'wallet+binding@example.com',
       }),
       { encoding: 'utf8', mode: 0o600 },
     );
@@ -853,15 +891,28 @@ test('vendored card binding-link exposes its URL only after the default watch is
       '/agent/cwallet/card/bindingLink',
       '/agent/event-hub/webhook-events/poll',
     ]);
-    assert.deepEqual(jsonLines(ready.stdout), [{
+    const readyLines = jsonLines(ready.stdout);
+    assert.deepEqual(readyLines, [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        bindingUrl:
+          'https://agent.clinkbill.com/payment-method-setup'
+          + '?email=wallet%2Bbinding%40example.com',
         paymentMethodsVoList: [],
         watchReady: true,
         watchEventType: 'payment_method.added',
       },
     }]);
+    const handoff = classifyPageHandoff({
+      kind: PageHandoffKind.CARD_BINDING,
+      url: readyLines[0].data.bindingUrl,
+      watchReady: readyLines[0].data.watchReady,
+      watchEventType: readyLines[0].data.watchEventType,
+      processRunning: ready.status === undefined,
+    });
+    assert.equal(handoff.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
+    assert.equal(handoff.emitUrl, true);
+    assert.equal(handoff.url, readyLines[0].data.bindingUrl);
     assert.doesNotMatch(ready.stdout, /card-binding|watch-secret|fragment/u);
     assert.match(ready.stderr, /https:\/\/agent\.clinkbill\.com/u);
 
@@ -935,7 +986,7 @@ test('vendored card binding-link does not expose an old wallet URL after login t
   let live;
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     const configPath = join(configDirectory, 'config.json');
     await mkdir(configDirectory, { recursive: true });
@@ -1022,7 +1073,7 @@ test('vendored card binding-link validates first-poll event customer before expo
   const home = await mkdtemp(join(tmpdir(), 'clink-card-watch-customer-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -1120,7 +1171,7 @@ test('vendored card binding-link fails closed when Event Hub omits records', asy
   const home = await mkdtemp(join(tmpdir(), 'clink-card-watch-malformed-poll-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -1185,7 +1236,7 @@ test('vendored card binding-link --no-watch exits without polling Event Hub', as
   const home = await mkdtemp(join(tmpdir(), 'clink-card-no-watch-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(
@@ -1256,7 +1307,7 @@ test('vendored card refresh rejects missing or malformed paymentMethodsVoList wi
     const home = await mkdtemp(join(tmpdir(), `clink-card-invalid-list-${fixture.name}-`));
 
     try {
-      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const baseUrl = `https://127.0.0.1:${address.port}`;
       const configPath = join(home, '.clink-cli', 'config.json');
       await mkdir(join(home, '.clink-cli'), { recursive: true });
       await writeFile(configPath, JSON.stringify({
@@ -1355,7 +1406,7 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
   const home = await mkdtemp(join(tmpdir(), 'clink-wallet-malformed-oauth-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(
@@ -1735,7 +1786,7 @@ test('vendored events poll filters checkout success before ACK', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-checkout-filter-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -1821,7 +1872,7 @@ test('vendored checkout success poll fetches the frozen UCP order in the same pr
   const home = await mkdtemp(join(tmpdir(), 'clink-composite-order-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -1902,7 +1953,7 @@ test('vendored checkout success poll does not retry a non-projecting checkout st
   const home = await mkdtemp(join(tmpdir(), 'clink-non-projecting-checkout-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -1994,7 +2045,7 @@ test('vendored checkout no-ack preserves every event while returning only the se
   const home = await mkdtemp(join(tmpdir(), 'clink-checkout-filter-no-ack-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -2048,7 +2099,7 @@ test('vendored checkout event poll preserves checkout id in timeout resume comma
   const home = await mkdtemp(join(tmpdir(), 'clink-checkout-timeout-'));
 
   try {
-    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const baseUrl = `https://127.0.0.1:${address.port}`;
     const configDirectory = join(home, '.clink-cli');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
@@ -2105,11 +2156,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.18');
+  assert.equal(vendorPackage.version, '0.2.23');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '23f4ee939d73e7a945dc13ba6f982b22facfc0f2',
+    '8f0eb1c39452347661b832645791b000900a4839',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
@@ -2338,4 +2389,23 @@ test('vendored CLI rejects a literal latest Skill install version', () => {
 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /invalid skill package/u);
+});
+
+test('vendored CLI exposes the aggregate UCP checkout contract', () => {
+  const result = runBundleRaw(['ucp-checkout', 'run', '--help']);
+  assert.equal(result.status, 0, result.stderr);
+  for (const contract of [
+    /ucp-checkout run/u,
+    /--endpoint/u,
+    /--merchant-url/u,
+    /--merchant-category-code/u,
+    /--currency/u,
+    /--line-items/u,
+    /--payment-instrument-id/u,
+    /--confirm-purchase/u,
+    /--wait-delivery/u,
+    /--max-wait/u,
+  ]) {
+    assert.match(result.stdout, contract);
+  }
 });

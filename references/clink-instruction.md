@@ -70,6 +70,11 @@ clink instruction get \
 
 The CLI and backend use UTC datetime strings in `yyyy-MM-dd HH:mm:ss` format for `--effective-until-time` and each mandate `effectiveUntilTime`. Do not send numeric epoch values.
 
+Every mandate `description` must be 150 characters or fewer. Rewrite longer
+authorization wording before presenting it to the user and before creating the
+draft; never silently truncate reviewed authorization scope. The CLI rejects a
+longer description before sending the request.
+
 Example:
 
 ```bash

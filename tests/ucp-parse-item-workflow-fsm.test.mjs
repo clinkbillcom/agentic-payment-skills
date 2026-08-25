@@ -6,6 +6,7 @@ import {
   UcpCheckoutWorkflowState,
   classifyUcpCheckoutPrerequisites,
   classifyUcpParseItemObservation,
+  normalizeUcpAmountToMinorUnitLong,
 } from '../lib/ucp-checkout-workflow-fsm.mjs';
 
 const singleItemPayload = {
@@ -37,6 +38,43 @@ const checkoutPrerequisites = {
   fulfillmentType: 'NO_SHIPPING_REQUIRED',
   paymentInstrumentId: 'pm_123',
 };
+
+test('major-unit normalization rejects Numbers whose original decimal spelling is unknowable', () => {
+  assert.equal(
+    normalizeUcpAmountToMinorUnitLong({ amount: '0.10', currency: 'USD' }),
+    10,
+  );
+  assert.throws(
+    () => normalizeUcpAmountToMinorUnitLong({
+      amount: JSON.parse('0.10000000000000001'),
+      currency: 'USD',
+    }),
+    /major-unit amount must be a decimal string/u,
+  );
+});
+
+test('checkout prerequisites require a positive safe-integer quantity', () => {
+  for (const quantity of [
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    true,
+    [1],
+    '1',
+    '0x1',
+    '1e0',
+  ]) {
+    const result = classifyUcpCheckoutPrerequisites({
+      ...checkoutPrerequisites,
+      quantity,
+      productExplorationAttempted: true,
+    });
+
+    assert.notEqual(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
+    assert.ok(result.missing.includes('quantity'));
+  }
+});
 
 test('catalog candidate checkout continues only when wallet and Catalog origins match', () => {
   const result = classifyUcpCheckoutPrerequisites({
