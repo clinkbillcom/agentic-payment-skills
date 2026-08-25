@@ -2,11 +2,13 @@
 
 Read this before executing `clink pay`, handling 3DS, or creating/checking refunds.
 
+Enter payment execution only after `references/clink-payment-intent-contract.md` returns `walletGate=REQUIRE_STATUS`. Its v2 `payment.mode` is authoritative: `DIRECT` and `SESSION` are mutually exclusive, and raw text or ambient fields cannot choose either mode.
+
 ## Preconditions
 
 - Wallet is initialized with credentials matching the selected environment.
 - The environment persisted by `wallet init` is reused unchanged for the whole workflow, with no environment flags on later commands.
-- At least one current payment method is available. Refresh with `card binding-link --no-watch` before relying on cached methods.
+- At least one current payment method is available. Refresh with `card binding-link --no-watch --no-open` before relying on cached methods.
 - Payment parameters come from the user or an upstream merchant workflow.
 - The payment is explicitly authorized for this request.
 - Fulfillment is classified before old pay: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`.
@@ -29,6 +31,8 @@ Session mode:
 ```bash
 clink pay --session-id <id> --format json
 ```
+
+The v2 router requires `payment.mode=DIRECT` with merchant/amount/currency or `payment.mode=SESSION` with session ID. Never combine the CLI execution fields from both modes. Direct amount is a positive canonical decimal string and currency is canonicalized to three uppercase letters before this workflow starts.
 
 Common options:
 
@@ -69,7 +73,7 @@ The fixed default address is not a delivery address and must not be used for shi
 Before any direct/session `clink pay`, refresh payment methods and resolve the selected/default `payment_instrument_id`:
 
 ```bash
-clink card binding-link --no-watch --format json
+clink card binding-link --no-watch --no-open --format json
 ```
 
 Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs` `classifyPaymentAuthorizationResolver`.

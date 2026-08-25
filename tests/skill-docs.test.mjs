@@ -14,6 +14,10 @@ const instruction = await readFile(new URL('../references/clink-instruction.md',
 const skillTip = await readFile(new URL('../references/clink-skill-tip.md', import.meta.url), 'utf8');
 const skillInstall = await readFile(new URL('../references/clink-skill-install.md', import.meta.url), 'utf8');
 const catalogDiscovery = await readFile(new URL('../references/clink-catalog-discovery.md', import.meta.url), 'utf8');
+const paymentIntentContract = await readFile(
+  new URL('../references/clink-payment-intent-contract.md', import.meta.url),
+  'utf8',
+);
 const browserHandoff = await readFile(new URL('../references/clink-browser-handoff.md', import.meta.url), 'utf8');
 const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
 const networkPreflight = await readFile(new URL('../scripts/network-preflight.mjs', import.meta.url), 'utf8');
@@ -34,9 +38,36 @@ const shippedDocs = {
   'references/clink-skill-tip.md': skillTip,
   'references/clink-skill-install.md': skillInstall,
   'references/clink-catalog-discovery.md': catalogDiscovery,
+  'references/clink-payment-intent-contract.md': paymentIntentContract,
   'references/clink-browser-handoff.md': browserHandoff,
   'references/clink-restricted-categories.md': restrictedCategories,
 };
+
+function plainMarkdownCell(cell) {
+  return cell.replace(/`/gu, '').replace(/\*\*/gu, '').trim();
+}
+
+function markdownTableRows(markdown) {
+  return markdown
+    .split('\n')
+    .filter(line => /^\s*\|.*\|\s*$/u.test(line))
+    .map(line => line.trim().slice(1, -1).split('|').map(plainMarkdownCell))
+    .filter(cells => !cells.every(cell => /^:?-{3,}:?$/u.test(cell)));
+}
+
+function markdownTableRow(markdown, firstCell) {
+  const matches = markdownTableRows(markdown).filter(cells => cells[0] === firstCell);
+  assert.equal(
+    matches.length,
+    1,
+    `expected exactly one Markdown table row whose first cell is ${firstCell}`,
+  );
+  return matches[0];
+}
+
+function jsonExamples(markdown) {
+  return [...markdown.matchAll(/```json\n([\s\S]*?)```/gu)].map(([, source]) => JSON.parse(source));
+}
 
 test('skill frontmatter stays compact and trigger-focused', () => {
   const frontmatter = skill.match(/^---\n([\s\S]*?)\n---/u)?.[1] ?? '';
@@ -53,6 +84,17 @@ test('environment guidance matches the production wallet-init distribution wrapp
   assert.match(cliInvocation, /pins `wallet init` to production/u);
   assert.match(cliInvocation, /there is no `--base-url` flag/u);
   assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
+});
+
+test('UCP checkout docs leave idempotency-key generation to the CLI', () => {
+  const bashExamples = [...ucpCheckout.matchAll(/```bash\n([\s\S]*?)```/gu)]
+    .map(([, source]) => source)
+    .join('\n');
+
+  assert.match(ucpCheckout, /CLI generates the create idempotency key/u);
+  assert.match(ucpCheckout, /CLI also generates the complete idempotency key/u);
+  assert.match(ucpCheckout, /Do not pass `--idempotency-key`/u);
+  assert.doesNotMatch(bashExamples, /--idempotency-key/u);
 });
 
 test('network execution contract distinguishes host sandbox failures and protects mutations', () => {
@@ -90,7 +132,12 @@ test('network execution contract distinguishes host sandbox failures and protect
 test('main skill routes direct and session pay through authorization resolver before pay', () => {
   assert.match(skill, /lib\/authorization-workflow-fsm\.mjs/u);
   assert.match(skill, /classifyPaymentAuthorizationResolver/u);
-  assert.match(skill, /Direct\/session payment is explicitly authorized/u);
+  const directPayRow = markdownTableRow(paymentIntentContract, 'DIRECT_PAY');
+  assert.equal(directPayRow[2], 'REQUIRE_STATUS');
+  const authorizationSourceRow = markdownTableRow(paymentIntentContract, 'authorizationSource');
+  assert.match(authorizationSourceRow[1], /DIRECT_PAY/u);
+  assert.match(authorizationSourceRow[1], /CURRENT_USER_TURN/u);
+  assert.match(authorizationSourceRow[1], /UPSTREAM_MERCHANT_WORKFLOW/u);
   assert.match(skill, /Visa \+ VIC ready/u);
   assert.match(skill, /non-Visa or Visa without VIC readiness/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
@@ -348,16 +395,29 @@ test('UCP checkout workflow uses parse-item as the product analysis command', ()
 });
 
 test('UCP order lookup keeps payment and UCP order identifiers type-safe', () => {
+  const pollRow = markdownTableRow(skill, 'POLL_PAYMENT_SUCCESS_EVENT');
+  const checkoutFallbackRow = markdownTableRow(skill, 'GET_CHECKOUT_FOR_UCP_ORDER');
+  const orderFallbackRow = markdownTableRow(skill, 'FETCH_UCP_ORDER');
+
   assert.match(skill, /checkout create\/update\/complete\/get `data\.ucp\.ucp_order_id` is `ucpOrderId`/u);
   assert.match(skill, /completed checkout `data\.order\.id` is a compatibility alias/u);
   assert.match(skill, /agent_order\.succeeded\.data\.orderId\/resourceId` is `paymentOrderId`/u);
   assert.match(skill, /never pass `paymentOrderId` to `ucp-order get`/u);
-  assert.match(skill, /only nested payload `data\.checkoutId` \/ `data\.checkout_id`/u);
+  assert.match(skill, /canonical processed `data\.checkoutId` \/ `data\.checkout_id`/u);
+  assert.match(skill, /normalizes a verified nested UCP `agentInstructionInfo` selector/u);
   assert.match(skill, /classifyUcpOrderResolutionObservation/u);
   assert.match(skill, /classifyUcpOrderFetchObservation/u);
   assert.match(skill, /original internal endpoint/u);
   assert.match(skill, /data\.ucp\.success_info/u);
   assert.match(skill, /events poll --type agent_order\.succeeded --checkout-id <checkoutId>/u);
+  assert.match(pollRow[1], /--ucp-order-id <frozenUcpOrderId>/u);
+  assert.match(pollRow[1], /fetches the UCP order in the same process/u);
+  assert.match(pollRow[1], /keeps the event queued[\s\S]*ACKs immediately before output/u);
+  assert.match(pollRow[1], /eventAckWarning/u);
+  assert.match(pollRow[1], /nextToken/u);
+  assert.match(pollRow[1], /must not dispatch a second checkout\/order command/u);
+  assert.match(checkoutFallbackRow[1], /^Legacy-bundle fallback only\./u);
+  assert.match(orderFallbackRow[1], /^Legacy-bundle fallback only\./u);
 
   assert.match(ucpCheckout, /`ucpOrderId`[\s\S]*data\.ucp\.ucp_order_id/u);
   assert.match(ucpCheckout, /`paymentOrderId`[\s\S]*agent_order\.succeeded/u);
@@ -367,6 +427,9 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
   assert.match(ucpCheckout, /Do not re-poll the acknowledged event, re-run complete, or retry payment/u);
   assert.match(ucpCheckout, /data\.ucp\.success_info/u);
   assert.match(ucpCheckout, /same-type event for another checkout stays queued/u);
+  assert.match(ucpCheckout, /keeps it unacknowledged[\s\S]*ACKs immediately before output/u);
+  assert.match(ucpCheckout, /eventAckWarning/u);
+  assert.match(ucpCheckout, /preserving `nextToken`/u);
   assert.match(ucpCheckout, /`merchantOrderId` is an external merchant reference, never a UCP ID alias/u);
 
   assert.match(asyncEvents, /Event `orderId`\/`resourceId` is the Clink Payment `paymentOrderId`/u);
@@ -375,10 +438,61 @@ test('UCP order lookup keeps payment and UCP order identifiers type-safe', () =>
   assert.match(asyncEvents, /filtering happens before ACK/u);
 });
 
-test('skill documents intent routing and checkout route FSMs', () => {
+test('skill documents the normative v2 semantic intent contract and checkout route FSM', () => {
   assert.match(skill, /lib\/payment-intent-router-fsm\.mjs/u);
   assert.match(skill, /classifyPaymentIntent/u);
-  assert.match(skill, /explicit buy\/order\/checkout language or an upstream purchaseIntent/u);
+  assert.match(skill, /references\/clink-payment-intent-contract\.md/u);
+
+  const versionRow = markdownTableRow(paymentIntentContract, 'routingContractVersion');
+  assert.match(versionRow[1], /2/u);
+  const operationRow = markdownTableRow(paymentIntentContract, 'operation');
+  for (const operation of [
+    'CATALOG_SEARCH',
+    'CATALOG_PURCHASE',
+    'UCP_CHECKOUT',
+    'DIRECT_PAY',
+    'NO_ACTION',
+  ]) {
+    assert.match(operationRow[1], new RegExp(`\\b${operation}\\b`, 'u'));
+  }
+  const decisionRow = markdownTableRow(paymentIntentContract, 'executionDecision');
+  for (const decision of ['AUTHORIZED', 'DENIED', 'CLARIFY']) {
+    assert.match(decisionRow[1], new RegExp(`\\b${decision}\\b`, 'u'));
+  }
+
+  const examplesByOperation = new Map(
+    jsonExamples(paymentIntentContract).map(example => [example.operation, example]),
+  );
+  for (const operation of ['CATALOG_SEARCH', 'CATALOG_PURCHASE', 'DIRECT_PAY']) {
+    const example = examplesByOperation.get(operation);
+    assert.equal(example?.routingContractVersion, 2);
+    assert.equal(typeof example?.requestId, 'string');
+    assert.equal(typeof example?.turnId, 'string');
+    assert.equal(example?.executionDecision, 'AUTHORIZED');
+    assert.equal(typeof example?.target, 'object');
+  }
+  assert.equal(examplesByOperation.get('CATALOG_SEARCH')?.authorizationSource, undefined);
+  assert.equal(
+    examplesByOperation.get('CATALOG_PURCHASE')?.authorizationSource,
+    'CURRENT_USER_TURN',
+  );
+  assert.equal(
+    examplesByOperation.get('DIRECT_PAY')?.authorizationSource,
+    'UPSTREAM_MERCHANT_WORKFLOW',
+  );
+
+  const textRow = markdownTableRow(paymentIntentContract, 'text');
+  assert.match(textRow[1], /audit\/context/u);
+  assert.match(textRow[1], /cannot authorize or veto/u);
+  assert.match(paymentIntentContract, /legacy compatibility adapter/iu);
+  assert.match(paymentIntentContract, /do not extend it with new phrase-specific regexes/iu);
+  for (const body of [skill, catalogDiscovery]) {
+    assert.doesNotMatch(body, /Text forms share one verb family/iu);
+    assert.doesNotMatch(body, /every search synonym/iu);
+    assert.doesNotMatch(body, /canonical purchase-wrapped ordinal/iu);
+    assert.doesNotMatch(body, /Text may authorize the transition/iu);
+  }
+
   assert.match(skill, /lib\/ucp-checkout-route-fsm\.mjs/u);
   assert.match(skill, /classifyUcpCheckoutRoute/u);
 });
@@ -486,8 +600,8 @@ test('CLI invocation reference documents Skill install help and exit code 8', ()
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.12\.1"/u);
-  assert.equal(packageJson.version, '1.12.1');
+  assert.match(skill, /version:\s*"1\.13\.1"/u);
+  assert.equal(packageJson.version, '1.13.1');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -708,7 +822,7 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
   assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--test/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] \[--context <json>\] \[--test\|--sandbox\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--test\|--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
@@ -728,8 +842,19 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
 
   assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
   assert.match(catalogDiscovery, /valid BCP47 tag/u);
-  assert.match(catalogDiscovery, /let search infer language from the query/u);
-  assert.match(catalogDiscovery, /"address_country":"HK","language":"zh-Hans"/u);
+  assert.match(catalogDiscovery, /Agent owns result-language detection/u);
+  assert.match(catalogDiscovery, /--language zh-Hans --context '\{"address_country":"HK"\}'/u);
+  assert.doesNotMatch(catalogDiscovery, /let (?:search|the query) infer language/iu);
+  assert.doesNotMatch(catalogDiscovery, /--context '\{[^'\n]*"language"/u);
+  assert.match(cliInvocation, /writes the effective value to request `context\.language`/u);
+  assert.match(cliInvocation, /sends the same value as `Accept-Language`/u);
+  assert.match(cliInvocation, /query is never used to guess a target language/u);
+  assert.match(catalogDiscovery, /Broad `catalog search` forwards the declared language/u);
+  assert.match(ucpCheckout, /Pass it with `--language` on both search and product/u);
+  assert.match(ucpCheckout, /two views can disagree/u);
+  const catalogLanguageRow = markdownTableRow(paymentIntentContract, 'target.catalogLanguage');
+  assert.match(catalogLanguageRow[1], /Required for CATALOG_SEARCH and CATALOG_PURCHASE/u);
+  assert.match(catalogLanguageRow[1], /--language/u);
   assert.match(catalogDiscovery, /Preserve `catalogEnvironment` on every candidate/u);
   assert.match(catalogDiscovery, /pending selection is authoritative/u);
   assert.match(catalogDiscovery, /current `wallet status`/u);
@@ -746,8 +871,51 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
   assert.match(skill, /catalogEnvironment[\s\S]*catalogLanguage/u);
   assert.match(skill, /Gateway Catalog API[\s\S]*`401`\/`403`[\s\S]*not a wallet-login problem/u);
   assert.match(skill, /pending selection is authoritative[\s\S]*candidate copy/u);
-  assert.match(readme, /Anonymous public Catalog discovery/u);
-  assert.match(readmeZh, /匿名公共 Catalog 搜索/u);
+  assert.match(readme, /Semantic v2 intent routing with derived wallet gates/u);
+  assert.match(readmeZh, /基于语义的 v2 意图路由和派生钱包门禁/u);
+  assert.match(readme, /agent chooses the Catalog result language[\s\S]*`--language`/iu);
+  assert.match(readmeZh, /Catalog 结果语言由 Agent[\s\S]*`--language`/u);
+});
+
+test('pure product search routes anonymously before wallet readiness', () => {
+  const searchRow = markdownTableRow(paymentIntentContract, 'CATALOG_SEARCH');
+  const purchaseDiscoveryRow = markdownTableRow(paymentIntentContract, 'CATALOG_PURCHASE');
+  const checkoutRow = markdownTableRow(paymentIntentContract, 'UCP_CHECKOUT');
+  const directPayRow = markdownTableRow(paymentIntentContract, 'DIRECT_PAY');
+  assert.equal(searchRow[2], 'SKIP');
+  assert.equal(purchaseDiscoveryRow[2], 'DEFER_UNTIL_SELECTION');
+  assert.equal(checkoutRow[2], 'REQUIRE_STATUS');
+  assert.equal(directPayRow[2], 'REQUIRE_STATUS');
+  assert.match(skill, /`CATALOG_SEARCH` \| `SKIP`[\s\S]*without `wallet status` or `wallet init`/u);
+  assert.match(catalogDiscovery, /state: CATALOG_SEARCH_SELECTED/u);
+  assert.match(catalogDiscovery, /action: RUN_PUBLIC_CATALOG_DISCOVERY_WORKFLOW/u);
+  assert.match(catalogDiscovery, /walletGate: SKIP/u);
+  assert.match(walletConfig, /`CATALOG_SEARCH` returns `walletGate=SKIP`/u);
+  assert.match(cliInvocation, /`CATALOG_SEARCH=SKIP`/u);
+  assert.match(readme, /product search runs anonymously with `walletGate=SKIP`/u);
+  assert.match(readmeZh, /商品搜索使用 `walletGate=SKIP`/u);
+  assert.match(readme, /validated route returns `walletGate=REQUIRE_STATUS`/u);
+  assert.match(readmeZh, /验证后的路由返回 `walletGate=REQUIRE_STATUS`/u);
+  assert.doesNotMatch(readme, /must immediately continue with wallet initialization/iu);
+  assert.doesNotMatch(readmeZh, /必须立即继续钱包初始化/u);
+});
+
+test('discovery-only results require semantic purchase authorization before checkout', () => {
+  assert.match(skill, /Candidate binding cannot create authorization/iu);
+  assert.match(skill, /candidate ID or ordinal identifies a result but is not purchase authorization/iu);
+  assert.match(catalogDiscovery, /status:'AWAITING_SELECTION'/u);
+  assert.match(catalogDiscovery, /candidate number[\s\S]*does not authorize purchase/u);
+  assert.match(catalogDiscovery, /Only an authorized purchase decision may be bound to a candidate/u);
+  assert.match(catalogDiscovery, /resultMode:'PURCHASE_SELECTION'/u);
+  assert.match(catalogDiscovery, /catalog_product_selection_conflict/u);
+  const textRow = markdownTableRow(paymentIntentContract, 'text');
+  assert.match(textRow[1], /cannot authorize or veto/u);
+  assert.match(catalogDiscovery, /legacy `purchaseIntent` boolean cannot create authorization/iu);
+  assert.match(paymentIntentContract, /A turn may deny purchase while authorizing discovery/u);
+  assert.match(
+    catalogDiscovery,
+    /`CATALOG_SEARCH` returns it as discovery-only output[\s\S]*only purchase-origin `CATALOG_PURCHASE` continues/u,
+  );
 });
 
 test('catalog search uses the channel selector and location hint plus exact local store filtering', () => {
@@ -780,10 +948,16 @@ test('platform-store checkout uses the candidate url and its manual-facts envelo
   assert.match(skill, /manual_item_facts/u);
   assert.match(skill, /success envelope and an instruction, not a failure/u);
   assert.match(skill, /do not browse for a product detail page that does not exist/iu);
-  assert.match(skill, /store ordering page carrying `\?product_id=`/u);
+  assert.match(
+    skill,
+    /store ordering page[\s\S]{0,160}`product_id`[\s\S]{0,160}candidate's product ID/iu,
+  );
 
   assert.match(catalogDiscovery, /manual_item_facts/u);
-  assert.match(catalogDiscovery, /store ordering page with `\?product_id=`/u);
+  assert.match(
+    catalogDiscovery,
+    /store ordering page[\s\S]{0,160}`\?product_id=`[\s\S]{0,160}candidate product ID/iu,
+  );
   assert.doesNotMatch(skill, /Resolve a product detail URL for `parse-item` before checkout create/u);
 });
 
@@ -818,30 +992,85 @@ test('described product purchase routes through catalog discovery before checkou
   assert.match(skill, /CATALOG_PURCHASE/u);
   assert.match(skill, /RUN_CATALOG_DISCOVERY_WORKFLOW/u);
   assert.match(skill, /RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT/u);
-  assert.match(skill, /never straight to `UCP_CHECKOUT`/u);
-  assert.match(skill, /bare purchase verb/u);
+
+  const catalogPurchaseRow = markdownTableRow(paymentIntentContract, 'CATALOG_PURCHASE');
+  assert.match(catalogPurchaseRow[1], /target\.catalogQuery/u);
+  assert.match(catalogPurchaseRow[1], /target\.productName/u);
+  assert.equal(catalogPurchaseRow[2], 'DEFER_UNTIL_SELECTION');
+  const checkoutRow = markdownTableRow(paymentIntentContract, 'UCP_CHECKOUT');
+  assert.match(checkoutRow[1], /target\.productUrl/u);
+  assert.equal(checkoutRow[2], 'REQUIRE_STATUS');
+  assert.match(paymentIntentContract, /described-product purchase is not checkout-ready/iu);
+  assert.match(catalogDiscovery, /merchant ID is optional discovery scope, not a product identity/iu);
 
   assert.match(catalogDiscovery, /Described Product Purchase Route/u);
   assert.match(catalogDiscovery, /RUN_CATALOG_DISCOVERY_WORKFLOW/u);
   assert.match(catalogDiscovery, /USER_SELECTS_ONE_PRODUCT/u);
-  assert.match(catalogDiscovery, /needs a product detail URL/u);
 });
 
 test('catalog product selection belongs to the user and resolves only presented candidates', () => {
   assert.match(skill, /ASK_FOR_CATALOG_PRODUCT_SELECTION/u);
   assert.match(skill, /ASK_FOR_CATALOG_DISCOVERY_INPUT/u);
   assert.match(skill, /CANCEL_PENDING_CATALOG_PRODUCT_SELECTION/u);
-  assert.match(skill, /structured product id, structured index, or a bare ordinal/u);
-  assert.match(skill, /never auto-select/u);
+  assert.match(skill, /never auto-select/iu);
 
+  assert.deepEqual(
+    markdownTableRow(catalogDiscovery, 'Structured product id').slice(0, 1),
+    ['Structured product id'],
+  );
+  assert.deepEqual(
+    markdownTableRow(catalogDiscovery, 'Structured index, 1-based').slice(0, 1),
+    ['Structured index, 1-based'],
+  );
+  assert.deepEqual(
+    markdownTableRow(catalogDiscovery, 'Bare ordinal in the reply text').slice(0, 1),
+    ['Bare ordinal in the reply text'],
+  );
   assert.match(catalogDiscovery, /AWAITING_SELECTION/u);
   assert.match(catalogDiscovery, /original `catalogQuery`/u);
-  assert.match(catalogDiscovery, /marks the pending object `INVALID`/u);
-  assert.match(catalogDiscovery, /never loop by showing the same candidates again/u);
+  assert.match(catalogDiscovery, /Damaged context becomes `INVALID`/u);
   assert.match(catalogDiscovery, /selected_product_not_in_candidates/u);
   assert.match(catalogDiscovery, /selected_index_out_of_range/u);
   assert.match(catalogDiscovery, /Do not preselect a product/u);
   assert.match(catalogDiscovery, /mutually exclusive/u);
+  assert.match(catalogDiscovery, /checks bind a prior semantic decision and never supply purchase authorization/iu);
+  assert.match(
+    catalogDiscovery,
+    /selector from `DISCOVERY_ONLY` context cannot cross into checkout[\s\S]*authorized semantic purchase decision/iu,
+  );
+});
+
+test('semantic denial and the purchase wallet boundary fail closed', () => {
+  const decisionRow = markdownTableRow(paymentIntentContract, 'executionDecision');
+  assert.match(decisionRow[1], /DENIED/u);
+  assert.match(decisionRow[1], /CLARIFY/u);
+  const noActionRow = markdownTableRow(paymentIntentContract, 'NO_ACTION');
+  assert.equal(noActionRow[2], 'SKIP');
+  assert.match(
+    paymentIntentContract,
+    /Invalid, denied, unsupported, or unbound contracts fail closed[\s\S]*requiresWallet:false[\s\S]*walletGate:SKIP/iu,
+  );
+  assert.match(catalogDiscovery, /executionDecision=DENIED/u);
+  assert.match(catalogDiscovery, /DO_NOT_RUN_PUBLIC_CATALOG_DISCOVERY/u);
+  assert.match(skill, /AWAITING_SELECTION -> EXECUTING/u);
+  assert.match(skill, /walletGate=REQUIRE_STATUS/u);
+  assert.match(skill, /Candidate resolution only binds the authorized decision/u);
+  assert.match(skill, /Preserve and validate the frozen query, product aliases/u);
+  assert.match(catalogDiscovery, /price, currency, and quantity/u);
+  assert.match(catalogDiscovery, /failed claim or replay runs no checkout/iu);
+});
+
+test('UCP minimal skeleton parses and classifies the item before card refresh', () => {
+  const skeleton = ucpCheckout.match(/## Minimal End-To-End Skeleton\n\n```bash\n([\s\S]*?)```/u)?.[1] ?? '';
+  const parseItemIndex = skeleton.indexOf('clink tool parse-item --url <item_url> --format json');
+  const cardRefreshIndex = skeleton.indexOf(
+    'clink card binding-link --no-watch --no-open --format json',
+  );
+
+  assert.ok(parseItemIndex >= 0, 'minimal skeleton must include parse-item');
+  assert.ok(cardRefreshIndex >= 0, 'minimal skeleton must include card refresh');
+  assert.ok(parseItemIndex < cardRefreshIndex, 'parse-item must run before card refresh');
+  assert.match(skeleton, /Finish fulfillment classification[\s\S]*before touching payment readiness/u);
 });
 
 test('catalog selection does not bypass UCP checkout guards', () => {
@@ -921,6 +1150,66 @@ test('--no-open covers every link command other than wallet init', () => {
   assert.match(walletConfig, /card binding-link --no-open --format json/u);
   assert.match(walletConfig, /risk link --no-open --format json/u);
   assert.match(instruction, /--no-open/u);
+
+  let cardRefreshRecommendationCount = 0;
+  for (const [name, body] of Object.entries(shippedDocs)) {
+    const recommendations = [...body.matchAll(
+      /`((?:clink )?card binding-link --no-watch[^`\n]*)`/gu,
+    )].map(match => match[1]);
+    cardRefreshRecommendationCount += recommendations.length;
+    for (const command of recommendations) {
+      assert.match(command, /(?:^|\s)--no-open(?:\s|$)/u,
+        `${name} card refresh recommendation must suppress browser launch: ${command}`);
+    }
+  }
+  assert.ok(cardRefreshRecommendationCount > 0, 'shipped docs must retain card refresh guidance');
+
+  const fencedCommandNames = [
+    'wallet init',
+    'card binding-link',
+    'card setup-link',
+    'card modify-link',
+    'risk link',
+    'instruction create',
+    'instruction sign-url',
+    'instruction update',
+    'instruction cancel',
+  ];
+  const commandStart = new RegExp(
+    `^\\s*(clink (${fencedCommandNames.join('|').replaceAll(' ', '\\s+')})\\b.*)$`,
+    'u',
+  );
+  const seenFencedCommands = new Set();
+
+  for (const [name, body] of Object.entries(shippedDocs)) {
+    for (const block of body.match(/```bash\n[\s\S]*?```/gu) ?? []) {
+      const lines = block.split('\n');
+      for (let index = 0; index < lines.length; index += 1) {
+        const start = lines[index].match(commandStart);
+        if (!start) continue;
+
+        const commandName = start[2].replace(/\s+/gu, ' ');
+        let command = start[1];
+        while (/\\\s*$/u.test(command) && index + 1 < lines.length) {
+          command += `\n${lines[index += 1].trim()}`;
+        }
+        seenFencedCommands.add(commandName);
+
+        if (commandName === 'wallet init') {
+          assert.match(command, /(?:^|\s)--open(?:\s|$)/u,
+            `${name} wallet init example must request the system browser: ${command}`);
+          assert.doesNotMatch(command, /--no-open/u);
+        } else {
+          assert.match(command, /(?:^|\s)--no-open(?:\s|$)/u,
+            `${name} link command must suppress host-side browser launch: ${command}`);
+        }
+      }
+    }
+  }
+  for (const commandName of fencedCommandNames) {
+    assert.ok(seenFencedCommands.has(commandName),
+      `shipped Bash examples must cover clink ${commandName}`);
+  }
 
   assert.match(cliInvocation, /belongs on every other link-producing command, not `wallet init`/u);
   // --no-open must not be confused with --no-watch: killing the watch loses the completion event.

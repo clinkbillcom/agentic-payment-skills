@@ -149,7 +149,7 @@ test('catalog environment aliases fail closed when non-empty values conflict', (
   assert.equal(result.command, undefined);
 });
 
-test('adds a canonical BCP47 language to scoped catalog search context', () => {
+test('passes the canonical Agent-selected language with --language on scoped search', () => {
   const result = classifyCatalogDiscovery({
     query: '屈臣氏',
     catalogEnvironment: CatalogEnvironment.TEST,
@@ -162,7 +162,7 @@ test('adds a canonical BCP47 language to scoped catalog search context', () => {
   assert.equal(
     result.command,
     'clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd'
-      + ' --query \'屈臣氏\' --context \'{"language":"zh-Hans"}\''
+      + ' --query \'屈臣氏\' --language zh-Hans'
       + ' --test --format json',
   );
   assert.deepEqual(resolveCatalogLanguage({ catalogLanguage: 'zh-hans' }), {
@@ -171,7 +171,7 @@ test('adds a canonical BCP47 language to scoped catalog search context', () => {
   });
 });
 
-test('merges catalog language and buyer country into one broad-search context', () => {
+test('keeps --language separate from buyer-country context on broad search', () => {
   const result = classifyCatalogDiscovery({
     query: 'iced matcha latte',
     catalogEnvironment: CatalogEnvironment.SANDBOX,
@@ -181,11 +181,11 @@ test('merges catalog language and buyer country into one broad-search context', 
     merchantMatch: false,
   });
 
-  assert.equal(result.catalogLanguage, 'zh-Hant-HK');
+  assert.equal(result.catalogLanguage, 'zh-Hant');
   assert.equal(
     result.command,
     'clink catalog search --query \'iced matcha latte\''
-      + ' --context \'{"address_country":"HK","language":"zh-Hant-HK"}\''
+      + ' --language zh-Hant --context \'{"address_country":"HK"}\''
       + ' --sandbox --format json',
   );
 });
@@ -218,6 +218,46 @@ test('catalog language aliases ignore blanks and require one canonical BCP47 val
     valid: true,
     catalogLanguage: 'he',
   });
+  assert.deepEqual(resolveCatalogLanguage({ catalogLanguage: 'fr-ca' }), {
+    valid: true,
+    catalogLanguage: 'fr-CA',
+  });
+});
+
+test('catalog language normalization matches the CLI Chinese contract', () => {
+  assert.deepEqual(resolveCatalogLanguage({
+    catalogLanguage: 'zh-HK',
+    catalog_language: 'zh-Hant-HK',
+    language: 'zh-Hant',
+  }), {
+    valid: true,
+    catalogLanguage: 'zh-Hant',
+  });
+  assert.deepEqual(resolveCatalogLanguage({ catalogLanguage: 'zh' }), {
+    valid: true,
+    catalogLanguage: 'zh-Hans',
+  });
+});
+
+for (const catalogLanguage of ['und', 'zh-US', 'zh-Latn', `en-${'a'.repeat(65)}`, 123]) {
+  test(`rejects a Catalog language the CLI would reject: ${String(catalogLanguage)}`, () => {
+    assert.deepEqual(resolveCatalogLanguage({ catalogLanguage }), {
+      valid: false,
+      reason: 'catalog_language_invalid',
+      value: catalogLanguage,
+    });
+  });
+}
+
+test('legacy direct discovery does not infer language from a Chinese query', () => {
+  const result = classifyCatalogDiscovery({
+    query: '屈臣氏',
+    merchantListOutput,
+    matchedMerchantId: 'mcht_frnz6yfrz1sd',
+  });
+
+  assert.equal(result.catalogLanguage, undefined);
+  assert.doesNotMatch(result.command, /--language|context[^\n]*language/u);
 });
 
 test('catalog language aliases fail closed when canonical values conflict', () => {

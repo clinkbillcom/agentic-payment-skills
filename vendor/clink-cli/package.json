@@ -1,7 +1,7 @@
 {
   "name": "clink-cli-vendored",
-  "version": "0.2.17",
-  "upstreamCommit": "9fc123a4b88e6d95544bc25d3e8df1859e129b0c",
+  "version": "0.2.18",
+  "upstreamCommit": "23f4ee939d73e7a945dc13ba6f982b22facfc0f2",
   "edition": "main",
   "private": true,
   "type": "module",

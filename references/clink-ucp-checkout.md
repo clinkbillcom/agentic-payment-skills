@@ -77,11 +77,13 @@ Agent owns product exploration. For "use Clink Pay to buy <product URL>" intent,
 When a merchant is already known by `merchantId` and the user is browsing rather than naming a URL, the merchant's registered UCP Catalog can be queried directly instead of scraping storefront pages:
 
 ```bash
-clink ucp-catalog search --merchant-id <merchant_id> --query <text> --limit <n> [--context <json>] [--test|--sandbox] --format json
-clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> [--context <json>] [--test|--sandbox] --format json
+clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <BCP47> --limit <n> [--context <json>] [--test|--sandbox] --format json
+clink ucp-catalog product --merchant-id <merchant_id> --product-id <product_id> --language <same_BCP47_as_search> [--context <json>] [--test|--sandbox] --format json
 ```
 
-Both send anonymous `POST /agent/ucp/{merchantId}/catalog/{search,product}` requests. They do not require `wallet init`, do not read `~/.clink-cli/config.json`, and send no OAuth or CSK credentials. No environment flag deterministically selects production; `--sandbox` selects UAT and `--test` selects test, and the two flags are mutually exclusive. Freeze one `catalogEnvironment` and use its same flag on search and product. If the user requested a BCP47 language, preserve it in both contexts as `{"language":"<BCP47>"}`; without one, omit it so search can infer language from the query. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
+Both send anonymous `POST /agent/ucp/{merchantId}/catalog/{search,product}` requests. They do not require `wallet init`, do not read `~/.clink-cli/config.json`, and send no OAuth or CSK credentials. No environment flag deterministically selects production; `--sandbox` selects UAT and `--test` selects test, and the two flags are mutually exclusive. Freeze one `catalogEnvironment` and use its same flag on search and product.
+
+The Agent must also determine one target result language before search, following `references/clink-payment-intent-contract.md`, and freeze the CLI-normalized BCP47 value. Pass it with `--language` on both search and product; never put it in `context.language`, infer it from query/product keywords, or read it from wallet config. Reusing the same flag matters because merchant-scoped search and product implement Catalog translation and otherwise the two views can disagree. The CLI sends the normalized value in request `context.language` and `Accept-Language`. A legacy caller that omits language receives merchant-original text and sends no language header; the backend/query does not guess a target language. `--context`, `--filters`, `--signals`, and `--attribution` must each be a JSON object; Catalog price filters use minor units. `--limit` is 1 to 100 and the server default is 10; continue paging with `--cursor` from the previous response. `--request-id` defaults to a generated UUID; `--ucp-agent` defaults to `clink-cli`. `product` takes the `--product-id` returned by `search` and rejects `--query`, `--cursor`, and `--limit`.
 
 Catalog's public environment is separate from checkout's authenticated wallet environment. Preserve the candidate's `catalogEnvironment`; the pending selection is authoritative and a conflicting candidate copy must not replace it. A supplied selected product without that frozen environment is invalid and cannot fall back to a top-level value. Then require a successful current `wallet status` and verify that its API origin matches before `tool internal-ucp get-endpoint`, checkout create/complete, or payment. Every supplied `walletStatus` alias must be successful, parseable, carry a base URL, and agree. An explicit `walletBaseUrl` may only corroborate that status or create a conflict; it can never replace missing, malformed, error, or missing-origin status. Stop if top-level input conflicts with the selected candidate, an explicit wallet URL conflicts with wallet status, or the final origins mismatch. Never use a test or sandbox candidate in production checkout.
 
@@ -204,7 +206,7 @@ For physical goods, collect one standard complete shipping address but serialize
 Use the `clink` prefix defined for this workflow (see `references/clink-cli-invocation.md`); the prefix already fixes the environment, so do not add environment flags here.
 
 ```bash
-clink card binding-link --no-watch --format json
+clink card binding-link --no-watch --no-open --format json
 ```
 
 Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Carry this exact `paymentInstrumentId` through the rest of the checkout workflow, including `ucp-checkout complete`. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
@@ -317,15 +319,14 @@ clink ucp-checkout create \
   [--instruction-id <instruction_id> --mandate-id <mandate_id>] \
   --line-items '[{"id":"li_<item_id>","item":{"id":"<item_id>","title":"<title>","price":"10.00"},"quantity":1}]' \
   --buyer '{"email":"buyer@example.com"}' \
-  --idempotency-key <stable_create_key> \
   --format json
 ```
 
 For external checkout, the current `clink ucp-checkout create` command sends the selected item URL through `--merchant-url`; this flag name is a CLI/API legacy name, not proof that the value is a merchant origin. Pass `--instruction-id` and `--mandate-id` only when the authorization resolver produced them and the selected checkout path requires them. For internal checkout, use the same `ucp-checkout create` command and selected item payload, but pass `--endpoint <rest_endpoint>` from either `internal-ucp get-endpoint` or fallback `get-rest-endpoint`. If provider is not `clinkbill`, use the external UCP checkout path without `--endpoint`.
 
-For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
+The CLI generates the create idempotency key from the request. Do not pass `--idempotency-key`; the command rejects caller-supplied values.
 
-`stable_create_key` should be stable for the same product order attempt, for example a hash of selected item URL, item ID, quantity, total, instruction ID, mandate ID, and user/task correlation. Do not reuse it for a different cart.
+For `ucp-checkout create`, use `--shipping-address '<json>'` only for physical goods that ship. The JSON must be the UCP Postal Address shape (`street_address`, `extended_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `first_name`, `last_name`, `phone_number`). `address_country` is the destination country as ISO 3166-1 alpha-2, not a fixed country. Services, subscriptions, hotels, tickets, reservations, bookings, and digital goods do not pass a UCP checkout shipping address unless the merchant explicitly requires one; this does not change the rule above that `NO_SHIPPING_REQUIRED` instruction creation uses the fixed Apple Park default address.
 
 This is a continuous create then complete handoff. After create, parse `data.id` / `data.checkout_id` / `data.checkoutId` as `checkoutId` and freeze `data.ucp.ucp_order_id` as `ucpOrderId`; do not ask the user to provide either identifier. Carry both values through update and complete. A normal create response should be `ready_for_complete` (or equivalent ready state). If it is not ready, run:
 
@@ -344,11 +345,10 @@ clink ucp-checkout complete \
   [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
-  --idempotency-key <stable_complete_key> \
   --format json
 ```
 
-`stable_complete_key` is scoped to the checkout ID and payment instrument. Reusing it for the same complete attempt is safe; do not reuse it across different checkout IDs.
+The CLI also generates the complete idempotency key. Do not pass `--idempotency-key`; the command rejects caller-supplied values.
 
 ## Step 7: Poll Payment Success Event
 
@@ -357,20 +357,29 @@ Parse the complete response. There are two distinct identifiers and their string
 - `ucpOrderId`: checkout create/update/complete/get `data.ucp.ucp_order_id`. Completed checkout `data.order.id` is a compatibility alias and must match when both are present. This is the only value allowed in `clink ucp-order get --order-id`.
 - `paymentOrderId`: `agent_order.succeeded` `data.orderId` or `resourceId`. This is Clink Payment success evidence and must never be used for UCP order lookup.
 
-Complete may return `complete_in_progress` without `order`, but the frozen `data.ucp.ucp_order_id` remains available because the UCP order is created with the checkout. A later checkout GET is needed only for an older response that omitted the meta field; once projection reaches `completed`, its `order.id` supplies the same compatibility value. `order.permalink_url` may carry the merchant order page; pass it through as-is and treat absence as normal. The FSM accepts only the trusted legacy checkout-response aliases `omsOrderId` / `oms_order_id` and canonicalizes them to `ucpOrderId`; `merchantOrderId` is an external merchant reference, never a UCP ID alias. Freeze `checkoutId`, `ucpOrderId`, the route, and the original internal `endpoint`. Classify only explicit `{ok:true,data:{...}}` checkout and event-poll envelopes; an error or malformed envelope fails closed even if its error payload resembles completed checkout or success-event data. Every checkout, UCP-order, and payment-order identifier must be a non-empty string; arrays, objects, numbers, and conflicting aliases fail closed. Bind every complete/get response with `expectedCheckoutId` or `expectedResource.checkoutId`; every present `id`, `checkoutId`, and `checkout_id` alias must agree with each other and with that frozen ID, and every present checkout/context UCP-order-ID alias must agree before order lookup. A missing frozen binding, conflicting aliases, or a response for another checkout fails closed. When complete returns `completed`, immediately start the payment success event poll:
+Complete may return `complete_in_progress` without `order`, but the frozen `data.ucp.ucp_order_id` remains available because the UCP order is created with the checkout. A later checkout GET is needed only for an older response that omitted the meta field; once projection reaches `completed`, its `order.id` supplies the same compatibility value. `order.permalink_url` may carry the merchant order page; pass it through as-is and treat absence as normal. The FSM accepts only the trusted legacy checkout-response aliases `omsOrderId` / `oms_order_id` and canonicalizes them to `ucpOrderId`; `merchantOrderId` is an external merchant reference, never a UCP ID alias. Freeze `checkoutId`, `ucpOrderId`, the route, and the original internal `endpoint`. Classify only explicit `{ok:true,data:{...}}` checkout and event-poll envelopes; an error or malformed envelope fails closed even if its error payload resembles completed checkout or success-event data. Every checkout, UCP-order, and payment-order identifier must be a non-empty string; arrays, objects, numbers, and conflicting aliases fail closed. Bind every complete/get response with `expectedCheckoutId` or `expectedResource.checkoutId`; every present `id`, `checkoutId`, and `checkout_id` alias must agree with each other and with that frozen ID, and every present checkout/context UCP-order-ID alias must agree before order lookup. A missing frozen binding, conflicting aliases, or a response for another checkout fails closed. When complete returns either `completed` or `complete_in_progress`, immediately start the payment success event poll. Pass the frozen UCP ID for the direct order path and preserve the checkout endpoint for legacy fallback:
 
 ```bash
-clink events poll --type agent_order.succeeded --checkout-id <checkoutId> --max-wait 900 --format json
+clink events poll \
+  --type agent_order.succeeded \
+  --checkout-id <checkoutId> \
+  [--ucp-order-id <frozenUcpOrderId>] \
+  [--endpoint <original_rest_endpoint>] \
+  --max-wait 900 \
+  --format json
 ```
 
-The 900-second window matches the 15-minute built-in watch used elsewhere; async order success can take minutes, so do not shorten it.
+The 900-second window matches the 15-minute built-in watch used elsewhere; async order success can take minutes, so do not shorten it. This is a composite CLI operation, not an Agent scheduling boundary. After the exact event is filtered, the same process keeps it unacknowledged while it calls the UCP order API when `--ucp-order-id` is present, then ACKs immediately before output. If the frozen ID is unavailable, the CLI uses the original endpoint to perform only the bounded read-only checkout projection recovery, then calls the order API. It never derives the UCP order ID from the event's `orderId` or `resourceId`. A malformed or conflicting Payment Order alias keeps the event queued. If ACK is uncertain after lookup, the command still exits successfully with payment evidence and a separate `eventAckWarning`; a later poll may observe a harmless duplicate.
 
 Classify the poll output with `classifyUcpPaymentSuccessEventObservation`. Pass `expectedResource: { checkoutId, ucpOrderId, checkoutEndpoint }` (omit absent fields; `omsOrderId` remains a compatibility alias):
 
 - Let the CLI filter and ACK only exact `checkoutId`. A same-type event for another checkout stays queued for its own concurrent workflow. A generic event `orderId` is the payment ID and cannot substitute. Type-only UCP matching is unsafe and remains pending.
-- Require the nested payload `data.checkoutId` / `data.checkout_id` aliases to match the frozen checkout ID and every payment-order alias to agree. Never fall back to event top-level checkout fields or `resourceId` for checkout correlation. Store the matched Payment Order ID as `paymentOrderId`; do not overwrite `ucpOrderId`.
+- Require the processed payload `data.checkoutId` / `data.checkout_id` aliases to match the frozen checkout ID and every payment-order alias to agree. The CLI normalizes a locally verified `requestParams.extra.agentInstructionInfo.ucpCheckoutId` match into canonical `data.checkoutId` before output. Never fall back to event top-level checkout fields or `resourceId` for checkout correlation. Store the matched Payment Order ID as `paymentOrderId`; do not overwrite `ucpOrderId`.
+- `orderLookupStatus=FETCHED` includes the verified UCP order and returns terminal payment success directly. Do not dispatch another `ucp-order get` from the Agent.
+- An order-resolution or order-fetch warning after the matched event keeps `paymentConfirmed=true` and returns terminal success-with-order-warning. Never retry checkout complete or payment.
+- Preserve `eventAckWarning` independently from any order warning. It means duplicate delivery is possible, not that payment or order lookup failed; never use it to downgrade payment or trigger another charge.
 
-If `ucpOrderId` is already present, the FSM returns `FETCH_UCP_ORDER`. Otherwise it returns `GET_CHECKOUT_FOR_UCP_ORDER`; execute the exact `checkoutCommand` it provides:
+The following steps are compatibility behavior for an older CLI bundle that returns only the event envelope. If `ucpOrderId` is already present, the FSM returns `FETCH_UCP_ORDER`. Otherwise it returns `GET_CHECKOUT_FOR_UCP_ORDER`; execute the exact `checkoutCommand` it provides:
 
 ```bash
 clink ucp-checkout get \
@@ -415,7 +424,7 @@ If complete/get exits with a network or timeout error, treat the checkout state 
 - More than one equally specific match: ask the user to choose.
 - `ucp-checkout create` idempotency conflict: use the original response if the cart is identical; otherwise create a new checkout with a new key.
 - `ucp-checkout complete` already has a payment in progress: recover with `ucp-checkout get`.
-- Payment success event poll timeout: return the pending state and `resumeCommand`; do not claim payment success until a matching `agent_order.succeeded` event is observed.
+- Payment success event poll timeout: return the pending state and the safely rebuilt `resumeCommand`, preserving `nextToken`; do not claim payment success until a matching `agent_order.succeeded` event is observed or restart pagination from the first page.
 - Payment event matched but a legacy checkout response exposed neither `data.ucp.ucp_order_id` nor `data.order.id`: pass the exact event-bearing classifier output forward, keep payment confirmed, and retry only original-route `ucp-checkout get`; never reconstruct context from IDs, use event `paymentOrderId` for lookup, re-poll the event, or retry payment.
 - UCP order lookup fails after valid correlated event context: return payment success with a separate order warning and preserve the message, order permalink, and checkout endpoint; payment status must not be downgraded. Missing or inconsistent event context is an input error with `paymentConfirmed=false`, not a payment-success warning.
 - Backend `NO_AUTHORIZATION` or `UCP_AUTHORIZATION_BINDING_INVALID`: the instruction/mandate is not valid for this checkout. Stop and request a corrected instruction.
@@ -423,11 +432,13 @@ If complete/get exits with a network or timeout error, treat the checkout state 
 ## Minimal End-To-End Skeleton
 
 ```bash
-clink card binding-link --no-watch --format json
 clink tool parse-item --url <item_url> --format json
 
 # Select one available parsed item.
 # Agent/FSM supplies quantity, merchantCategoryCode, fulfillmentType, and shipping when required.
+# Finish fulfillment classification and collect required shipping before touching payment readiness.
+
+clink card binding-link --no-watch --no-open --format json
 
 # Authorization branch:
 # If selected/default card is non-Visa or Visa without VIC readiness:
@@ -460,17 +471,15 @@ clink ucp-checkout create \
   [--instruction-id <instruction_id> --mandate-id <mandate_id>] \
   --line-items '<line_items_json>' \
   --shipping-address '<ucp_postal_address_json_if_required>' \
-  --idempotency-key <stable_create_key> \
   --format json
 clink ucp-checkout complete \
   [--endpoint <rest_endpoint>] \
   --checkout-id <checkout_id> \
   --payment-instrument-id <payment_instrument_id> \
-  --idempotency-key <stable_complete_key> \
   --format json
-clink events poll --type agent_order.succeeded --checkout-id <checkout_id> --max-wait 900 --format json
-# Legacy compatibility only: if create/complete had no data.ucp.ucp_order_id or data.order.id,
-# resolve it after the event from the same checkout route.
-clink ucp-checkout get [--endpoint <rest_endpoint>] --checkout-id <checkout_id> --format json
-clink ucp-order get --order-id <ucpOrderId_from_checkout> --format json
+clink events poll --type agent_order.succeeded --checkout-id <checkout_id> \
+  [--ucp-order-id <frozenUcpOrderId>] [--endpoint <rest_endpoint>] \
+  --max-wait 900 --format json
+# The poll process itself resolves a missing legacy UCP ID and fetches the order after event success.
+# Do not schedule a separate checkout get or ucp-order get from the Agent.
 ```

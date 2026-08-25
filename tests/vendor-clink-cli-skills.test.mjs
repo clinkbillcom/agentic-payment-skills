@@ -1418,6 +1418,7 @@ test('vendored CLI discovers skills list and tip commands', () => {
 test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', () => {
   const rootHelp = runBundle(['--help']);
   const catalogHelp = runBundle(['ucp-catalog', '--help']);
+  const searchHelp = runBundle(['ucp-catalog', 'search', '--help']);
   const productHelp = runBundle(['ucp-catalog', 'product', '--help']);
   assert.match(rootHelp, /ucp-catalog/u);
   assert.match(rootHelp, /^\s*catalog\s/mu);
@@ -1425,6 +1426,10 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.match(catalogHelp, /ucp-catalog product/u);
   assert.match(productHelp, /--product-id <id>/u);
   assert.match(productHelp, /\/agent\/ucp\/\{merchantId\}\/catalog\/product/u);
+  assert.match(searchHelp, /--language <tag>/u);
+  assert.match(searchHelp, /query text is never used to guess a target language/u);
+  assert.match(productHelp, /--language <tag>/u);
+  assert.match(productHelp, /Pass the same language Search used/u);
 
   // catalog is the cross-merchant path that answers "who carries this"; naming a merchant is the
   // scoped question, so help must route the caller to ucp-catalog instead.
@@ -1435,6 +1440,10 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.match(crossMerchantHelp, /Published external-store mappings\s+currently cover HK and SG/u);
   assert.match(crossMerchantHelp, /other ISO codes may leave results un-narrowed/u);
   assert.match(crossMerchantHelp, /bounded, non-exhaustive result window and currently exposes no pagination/u);
+  assert.match(crossMerchantHelp, /--language <tag>/u);
+  assert.match(crossMerchantHelp, /query text is never used to guess one/u);
+  assert.match(crossMerchantHelp, /does not run UCP's LLM translation/u);
+  assert.match(crossMerchantHelp, /translation is implemented for merchant-scoped/u);
   assert.doesNotMatch(crossMerchantHelp, /--cursor <cursor>|--limit <n>/u);
 });
 
@@ -1454,7 +1463,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
   const cases = [
     {
       args: [
-        'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', 'watch',
+        'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', '手表',
         '--dry-run', '--format', 'json',
       ],
       expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
@@ -1484,6 +1493,8 @@ test('vendored public Catalog commands ignore wallet config and select their own
       assert.equal(request.headers['X-Customer-API-Key'], undefined);
       assert.equal(request.headers['X-Customer-ID'], undefined);
       assert.equal(request.headers['X-Timestamp'], undefined);
+      assert.equal(request.headers['Accept-Language'], undefined);
+      assert.equal(request.body.context?.language, undefined);
     }
 
     const merchantList = runBundleRaw([
@@ -1499,6 +1510,55 @@ test('vendored public Catalog commands ignore wallet config and select their own
     assert.match(credentials.stderr, /--customer-api-key is not supported by public Catalog commands/u);
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored public Catalog commands normalize explicit --language without query inference', () => {
+  const cases = [
+    [
+      'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', '手表',
+      '--language', 'zh-Hant-HK', '--dry-run', '--format', 'json',
+    ],
+    [
+      'ucp-catalog', 'product', '--merchant-id', 'merchant_1', '--product-id', 'product_1',
+      '--language', 'zh-Hant-HK', '--dry-run', '--format', 'json',
+    ],
+    [
+      'catalog', 'search', '--query', '手表', '--language', 'zh-Hant-HK',
+      '--dry-run', '--format', 'json',
+    ],
+  ];
+
+  for (const args of cases) {
+    const result = runBundleRaw(args);
+    assert.equal(result.status, 0, result.stderr);
+    const request = JSON.parse(result.stdout).data.request;
+    assert.equal(request.body.context.language, 'zh-Hant');
+    assert.equal(request.headers['Accept-Language'], 'zh-Hant');
+  }
+
+  const merged = runBundleRaw([
+    'catalog', 'search', '--query', 'coffee', '--language', 'fr-CA',
+    '--context', '{"currency":"CAD"}', '--dry-run', '--format', 'json',
+  ]);
+  assert.equal(merged.status, 0, merged.stderr);
+  const mergedRequest = JSON.parse(merged.stdout).data.request;
+  assert.deepEqual(mergedRequest.body.context, { currency: 'CAD', language: 'fr-CA' });
+  assert.equal(mergedRequest.headers['Accept-Language'], 'fr-CA');
+
+  const conflict = runBundleRaw([
+    'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', 'watch',
+    '--language', 'en', '--context', '{"language":"en"}', '--format', 'json',
+  ]);
+  assert.equal(conflict.status, 2);
+  assert.match(conflict.stderr, /--language and a context\.language value cannot be used together/u);
+
+  for (const language of ['und', 'zh-US']) {
+    const invalid = runBundleRaw([
+      'catalog', 'search', '--query', 'watch', '--language', language, '--format', 'json',
+    ]);
+    assert.equal(invalid.status, 2);
+    assert.match(invalid.stderr, /must be an IETF BCP 47 language tag/u);
   }
 });
 
@@ -1524,6 +1584,9 @@ test('vendored CLI documents typed polling as a draining any-of filter', () => {
 test('vendored CLI exposes the strict checkout event selector', () => {
   const eventsHelp = runBundle(['events', 'poll', '--help']);
   assert.match(eventsHelp, /--checkout-id <id>/u);
+  assert.match(eventsHelp, /--ucp-order-id <id>/u);
+  assert.match(eventsHelp, /same\s+process\s+to UCP order lookup/u);
+  assert.match(eventsHelp, /Payment Order IDs and are never reused/u);
   assert.match(eventsHelp, /eventTypes plus selectors\.checkoutId to Event Hub before pagination/u);
   assert.match(bundleSource, /recordMatchesCheckoutId/u);
   assert.match(bundleSource, /data\?\.checkout_id/u);
@@ -1714,6 +1777,167 @@ test('vendored events poll filters checkout success before ACK', async () => {
   }
 });
 
+test('vendored checkout success poll fetches the frozen UCP order in the same process', async () => {
+  const checkoutId = 'checkout_composite_target';
+  const paymentOrderId = 'order_payment_target';
+  const ucpOrderId = 'order_ucp_target';
+  const requestedPaths = [];
+  const server = createServer(async (request, response) => {
+    requestedPaths.push(request.url);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    if (request.url === '/agent/event-hub/webhook-events/poll') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          records: [{
+            eventId: 'evt_composite_target',
+            eventType: 'agent_order.succeeded',
+            customerId: 'cus_composite_target',
+            resourceId: paymentOrderId,
+            payload: JSON.stringify({ data: { checkoutId, orderId: paymentOrderId } }),
+          }],
+        },
+      }));
+      return;
+    }
+    if (request.url === '/agent/event-hub/webhook-events/ack') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: { deletedCount: 1, notFoundEventIds: [] },
+      }));
+      return;
+    }
+    if (request.url === `/agent/ucp/orders/${ucpOrderId}`) {
+      response.end(JSON.stringify({
+        code: 200,
+        data: { id: ucpOrderId, status: 'paid' },
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: 404, message: 'not found' }));
+  });
+  const address = await listen(server);
+  const home = await mkdtemp(join(tmpdir(), 'clink-composite-order-'));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const configDirectory = join(home, '.clink-cli');
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
+      baseUrl,
+      defaultOpenLinks: false,
+      customerId: 'cus_composite_target',
+      customerApiKey: 'csk_composite_target',
+    }), { encoding: 'utf8', mode: 0o600 });
+
+    const result = await runBundleAsync([
+      'events', 'poll',
+      '--type', 'agent_order.succeeded',
+      '--checkout-id', checkoutId,
+      '--ucp-order-id', ucpOrderId,
+      '--max-wait', '1',
+      '--format', 'json',
+    ], {
+      HOME: home,
+      CLINK_BASE_URL: baseUrl,
+      CLINK_CUSTOMER_ID: undefined,
+      CLINK_CUSTOMER_API_KEY: undefined,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.data.paymentConfirmed, true);
+    assert.equal(output.data.ucpOrderId, ucpOrderId);
+    assert.equal(output.data.orderLookupStatus, 'FETCHED');
+    assert.deepEqual(output.data.order, { id: ucpOrderId, status: 'paid' });
+    assert.ok(requestedPaths.includes(`/agent/ucp/orders/${ucpOrderId}`));
+    assert.ok(!requestedPaths.some((path) => path?.includes(paymentOrderId)));
+    assert.ok(!requestedPaths.some((path) => path?.includes('/checkout-sessions/')));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored checkout success poll does not retry a non-projecting checkout state', async () => {
+  const checkoutId = 'checkout_failed_projection';
+  const checkoutPath = `/custom/ucp/checkout-sessions/${checkoutId}`;
+  const requestedPaths = [];
+  const server = createServer(async (request, response) => {
+    requestedPaths.push(request.url);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    if (request.url === '/agent/event-hub/webhook-events/poll') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          records: [{
+            eventId: 'evt_failed_projection',
+            eventType: 'agent_order.succeeded',
+            customerId: 'cus_failed_projection',
+            payload: JSON.stringify({ data: { checkoutId } }),
+          }],
+        },
+      }));
+      return;
+    }
+    if (request.url === '/agent/event-hub/webhook-events/ack') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: { deletedCount: 1, notFoundEventIds: [] },
+      }));
+      return;
+    }
+    if (request.url === checkoutPath) {
+      response.end(JSON.stringify({
+        code: 200,
+        data: { id: checkoutId, status: 'failed' },
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: 404, message: 'not found' }));
+  });
+  const address = await listen(server);
+  const home = await mkdtemp(join(tmpdir(), 'clink-non-projecting-checkout-'));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const configDirectory = join(home, '.clink-cli');
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
+      baseUrl,
+      defaultOpenLinks: false,
+      customerId: 'cus_failed_projection',
+      customerApiKey: 'csk_failed_projection',
+    }), { encoding: 'utf8', mode: 0o600 });
+
+    const result = await runBundleAsync([
+      'events', 'poll',
+      '--type', 'agent_order.succeeded',
+      '--checkout-id', checkoutId,
+      '--endpoint', `${baseUrl}/custom/ucp`,
+      '--max-wait', '1',
+      '--format', 'json',
+    ], {
+      HOME: home,
+      CLINK_BASE_URL: baseUrl,
+      CLINK_CUSTOMER_ID: undefined,
+      CLINK_CUSTOMER_API_KEY: undefined,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.data.paymentConfirmed, true);
+    assert.equal(output.data.orderLookupStatus, 'ERROR');
+    assert.match(output.data.orderWarning, /does not support a pending UCP order projection/u);
+    assert.equal(requestedPaths.filter((path) => path === checkoutPath).length, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test('vendored checkout no-ack preserves every event while returning only the selected checkout', async () => {
   const targetCheckoutId = 'checkout_target_no_ack';
   const ackBodies = [];
@@ -1881,11 +2105,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.17');
+  assert.equal(vendorPackage.version, '0.2.18');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '9fc123a4b88e6d95544bc25d3e8df1859e129b0c',
+    '23f4ee939d73e7a945dc13ba6f982b22facfc0f2',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
@@ -1906,6 +2130,10 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   assert.match(bundleSource, /\/agent\/cwallet\/oauth\/device\/authorization/u);
   assert.match(bundleSource, /requestJsonWithOAuthRetry/u);
   assert.match(bundleSource, /Authentication changed while the command was in progress/u);
+  assert.equal(
+    bundleSource.match(/rethrowPostPaymentAuthError\(error\);/gu)?.length,
+    3,
+  );
   assert.match(bundleSource, /Wallet login changed while webhook events were in progress/u);
   assert.match(bundleSource, /Webhook event customer does not match the authenticated wallet/u);
   assert.match(bundleSource, /staleEventCutoffMs/u);

@@ -17,7 +17,9 @@
 Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
 ```
 
-安装完成后，Agent 必须立即继续钱包初始化，而不是等待用户再次发起：
+安装完成后，Agent 必须先理解完整语义意图，不能直接操作钱包。新的 Catalog/支付调用要构造 `references/clink-payment-intent-contract.md` 中的版本化契约，不得用正则、关键词、原始文本、旧布尔字段或环境中的支付参数来授权购买。商品搜索使用 `walletGate=SKIP`；描述商品后的购买发现使用 `DEFER_UNTIL_SELECTION`，两者都不执行 `wallet status` 或 `wallet init`。
+
+只有验证后的路由返回 `walletGate=REQUIRE_STATUS` 时，才进入以下 status-first 初始化流程：明确的钱包操作可立即进入；商品购买必须先完成匿名发现、语义授权与用户选品，形成已解析的结账目标后再进入。仅有商品描述不是初始化钱包的理由。
 
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
 2. 否则向用户询问邮箱地址（唯一必填项；显示名取邮箱 `@` 前的部分，无需询问姓名）。
@@ -34,12 +36,12 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包重新登录与重新授权
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
-- 无需初始化钱包、也不依赖 `~/.clink-cli/config.json` 的匿名公共 Catalog 搜索：默认生产环境，可显式传 `--test` 或 `--sandbox`，并可通过 Catalog context 携带 BCP47 结果语言
+- 基于语义的 v2 意图路由和派生钱包门禁：匿名公共 Catalog 搜索不读取钱包状态或 `~/.clink-cli/config.json`；带购买意图的商品发现也保持匿名，直到本轮语义明确授权并绑定一个候选商品。候选编号只负责定位商品，本身不能授权购买。Catalog 结果语言由 Agent 根据会话意图决定并冻结为 BCP47，通过 `--language` 传入；query 文本和后端不再猜测目标语言
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行
 - VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
-- UCP 商品下单 —— 先用 `clink tool parse-item` 解析并选择商品，判断履约方式；需要邮寄的实物商品必须提供完整的标准收货地址；在 Visa/VIC 需要时完成授权匹配；随后用商品 URL 调用 `clink tool internal-ucp get-endpoint`。命中配置时直接走 internal checkout；只有返回 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `/.well-known/ucp-clink` 与 `get-rest-endpoint` 自主探测，其中 provider 为 `clinkbill` 时走 internal checkout，其他 provider 或探测失败时走 external checkout
+- UCP 商品下单 —— 先用 `clink tool parse-item` 解析并选择商品，判断履约方式；需要邮寄的实物商品必须提供完整的标准收货地址；在 Visa/VIC 需要时完成授权匹配；随后用商品 URL 调用 `clink tool internal-ucp get-endpoint`。命中配置时直接走 internal checkout；只有返回 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `/.well-known/ucp-clink` 与 `get-rest-endpoint` 自主探测，其中 provider 为 `clinkbill` 时走 internal checkout，其他 provider 或探测失败时走 external checkout。complete 之后由同一个 checkout-scoped `events poll` 进程等待支付成功并直接读取 UCP 订单，不再让 Agent 调度第二条命令
 - 退款提交与状态轮询
 - 风控规则查看与配置
 - 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
@@ -53,6 +55,8 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 ## Skill 结构
 
 `SKILL.md` 只保留路由和安全规则；命令级细节放在 `references/` 下，沿用飞书/Lark skills 的“执行前读取对应操作 reference”模式。
+
+Catalog/支付路由先读取 `references/clink-payment-intent-contract.md`。该文档定义语义 v2 envelope、Direct/Session Pay 范围，以及 `SKIP` / `DEFER_UNTIL_SELECTION` / `REQUIRE_STATUS` 钱包门禁。
 
 商品下单前请先读取 `references/clink-ucp-checkout.md`，再执行 `clink tool parse-item`、`clink instruction list`、`clink ucp-checkout create/complete`。
 

@@ -17,7 +17,9 @@ Ask your agent to install the current Clink Payment Skills package:
 Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
 ```
 
-After installation, the agent must immediately continue with wallet initialization instead of waiting for another command:
+After installation, route the user's complete semantic intent before touching the wallet. New Catalog/payment callers construct the versioned contract in `references/clink-payment-intent-contract.md`; they do not authorize purchase from regexes, keywords, raw text, legacy booleans, or ambient payment fields. A product search runs anonymously with `walletGate=SKIP`, and described-product purchase discovery uses `DEFER_UNTIL_SELECTION`; neither runs `wallet status` or `wallet init`.
+
+Use this status-first setup path only when the validated route returns `walletGate=REQUIRE_STATUS`: immediately for an explicit wallet operation, or after anonymous discovery and user selection when a resolved purchase enters checkout/payment. A purchase description alone is not a reason to initialize the wallet.
 
 1. Run `clink wallet status --format json`. If the wallet is already ready (OAuth or complete legacy CSK), report readiness and stop.
 2. Otherwise ask the user for their email address (the only required input; the display name is derived from the email text before `@`).
@@ -34,12 +36,12 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Explicit fresh wallet login and reauthorization
 - Card binding and management
 - Payment execution (direct and session mode)
-- Anonymous public Catalog discovery without wallet initialization or `~/.clink-cli/config.json`: production by default, with explicit `--test` or `--sandbox`, plus optional BCP47 result language carried in Catalog context
+- Semantic v2 intent routing with derived wallet gates: anonymous public Catalog discovery does not read wallet state or `~/.clink-cli/config.json`; purchase discovery also remains anonymous until one candidate is semantically authorized and selected. Candidate numbers identify products but never authorize purchase by themselves. The agent chooses the Catalog result language from conversation intent and passes the frozen BCP47 tag with `--language`; query text and the backend do not guess it
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - Explicitly authorized public Skill installs with `clink skills install publisher/name[@version]`: omit version for latest, use `@version` for an exact release, or resolve a Number from the newest same-context two-hour list and confirm the frozen publisher/name/version before installation
 - VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
-- UCP checkout for product orders — parse product-page facts with `clink tool parse-item`, select one available item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization when required, then call `clink tool internal-ucp get-endpoint` with the product URL. A configured endpoint uses internal checkout; only `NOT_IN_INTERNAL_UCP_LIST` falls back to `/.well-known/ucp-clink` plus `get-rest-endpoint`, where provider `clinkbill` uses internal checkout and other providers or discovery failures use external checkout
+- UCP checkout for product orders — parse product-page facts with `clink tool parse-item`, select one available item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization when required, then call `clink tool internal-ucp get-endpoint` with the product URL. A configured endpoint uses internal checkout; only `NOT_IN_INTERNAL_UCP_LIST` falls back to `/.well-known/ucp-clink` plus `get-rest-endpoint`, where provider `clinkbill` uses internal checkout and other providers or discovery failures use external checkout. After complete, one checkout-scoped `events poll` process waits for payment success and fetches the UCP order directly, without a second Agent-dispatched command
 - Refund submission and polling
 - Risk rule configuration
 - Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink events poll`, instead of guessing or busy-retrying
@@ -53,6 +55,8 @@ Because completion is proven by a webhook event rather than by anything the brow
 ## Skill Structure
 
 `SKILL.md` contains routing and safety rules. Command-level details live under `references/`, following the same "read the operation reference before running the CLI" pattern used by the Lark skills.
+
+For Catalog/payment routing, read `references/clink-payment-intent-contract.md` first. It defines the semantic v2 envelope, Direct/Session Pay scope, and `SKIP` / `DEFER_UNTIL_SELECTION` / `REQUIRE_STATUS` wallet gates.
 
 For product checkout, read `references/clink-ucp-checkout.md` before running `clink tool parse-item`, `clink instruction list`, or `clink ucp-checkout create/complete`.
 
