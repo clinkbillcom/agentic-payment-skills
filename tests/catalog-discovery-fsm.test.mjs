@@ -368,6 +368,75 @@ test('rejects a matched merchant id that is not in the loaded candidate set', ()
   assert.equal(result.rejectedMerchantId, 'mcht_never_listed');
 });
 
+test('rejects an ambiguous scoped merchant id without a URL or domain discriminator', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    matchedMerchantId: duplicateMerchantId,
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.MATCH_MERCHANT_INTENT);
+  assert.equal(result.reason, 'merchant_match_ambiguous');
+  assert.equal(result.command, undefined);
+});
+
+test('broad results use their domain to disambiguate duplicate merchant ids', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    merchantMatch: false,
+    broadSearchOutput: {
+      groups: [{
+        merchant_id: duplicateMerchantId,
+        domain_name: 'vtravel.link2shops.com',
+        products: [{ id: 'voucher_1', title: 'Vtravel voucher' }],
+      }],
+      total_products: 1,
+    },
+  });
+
+  assert.equal(result.groups[0].merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.groups[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
+  assert.equal(result.groups[0].products[0].merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.groups[0].products[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
+});
+
 test('returns merchant-scoped products without widening the search', () => {
   const result = classifyCatalogDiscovery({
     query: 'bruce lee t-shirt',
@@ -889,6 +958,8 @@ test('frozen internal Catalog product reaches checkout guards without productUrl
     operation: PaymentRoutingOperation.UCP_CHECKOUT,
     executionDecision: PaymentExecutionDecision.AUTHORIZED,
     authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    pendingCatalogProductSelection: selection.pendingCatalogProductSelection,
+    selectedProduct: selection.selectedProduct,
     target: {
       source: selection.selectedProduct.source,
       merchantId: selection.selectedProduct.merchantId,

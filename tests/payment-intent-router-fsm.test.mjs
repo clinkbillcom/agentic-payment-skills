@@ -2960,7 +2960,7 @@ test('rejects an internal Catalog candidate whose merchant URL is absent', () =>
   assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
-test('uses an internal Catalog product URL when the merchant list has no merchant_url yet', () => {
+test('rejects an internal Catalog product URL when the merchant list has no merchant_url', () => {
   const {
     merchant_url: _merchantUrl,
     ...candidateWithoutMerchantUrl
@@ -2976,9 +2976,9 @@ test('uses an internal Catalog product URL when the merchant list has no merchan
     },
   });
 
-  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
-  assert.equal(result.selectedProduct.productUrl, 'https://testa.link2shops.com/product/voucher_1');
-  assert.equal(result.selectedProduct.merchantUrl, 'https://testa.link2shops.com/product/voucher_1');
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_candidate_invalid');
+  assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
 for (const conflictingSelection of [
