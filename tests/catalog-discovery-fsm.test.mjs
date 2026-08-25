@@ -7,7 +7,7 @@ import {
   CatalogDiscoveryAction,
   CATALOG_CHANNEL_EATS365,
   CATALOG_SUPPORTED_COUNTRIES,
-  classifyCatalogDiscovery,
+  classifyCatalogDiscovery as classifyCatalogDiscoveryRaw,
   resolveCatalogEnvironment,
   resolveCatalogLanguage,
   resolveCatalogExt,
@@ -30,6 +30,15 @@ const shopifyMerchant = {
 };
 
 const merchantListOutput = { merchants: [bruceLeeMerchant, shopifyMerchant] };
+
+function classifyCatalogDiscovery(input = {}) {
+  const hasLanguage = ['catalogLanguage', 'catalog_language', 'language']
+    .some((field) => input[field] !== undefined);
+  return classifyCatalogDiscoveryRaw({
+    ...(hasLanguage ? {} : { catalogLanguage: 'en' }),
+    ...input,
+  });
+}
 
 test('asks for a query before touching the CLI', () => {
   const result = classifyCatalogDiscovery({});
@@ -75,7 +84,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(
       scoped.command,
       `clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd`
-        + ` --query 'bruce lee t-shirt' ${flag} --format json`,
+        + ` --query 'bruce lee t-shirt' --language en ${flag} --format json`,
     );
 
     const broad = classifyCatalogDiscovery({
@@ -87,7 +96,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(broad.catalogEnvironment, catalogEnvironment);
     assert.equal(
       broad.command,
-      `clink catalog search --query 'iced matcha latte' ${flag} --format json`,
+      `clink catalog search --query 'iced matcha latte' --language en ${flag} --format json`,
     );
   }
 });
@@ -202,6 +211,22 @@ test('rejects a non-BCP47 catalog language before running a command', () => {
   assert.equal(result.command, undefined);
 });
 
+test('requires a nonblank language before any Catalog discovery step', () => {
+  for (const catalogLanguage of [undefined, null, '', '   ']) {
+    const result = classifyCatalogDiscoveryRaw({
+      query: '奶茶',
+      catalogLanguage,
+      merchantListOutput: { merchants: [] },
+    });
+
+    assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_MISSING);
+    assert.equal(result.action, CatalogDiscoveryAction.ASK_FOR_CATALOG_INPUT);
+    assert.equal(result.reason, 'catalog_language_missing');
+    assert.deepEqual(result.missing, ['catalogLanguage']);
+    assert.equal(result.command, undefined);
+  }
+});
+
 test('catalog language aliases ignore blanks and require one canonical BCP47 value', () => {
   assert.deepEqual(resolveCatalogLanguage({
     catalogLanguage: '',
@@ -249,15 +274,15 @@ for (const catalogLanguage of ['und', 'zh-US', 'zh-Latn', `en-${'a'.repeat(65)}`
   });
 }
 
-test('legacy direct discovery does not infer language from a Chinese query', () => {
-  const result = classifyCatalogDiscovery({
+test('direct discovery fails closed instead of inferring language from a Chinese query', () => {
+  const result = classifyCatalogDiscoveryRaw({
     query: '屈臣氏',
     merchantListOutput,
     matchedMerchantId: 'mcht_frnz6yfrz1sd',
   });
 
-  assert.equal(result.catalogLanguage, undefined);
-  assert.doesNotMatch(result.command, /--language|context[^\n]*language/u);
+  assert.equal(result.reason, 'catalog_language_missing');
+  assert.equal(result.command, undefined);
 });
 
 test('catalog language aliases fail closed when canonical values conflict', () => {
@@ -335,7 +360,7 @@ test('runs a merchant-scoped search when intent matches one merchant', () => {
   assert.equal(result.matchReason, 'description names licensed apparel');
   assert.equal(
     result.command,
-    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --format json",
+    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --language en --format json",
   );
 });
 
@@ -385,7 +410,7 @@ test('falls back to broad search when the merchant-scoped search is empty', () =
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink catalog search --query 'bruce lee t-shirt' --format json",
+    "clink catalog search --query 'bruce lee t-shirt' --language en --format json",
   );
 });
 
@@ -401,7 +426,7 @@ test('runs an unscoped broad search when intent matches no merchant', () => {
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink catalog search --query 'iced matcha latte' --format json",
+    "clink catalog search --query 'iced matcha latte' --language en --format json",
   );
 });
 
@@ -434,6 +459,7 @@ test('uses the top-level channel selector and keeps a store id for response filt
     result.command,
     'clink catalog search --query \'iced matcha latte\''
       + ' --channel-type eats365'
+      + ' --language en'
       + ' --context \'{"address_country":"HK"}\' --format json',
   );
   assert.doesNotMatch(result.command, /--ext|store_id/u);
@@ -464,7 +490,7 @@ test('treats countries without catalog location mappings as unknown location', (
 
     assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
     assert.equal(result.country, null);
-    assert.equal(result.command, "clink catalog search --query croissant --format json");
+    assert.equal(result.command, "clink catalog search --query croissant --language en --format json");
     assert.doesNotMatch(result.command, /--context/u);
   }
 });

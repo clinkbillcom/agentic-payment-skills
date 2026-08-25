@@ -8,7 +8,10 @@ import {
   PaymentWalletGate,
   classifyPaymentIntent,
 } from '../lib/payment-intent-router-fsm.mjs';
-import { classifyCatalogDiscovery } from '../lib/catalog-discovery-fsm.mjs';
+import {
+  CatalogDiscoveryAction,
+  classifyCatalogDiscovery,
+} from '../lib/catalog-discovery-fsm.mjs';
 
 test('routes explicit wallet relogin before payment-target classification', () => {
   const result = classifyPaymentIntent({
@@ -3241,10 +3244,9 @@ for (const [name, languageFields, expectedReason] of [
       query: result.catalogQuery,
       catalogEnvironment: result.catalogEnvironment,
     });
-    assert.equal(
-      restarted.command,
-      'clink tool internal-ucp get-merchant-list --sandbox --format json',
-    );
+    assert.equal(restarted.action, CatalogDiscoveryAction.ASK_FOR_CATALOG_INPUT);
+    assert.equal(restarted.reason, 'catalog_language_missing');
+    assert.equal(restarted.command, undefined);
     assert.equal(Object.hasOwn(restarted, 'catalogLanguage'), false);
   });
 }
