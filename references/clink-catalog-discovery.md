@@ -147,7 +147,7 @@ Match the user's request against each candidate's `description`, not against its
 
 Skip this inference step when `channelType` or `storeId` is already established. After the merchant-list preflight, go directly to broad search: the merchant-scoped endpoint accepts neither the channel selector nor store identity, so a scoped match would silently discard the target constraint. A buyer country alone remains a hint and does not skip matching.
 
-Report the decision back to the FSM as `merchantMatch: { merchantId, reason }` for a match, or `merchantMatch: false` for no match. The FSM rejects a `merchantId` that is not in the list it just loaded (`merchant_match_not_in_candidates`): a merchant the wallet never enumerated must not receive a scoped search.
+Report a match as `merchantMatch: { merchantId, merchantDomain, merchantUrl, reason }`, copying `merchantId`, `domainName` as `merchantDomain`, and the optional `merchantUrl` exactly from the one selected candidate. The description remains the only matching evidence; domain and URL only preserve that candidate's identity. Return `merchantMatch:false` for no match. When multiple candidates share a merchant ID, a matching domain or URL discriminator is mandatory; omission returns `merchant_match_ambiguous`. Any supplied discriminator that conflicts with the selected list entry also fails closed. Never construct a replacement URL. The FSM rejects an ID outside the loaded list as `merchant_match_not_in_candidates`.
 
 Match only when the description genuinely covers the request. A weak match that returns nothing costs an extra round trip; a wrong match sends the user a confident answer from the wrong catalog.
 

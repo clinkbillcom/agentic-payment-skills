@@ -865,6 +865,8 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
+  assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
+  assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {

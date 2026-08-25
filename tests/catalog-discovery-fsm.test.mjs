@@ -398,6 +398,67 @@ test('rejects an ambiguous scoped merchant id without a URL or domain discrimina
   assert.equal(result.command, undefined);
 });
 
+test('scoped matching uses the selected candidate identity to disambiguate duplicate merchant ids', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const vtravelUrl = 'https://vtravel.link2shops.com/yiyuan/';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    catalogEnvironment: 'sandbox',
+    catalogLanguage: 'zh-Hans',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: vtravelUrl,
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    merchantMatch: {
+      merchantId: duplicateMerchantId,
+      merchantDomain: 'vtravel.link2shops.com',
+      merchantUrl: vtravelUrl,
+      reason: 'description names the requested Vtravel voucher catalog',
+    },
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.RUN_MERCHANT_SCOPED_CATALOG_SEARCH);
+  assert.equal(result.merchantId, duplicateMerchantId);
+  assert.equal(result.merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.merchantUrl, vtravelUrl);
+  assert.equal(
+    result.command,
+    `clink ucp-catalog search --merchant-id ${duplicateMerchantId}`
+      + ` --query 'vtravel voucher' --language zh-Hans --sandbox --format json`,
+  );
+});
+
+test('scoped matching rejects conflicting merchant domain and URL discriminators', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'Bruce Lee shirt',
+    merchantListOutput,
+    merchantMatch: {
+      merchantId: bruceLeeMerchant.merchant_id,
+      merchantDomain: bruceLeeMerchant.domain_name,
+      merchantUrl: shopifyMerchant.merchant_url,
+      reason: 'description match',
+    },
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.MATCH_MERCHANT_INTENT);
+  assert.equal(result.reason, 'merchant_match_not_in_candidates');
+  assert.equal(result.command, undefined);
+});
+
 test('broad results use their domain to disambiguate duplicate merchant ids', () => {
   const duplicateMerchantId = 'mcht_ftmse61a6az0';
   const result = classifyCatalogDiscovery({
