@@ -12688,7 +12688,9 @@ Behavior:
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
-  The output preserves list metadata, descriptions, enabled flags, and disabled entries.
+  The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
+  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry whose hostname
+  must exactly match domain_name; callers must not construct a replacement URL.
   CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
@@ -14223,24 +14225,28 @@ var ucp_merchants_default = {
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
     },
     {
       domain_name: "uat-magento.clinkpay.team",
+      merchant_url: "https://uat-magento.clinkpay.team/",
       merchant_id: "mcht_f5d0rys1hjxe",
       enabled: true,
       description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     },
     {
       domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
     },
     {
       domain_name: "vtravel.link2shops.com",
+      merchant_url: "https://vtravel.link2shops.com/yiyuan/#/exitPage",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
@@ -14255,12 +14261,14 @@ var ucp_merchants_default2 = {
   merchants: [
     {
       domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
       merchant_id: "mcht_fcq09yoqqink",
       enabled: true,
       description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
     },
     {
       domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
       merchant_id: "mcht_f5xuyduv1a0j",
       enabled: true,
       description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
@@ -14288,6 +14296,9 @@ function validateInternalUcpMerchants(value, source) {
     const merchantId = stringValue(fields.merchant_id);
     if (!domainName || !merchantId) {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (fields.merchant_url !== void 0) {
+      validateMerchantUrl(fields.merchant_url, domainName, source, index);
     }
     if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
       throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
@@ -14423,6 +14434,18 @@ async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_
 }
 function stringValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function validateMerchantUrl(value, domainName, source, index) {
+  const rawUrl = stringValue(value);
+  let merchantUrl;
+  try {
+    merchantUrl = new URL(rawUrl ?? "");
+  } catch {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+  }
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password) {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+  }
 }
 function canonicalDomain(value) {
   return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
