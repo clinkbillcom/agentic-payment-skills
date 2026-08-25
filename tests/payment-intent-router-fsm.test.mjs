@@ -2364,6 +2364,26 @@ const pendingDiscoveryOnlyCatalogSelection = {
   resultMode: 'DISCOVERY_ONLY',
 };
 
+const pendingInternalCatalogSelection = {
+  status: 'AWAITING_SELECTION',
+  purchaseIntent: true,
+  resultMode: 'PURCHASE_SELECTION',
+  catalogQuery: 'HungryPanda',
+  catalog_environment: 'sandbox',
+  catalog_language: 'zh-Hans',
+  candidates: [{
+    product_id: '571d217de068498f8ba545a286900a16',
+    title: 'HungryPanda(US)',
+    source: 'INTERNAL_UCP_CATALOG',
+    merchant_id: 'mcht_ftmse61a6az0',
+    merchant_url: 'https://testa.link2shops.com/',
+    merchant_domain: 'testa.link2shops.com',
+    price: 100,
+    currency: 'USD',
+    quantity: 1,
+  }],
+};
+
 for (const [name, provenance, expectedReason] of [
   [
     'both fields missing',
@@ -2909,6 +2929,59 @@ test('structured purchase authorization can select from discovery-only results',
 
   assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
   assert.equal(result.selectedProduct.productId, 'product_1');
+});
+
+test('selects a frozen internal Catalog product without requiring productUrl', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: pendingInternalCatalogSelection,
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
+  assert.equal(result.selectedProduct.source, 'INTERNAL_UCP_CATALOG');
+  assert.equal(result.selectedProduct.merchantId, 'mcht_ftmse61a6az0');
+  assert.equal(result.selectedProduct.merchantUrl, 'https://testa.link2shops.com/');
+  assert.equal(result.selectedProduct.productId, '571d217de068498f8ba545a286900a16');
+  assert.equal(Object.hasOwn(result.selectedProduct, 'productUrl'), false);
+  assert.equal(result.walletGate, PaymentWalletGate.REQUIRE_STATUS);
+});
+
+test('rejects an internal Catalog candidate whose merchant URL is absent', () => {
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingInternalCatalogSelection,
+      candidates: [{
+        ...pendingInternalCatalogSelection.candidates[0],
+        merchant_url: undefined,
+      }],
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_candidate_invalid');
+  assert.deepEqual(result.missing, ['merchantUrl']);
+});
+
+test('rejects an internal Catalog product URL when the merchant list has no merchant_url', () => {
+  const {
+    merchant_url: _merchantUrl,
+    ...candidateWithoutMerchantUrl
+  } = pendingInternalCatalogSelection.candidates[0];
+  const result = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      ...pendingInternalCatalogSelection,
+      candidates: [{
+        ...candidateWithoutMerchantUrl,
+        url: 'https://testa.link2shops.com/product/voucher_1',
+      }],
+    },
+  });
+
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_candidate_invalid');
+  assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
 for (const conflictingSelection of [

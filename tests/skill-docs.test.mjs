@@ -648,8 +648,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.13\.1"/u);
-  assert.equal(packageJson.version, '1.13.1');
+  assert.match(skill, /version:\s*"1\.13\.2"/u);
+  assert.equal(packageJson.version, '1.13.2');
   assert.equal(packageJson.engines?.node, '>=20');
 });
 
@@ -865,6 +865,8 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
+  assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
+  assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
@@ -1053,9 +1055,10 @@ test('described product purchase routes through catalog discovery before checkou
   assert.equal(catalogPurchaseRow[2], 'DEFER_UNTIL_SELECTION');
   const checkoutRow = markdownTableRow(paymentIntentContract, 'UCP_CHECKOUT');
   assert.match(checkoutRow[1], /target\.productUrl/u);
+  assert.match(checkoutRow[1], /INTERNAL_UCP_CATALOG/u);
   assert.equal(checkoutRow[2], 'REQUIRE_STATUS');
   assert.match(paymentIntentContract, /described-product purchase is not checkout-ready/iu);
-  assert.match(catalogDiscovery, /merchant ID is optional discovery scope, not a product identity/iu);
+  assert.match(catalogDiscovery, /merchant ID by itself is only optional discovery scope/iu);
 
   assert.match(catalogDiscovery, /Described Product Purchase Route/u);
   assert.match(catalogDiscovery, /RUN_CATALOG_DISCOVERY_WORKFLOW/u);
@@ -1110,7 +1113,7 @@ test('semantic denial and the purchase wallet boundary fail closed', () => {
   assert.match(skill, /walletGate=REQUIRE_STATUS/u);
   assert.match(skill, /Candidate resolution only binds the authorized decision/u);
   assert.match(skill, /Preserve and validate the frozen query, product aliases/u);
-  assert.match(catalogDiscovery, /price, currency, and quantity/u);
+  assert.match(catalogDiscovery, /price, currency, quantity/u);
   assert.match(catalogDiscovery, /failed claim or replay runs no checkout/iu);
 });
 
@@ -1129,8 +1132,11 @@ test('UCP minimal skeleton parses and classifies the item before card refresh', 
 
 test('catalog selection does not bypass UCP checkout guards', () => {
   assert.match(catalogDiscovery, /clink-ucp-checkout\.md/u);
-  assert.match(catalogDiscovery, /Selecting a product does not skip any of them/u);
-  assert.match(catalogDiscovery, /Selection is not authorization to skip/u);
+  assert.match(catalogDiscovery, /Only a validated `INTERNAL_UCP_CATALOG` target may skip `parse-item`/u);
+  assert.match(
+    catalogDiscovery,
+    /never skips fulfillment, shipping, amount, wallet, instruction, route, or execution gates/u,
+  );
 });
 
 // This skill is installed by many host agents, and some drive a browser of their own. A Passkey page
