@@ -12689,8 +12689,8 @@ Behavior:
   Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
   Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
   The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
-  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry whose hostname
-  must exactly match domain_name; callers must not construct a replacement URL.
+  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry with no
+  fragment whose hostname must exactly match domain_name; callers must not construct a replacement URL.
   CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
@@ -14246,7 +14246,7 @@ var ucp_merchants_default = {
     },
     {
       domain_name: "vtravel.link2shops.com",
-      merchant_url: "https://vtravel.link2shops.com/yiyuan/#/exitPage",
+      merchant_url: "https://vtravel.link2shops.com/yiyuan/",
       merchant_id: "mcht_ftmse61a6az0",
       enabled: true,
       description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
@@ -14443,7 +14443,7 @@ function validateMerchantUrl(value, domainName, source, index) {
   } catch {
     throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
-  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password) {
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password || merchantUrl.hash) {
     throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
 }
