@@ -296,6 +296,77 @@ test('v2 checkout rejects a bare item id without a product URL', () => {
   assert.equal(result.walletGate, PaymentWalletGate.SKIP);
 });
 
+test('v2 checkout accepts a frozen internal Catalog product without a product page', () => {
+  const result = classifyPaymentIntent({
+    ...boundRequest,
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    target: {
+      source: 'INTERNAL_UCP_CATALOG',
+      merchantId: 'mcht_fuhui',
+      merchantUrl: 'https://merchant.example/catalog',
+      merchantDomain: 'merchant.example',
+      itemId: 'voucher_1',
+      productName: 'HungryPanda(US)',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+  });
+
+  assert.equal(result.state, PaymentIntentState.UCP_CHECKOUT_SELECTED);
+  assert.equal(result.reason, 'structured_internal_catalog_checkout_intent');
+  assert.equal(result.merchantId, 'mcht_fuhui');
+  assert.equal(result.merchantUrl, 'https://merchant.example/catalog');
+  assert.equal(result.itemId, 'voucher_1');
+  assert.equal(result.requiresProductParse, false);
+  assert.equal(result.validateItemAgainstProductUrl, false);
+  assert.equal(result.walletGate, PaymentWalletGate.REQUIRE_STATUS);
+});
+
+test('v2 internal Catalog checkout fails closed without an authoritative merchant URL', () => {
+  const result = classifyPaymentIntent({
+    ...boundRequest,
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    target: {
+      source: 'INTERNAL_UCP_CATALOG',
+      merchantId: 'mcht_fuhui',
+      merchantDomain: 'merchant.example',
+      itemId: 'voucher_1',
+      productName: 'HungryPanda(US)',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.reason, 'routing_contract_internal_catalog_target_missing');
+  assert.deepEqual(result.missing, ['target.merchantUrl']);
+  assert.equal(result.walletGate, PaymentWalletGate.SKIP);
+});
+
+test('v2 internal Catalog checkout rejects a merchant URL on another domain', () => {
+  const result = classifyPaymentIntent({
+    ...boundRequest,
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    target: {
+      source: 'INTERNAL_UCP_CATALOG',
+      merchantId: 'mcht_fuhui',
+      merchantUrl: 'https://other.example/catalog',
+      merchantDomain: 'merchant.example',
+      itemId: 'voucher_1',
+      productName: 'HungryPanda(US)',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.reason, 'routing_contract_target_invalid');
+  assert.deepEqual(result.invalidFields, ['target.merchantUrl']);
+});
+
 test('v2 direct pay requires exact target and payment scope', () => {
   const result = classifyPaymentIntent({
     ...boundRequest,

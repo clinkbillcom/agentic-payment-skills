@@ -14,9 +14,25 @@ import {
   resolveContextCountry,
   formatCatalogDiscoveryFsmMarker,
 } from '../lib/catalog-discovery-fsm.mjs';
+import {
+  PaymentAuthorizationSource,
+  PaymentExecutionDecision,
+  PaymentIntentAction,
+  PaymentRoutingOperation,
+  classifyPaymentIntent,
+} from '../lib/payment-intent-router-fsm.mjs';
+import {
+  UcpCheckoutRouteAction,
+  classifyUcpCheckoutRoute,
+} from '../lib/ucp-checkout-route-fsm.mjs';
+import {
+  UcpCheckoutWorkflowAction,
+  classifyUcpCheckoutPrerequisites,
+} from '../lib/ucp-checkout-workflow-fsm.mjs';
 
 const bruceLeeMerchant = {
   domain_name: 'www.bruceleeclub.com',
+  merchant_url: 'https://www.bruceleeclub.com/',
   merchant_id: 'mcht_frnz6yfrz1sd',
   enabled: true,
   description: 'Official online store of Bruce Lee Club. Licensed fan and collector goods: apparel and T-shirts, memorabilia, books, posters, accessories.',
@@ -24,6 +40,7 @@ const bruceLeeMerchant = {
 
 const shopifyMerchant = {
   domain_name: 'uebmaw-it.myshopify.com',
+  merchant_url: 'https://uebmaw-it.myshopify.com/',
   merchant_id: 'mcht_frnagwqi4k43',
   enabled: true,
   description: 'Shopify storefront selling Bruce Lee Club collaboration merchandise, mainly limited-run tops and shirts.',
@@ -367,8 +384,38 @@ test('returns merchant-scoped products without widening the search', () => {
   assert.equal(result.reason, 'merchant_scoped_search_matched');
   assert.equal(result.scope, 'MERCHANT_SCOPED');
   assert.equal(result.productCount, 1);
+  assert.deepEqual(result.products[0], {
+    id: 'product_1',
+    title: 'Bruce Lee Tee',
+    source: 'INTERNAL_UCP_CATALOG',
+    merchantId: 'mcht_frnz6yfrz1sd',
+    merchantDomain: 'www.bruceleeclub.com',
+    merchantUrl: 'https://www.bruceleeclub.com/',
+  });
   assert.equal(result.messages.length, 1);
   assert.equal(result.terminal, true);
+});
+
+test('merchant-scoped discovery does not synthesize a merchant URL when the list omits it', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'voucher',
+    merchantListOutput: {
+      merchants: [{
+        domain_name: 'merchant.example',
+        merchant_id: 'mcht_1',
+        enabled: true,
+        description: 'Digital vouchers',
+      }],
+    },
+    matchedMerchantId: 'mcht_1',
+    merchantSearchOutput: {
+      products: [{ id: 'voucher_1', title: 'Voucher' }],
+    },
+  });
+
+  assert.equal(result.products[0].source, 'INTERNAL_UCP_CATALOG');
+  assert.equal(result.products[0].merchantDomain, 'merchant.example');
+  assert.equal(Object.hasOwn(result.products[0], 'merchantUrl'), false);
 });
 
 test('falls back to broad search when the merchant-scoped search is empty', () => {
@@ -770,4 +817,121 @@ test('formats an internal-only diagnostic marker', () => {
     '[CATALOG_DISCOVERY_FSM] state=BROAD_SEARCH_REQUIRED'
       + ' action=RUN_BROAD_CATALOG_SEARCH reason=merchant_intent_match_failed',
   );
+});
+
+test('frozen internal Catalog product reaches checkout guards without productUrl', () => {
+  const merchantId = 'mcht_ftmse61a6az0';
+  const merchantUrl = 'https://testa.link2shops.com/';
+  const merchantDomain = 'testa.link2shops.com';
+  const itemId = '571d217de068498f8ba545a286900a16';
+  const walletOrigin = 'https://uat-api.clinkbill.com';
+  const endpoint = `${walletOrigin}/agent/ucp/${merchantId}`;
+  const walletStatus = { ok: true, data: { baseUrl: walletOrigin } };
+  const discovery = classifyCatalogDiscovery({
+    query: '熊猫外卖券',
+    catalogEnvironment: 'sandbox',
+    catalogLanguage: 'zh-Hans',
+    merchantListOutput: {
+      merchants: [{
+        domain_name: merchantDomain,
+        merchant_url: merchantUrl,
+        merchant_id: merchantId,
+        enabled: true,
+        description: 'Fuhui UAT digital vouchers and coupons',
+      }],
+    },
+    matchedMerchantId: merchantId,
+    merchantSearchOutput: {
+      products: [{
+        id: itemId,
+        title: 'HungryPanda(US)',
+        price_range: {
+          min: { amount: 100, currency: 'USD' },
+          max: { amount: 100, currency: 'USD' },
+        },
+        variants: [{
+          id: itemId,
+          title: 'HungryPanda(US)',
+          price: { amount: 100, currency: 'USD' },
+          availability: { available: true, status: 'in_stock' },
+        }],
+      }],
+    },
+  });
+
+  assert.equal(discovery.action, CatalogDiscoveryAction.RETURN_CATALOG_RESULTS);
+  assert.equal(discovery.products[0].source, 'INTERNAL_UCP_CATALOG');
+  assert.equal(discovery.products[0].merchantUrl, merchantUrl);
+  assert.equal(Object.hasOwn(discovery.products[0], 'productUrl'), false);
+
+  const selection = classifyPaymentIntent({
+    text: '1',
+    pendingCatalogProductSelection: {
+      status: 'AWAITING_SELECTION',
+      purchaseIntent: true,
+      resultMode: 'PURCHASE_SELECTION',
+      catalogQuery: '熊猫外卖券',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+      candidates: discovery.products,
+    },
+  });
+
+  assert.equal(
+    selection.action,
+    PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT,
+  );
+
+  const checkoutIntent = classifyPaymentIntent({
+    routingContractVersion: 2,
+    requestId: 'request_hungrypanda',
+    turnId: 'turn_hungrypanda',
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    executionDecision: PaymentExecutionDecision.AUTHORIZED,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    target: {
+      source: selection.selectedProduct.source,
+      merchantId: selection.selectedProduct.merchantId,
+      merchantUrl: selection.selectedProduct.merchantUrl,
+      merchantDomain: selection.selectedProduct.merchantDomain,
+      itemId: selection.selectedProduct.productId,
+      productName: selection.selectedProduct.productName,
+      catalogEnvironment: selection.selectedProduct.catalogEnvironment,
+      catalogLanguage: selection.selectedProduct.catalogLanguage,
+    },
+  });
+
+  assert.equal(checkoutIntent.action, PaymentIntentAction.RUN_UCP_CHECKOUT_WORKFLOW);
+  assert.equal(checkoutIntent.requiresProductParse, false);
+  assert.equal(Object.hasOwn(checkoutIntent, 'productUrl'), false);
+
+  const route = classifyUcpCheckoutRoute({
+    merchantUrl: checkoutIntent.merchantUrl,
+    walletStatus,
+    internalUcpEndpointOutput: {
+      domainName: merchantDomain,
+      merchantId,
+      provider: 'clinkbill',
+      endpoint,
+    },
+  });
+
+  assert.equal(route.action, UcpCheckoutRouteAction.CREATE_INTERNAL_UCP_CHECKOUT);
+  assert.equal(route.endpoint, endpoint);
+
+  const prerequisites = classifyUcpCheckoutPrerequisites({
+    source: checkoutIntent.source,
+    itemId: checkoutIntent.itemId,
+    merchantUrl: checkoutIntent.merchantUrl,
+    title: checkoutIntent.productName,
+    currency: 'USD',
+    amountMinor: 100,
+    quantity: 1,
+    fulfillmentType: 'NO_SHIPPING_REQUIRED',
+    paymentInstrumentId: 'pm_test',
+    selectedProduct: selection.selectedProduct,
+    walletStatus,
+  });
+
+  assert.equal(prerequisites.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
 });

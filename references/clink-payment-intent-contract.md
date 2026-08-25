@@ -43,13 +43,19 @@ The FSM derives wallet behavior from the validated operation. Callers must obey 
 | --- | --- | --- | --- |
 | `CATALOG_SEARCH` | `target.catalogQuery` and `target.catalogLanguage`; optional Catalog environment plus either merchant scope or channel/store/location scope | `SKIP` | Anonymous discovery. Run no `wallet status`, `wallet init`, card, instruction, or checkout command. |
 | `CATALOG_PURCHASE` | `target.catalogQuery` or `target.productName`, plus `target.catalogLanguage`; the same optional Catalog scope | `DEFER_UNTIL_SELECTION` | Discovery remains anonymous. Present candidates and wait; do not touch the wallet until one validated product is selected for checkout. |
-| `UCP_CHECKOUT` | Absolute `target.productUrl`; optional `target.itemId` must later be verified against that URL's parsed available items | `REQUIRE_STATUS` | The product is resolved and the purchase is authorized. Enter authenticated wallet readiness and checkout. |
+| `UCP_CHECKOUT` | Either an absolute `target.productUrl`, or a frozen internal Catalog target with `target.source=INTERNAL_UCP_CATALOG`, `merchantId`, authoritative `merchantUrl`, matching `merchantDomain`, `itemId`, `productName`, `catalogEnvironment`, and `catalogLanguage` | `REQUIRE_STATUS` | The product is resolved and the purchase is authorized. Page-backed products run `parse-item`; an internal Catalog target uses its frozen item facts and skips page parsing. |
 | `DIRECT_PAY` | The mutually exclusive Direct/Session scope below | `REQUIRE_STATUS` | Enter authenticated wallet readiness and Direct/Session Pay guards. |
 | `NO_ACTION` | No executable target | `SKIP` | Run no Catalog or wallet/payment command. Use `DENIED` or `CLARIFY`, not `AUTHORIZED`. |
 
 Invalid, denied, unsupported, or unbound contracts fail closed with `requiresWallet:false` and `walletGate:SKIP`. Missing inputs also do not initialize a wallet; collect or repair the scoped input first.
 
 Catalog scope is nested under `target`. `merchantId` is mutually exclusive with channel/store scope. `storeId` requires `channelType`; `addressCountry` is an optional discovery hint. The Catalog FSM still validates a scoped merchant against the anonymous merchant list. Top-level copies are ambient and ignored.
+
+`INTERNAL_UCP_CATALOG` is not a general item-ID bypass. It is valid only for a
+candidate produced by the Catalog FSM from a validated merchant-list entry. Its
+`merchantUrl` must come from that entry's `merchant_url`, not from Agent URL
+construction, a brand default, or a prior run. A bare item ID still requires a
+product URL and remains outside the wallet gate.
 
 ### Agent-Owned Catalog Language
 
