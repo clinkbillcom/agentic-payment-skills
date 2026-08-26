@@ -10372,7 +10372,7 @@ function resolveWalletInitBaseUrl(flags) {
   return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
 }
 function resolvePublicCatalogBaseUrl(flags) {
-  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
+  return API_BASE_URLS[resolveSelectedEnvironment(flags) ?? "production"];
 }
 function resolveSelectedEnvironment(flags) {
   const explicitEnvironment = resolveExplicitEnvironment(flags);
@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.30";
+var CLI_VERSION = "0.2.27";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -12853,7 +12853,7 @@ Options:
   --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
   --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
   --description <text>         Optional Quick Instruction description
-  --is-recurring               Mark the Quick Instruction as recurring
+  --is-recurring               Mark it recurring; mandates require recurringFrequency
   --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
   --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
@@ -12877,13 +12877,13 @@ Quick Instruction:
   --extra are rejected because no card exists yet and the context is intentionally bounded.
   Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
   contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
-  requires a description of at most 150 characters, a positive amountLimit with at most two
-  decimals, and currencyCode.
+  requires description, a positive amountLimit with at most two decimals, and currencyCode.
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  A successful token response reports pendingInstructionId; null means no usable Quick ID was
-  returned and does not prove whether creation was skipped or failed.
-  A PENDING instruction activates after VIC card binding completes and emits
-  purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
+  After browser authorization, the server attempts to create a PENDING purchase instruction and
+  reports pendingInstructionId. A null value means no usable Quick ID was returned and does not
+  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
+  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
+  \`instruction list --valid-only\` until it is ACTIVE.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -13139,7 +13139,7 @@ Arguments:
   --amount <amount>            Charge amount for direct charge mode
   --currency <currency>        Charge currency for direct charge mode, for example USD
   --session-id <id>            Checkout session ID for session mode
-  --payment-instrument-id <id> Payment instrument to charge; optional for ALIPAY
+  --payment-instrument-id <id> Payment instrument to charge; optional for Order-resolved ALIPAY
   --instruction-id <id>          VIC purchase instruction ID sent as instruction_id
   --purchase-instruction-id <id> Backward-compatible alias for --instruction-id
   --mandate-id <id>              VIC mandate ID sent as mandate_id
@@ -13152,13 +13152,18 @@ Options:
 ${CUSTOMER_REQUEST_OPTIONS}
 
 Notes:
-  If --payment-instrument-id is omitted, ALIPAY sends no payment instrument and lets the backend
-  resolve or create it. CARD and BALANCE keep using the cached default payment method. Other types
-  refresh payment methods and require one matching type. If none match, bind one and refresh
-  payment methods. When several match, exactly one must be marked default or the caller must pass
-  --payment-instrument-id explicitly.
-  An explicit payment instrument for ALIPAY or those other types is validated against the refreshed
-  list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
+  If --payment-method-type is omitted, pay uses CARD and the cached default payment instrument.
+  CARD without an explicit instrument keeps using the cached default payment method.
+  BALANCE without an explicit instrument omits the payment instrument so Order keeps the legacy
+  balance route instead of receiving an unrelated cached default card.
+  When ALIPAY is explicit and --payment-instrument-id is omitted, Order resolves or creates the
+  Alipay payment instrument. This path does not use the cached default card or require a pre-bound
+  Alipay method.
+  Other non-CARD/BALANCE types refresh payment methods and require one matching type, except for
+  Order-resolved ALIPAY without an explicit instrument. When several match, exactly one must be
+  marked default or the caller must pass --payment-instrument-id.
+  An explicit payment instrument for another non-CARD/BALANCE type is validated against the
+  refreshed list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
   Refresh cached payment methods with clink card binding-link when needed.
   For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
   For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
@@ -14101,7 +14106,6 @@ Options:
   --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
                                --ucp-order-id is unavailable
   --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
-  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
   --event-only                 ACK and return the exact succeeded event without UCP order lookup
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -14570,9 +14574,9 @@ function canonicalDomain(value) {
 import { readFile as readFile3 } from "node:fs/promises";
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
-var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
   "title",
   "description",
@@ -15494,12 +15498,12 @@ function compact(value) {
 
 // dist/payment/method-selection.js
 var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
-var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
+var OMIT_PAYMENT_INSTRUMENT_WHEN_ABSENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY", "BALANCE"]);
 function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
   return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
 }
-function allowsMissingPaymentInstrument(paymentMethodType) {
-  return OPTIONAL_PAYMENT_INSTRUMENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+function shouldOmitPaymentInstrumentWhenAbsent(paymentMethodType) {
+  return OMIT_PAYMENT_INSTRUMENT_WHEN_ABSENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
 }
 function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
   const normalizedType = normalizePaymentMethodType(paymentMethodType);
@@ -20159,7 +20163,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
+  validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.publicEnvironmentCommands ?? []);
   validateCatalogLanguageFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
   validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, args.flags);
@@ -20176,15 +20180,12 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     return EXIT_CODES.OK;
   }
   const preparedCommand = await edition.prepareCommand?.(command, subcommand, args);
-  const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand);
+  const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand, edition.publicEnvironmentCommands ?? []);
   const storedConfig = usesPublicCatalogEnvironment ? defaultConfig() : await readStoredConfig();
   const runtimeConfig = usesPublicCatalogEnvironment ? {
     baseUrl: resolvePublicCatalogBaseUrl(args.flags),
     defaultOpenLinks: false
   } : resolveRuntimeConfig(storedConfig, args.flags);
-  if (selectedCommandEnvironment) {
-    runtimeConfig.baseUrl = API_BASE_URLS[selectedCommandEnvironment];
-  }
   const globalOptions = resolveGlobalOptions(args, storedConfig);
   const context = {
     args,
@@ -20261,36 +20262,23 @@ function validateUcpCheckoutRunPurchaseConfirmation(command, subcommand, flags) 
     throw validationError("ucp-checkout run requires explicit --confirm-purchase before any live request");
   }
 }
-function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags, editionInitCommands, editionCommands) {
-  if (isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand)) {
+function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags, editionCommands, publicEnvironmentCommands) {
+  if (isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand, publicEnvironmentCommands)) {
     resolvePublicCatalogBaseUrl(flags);
-    return void 0;
+    return;
   }
-  const environmentCommands = [
-    { command: "wallet", subcommand: "init" },
-    ...editionInitCommands.map((name) => ({ command: name, subcommand: "init" })),
-    ...editionCommands
-  ];
-  const selectedCommand = environmentCommands.find((candidate) => command === candidate.command && subcommand === candidate.subcommand);
-  const sandbox = getBooleanFlag(flags, "sandbox");
-  const test = getBooleanFlag(flags, "test");
-  if (selectedCommand) {
-    return resolveSelectedEnvironment(flags);
+  const environmentCommands = ["wallet", ...editionCommands];
+  const isEnvironmentSelectingInit = command !== void 0 && environmentCommands.includes(command) && subcommand === "init";
+  if (isEnvironmentSelectingInit) {
+    resolveSelectedEnvironment(flags);
   }
-  const publicCatalogCommands = [
-    "ucp-catalog search",
-    "ucp-catalog product",
-    "catalog search",
-    "tool internal-ucp get-merchant-list"
-  ];
-  const supportedBy = environmentCommands.map(({ command: name, subcommand: action }) => `${name} ${action}`).concat(publicCatalogCommands).join(" or ");
-  if (!selectedCommand && sandbox) {
+  const supportedBy = environmentCommands.map((name) => `${name} init`).join(" or ");
+  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "sandbox")) {
     throw validationError(`--sandbox is only supported by ${supportedBy}`);
   }
-  if (!selectedCommand && test) {
+  if (!isEnvironmentSelectingInit && getBooleanFlag(flags, "test")) {
     throw validationError(`--test is only supported by ${supportedBy}`);
   }
-  return void 0;
 }
 function validateCatalogLanguageFlagScope(command, subcommand, flags) {
   if (!("language" in flags)) {
@@ -20301,8 +20289,8 @@ function validateCatalogLanguageFlagScope(command, subcommand, flags) {
     throw validationError("--language is only supported by ucp-catalog search, ucp-catalog product, catalog search, or visa product-search");
   }
 }
-function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
-  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
+function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand, editionCommands = []) {
+  return editionCommands.some((candidate) => command === candidate.command && subcommand === candidate.subcommand) || command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -20670,7 +20658,7 @@ function resolveWatchFlag(flags) {
 async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) {
   if (!context.globalOptions.watch || context.globalOptions.dryRun) {
     if (!context.globalOptions.watch && !context.globalOptions.dryRun) {
-      printPendingWatchHandoff(url, watchTarget.eventType, context.executableName);
+      printPendingWatchHandoff(url, watchTarget.eventType);
     }
     return;
   }
@@ -20717,12 +20705,12 @@ async function collectCommandEvents(context, options2) {
     } : {}
   };
 }
-function printPendingWatchHandoff(url, eventType, executableName) {
+function printPendingWatchHandoff(url, eventType) {
   if (!url || !eventType) {
     return;
   }
   process.stderr.write(`Watch not started (--no-watch). This link needs a listener before the user acts on it.
-Run now: ${executableName} events poll --type ${eventType} --no-ack --format json
+Run now: clink-cli events poll --type ${eventType} --no-ack --format json
 `);
 }
 async function handleEventsCommand(subcommand, context) {
@@ -21620,10 +21608,10 @@ async function handlePayCommand(context) {
   }
   const paymentMethodApi = createPaymentMethodApi(context);
   let paymentInstrumentId = getStringFlag(flags, "payment-instrument-id");
+  const omitPaymentInstrumentWhenAbsent = !paymentInstrumentId && shouldOmitPaymentInstrumentWhenAbsent(paymentMethodType);
   const requiresTypeMatch = requiresTypeMatchedPaymentInstrument(paymentMethodType);
-  const allowsMissingInstrument = allowsMissingPaymentInstrument(paymentMethodType);
-  const typeValidationMethods = requiresTypeMatch && (paymentInstrumentId !== void 0 || !allowsMissingInstrument) ? context.globalOptions.dryRun ? getStoredPaymentMethods(context) : await paymentMethodApi.refreshPaymentMethods() : void 0;
-  if (!paymentInstrumentId && !allowsMissingInstrument) {
+  const typeValidationMethods = requiresTypeMatch && !omitPaymentInstrumentWhenAbsent ? context.globalOptions.dryRun ? getStoredPaymentMethods(context) : await paymentMethodApi.refreshPaymentMethods() : void 0;
+  if (!paymentInstrumentId && !omitPaymentInstrumentWhenAbsent) {
     paymentInstrumentId = requiresTypeMatch ? selectPaymentInstrumentByType(typeValidationMethods, paymentMethodType) : await resolveDefaultPaymentInstrumentId(context);
   } else if (paymentInstrumentId && requiresTypeMatch) {
     paymentInstrumentId = validatePaymentInstrumentType(typeValidationMethods, paymentInstrumentId, paymentMethodType);
@@ -21642,9 +21630,10 @@ async function handlePayCommand(context) {
     ...mandateId ? { mandateId } : {},
     ...legacyPurchaseInstructionId ? { legacyInstructionId: legacyPurchaseInstructionId } : {}
   } : void 0;
+  const paymentInstrument = paymentInstrumentId ? { paymentInstrumentId } : {};
   const chargeInput = sessionId ? {
     mode: "session",
-    ...paymentInstrumentId ? { paymentInstrumentId } : {},
+    ...paymentInstrument,
     paymentMethodType,
     sessionId,
     ...authorization ? { authorization } : {},
@@ -21652,7 +21641,7 @@ async function handlePayCommand(context) {
     ...products ? { products } : {}
   } : {
     mode: "direct",
-    ...paymentInstrumentId ? { paymentInstrumentId } : {},
+    ...paymentInstrument,
     paymentMethodType,
     merchantId,
     amount: parseAmount(requireStringFlag(flags, "missing --amount", "amount")),
@@ -24717,7 +24706,7 @@ var LEGAL_TRANSITIONS = {
 function defaultVisaState() {
   return {
     fsmState: "IDLE",
-    activeMarket: "cn",
+    activeMarket: "hk",
     vsraTokens: {}
   };
 }
@@ -25973,7 +25962,7 @@ async function getVisaProgramDetail(options2) {
   return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa Program detail");
 }
 function parseVisaMarket(value, storedConfig) {
-  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "cn");
+  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "hk");
 }
 function normalizeVisaLocale(value) {
   const locale = String(value ?? "zh-CN").trim().replaceAll("_", "-").toLowerCase();
@@ -28301,7 +28290,7 @@ function workflowFailure(stage, error, detail = {}) {
     ...detail,
     error: {
       name: value.name,
-      message: renderCliCommandText(value.message, VISA_EXECUTABLE_NAME)
+      message: value.message
     }
   };
 }
@@ -29316,7 +29305,7 @@ var VISA_EDITION = {
   executableName: VISA_EXECUTABLE_NAME,
   commandNames: ["visa"],
   environmentSelectingInitCommands: ["visa"],
-  environmentSelectingCommands: [
+  publicEnvironmentCommands: [
     { command: "visa", subcommand: "product-search" }
   ],
   getHelpText: getVisaEditionHelpText,
