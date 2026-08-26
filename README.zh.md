@@ -36,6 +36,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包重新登录与重新授权
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
+- Agent 支付宝二维码支付：直接在终端展示 CLI 生成的字符二维码，必要时回退到私有 PNG，等待关联的成功/失败事件，并在每个终态递归清理临时目录
 - 基于语义的 v2 意图路由和派生钱包门禁：匿名公共 Catalog 搜索不读取钱包状态或 `~/.clink-cli/config.json`；带购买意图的商品发现也保持匿名，直到本轮语义明确授权并绑定一个候选商品。候选编号只负责定位商品，本身不能授权购买。Catalog 结果语言由 Agent 根据会话意图决定并冻结为 BCP47，通过 `--language` 传入；query 文本和后端不再猜测目标语言
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
@@ -51,6 +52,8 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
 
 由于完成与否只由 webhook 事件证明，而不是由浏览器回报，用户可以在任意浏览器或设备上完成（包括手机），流程照样收敛。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
+
+Agent 支付宝二维码不属于这些页面。Skill 使用 `--terminal-qr` 调用 `clink pay`，原样展示 CLI 生成的 UTF-8 字符二维码，并保留本地 `image/png` 文件动作作为兜底；不得通过 Agent Browser 打开图片、打印 Base64 或暴露原始二维码内容。Skill 会立即启动订单事件等待，并在成功、失败、过期、超时或监听错误后递归删除由调用方负责的临时目录。
 
 ## Skill 结构
 
