@@ -297,10 +297,30 @@ test('v2 checkout rejects a bare item id without a product URL', () => {
 });
 
 test('v2 checkout accepts a frozen internal Catalog product without a product page', () => {
+  const selectedProduct = {
+    source: 'INTERNAL_UCP_CATALOG',
+    merchantId: 'mcht_fuhui',
+    merchantUrl: 'https://merchant.example/catalog',
+    merchantDomain: 'merchant.example',
+    productId: 'voucher_1',
+    productName: 'HungryPanda(US)',
+    catalogEnvironment: 'sandbox',
+    catalogLanguage: 'zh-Hans',
+  };
   const result = classifyPaymentIntent({
     ...boundRequest,
     operation: PaymentRoutingOperation.UCP_CHECKOUT,
     authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    pendingCatalogProductSelection: {
+      status: 'EXECUTING',
+      purchaseIntent: true,
+      resultMode: 'PURCHASE_SELECTION',
+      catalogQuery: 'HungryPanda',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+      candidates: [selectedProduct],
+    },
+    selectedProduct,
     target: {
       source: 'INTERNAL_UCP_CATALOG',
       merchantId: 'mcht_fuhui',
@@ -321,6 +341,71 @@ test('v2 checkout accepts a frozen internal Catalog product without a product pa
   assert.equal(result.requiresProductParse, false);
   assert.equal(result.validateItemAgainstProductUrl, false);
   assert.equal(result.walletGate, PaymentWalletGate.REQUIRE_STATUS);
+});
+
+test('v2 internal Catalog checkout rejects a naked caller-asserted target', () => {
+  const result = classifyPaymentIntent({
+    ...boundRequest,
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    target: {
+      source: 'INTERNAL_UCP_CATALOG',
+      merchantId: 'mcht_fuhui',
+      merchantUrl: 'https://merchant.example/catalog',
+      merchantDomain: 'merchant.example',
+      itemId: 'voucher_1',
+      productName: 'HungryPanda(US)',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.reason, 'routing_contract_internal_catalog_provenance_missing');
+  assert.deepEqual(result.missing, ['pendingCatalogProductSelection', 'selectedProduct']);
+  assert.equal(result.walletGate, PaymentWalletGate.SKIP);
+});
+
+test('v2 internal Catalog checkout rejects target facts that conflict with the frozen selection', () => {
+  const selectedProduct = {
+    source: 'INTERNAL_UCP_CATALOG',
+    merchantId: 'mcht_fuhui',
+    merchantUrl: 'https://merchant.example/catalog',
+    merchantDomain: 'merchant.example',
+    productId: 'voucher_1',
+    productName: 'HungryPanda(US)',
+    catalogEnvironment: 'sandbox',
+    catalogLanguage: 'zh-Hans',
+  };
+  const result = classifyPaymentIntent({
+    ...boundRequest,
+    operation: PaymentRoutingOperation.UCP_CHECKOUT,
+    authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    pendingCatalogProductSelection: {
+      status: 'EXECUTING',
+      purchaseIntent: true,
+      resultMode: 'PURCHASE_SELECTION',
+      catalogQuery: 'HungryPanda',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+      candidates: [selectedProduct],
+    },
+    selectedProduct,
+    target: {
+      source: 'INTERNAL_UCP_CATALOG',
+      merchantId: 'mcht_fuhui',
+      merchantUrl: 'https://merchant.example/catalog',
+      merchantDomain: 'merchant.example',
+      itemId: 'invented_voucher',
+      productName: 'HungryPanda(US)',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+  });
+
+  assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
+  assert.equal(result.reason, 'routing_contract_internal_catalog_provenance_conflict');
+  assert.deepEqual(result.invalidFields, ['target.itemId']);
 });
 
 test('v2 internal Catalog checkout fails closed without an authoritative merchant URL', () => {

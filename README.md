@@ -14,7 +14,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, publ
 Ask your agent to install the current Clink Payment Skills package:
 
 ```text
-Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
+Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-skills
 ```
 
 After installation, route the user's complete semantic intent before touching the wallet. New Catalog/payment callers construct the versioned contract in `references/clink-payment-intent-contract.md`; they do not authorize purchase from regexes, keywords, raw text, legacy booleans, or ambient payment fields. A product search runs anonymously with `walletGate=SKIP`, and described-product purchase discovery uses `DEFER_UNTIL_SELECTION`; neither runs `wallet status` or `wallet init`.
@@ -28,6 +28,32 @@ Use this status-first setup path only when the validated route returns `walletGa
 
 An explicit request to log in again, reauthorize, replace an expired link, or recover after missing the earlier login always starts a fresh `wallet init`. The new attempt supersedes the old one, and the agent must never reuse a login URL from chat history or earlier terminal output.
 
+## Build The Fallback Release Artifact
+
+The fallback package for Clink CLI auto-installation is generated from a clean Git checkout:
+
+```bash
+npm run build:fallback-artifact
+```
+
+This writes two ignored release files under `dist/`:
+
+- `agentic-payment-skill.zip`, with the single package root `agentic-payment-skills/`
+- `agentic-payment-skill.manifest.json`, the schema-v1 integrity and provenance sidecar
+
+The ZIP is derived directly from the committed Git `HEAD` tree and keeps every tracked regular file except the root `docs/` and `tests/` trees. It therefore includes `SKILL.md`, `package.json`, both README files, `.gitignore`, and the complete runtime directories without admitting local ignored files. Symbolic links, submodules, special entries, and source-owned `.clink-install.json` or `.clink-provenance.json` files make the build fail.
+
+The build uses the source commit timestamp for deterministic ZIP metadata. Set standard `SOURCE_DATE_EPOCH` when release infrastructure needs an explicit timestamp. No signing key or other private key is required. Publish the resulting pair together as:
+
+```text
+https://www.clinkbill.com/public/skills/agentic-payment-skill.zip
+https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
+```
+
+`archiveSha256` hashes the exact ZIP bytes. `contentSha256` is the installer-compatible canonical tree hash: SHA-256 starts with `clink-skill-tree-v1\0`, then processes every regular file after pruning in POSIX-path order using UTF-8 byte comparison. Each record is `path + NUL + executable-bit + NUL + byte-size + NUL + file-bytes + NUL`; the executable bit is `1` when any Unix execute bit is set, otherwise `0`. Installer-owned `.clink-install.json` and `.clink-provenance.json` are excluded from this tree hash.
+
+For the two fixed public URLs, publish and invalidate the ZIP first, confirm that its public byte size and SHA-256 match the new manifest, and publish the manifest last. Invalidate both CDN paths together and run a public download check before announcing the release. Never expose a new manifest while the public ZIP still serves another generation; the CLI deliberately fails closed on that mismatch.
+
 ## What It Does
 
 Once installed, Claude can handle Clink payment operations on your behalf:
@@ -36,6 +62,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Explicit fresh wallet login and reauthorization
 - Card binding and management
 - Payment execution (direct and session mode)
+- Agent Alipay QR payments: render a CLI-generated character QR directly in the terminal, fall back to the private PNG when needed, wait for the correlated success/failure event, and recursively clean up the temporary directory on every terminal result
 - Semantic v2 intent routing with derived wallet gates: anonymous public Catalog discovery does not read wallet state or `~/.clink-cli/config.json`; purchase discovery also remains anonymous until one candidate is semantically authorized and selected. Candidate numbers identify products but never authorize purchase by themselves. The agent chooses the Catalog result language from conversation intent and passes the frozen BCP47 tag with `--language`; query text and the backend do not guess it
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
@@ -51,6 +78,8 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 Different agents install this skill, and some drive a browser of their own. OAuth device verification, card binding/setup/modify, Visa Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser — not opened, navigated, previewed, screenshotted, or filled by an agent browser, headless browser, browser MCP, computer-use, or embedded webview. Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's own platform authenticator. Merchant product pages are the opposite case and remain agent work.
 
 Because completion is proven by a webhook event rather than by anything the browser reports, the user may finish on any browser or device — including a phone — and the flow still converges. `references/clink-browser-handoff.md` holds the per-page contract, and `lib/page-handoff.mjs` classifies each URL before it is sent.
+
+An Agent Alipay QR is not one of these pages. The Skill invokes `clink pay` with `--terminal-qr`, preserves the CLI's UTF-8 character QR, and keeps the local `image/png` file action as fallback. It never opens that file in Agent Browser, prints Base64, or exposes raw QR content. The Skill starts the order-event wait immediately and recursively removes the caller-owned cleanup directory after success, failure, expiry, timeout, or polling error.
 
 ## Skill Structure
 

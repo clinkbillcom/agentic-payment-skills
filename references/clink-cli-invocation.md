@@ -110,10 +110,16 @@ Success envelope on stdout:
 Error envelope on stderr when JSON format is explicit:
 
 ```json
-{ "ok": false, "error": { "type": "...", "code": 0, "message": "..." } }
+{ "ok": false, "error": { "type": "...", "code": 0, "message": "...", "details": {} } }
 ```
 
-Inspect the process exit code first, then parse the stream that contains the envelope. Do not scrape human text when JSON is available.
+Inspect the process exit code first, then parse the stream that contains the envelope. Do not scrape human text when JSON is available. A successful `pay --terminal-qr --format json` is the deliberate exception to an otherwise quiet stderr: stdout still contains the only success JSON envelope, while stderr contains the user-facing UTF-8 QR or its safe fallback warning. Never parse that character QR as JSON.
+
+For an explicitly selected Agent Alipay payment, invoke `clink pay` with `--payment-method-type ALIPAY --terminal-qr --format json` and omit a default Card payment instrument. In Codex, command output may be collapsed and is not a user-visible message. When stderr contains block characters and no terminal warning, extract only the contiguous QR lines and repeat them exactly inside a fenced `text` block in the next assistant message. Do not substitute PNG because of possible alignment concerns. Use the local file fallback from stdout only when stderr contains `Warning: terminal QR could not be displayed; use customerAction.imagePath instead.` or contains no QR block characters.
+
+That stdout contains `customerAction.type=QR_CODE_REQUIRED` with fixed local-file metadata: `mediaType=image/png`, `temporary=true`, `cleanupRequired=true`, `imagePath`, caller-owned `cleanupPath`, nullable `orderId`, nullable `paymentExecutionDetailId`, numeric-or-null epoch-seconds `expiresAt`, and numeric-or-null `expiresSecond`. The original PNG Data URL and raw `qrCodeContent` are redacted. Never print or decode either marker. After the terminal QR or image fallback becomes visible, immediately run the returned `agent_order.succeeded,agent_order.failed` any-of poll and recursively remove `cleanupPath` after a terminal result.
+
+If QR validation or local storage fails after the charge was submitted, the CLI returns exit 5 with `error.type=payment_state_unknown`. This is not an ordinary API error. Preserve safe `error.details.orderId` and `error.details.paymentExecutionDetailId`, keep `retryAllowed=false`, and route to `PAY_UNKNOWN / VERIFY_BEFORE_RETRY`. Verify the existing payment before any resubmission.
 
 The OAuth verification URL is a live progress message on stderr, not the final JSON envelope. With `wallet init --open`, do not expose it after CLI browser handoff. After a reported browser-launch failure, read it only from the current process's latest attempt segment and send it once. Do not start another init merely to obtain or repeat the URL for the same active attempt; start a new attempt only for explicit re-login or after the current attempt expires or terminates.
 
@@ -127,7 +133,7 @@ Before OAuth completion, the running `wallet init` process polls the OAuth devic
 | 2 | Validation error | Fix input before retrying. |
 | 3 | Config error | Ask the user to initialize/configure wallet. A logged-out or malformed OAuth-only wallet normally reaches this `Login required` path rather than falling back to CSK. |
 | 4 | Auth error | The CLI already refreshes OAuth and retries an unauthorized business request at most once. If OAuth `401` still escapes, or the session is expired/invalid/revoked, stop and explicitly reauthorize. For legacy-CSK `401`, verify the locked environment and key. For `403`, surface the permission/scope error without refresh or retry. |
-| 5 | API error | Show `error.message`; do not invent recovery. |
+| 5 | API error, or a post-submit unknown payment state | For ordinary API errors, show `error.message`. If `error.type=payment_state_unknown`, preserve its safe order/PED details, forbid automatic retry, and verify the existing payment. |
 | 6 | Transport/network failure or ambiguous timeout; not proof of a server-side failure | Preserve any available sanitized transport cause. Treat every state-changing result as unknown and follow its verification/no-resubmission rule. Use only documented bounded retry policies for read-only work. |
 | 7 | 3DS required | Send redirect URL and wait for order event. |
 | 8 | Install error | Surface the installation conflict or transaction failure; do not claim success. |

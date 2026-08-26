@@ -1449,9 +1449,9 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
   }
 });
 
-test('vendored CLI discovers skills list and tip commands', () => {
+test('vendored CLI discovers skills list, install, sync, and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);
-  assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
+  assert.match(runBundle(['skills', '--help']), /skills <list\|install\|sync\|tip>/u);
   const listHelp = runBundle(['skills', 'list', '--help']);
   assert.match(listHelp, /skills list --all/u);
   assert.match(listHelp, /--tippable/u);
@@ -1464,6 +1464,10 @@ test('vendored CLI discovers skills list and tip commands', () => {
     runBundle(['skills', 'install', '--help']),
     /skills install <publisher>\/<skillName>\[@<version>\]/u,
   );
+  const syncHelp = runBundle(['skills', 'sync', '--help']);
+  assert.match(syncHelp, /skills sync/u);
+  assert.match(syncHelp, /--check/u);
+  assert.match(syncHelp, /--force/u);
 });
 
 test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', () => {
@@ -1498,7 +1502,7 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.doesNotMatch(crossMerchantHelp, /--cursor <cursor>|--limit <n>/u);
 });
 
-test('vendored public Catalog commands ignore wallet config and select their own environment', async () => {
+test('vendored public Catalog commands ignore wallet config and wallet-init defaults', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-vendored-public-catalog-'));
   const configDirectory = join(home, '.clink-cli');
   await mkdir(configDirectory, { recursive: true });
@@ -1517,7 +1521,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
         'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', '手表',
         '--dry-run', '--format', 'json',
       ],
-      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
+      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
     },
     {
       args: [
@@ -1525,6 +1529,12 @@ test('vendored public Catalog commands ignore wallet config and select their own
         '--sandbox', '--dry-run', '--format', 'json',
       ],
       expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/product',
+    },
+    {
+      args: [
+        'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
+      ],
+      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/extra/catalog/search',
     },
   ];
 
@@ -1542,14 +1552,8 @@ test('vendored public Catalog commands ignore wallet config and select their own
       assert.equal(request.body.context?.language, undefined);
     }
 
-    const testConflict = runBundleRaw([
-      'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
-    ], publicEnv);
-    assert.equal(testConflict.status, 2);
-    assert.match(testConflict.stderr, /fixed to sandbox|--sandbox and --test/u);
-
     const merchantList = runBundleRaw([
-      'tool', 'internal-ucp', 'get-merchant-list', '--format', 'json',
+      'tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json',
     ], publicEnv);
     assert.equal(merchantList.status, 0, merchantList.stderr);
     assert.ok(JSON.parse(merchantList.stdout).merchants.length > 0);
@@ -2156,11 +2160,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.27');
+  assert.equal(vendorPackage.version, '0.2.31');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'be61dcabc3120e1054811260ed53cbd855fd6f2e',
+    '2031fdd6129ebefae3d2fe63b7a56db9896ea03f',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

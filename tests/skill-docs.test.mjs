@@ -648,9 +648,58 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 });
 
 test('skill and package versions stay bumped and in sync', () => {
-  assert.match(skill, /version:\s*"1\.13\.2"/u);
-  assert.equal(packageJson.version, '1.13.2');
+  const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
+  assert.equal(skillVersion, '1.14.0');
+  assert.equal(packageJson.version, '1.14.0');
+  assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('Agent Alipay QR docs preserve terminal rendering, image fallback, event, expiry, and cleanup', () => {
+  for (const body of [skill, paymentRefund, asyncEvents, cliInvocation]) {
+    assert.match(body, /QR_CODE_REQUIRED/u);
+    assert.match(body, /image\/png/u);
+    assert.match(body, /cleanupPath/u);
+    assert.match(body, /agent_order\.succeeded,agent_order\.failed/u);
+    assert.match(body, /paymentExecutionDetailId/u);
+  }
+
+  assert.match(skill, /SHOW_QR_AND_WAIT_EVENT/u);
+  assert.match(skill, /RETURN_QR_TERMINAL_AND_CLEANUP/u);
+  assert.match(skill, /--payment-method-type ALIPAY --terminal-qr --format json/u);
+  assert.match(skill, /stderr[\s\S]*stdout remains one JSON envelope/u);
+  assert.match(skill, /Preserve every character, leading\/trailing space, and line break/u);
+  assert.match(skill, /native image/u);
+  assert.match(skill, /collapsed or hidden from the user/u);
+  assert.match(skill, /fenced `text` block/u);
+  assert.match(skill, /Do not replace a successfully rendered character QR with PNG/u);
+  assert.match(skill, /do not call `nodeRepl\.emitImage`, `view_image`, or any image\/file attachment tool/u);
+  assert.match(skill, /tool transcript.*is not the user-visible response/iu);
+  assert.match(skill, /omit any default Card `--payment-instrument-id`/u);
+  assert.match(skill, /never expose Base64 or `qrCodeContent`/u);
+  assert.match(skill, /never automatically run `pay` again/u);
+  assert.match(skill, /recursively remove/u);
+  assert.match(paymentRefund, /--payment-method-type ALIPAY[\s\S]*--terminal-qr[\s\S]*--format json/u);
+  assert.match(paymentRefund, /UTF-8 QR to stderr[\s\S]*stdout as one JSON envelope/u);
+  assert.match(paymentRefund, /terminal QR could not be displayed; use customerAction\.imagePath instead/u);
+  assert.match(paymentRefund, /collapsed tool transcript does not count/u);
+  assert.match(paymentRefund, /concern about chat alignment is not a reason to switch to PNG/u);
+  assert.match(paymentRefund, /Do not generate another QR, expose `qrCodeContent`/u);
+  assert.match(paymentRefund, /epoch seconds/u);
+  assert.match(paymentRefund, /Prefer a positive `expiresSecond`/u);
+  assert.match(paymentRefund, /cap either result at 900 seconds/iu);
+  assert.match(paymentRefund, /\[redacted:png-data-url\]/u);
+  assert.match(paymentRefund, /real UAT Agent QR E2E/u);
+  assert.match(asyncEvents, /terminal QR becomes visible/u);
+  assert.match(asyncEvents, /\[redacted:qr-code-content\]/u);
+  assert.match(cliInvocation, /successful `pay --terminal-qr --format json`/u);
+  assert.match(cliInvocation, /Never parse that character QR as JSON/u);
+  assert.match(cliInvocation, /raw `qrCodeContent` are redacted/u);
+  assert.match(cliInvocation, /repeat them exactly inside a fenced `text` block/u);
+  assert.match(cliInvocation, /Do not substitute PNG because of possible alignment concerns/u);
+  assert.match(readme, /character QR directly in the terminal/u);
+  assert.match(readmeZh, /终端展示 CLI 生成的字符二维码/u);
+  assert.doesNotMatch(paymentRefund, /Date\.parse/u);
 });
 
 // The command was renamed clink-cli -> clink across every doc. A rename verified only by positive
@@ -859,29 +908,33 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list --format json/u);
+  assert.match(skill, /UAT wrapper adds `--sandbox`/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list --format json/u);
+  assert.match(catalogDiscovery, /wrapper appends `--sandbox` to every public Catalog command/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
+  assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
+  assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--test/u);
-  assert.match(skill, /clink catalog search --query <text>[^\n]*--test/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--format json/u);
+  assert.match(skill, /clink catalog search --query <text>[^\n]*--format json/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--test/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--format json/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--test\|--sandbox\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
 });
 
-test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
+test('public Catalog is config-free, UAT-pinned, language-aware, and checkout-safe', () => {
   assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
   assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
   assert.match(cliInvocation, /wrapper appends `--sandbox`/u);
@@ -893,7 +946,8 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
   assert.match(cliInvocation, /preflight only `https:\/\/uat-api\.clinkbill\.com`/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
-  assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
+  assert.match(catalogDiscovery, /fixes `catalogEnvironment=sandbox`/u);
+  assert.match(catalogDiscovery, /do not pass `--sandbox` or `--test` yourself/u);
   assert.match(catalogDiscovery, /valid BCP47 tag/u);
   assert.match(catalogDiscovery, /Agent owns result-language detection/u);
   assert.match(catalogDiscovery, /--language zh-Hans --context '\{"address_country":"HK"\}'/u);

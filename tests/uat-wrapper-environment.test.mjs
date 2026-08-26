@@ -59,6 +59,42 @@ test('wrapper rejects a conflicting --test wallet environment', async (context) 
   assert.match(result.stderr, /wallet init environment is fixed to sandbox/u);
 });
 
+test('wrapper pins public Catalog commands to sandbox', async (context) => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-payment-wrapper-catalog-'));
+  context.after(() => rm(home, { recursive: true, force: true }));
+  const result = spawnSync(wrapper, [
+    'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', 'watch',
+    '--dry-run', '--format', 'json',
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: home,
+      CLINK_BASE_URL: 'https://api.clinkbill.com',
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    JSON.parse(result.stdout).data.request.url,
+    'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
+  );
+});
+
+test('wrapper rejects a conflicting --test Catalog environment', async (context) => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-payment-wrapper-catalog-conflict-'));
+  context.after(() => rm(home, { recursive: true, force: true }));
+  const result = spawnSync(wrapper, [
+    'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home },
+  });
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /--sandbox and --test cannot be used together/u);
+});
+
 test('wallet init rejects --name and derives the name from the email', async (context) => {
   const home = await mkdtemp(join(tmpdir(), 'clink-payment-wrapper-name-'));
   context.after(() => rm(home, { recursive: true, force: true }));

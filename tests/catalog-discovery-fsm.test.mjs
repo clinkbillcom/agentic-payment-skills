@@ -7,7 +7,7 @@ import {
   CatalogDiscoveryAction,
   CATALOG_CHANNEL_EATS365,
   CATALOG_SUPPORTED_COUNTRIES,
-  classifyCatalogDiscovery,
+  classifyCatalogDiscovery as classifyCatalogDiscoveryRaw,
   resolveCatalogEnvironment,
   resolveCatalogLanguage,
   resolveCatalogExt,
@@ -47,6 +47,15 @@ const shopifyMerchant = {
 };
 
 const merchantListOutput = { merchants: [bruceLeeMerchant, shopifyMerchant] };
+
+function classifyCatalogDiscovery(input = {}) {
+  const hasLanguage = ['catalogLanguage', 'catalog_language', 'language']
+    .some((field) => input[field] !== undefined);
+  return classifyCatalogDiscoveryRaw({
+    ...(hasLanguage ? {} : { catalogLanguage: 'en' }),
+    ...input,
+  });
+}
 
 test('asks for a query before touching the CLI', () => {
   const result = classifyCatalogDiscovery({});
@@ -92,7 +101,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(
       scoped.command,
       `clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd`
-        + ` --query 'bruce lee t-shirt' ${flag} --format json`,
+        + ` --query 'bruce lee t-shirt' --language en ${flag} --format json`,
     );
 
     const broad = classifyCatalogDiscovery({
@@ -104,7 +113,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(broad.catalogEnvironment, catalogEnvironment);
     assert.equal(
       broad.command,
-      `clink catalog search --query 'iced matcha latte' ${flag} --format json`,
+      `clink catalog search --query 'iced matcha latte' --language en ${flag} --format json`,
     );
   }
 });
@@ -219,6 +228,22 @@ test('rejects a non-BCP47 catalog language before running a command', () => {
   assert.equal(result.command, undefined);
 });
 
+test('requires a nonblank language before any Catalog discovery step', () => {
+  for (const catalogLanguage of [undefined, null, '', '   ']) {
+    const result = classifyCatalogDiscoveryRaw({
+      query: '奶茶',
+      catalogLanguage,
+      merchantListOutput: { merchants: [] },
+    });
+
+    assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_MISSING);
+    assert.equal(result.action, CatalogDiscoveryAction.ASK_FOR_CATALOG_INPUT);
+    assert.equal(result.reason, 'catalog_language_missing');
+    assert.deepEqual(result.missing, ['catalogLanguage']);
+    assert.equal(result.command, undefined);
+  }
+});
+
 test('catalog language aliases ignore blanks and require one canonical BCP47 value', () => {
   assert.deepEqual(resolveCatalogLanguage({
     catalogLanguage: '',
@@ -266,15 +291,15 @@ for (const catalogLanguage of ['und', 'zh-US', 'zh-Latn', `en-${'a'.repeat(65)}`
   });
 }
 
-test('legacy direct discovery does not infer language from a Chinese query', () => {
-  const result = classifyCatalogDiscovery({
+test('direct discovery fails closed instead of inferring language from a Chinese query', () => {
+  const result = classifyCatalogDiscoveryRaw({
     query: '屈臣氏',
     merchantListOutput,
     matchedMerchantId: 'mcht_frnz6yfrz1sd',
   });
 
-  assert.equal(result.catalogLanguage, undefined);
-  assert.doesNotMatch(result.command, /--language|context[^\n]*language/u);
+  assert.equal(result.reason, 'catalog_language_missing');
+  assert.equal(result.command, undefined);
 });
 
 test('catalog language aliases fail closed when canonical values conflict', () => {
@@ -352,7 +377,7 @@ test('runs a merchant-scoped search when intent matches one merchant', () => {
   assert.equal(result.matchReason, 'description names licensed apparel');
   assert.equal(
     result.command,
-    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --format json",
+    "clink ucp-catalog search --merchant-id mcht_frnz6yfrz1sd --query 'bruce lee t-shirt' --language en --format json",
   );
 });
 
@@ -366,6 +391,136 @@ test('rejects a matched merchant id that is not in the loaded candidate set', ()
   assert.equal(result.state, CatalogDiscoveryState.MERCHANT_INTENT_MATCH_REQUIRED);
   assert.equal(result.reason, 'merchant_match_not_in_candidates');
   assert.equal(result.rejectedMerchantId, 'mcht_never_listed');
+});
+
+test('rejects an ambiguous scoped merchant id without a URL or domain discriminator', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    matchedMerchantId: duplicateMerchantId,
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.MATCH_MERCHANT_INTENT);
+  assert.equal(result.reason, 'merchant_match_ambiguous');
+  assert.equal(result.command, undefined);
+});
+
+test('scoped matching uses the selected candidate identity to disambiguate duplicate merchant ids', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const vtravelUrl = 'https://vtravel.link2shops.com/yiyuan/';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    catalogEnvironment: 'sandbox',
+    catalogLanguage: 'zh-Hans',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: vtravelUrl,
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    merchantMatch: {
+      merchantId: duplicateMerchantId,
+      merchantDomain: 'vtravel.link2shops.com',
+      merchantUrl: vtravelUrl,
+      reason: 'description names the requested Vtravel voucher catalog',
+    },
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.RUN_MERCHANT_SCOPED_CATALOG_SEARCH);
+  assert.equal(result.merchantId, duplicateMerchantId);
+  assert.equal(result.merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.merchantUrl, vtravelUrl);
+  assert.equal(
+    result.command,
+    `clink ucp-catalog search --merchant-id ${duplicateMerchantId}`
+      + ` --query 'vtravel voucher' --language zh-Hans --sandbox --format json`,
+  );
+});
+
+test('scoped matching rejects conflicting merchant domain and URL discriminators', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'Bruce Lee shirt',
+    merchantListOutput,
+    merchantMatch: {
+      merchantId: bruceLeeMerchant.merchant_id,
+      merchantDomain: bruceLeeMerchant.domain_name,
+      merchantUrl: shopifyMerchant.merchant_url,
+      reason: 'description match',
+    },
+  });
+
+  assert.equal(result.action, CatalogDiscoveryAction.MATCH_MERCHANT_INTENT);
+  assert.equal(result.reason, 'merchant_match_not_in_candidates');
+  assert.equal(result.command, undefined);
+});
+
+test('broad results use their domain to disambiguate duplicate merchant ids', () => {
+  const duplicateMerchantId = 'mcht_ftmse61a6az0';
+  const result = classifyCatalogDiscovery({
+    query: 'vtravel voucher',
+    merchantListOutput: {
+      merchants: [
+        {
+          domain_name: 'testa.link2shops.com',
+          merchant_url: 'https://testa.link2shops.com/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Testa vouchers',
+        },
+        {
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          merchant_id: duplicateMerchantId,
+          enabled: true,
+          description: 'Vtravel vouchers',
+        },
+      ],
+    },
+    merchantMatch: false,
+    broadSearchOutput: {
+      groups: [{
+        merchant_id: duplicateMerchantId,
+        domain_name: 'vtravel.link2shops.com',
+        products: [{ id: 'voucher_1', title: 'Vtravel voucher' }],
+      }],
+      total_products: 1,
+    },
+  });
+
+  assert.equal(result.groups[0].merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.groups[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
+  assert.equal(result.groups[0].products[0].merchantDomain, 'vtravel.link2shops.com');
+  assert.equal(result.groups[0].products[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
 });
 
 test('returns merchant-scoped products without widening the search', () => {
@@ -432,7 +587,7 @@ test('falls back to broad search when the merchant-scoped search is empty', () =
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink catalog search --query 'bruce lee t-shirt' --format json",
+    "clink catalog search --query 'bruce lee t-shirt' --language en --format json",
   );
 });
 
@@ -448,7 +603,7 @@ test('runs an unscoped broad search when intent matches no merchant', () => {
   assert.equal(result.ext, null);
   assert.equal(
     result.command,
-    "clink catalog search --query 'iced matcha latte' --format json",
+    "clink catalog search --query 'iced matcha latte' --language en --format json",
   );
 });
 
@@ -481,6 +636,7 @@ test('uses the top-level channel selector and keeps a store id for response filt
     result.command,
     'clink catalog search --query \'iced matcha latte\''
       + ' --channel-type eats365'
+      + ' --language en'
       + ' --context \'{"address_country":"HK"}\' --format json',
   );
   assert.doesNotMatch(result.command, /--ext|store_id/u);
@@ -511,7 +667,7 @@ test('treats countries without catalog location mappings as unknown location', (
 
     assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
     assert.equal(result.country, null);
-    assert.equal(result.command, "clink catalog search --query croissant --format json");
+    assert.equal(result.command, "clink catalog search --query croissant --language en --format json");
     assert.doesNotMatch(result.command, /--context/u);
   }
 });
@@ -889,6 +1045,8 @@ test('frozen internal Catalog product reaches checkout guards without productUrl
     operation: PaymentRoutingOperation.UCP_CHECKOUT,
     executionDecision: PaymentExecutionDecision.AUTHORIZED,
     authorizationSource: PaymentAuthorizationSource.CURRENT_USER_TURN,
+    pendingCatalogProductSelection: selection.pendingCatalogProductSelection,
+    selectedProduct: selection.selectedProduct,
     target: {
       source: selection.selectedProduct.source,
       merchantId: selection.selectedProduct.merchantId,

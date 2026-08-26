@@ -8,7 +8,10 @@ import {
   PaymentWalletGate,
   classifyPaymentIntent,
 } from '../lib/payment-intent-router-fsm.mjs';
-import { classifyCatalogDiscovery } from '../lib/catalog-discovery-fsm.mjs';
+import {
+  CatalogDiscoveryAction,
+  classifyCatalogDiscovery,
+} from '../lib/catalog-discovery-fsm.mjs';
 
 test('routes explicit wallet relogin before payment-target classification', () => {
   const result = classifyPaymentIntent({
@@ -2960,7 +2963,7 @@ test('rejects an internal Catalog candidate whose merchant URL is absent', () =>
   assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
-test('uses an internal Catalog product URL when the merchant list has no merchant_url yet', () => {
+test('rejects an internal Catalog product URL when the merchant list has no merchant_url', () => {
   const {
     merchant_url: _merchantUrl,
     ...candidateWithoutMerchantUrl
@@ -2976,9 +2979,9 @@ test('uses an internal Catalog product URL when the merchant list has no merchan
     },
   });
 
-  assert.equal(result.action, PaymentIntentAction.RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT);
-  assert.equal(result.selectedProduct.productUrl, 'https://testa.link2shops.com/product/voucher_1');
-  assert.equal(result.selectedProduct.merchantUrl, 'https://testa.link2shops.com/product/voucher_1');
+  assert.equal(result.action, PaymentIntentAction.RUN_CATALOG_DISCOVERY_WORKFLOW);
+  assert.equal(result.reason, 'catalog_selection_candidate_invalid');
+  assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
 for (const conflictingSelection of [
@@ -3314,10 +3317,9 @@ for (const [name, languageFields, expectedReason] of [
       query: result.catalogQuery,
       catalogEnvironment: result.catalogEnvironment,
     });
-    assert.equal(
-      restarted.command,
-      'clink tool internal-ucp get-merchant-list --sandbox --format json',
-    );
+    assert.equal(restarted.action, CatalogDiscoveryAction.ASK_FOR_CATALOG_INPUT);
+    assert.equal(restarted.reason, 'catalog_language_missing');
+    assert.equal(restarted.command, undefined);
     assert.equal(Object.hasOwn(restarted, 'catalogLanguage'), false);
   });
 }

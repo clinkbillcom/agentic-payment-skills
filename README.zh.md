@@ -5,7 +5,7 @@
 ## 环境要求
 
 - Node.js >= 20
-- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 钉在生产环境
+- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 和公共 Catalog 发现钉在 sandbox/UAT 环境
 - **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续认证命令都会读到 UAT 的 `baseUrl`
 - 新的钱包初始化使用 OAuth Device Authorization，并默认取邮箱 `@` 前部分作为姓名；仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
 
@@ -14,7 +14,7 @@
 直接让 Agent 安装当前的 Clink Payment Skills：
 
 ```text
-Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
+Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-skills
 ```
 
 安装完成后，Agent 必须先理解完整语义意图，不能直接操作钱包。新的 Catalog/支付调用要构造 `references/clink-payment-intent-contract.md` 中的版本化契约，不得用正则、关键词、原始文本、旧布尔字段或环境中的支付参数来授权购买。商品搜索使用 `walletGate=SKIP`；描述商品后的购买发现使用 `DEFER_UNTIL_SELECTION`，两者都不执行 `wallet status` 或 `wallet init`。
@@ -28,6 +28,32 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
 
+## 构建 fallback 发布工件
+
+Clink CLI 自动安装所用的 fallback 包必须从干净的 Git 工作区生成：
+
+```bash
+npm run build:fallback-artifact
+```
+
+命令会在已忽略的 `dist/` 下生成两个文件：
+
+- `agentic-payment-skill.zip`，ZIP 内只有一个统一包根 `agentic-payment-skills/`
+- `agentic-payment-skill.manifest.json`，schema v1 的完整性与来源 sidecar
+
+ZIP 直接从已提交的 Git `HEAD` 树生成：除根 `docs/`、`tests/` 外，所有 tracked regular file 都会保留。因此 `SKILL.md`、`package.json`、两个 README、`.gitignore` 和完整运行目录都会进入工件，本地 ignored 文件不会被误打包。发现符号链接、submodule、特殊条目，或源码预带 `.clink-install.json` / `.clink-provenance.json` 时，构建会直接失败。
+
+构建默认使用源码 commit 的时间戳固定 ZIP 元数据；发布基础设施也可以通过标准 `SOURCE_DATE_EPOCH` 显式指定时间。不依赖签名私钥或其他私钥。生成后必须成对发布到：
+
+```text
+https://www.clinkbill.com/public/skills/agentic-payment-skill.zip
+https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
+```
+
+`archiveSha256` 校验 ZIP 原始字节。`contentSha256` 使用与安装器一致的规范树哈希：SHA-256 先写入 `clink-skill-tree-v1\0`，再对裁剪后的全部 regular file 按 POSIX 相对路径的 UTF-8 字节序处理；每条记录是 `path + NUL + executable-bit + NUL + byte-size + NUL + file-bytes + NUL`。任意 Unix 执行位存在时 executable-bit 为 `1`，否则为 `0`。安装器拥有的 `.clink-install.json` 与 `.clink-provenance.json` 不参与该树哈希。
+
+这两个固定公网 URL 发布时，必须先上传并刷新 ZIP，确认公网文件大小和 SHA-256 已与新 manifest 一致，再最后发布 manifest；随后同时刷新两个 CDN 路径，并执行一次公网下载校验。公网 ZIP 仍是上一代时不得提前暴露新 manifest，CLI 遇到跨代不匹配会按安全策略直接失败。
+
 ## 功能说明
 
 安装后，Claude 可以代你执行以下 Clink 支付操作：
@@ -36,6 +62,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 - 钱包重新登录与重新授权
 - 绑卡与支付方式管理
 - 支付执行（直接模式和会话模式）
+- Agent 支付宝二维码支付：直接在终端展示 CLI 生成的字符二维码，必要时回退到私有 PNG，等待关联的成功/失败事件，并在每个终态递归清理临时目录
 - 基于语义的 v2 意图路由和派生钱包门禁：匿名公共 Catalog 搜索不读取钱包状态或 `~/.clink-cli/config.json`；带购买意图的商品发现也保持匿名，直到本轮语义明确授权并绑定一个候选商品。候选编号只负责定位商品，本身不能授权购买。Catalog 结果语言由 Agent 根据会话意图决定并冻结为 BCP47，通过 `--language` 传入；query 文本和后端不再猜测目标语言
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
@@ -51,6 +78,8 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
 
 由于完成与否只由 webhook 事件证明，而不是由浏览器回报，用户可以在任意浏览器或设备上完成（包括手机），流程照样收敛。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
+
+Agent 支付宝二维码不属于这些页面。Skill 使用 `--terminal-qr` 调用 `clink pay`，原样展示 CLI 生成的 UTF-8 字符二维码，并保留本地 `image/png` 文件动作作为兜底；不得通过 Agent Browser 打开图片、打印 Base64 或暴露原始二维码内容。Skill 会立即启动订单事件等待，并在成功、失败、过期、超时或监听错误后递归删除由调用方负责的临时目录。
 
 ## Skill 结构
 

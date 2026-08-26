@@ -1,6 +1,6 @@
 {
   "name": "clink-payment-skill",
-  "version": "1.13.2",
+  "version": "1.14.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
     "clink": "./bin/clink"
   },
   "scripts": {
+    "build:fallback-artifact": "node scripts/build-fallback-artifact.mjs",
     "test": "node --test"
   }
 }
