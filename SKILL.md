@@ -1,591 +1,522 @@
 ---
-name: clink-payment-skill
-description: "Use when handling Clink wallet init/re-login/status/config, card or risk readiness, direct/UCP payment, Agent Alipay QR actions, refund, VIC/3DS events, finding a described product through Clink catalog search, listing tippable skills (支持打赏哪些 skill), tipping one or multiple skills, or installing a public skill by publisher/name with optional version or a Number from recent context."
+name: visa-skill
+description: "Visa Skill 0.1.26. Use for Visa card benefits and commerce plus concise Clink wallet, card, risk, Catalog, payment, UCP, Instruction, refund, event, Skill tipping, and Skill installation capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "1.14.0"
+  version: "0.1.26"
   requires:
     node: ">=20"
-    bundled: "vendor/clink-cli/clink-cli.bundle.mjs"
-  requiresHumanBrowser: "OAuth verification, card binding/setup/modify, Visa Passkey, 3DS, and risk pages must be completed by the user in their own browser, never in an agent browser"
+    bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
+  requiresHumanBrowser: "OAuth, card setup, Visa Passkey, 3DS, Instruction, and risk pages belong in the user's system browser"
 ---
 
-# Clink Payment Skill
+# Visa Skill
 
-Use this skill for Clink Catalog discovery and direct payment operations through `clink`.
-
-This skill executes wallet, card, payment, refund, risk, VIC instruction, public-skill listing/tipping/installation, internal/external UCP checkout, utility, event, and local config commands. It does not decide pricing, entitlement, or merchant receipt confirmation.
-
-## Semantic Intent Contract
-
-Before reading wallet state or choosing a Catalog/payment workflow, interpret the complete current turn semantically and construct the versioned contract in `references/clink-payment-intent-contract.md`. For new Catalog/payment routing, call `classifyPaymentIntent` with `routingContractVersion: 2`, one `operation`, and one `executionDecision`.
-
-Do not decide the route from regexes, keyword presence, synonym lists, legacy booleans, or ambient merchant/payment fields. Natural-language `text` is audit context only in v2 and cannot authorize Direct Pay or purchase. When the meaning is ambiguous, use `CLARIFY`; when it does not authorize execution, use `DENIED`. The unversioned text parser remains a compatibility adapter for existing callers only and must not receive new phrase-specific routing rules.
-
-Obey the validated `walletGate`:
-
-| Semantic operation | Wallet gate | Behavior |
-| --- | --- | --- |
-| `CATALOG_SEARCH` | `SKIP` | Run anonymous discovery without `wallet status` or `wallet init`. |
-| `CATALOG_PURCHASE` | `DEFER_UNTIL_SELECTION` | Find and present candidates anonymously; defer wallet work until a candidate is selected for checkout. |
-| `UCP_CHECKOUT` / `DIRECT_PAY` | `REQUIRE_STATUS` | Enter wallet readiness and the authenticated payment guards. |
-| `NO_ACTION`, `DENIED`, or `CLARIFY` | `SKIP` | Run no remote purchase/payment command; ask or answer as appropriate. |
-
-Classifier map:
-
-| Concern | Module |
-| --- | --- |
-| Semantic Catalog/payment contract | `lib/payment-intent-router-fsm.mjs` (`classifyPaymentIntent`) |
-| Wallet request and wallet observations | `lib/wallet-intent-fsm.mjs`; `lib/wallet-workflow-fsm.mjs` |
-| Catalog execution | `lib/catalog-discovery-fsm.mjs` (`classifyCatalogDiscovery`) |
-| Direct/Session authorization and payment results | `lib/authorization-workflow-fsm.mjs`; `lib/payment-workflow-fsm.mjs` |
-| UCP checkout, endpoint route, and aggregate execution | `lib/ucp-checkout-workflow-fsm.mjs`; `lib/ucp-checkout-route-fsm.mjs`; `lib/ucp-checkout-run-fsm.mjs` |
-| Skill Tip / batch Tip / install | `lib/skill-tip-workflow-fsm.mjs`; `lib/skill-tip-batch-workflow-fsm.mjs`; `lib/skill-install-workflow-fsm.mjs` (`classifySkillInstallPrerequisites`) |
-| Async events and browser handoff | `lib/event-workflow-fsm.mjs`; `lib/page-handoff.mjs` |
-
-## Execution Ownership
-
-Agent owns command execution. When this skill is triggered and required inputs/authorization are available, run the matching tool or `clink` command yourself through the available runtime. Command examples are internal execution recipes, not user instructions. Ask the user only for missing data, explicit payment/refund authorization, shipping details, or required browser-page actions.
-
-If the runtime cannot execute local commands, report that limitation and stop. Provide a manual command only when the user explicitly asks for a command preview or manual fallback.
-
-**Agent owns command execution; it does not own the browser pages those commands produce.** OAuth device verification, card binding/setup/modify, Visa Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser. Do not open, navigate, preview, prefetch, unfurl, screenshot, extract from, fill, or submit them through an agent built-in browser, headless browser, CDP/Playwright/Puppeteer, browser MCP server, computer-use, embedded webview, or link preview — not even to check that the page loads. Merchant product pages are the opposite case and stay agent work. Classify every URL with `lib/page-handoff.mjs` before sending it and read `references/clink-browser-handoff.md`.
-
-An Agent Alipay QR customer action is a terminal-or-local-image action, not a browser page. For an explicitly selected Alipay payment, run `clink pay` with `--payment-method-type ALIPAY --terminal-qr --format json` and do not inject a default Card payment instrument. The CLI renders the QR as UTF-8 characters on stderr while stdout remains one JSON envelope. A Codex command transcript may be collapsed or hidden from the user, so successful command execution alone is not QR display. When stderr contains QR block characters and does not contain `Warning: terminal QR could not be displayed; use customerAction.imagePath instead.`, extract only the contiguous QR lines and repeat them exactly in the next user-visible assistant message inside a fenced `text` block. Preserve every character, leading/trailing space, and line break. Do not replace a successfully rendered character QR with PNG because it might look misaligned; the fenced block is mandatory. In this successful branch, do not call `nodeRepl.emitImage`, `view_image`, or any image/file attachment tool. Use the CLI-owned `customerAction.imagePath` through the host's native image or file-attachment capability only when the exact warning is present or no QR block characters were produced. Never navigate to the image with Agent Browser, wrap it in a browser page, print it as Base64, expose `qrCodeContent`, or reconstruct it from the redacted `imageUrlPng` marker. Start the returned order-event wait immediately after either QR representation becomes visible to the user.
-
-For an ordinary public Skill installation or reinstallation, do not run the installed Skill's test suite or invoke commands such as `npm test` or `node --test`. Verify only the CLI exit code, JSON result binding, install path, and agent publication result. Run tests only when the user explicitly requests them or the current task also changes Skill or CLI source code.
-
-## Network Execution Contract
-
-Before the first remote-capable command in a workflow, follow `references/clink-cli-invocation.md`: resolve this Skill's `scripts/network-preflight.mjs` by absolute path, resolve the effective HTTPS origin, and run `node <absolute_skill_path>/scripts/network-preflight.mjs <origin>` without credentials or business data. Never resolve the script relative to the user's current working directory. Run it again before contacting a newly resolved origin when that origin is known before command invocation. The Skill cannot elevate the host sandbox through `SKILL.md` or `agents/openai.yaml`; use the host's normal network approval mechanism when available.
-
-`CODEX_SANDBOX_NETWORK_DISABLED=1` is only a diagnostic hint, because an approved or escalated command can retain it while having network access. Never skip the preflight or label the host blocked from that variable alone. If the actual preflight fails and carries `sandboxNetworkDisabledHint=true`, report the transport result, then suggest enabling `sandbox_workspace_write.network_access=true` in Codex configuration if the host cannot approve network access for the command.
-
-The Codex execution sandbox is unrelated to Clink's `--sandbox`/`--test` API environment. Never change the Clink environment or `CLINK_BASE_URL` to work around host networking. Exit code 6 alone is inconclusive; preserve any exposed `ENOTFOUND`, `EAI_AGAIN`, `ETIMEDOUT`, or TLS cause, and never blindly resubmit a payment, Tip, refund, checkout completion, or other state-changing command after an ambiguous network result.
-
-## Before Running Commands
-
-CRITICAL - before executing a matching operation, read the listed reference file. Do not rely on memory or infer hidden fields.
-
-| Operation | Must read |
-| --- | --- |
-| Any Catalog/payment intent classification, authorization boundary, or wallet-gate decision | `references/clink-payment-intent-contract.md` |
-| Any command invocation, host-network preflight, JSON parsing, exit-code classification, local bundle usage | `references/clink-cli-invocation.md` |
-| Emitting any URL a person must act on: OAuth verification, card binding/setup/modify, Visa Passkey, instruction update/cancel, 3DS redirect, risk link | `references/clink-browser-handoff.md` |
-| Wallet init/status, single-user config, production/UAT/test environment selection, card readiness, card management, risk links | `references/clink-wallet-config.md` |
-| Waiting for binding, risk, refund, VIC, instruction, 3DS or Agent Alipay QR completion, or optional Agent Pay account-confirmation events | `references/clink-async-events.md` |
-| VIC agentic authorization, Visa readiness, purchase instruction list/create/sign-url/update/cancel, recurring versus one-time limits, scheduled-task pre-authorization | `references/clink-instruction.md` |
-| Restricted-category screening before Quick `wallet init` with instruction context or any `instruction create`, including scheduled pre-authorization drafts | `references/clink-restricted-categories.md` |
-| Authorized payment execution, Agent Alipay QR display, 3DS handling, refund submission/status | `references/clink-payment-refund.md` |
-| UCP checkout product order flow, product-link purchase intent, instruction/mandate matching, product analysis with `parse-item`, merchant UCP Catalog search, checkout route resolution, aggregate execution, and read-only recovery | `references/clink-ucp-checkout.md` |
-| Catalog product discovery from a described product, supported-merchant list, merchant intent matching, merchant-scoped or broad catalog search, channel/location targeting, and exact store-result filtering | `references/clink-catalog-discovery.md` |
-| Public skill listing, skill tip input/authorization, Number snapshot safety, tip result handling, optional merchant account events | `references/clink-skill-tip.md` |
-| Public Skill installation by identity or Number, confirmation safety, CLI result handling, install conflicts | `references/clink-skill-install.md` |
-
-Read multiple references when a workflow crosses boundaries. Start Catalog/payment routing with `clink-payment-intent-contract.md`. Anonymous discovery reads `clink-cli-invocation.md` and `clink-catalog-discovery.md`; do not enter wallet, instruction, or checkout references while its gate is `SKIP` or `DEFER_UNTIL_SELECTION`. Once a resolved purchase returns `REQUIRE_STATUS`, a product order through UCP checkout needs `clink-wallet-config.md`, `clink-instruction.md`, `clink-ucp-checkout.md`, and sometimes `clink-async-events.md`; if it may create an instruction, it also needs `clink-restricted-categories.md`. Any workflow that emits a URL for the user — binding, Passkey, 3DS, risk — also needs `clink-browser-handoff.md`.
-
-## When to Use
-
-- initialize a user's Clink wallet
-- start a fresh wallet login when the user explicitly asks to re-login, reauthorize, replace an expired login link, or recover after missing the earlier login
-- check wallet environment or payment-method readiness
-- refresh payment-instrument list / `paymentMethodsVoList` from Clink before selecting a card or relying on cached payment methods
-- generate card binding, setup, modify, instruction signing, or risk-rule URLs
-- execute a payment after amount and authorization are already clear; old pay must classify fulfillment first, refresh the payment-instrument list, then run the direct/session authorization resolver before pay; Visa + VIC direct/session pay must list/match ACTIVE instruction+mandate before pay
-- display a CLI-generated Agent Alipay character QR in the terminal, fall back to its private PNG when needed, and wait for the correlated order result
-- buy a product the user described without giving a product link: route to `CATALOG_PURCHASE`, find candidates with the catalog discovery FSM, present them, let the user select one, then continue through the UCP checkout flow for that selected product
-- search for or discover a product in Clink catalogs without buying it: route to anonymous `CATALOG_SEARCH`, skip `wallet status` and `wallet init`, load the supported merchant list, and run merchant-scoped or broad discovery; return `DISCOVERY_ONLY` candidates and require a later explicit buy/order/checkout request before crossing into wallet or checkout
-- order a discovered product or product URL/product link through the UCP checkout control flow: page-backed products resolve a product detail URL and run `parse-item`; a validated `INTERNAL_UCP_CATALOG` candidate uses its frozen merchant-list `merchantUrl`, item ID, price, currency, and availability without page parsing. Both branches classify fulfillment, collect shipping when required, resolve the payment instrument, enforce Visa/VIC authorization, resolve a same-wallet-origin endpoint, and execute one aggregate `ucp-checkout run` only after every guard passes
-- pre-authorize a recurring/scheduled purchase task before the schedule is created: collect the schedule scope, pick recurring versus one-time with `classifyScheduledAuthorizationScope`, reuse an existing instruction only when it covers the whole schedule horizon, otherwise create and activate one while the user is present, then pin `instructionId` + `mandateId` into the schedule
-- create a full refund or poll refund status
-- wait for async completion events from the Clink event hub
-- list public skills that support tipping and present exactly Number, publisher, and skill name with all table headers in the user's language
-- tip one or multiple skills in USD by exact publisher/name without a version, with one shared amount or per-item amounts; Number targets resolve from a list displayed in the same context within two hours
-- install one public Skill by exact publisher/name with optional version, or resolve and confirm a Number from a list displayed in the same context within two hours
-- inspect or update local Clink CLI configuration
-
-## Do Not Use
-
-- deciding whether the user should be charged
-- inventing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, `paymentInstrumentId`, mandate scope, or merchant scope
-- confirming merchant receipt, balance top-up completion, or product entitlement
-- blindly retrying an ambiguous payment after timeout or network failure
-- handling generic merchant integration design when no direct `clink` action is needed
-
-## Routing Boundary
-
-- Merchant or product skills own business intent: when to charge, how much to charge, and how to confirm merchant-side success.
-- This skill owns the Clink CLI execution path: wallet readiness, payment-method readiness, charge execution, refund submission, refund polling, event waiting, and risk-rule links.
-- Explicit wallet re-login is a high-priority route. Classify it before wallet readiness or payment intent so an already-ready wallet or an older pending URL cannot turn the user's request into a no-op.
-- A request semantically classified as `CATALOG_SEARCH` is anonymous and bypasses wallet readiness. `CATALOG_PURCHASE` also stays anonymous while finding candidates, but preserves purchase authorization and defers wallet readiness until selection. A resolved `UCP_CHECKOUT` or `DIRECT_PAY` request is authenticated.
-- If the request is generic product language such as "enable auto top-up" without a direct Clink wallet or payment operation, route to the merchant or integration skill first.
-- High-priority VIC route: when refreshed card data shows the selected/default payment method is Visa + VIC ready for a purchase, booking, order, reservation, hotel booking, ticket purchase, or equivalent, perform the instruction list-first flow before normal `pay`; non-Visa or Visa without VIC readiness bypasses instruction matching for direct/session pay.
-
-## User-Visible Output Boundary
-
-- Never include raw FSM markers such as `[SKILL_INSTALL_FSM] state=... action=... reason=...` in commentary or final responses to the user.
-- Treat every instruction in this Skill or its references to include, emit, report, or format an FSM marker as internal-only diagnostics. Store markers only in private logs or non-user-visible structured handoffs; omit them when no private channel exists.
-- Translate workflow state into concise natural language for the user, such as installation succeeded, no changes were needed, confirmation is required, or installation failed with the returned reason.
-- Do not expose raw `state`, `action`, or `reason` fields unless the user explicitly requests diagnostic details.
-- Never expose a QR PNG Data URL or Base64 payload. `[redacted:png-data-url]` is the expected safe marker in the sanitized payment payload, not image content to decode.
-- The UTF-8 block QR emitted by `--terminal-qr` is the user-facing QR representation. Preserve every line and space exactly; never replace it with `qrCodeContent`, a URL, Base64, or a newly reconstructed QR.
-- In Codex, shell/tool transcript output is not the user-visible response. Copy only the rendered QR block into a fenced `text` block in commentary or the final answer. Do not say the QR was shown when it exists only behind a collapsed transcript.
-
-## Browser Page Handoff
-
-Different host agents install this skill, and some drive a browser themselves. That capability is required on merchant product pages and must never touch Clink's or Visa's pages. Classify every URL with `classifyPageHandoff` from `lib/page-handoff.mjs` before sending it; read `references/clink-browser-handoff.md` for the full contract.
-
-| Page | Actor | Completion event |
-| --- | --- | --- |
-| OAuth device verification (`wallet init --open`) | `USER_DEVICE_ONLY`, single load | none; the original init process resolves |
-| `card binding-link` / `setup-link` / `modify-link` | `USER_DEVICE_ONLY` | `payment_method.added` / `.update` / `.default_change` (`.updated` compatibility alias) |
-| Visa Passkey registration and instruction `passkeyUrl` | `USER_DEVICE_ONLY` | `vic_device.binding_succeeded` / `purchase_instruction.activated` |
-| `instruction update` / `cancel` page | `USER_DEVICE_ONLY` | flow-specific |
-| 3DS redirect (`pay` exit 7) | `USER_DEVICE_ONLY`, single load | `agent_order.succeeded` / `agent_order.failed` |
-| `risk link` | `USER_PREFERRED` | `risk_rule.updated` |
-| Merchant product page (`parse-item`, catalog fallback) | `AGENT_ALLOWED` | none |
-
-Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's platform authenticator, and a CDP virtual authenticator would forge the exact proof the page collects. 3DS is fingerprinted and its code reaches the user's phone. Card pages collect a PAN that must never enter model context. OAuth verification breaks on a second load through duplicate code sends.
-
-Pass `--open` on every `wallet init` invocation so the CLI requests an OAuth handoff through the system browser. Pass `--no-open` on the other link-producing commands, and check `defaultOpenLinks` once per workflow with `clink config get --format json` — it lives in the machine-wide config every build shares, so a stored `true` re-arms host-side auto-open. Completion is always proven by the event, never by browser inspection. Never add browser-side verification that a page opened.
-
-Agent Alipay QR does not enter this page-handoff table. Prefer the UTF-8 QR emitted by `clink pay --terminal-qr` on stderr and copy it into a user-visible fenced `text` block. Its fallback `customerAction.imagePath` is an absolute local PNG path with `mediaType=image/png`, `temporary=true`, and `cleanupRequired=true`, but it is permitted only after the exact terminal warning or missing block output. Neither representation is a URL handoff; do not call `classifyPageHandoff`, Agent Browser, computer-use, or a webview for it.
-
-## Control Loop
-
-Every workflow follows:
-
-`Observe → Classify → Act → Verify → Return`
-
-1. **Observe:** read the current CLI JSON envelope, exit code, event, or local config snapshot.
-2. **Classify:** for Catalog/payment routing, first interpret the complete current turn and construct the v2 envelope from `references/clink-payment-intent-contract.md`; then call `classifyPaymentIntent` and obey its derived `walletGate`. Do not pass prose, regex matches, legacy booleans, or ambient fields as authorization. The unversioned text path is compatibility-only. Wallet re-login still uses `classifyWalletIntent`; wallet observations use `classifyWalletInitObservation` / `classifyWalletStatusObservation`. After the high-level route is fixed, use the operation FSMs named in the required references: Catalog discovery, UCP checkout and route resolution, payment/refund, authorization/instruction, async events, Skill Tip/install, and browser handoff. Scheduled authorization must be prepared before the schedule and verified by pinned IDs at each unattended run; a human-only page during an unattended run surfaces a gap. Run `classifyInstructionRestriction` before Quick instruction context or any instruction draft.
-   For the final UCP mutation, call `classifyUcpCheckoutRunExecution` and use `lib/ucp-checkout-run-fsm.mjs` (`classifyUcpCheckoutRunRequest` / `classifyUcpCheckoutRunObservation` / `classifyUcpCheckoutRunResumeObservation`). It emits one authorized `ucp-checkout run` command and only read-only resume commands.
-3. **Act:** run exactly the next allowed CLI command; do not skip guards or combine unrelated recovery actions.
-4. **Verify:** use sync status, a matching event, or a `get`/status command before claiming a terminal state.
-5. **Return:** hand structured payment/order/refund/checkout data back to the caller; do not confirm merchant fulfillment.
-
-For payment results use `classifyPaymentObservation` and `classifyPaymentAccountEventObservation`. For asynchronous continuations use `classifyEventWaitRequest`, `classifyEventPollObservation`, and `correlateEventWorkflow`. UCP checkout uses the classifiers in `lib/ucp-checkout-workflow-fsm.mjs` plus `classifyUcpCheckoutRoute`; Catalog discovery uses `classifyCatalogDiscovery`. Keep their detailed inputs in the required references rather than inferring them from text.
-
-Maintain an **authenticated environment lock** from the effective `wallet status` base URL for wallet, payment, checkout, order, refund, event, and authenticated tool commands. The environment is chosen once by `wallet init`; this distribution pins init to production, and those later commands stay environment-neutral (see `references/clink-cli-invocation.md`). Public Catalog discovery is separate and anonymous: `get-merchant-list`, `ucp-catalog search/product`, and `catalog search` do not read wallet config, default to production, and accept mutually exclusive `--test`/`--sandbox`. For `CATALOG_SEARCH`, do not run `wallet status` or `wallet init` at all. Freeze one `catalogEnvironment` and carry its same flag through all Catalog stages.
-
-The Agent owns Catalog result-language detection. Before the first Catalog call, choose one language from the user's explicit result-language request, then the established conversation reply language, then the current user's language/script. New v2 Catalog routes require the canonical value in `target.catalogLanguage`. Reuse it on search and product calls as `--language <BCP47>`; never derive it from product keywords/query text, buyer country, wallet/config state, or the backend. Keep `--context` for non-language hints such as `address_country`; never combine `--language` with `context.language`. The CLI canonicalizes Chinese to `zh-Hans` or `zh-Hant`, sends the effective language as both request context and `Accept-Language`, and performs translation for merchant-scoped search/product. Broad search only forwards the language to providers, so localization may vary. A missing or blank language stops before any Catalog CLI command; no caller may fall back to provider-original text or infer a target language. The pending selection is authoritative over every candidate copy of the frozen environment/language; any conflict stops selection. Before a selected candidate enters authenticated checkout, require its frozen Catalog origin to equal the authoritative `wallet status` origin; conflicting duplicate environment inputs also stop checkout. Never move a test/sandbox candidate silently into production payment. `--base-url` no longer exists.
-
-FSM action contract:
-
-| Action | Required behavior |
-| --- | --- |
-| `WAIT_EVENT` | Return a pending state and wait for the correlated event or status check; do not claim completion. |
-| `SEND_3DS_AND_WAIT_EVENT` | Send the redirect URL once to the user's own browser, then wait for the matching `agent_order.succeeded` or `agent_order.failed`. Never load the challenge from the Agent runtime; the issuer ACS scores automation and the code reaches the user's phone. |
-| `SHOW_QR_AND_WAIT_EVENT` | Extract only the UTF-8 QR lines already emitted by `--terminal-qr` and repeat them verbatim in a user-visible fenced `text` block; a collapsed command transcript does not count. If and only if the exact terminal-QR warning is present or no block characters exist, attach `customerAction.imagePath` through the host's native image capability. Then immediately run the single returned `agent_order.succeeded,agent_order.failed` any-of poll. Keep the payment non-terminal, never expose Base64 or `qrCodeContent`, and never open the image with Agent Browser. |
-| `RETURN_QR_TERMINAL_AND_CLEANUP` | Return the correlated success, failure, timeout, expiry, or unknown result without retrying payment. Recursively remove the CLI-owned `customerAction.cleanupPath` with force semantics after the image attachment is no longer needed; deleting only `imagePath` is incomplete. |
-| `DEFER_OAUTH_TO_WALLET_WORKFLOW` | OAuth URL exposure belongs only to `classifyWalletInitObservation`. Keep the URL hidden while the system-browser request is pending or accepted; surface it once only after `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. |
-| `HANDOFF_TO_USER_DEVICE` | The non-OAuth page requires the user's own browser on their own device. Emit the URL verbatim on its own line, once, say what they will do there, and note explicitly that it must not be opened in this agent's browser. Keep the built-in watch or `events poll` already running. Do not open, navigate, preview, prefetch, unfurl, screenshot, extract, fill, or submit through any agent browser channel, and never satisfy a Passkey page with a virtual authenticator or fabricated payload. |
-| `HANDOFF_TO_USER_BROWSER` | Same handoff and same listener as above; the page holds no secret entry, but the choice is the user's and the agent must not make it for them. |
-| `ALLOW_AGENT_BROWSER` | Merchant/product page. Use browser, MCP, or page extraction normally; no handoff line and no event watch. |
-| `SURFACE_BROWSER_HANDOFF_GAP` | A page only a human can complete met an unattended run or a runtime with no user channel. Report which authorization is missing and stop. Do not emit the URL into an empty room, do not create a draft, and do not substitute another mandate. |
-| `SURFACE_PAGE_HANDOFF_ERROR` | The URL's kind is unknown or unsupported, so its actor cannot be established. Surface that instead of guessing; an unlabeled URL never defaults to agent-openable. |
-| `RETURN_SUCCESS_FOR_MERCHANT_CONFIRMATION` | Return payment success evidence to the merchant layer; do not claim merchant fulfillment. |
-| `STOP_PAYMENT_FAILURE` | Stop the payment path or offer an explicit recovery; do not retry automatically. |
-| `VERIFY_BEFORE_RETRY` | Treat payment state as unknown and verify through a safe status/idempotency path before retry. |
-| `START_FRESH_WALLET_INIT` | The user explicitly requested a fresh login. Prefer an email stated in the current request, otherwise use the current wallet-status email; start exactly one new `clink wallet init --email <email> --open --format json` even if the wallet is ready or an older init is still pending. The CLI supersedes the older attempt. Never reuse a URL from prior chat messages, terminal scrollback, logs, or another process. |
-| `ASK_FOR_WALLET_EMAIL` | A fresh-login request has no usable email in the current request or wallet status. Ask only for the email, then resume `START_FRESH_WALLET_INIT`; do not repeat an older URL while waiting. |
-| `DO_NOT_START_WALLET_INIT` | Re-login wording was negated, questioned, hypothetical, historical, or part of a bug/test discussion. Answer or acknowledge the request without running `wallet init` and without forwarding it to payment-target routing. |
-| `START_WALLET_SETUP` | Start wallet/config recovery before any new payment attempt. |
-| `WAIT_FOR_WALLET_INIT_PROGRESS` | Keep the original `wallet init --open` process running without showing its URL or claiming login monitoring is active. Continue until the current attempt prints the complete `Waiting for authorization...` marker; before that marker `oauthDevicePollActive=false`, even if browser-open progress or failure has appeared. |
-| `TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT` | Use only after the current `wallet init --open` attempt has printed both `Opening your browser...` and `Waiting for authorization...`. `oauthDevicePollActive=true` means that same process is polling the OAuth device-token endpoint; it is not an Event Hub listener. Do not show the verification URL or claim that a visible window was confirmed. Ask the user to finish email verification and click Confirm in the resulting window, keep the process alive, and never start `events poll` for OAuth. |
-| `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT` | Use only after the current attempt reports browser-launch failure and then prints `Waiting for authorization...`; require `oauthDevicePollActive=true`. Read the exact verification URL only from that attempt segment, then output the complete value of `authorizationUrl` verbatim on its own line. Do not add, remove, parse, encode, decode, rebuild, reduce to an origin, or truncate any character; preserve the query after `?` and the fragment after `#`. Send it once, keep that same OAuth token-polling process running, and do not start an Event Hub poll. |
-| `RETURN_WALLET_PLAN` | Report a `--dry-run` Device Authorization request as planned, not initialized. |
-| `START_WATCHED_CARD_BINDING` | `wallet init` is OAuth-ready and has exact first-card evidence: `paymentMethodsCached=true`, `paymentMethodCount=0`, and a non-empty `data.bindingUrl`. Do not return the unprotected init copy. This action is non-terminal and carries `bindingUrlRequired=true`: start `clink card binding-link --no-open --format json` without `--no-watch`, then **must return that command's trusted Agent Portal `/payment-method-setup` `data.bindingUrl` to the user** after `data.watchReady=true`, `data.watchEventType=payment_method.added`, and a still-running process prove the first scoped Event Hub poll succeeded. The URL may contain only one optional non-empty `email` parameter. Never stop after merely reporting OAuth ready. Keep that process running for the matching second envelope and do not start a competing `events poll`. Preserve nullable `pendingInstructionId` with the frozen Quick purchase. After the second envelope, extract the exact new `paymentInstrumentId`, refresh its card snapshot, and pass the ID, card, and nullable Quick ID through `classifyQuickInstructionActivationGate`; `payment_method.added` alone is never VIC or activation evidence. |
-| `RETURN_WALLET_READY` | For `wallet init`, require `hasAuthorization=true`, `authorizationType=oauth`, `hasCustomerApiKey=false`, and a non-empty `customerId`; init no longer echoes `oauthRequired`. Return ready when a positive `paymentMethodCount` proves a card already exists, or when exact first-card evidence is absent. Report `paymentMethodsCacheError` separately without treating successful OAuth as failed or inventing a binding URL. For `wallet status`, require the complete effective-credential markers documented in `references/clink-wallet-config.md`. Do not force a never-OAuth CSK user to migrate during another operation. A `pendingInstructionId` surfaced on this ready path is informational only: with no fresh binding ceremony coming, no activation event is coming either, so never start a quick activation wait here — continue the regular flow, and `clink instruction list --valid-only` picks the instruction up if it later becomes `ACTIVE`. |
-| `REFRESH_PAYMENT_INSTRUMENT_LIST` | Run `clink card binding-link --no-watch --no-open --format json`. For Quick setup, select only the exact `paymentInstrumentId` from `payment_method.added`; for ordinary direct/session pay, resolve the user-selected/default instrument. Never use the pre-binding list as the new card snapshot. |
-| `RUN_PAY_WITHOUT_AUTHORIZATION` | For direct/session pay, bypass instruction matching because the selected/default card is non-Visa or Visa without VIC readiness; run `clink pay` without instruction/mandate IDs. |
-| `LIST_AUTHORIZATIONS` | For Visa + VIC ready direct/session pay, run `clink instruction list --valid-only --payment-instrument-id <id> --format json` before pay. |
-| `RUN_PAY_WITH_AUTHORIZATION` | Run `clink pay` with the matched `instruction_id` and `mandate_id`. |
-| `REFUSE_RESTRICTED_INSTRUCTION` | The purchase falls in a restricted category, so refuse to create the instruction. Name the restricted category in the user's language, create no draft, and send no Passkey URL. The refusal is terminal for this payment intent: never rephrase, translate, trim mandate fields, split the purchase, or reroute it through plain `pay` or UCP checkout — the backend rejects these as illegal content anyway. |
-| `FIX_RESTRICTION_INPUT` | Restricted-category screening could not safely classify the purchase because context or a field/assertion is missing or malformed. Correct or collect the indicated input, then rerun the classifier; never treat this as clearance to create an instruction. |
-| `CONTINUE_INSTRUCTION_CREATION` | Restricted-category screening found no match for the complete purchase context. Proceed with the pending Quick `wallet init` context or later `instruction create`, whichever route requested the gate. |
-| `START_AUTHORIZATION_DRAFT_AND_WAIT` | Create the mandate/instruction draft for the same payment intent, then run `classifyAuthorizationDraftObservation` on the CLI output. Screen the purchase with `classifyInstructionRestriction` first; only `CONTINUE_INSTRUCTION_CREATION` may create the draft. |
-| `ASK_FOR_SCHEDULE_SCOPE` | A recurring/scheduled purchase task is missing its cadence, per-run cap, or currency. Ask for the missing pieces; never invent a cadence or an amount limit. |
-| `CREATE_SCHEDULED_AUTHORIZATION_DRAFT` | No existing instruction covers the whole schedule horizon. Screen the purchase with `classifyInstructionRestriction` first; then, while the user is still present, run `clink instruction create` with the mode, `recurringFrequency`, and `amountLimit` the scope classifier computed, write the per-run cap into the mandate `description`, send the Passkey URL, and verify `ACTIVE` before creating the schedule. When the classifier returned `total_budget_below_projected_spend`, tell the user how many runs the budget covers before creating anything. |
-| `PIN_SCHEDULED_AUTHORIZATION` | The authorization covers the whole schedule. Freeze its `instructionId` + `mandateId` into the scheduled task, then create the schedule. Each later run matches by these pinned ids, never by re-listing and re-matching. |
-| `SURFACE_UNATTENDED_AUTHORIZATION_GAP` | An unattended/scheduled run has no usable pinned authorization — not pinned, not `ACTIVE`, mandate missing, instruction mismatch, or a different card. Stop this run and report the reason. Do not create a draft, do not send a Passkey URL, and do not re-list instructions to find a substitute mandate: no user is present to authorize one, and silently spending against a different mandate is worse than skipping the run. |
-| `SEND_PASSKEY_URL_AND_AWAIT_BUILT_IN_WATCH` | Send the Passkey URL and keep the same `instruction create`/`sign-url` process alive — that process **is** the listener. The CLI prints the draft envelope, then blocks polling `purchase_instruction.activated` correlated to this `instructionId` (up to 15 min) and prints a second envelope when it arrives. Do not pass `--no-watch`, do not start an `events poll` alongside it, and do not wait for the user to report completion. Feed that second envelope back through `classifyAuthorizationDraftObservation` as `watchStdout`. |
-| `VERIFY_AUTHORIZATION_ACTIVATION` | The built-in watch delivered an activation event correlated to this instruction. Run the waitSpec verify command, `clink instruction get --purchase-instruction-id <id> --format json`, then `classifyAuthorizationActiveVerification` before resuming. The event alone is not proof; only `ACTIVE` is. |
-| `VERIFY_AUTHORIZATION_AFTER_WATCH_GAP` | The watch ended without this instruction's activation — it hit the 15-minute timeout, the runtime killed the foreground command, or only an unrelated instruction's event arrived. None of these mean authorization failed, so never report failure here. Run `clink instruction get --purchase-instruction-id <id> --format json` first; surface a failed GET instead of treating it as pending. Only when the GET succeeds with a non-`ACTIVE` status and the user may still be authorizing should you restart the returned `pollCommand`, rather than re-creating the draft or re-sending the URL. |
-| `WAIT_AUTHORIZATION_ACTIVATION` | A successful verification still reports `CREATED`, `PENDING`, or `INPROGRESS`, so activation may still arrive. For an ordinary Passkey flow, keep the pending payment intent frozen and keep waiting; do not re-create the draft, re-send the Passkey URL, or start a second watcher. A Quick waitSpec is different: it carries `singleAttempt=true`, so run its one bounded poll and preserve the returned `activationWaitAttempted=true` waitSpec for the final GET; if that GET is still activatable, obey the returned regular `LIST_AUTHORIZATIONS` action and never poll Quick activation again. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are errors, not pending. |
-| `WAIT_VIC_READINESS` | Quick setup found the exact newly added card is Visa but its authoritative snapshot is not VIC-ready. Run one bounded any-of poll for canonical `payment_method.update` or `vic_device.binding_succeeded`, correlated to that card; an update counts only with `visaRegistrationSucceeded=true`. Its `singleAttempt=true` result always routes to the returned refresh command after event, timeout, wrong-card/non-ready event, empty result, or poll gap and never supplies a resume poll. Merge the result's `{vicReadinessWaitAttempted:true}` continuation into the refreshed gate input. Never loop the VIC wait or treat `payment_method.added` as readiness. |
-| `VERIFY_RESOURCE_STATUS` | Run the waitSpec verify command after a correlated event. A Quick `singleAttempt` poll also returns this action for timeout, wrong-resource/non-ready event, empty result, or poll gap: run the authoritative card refresh or instruction GET, then preserve its returned waitSpec/continuation when re-entering the relevant classifier. Never restart the completed single-attempt poll. |
-| `RESUME_AUTHORIZED_PAYMENT` | The instruction verified `ACTIVE`, so authorization is complete and the frozen payment intent must now continue to execution in the same turn. Resume, never restart: reuse the frozen product, item selection, quantity, amount, currency, and fulfillment rather than asking the user again. For a UCP checkout intent, continue at `RESOLVE_CHECKOUT_ROUTE`, then enter `RUN_UCP_CHECKOUT`. For a direct/session pay intent, run `clink pay` with the activated `instruction_id` and `mandate_id`. Reporting the activation without continuing is a failure to complete the workflow. |
-| `SURFACE_AUTHORIZATION_ERROR` | Report the authorization error and stop the current payment intent; do not resume payment, retry the draft, or claim the instruction is usable. This includes instruction-GET failures, terminal non-`ACTIVE` statuses, missing/unknown status, and instruction-ID mismatch. A mismatch means a different instruction activated and this intent must not resume. |
-| `PARSE_ITEM` | Run `clink tool parse-item --url <item_url> --format json` for page-backed products before aggregate checkout. A platform-store item answers with `resolution: "manual_item_facts"` and an empty `items` array; that is a success envelope and an instruction, not a failure. Use the candidate facts and do not browse for a product detail page that does not exist. A validated `INTERNAL_UCP_CATALOG` item already has a frozen item ID and sets `requiresProductParse=false`, so do not run this action for it. |
-| `ASK_FOR_PRODUCT_INPUT` | Page-backed checkout needs a product detail URL it does not have. An internal Catalog target instead needs its complete frozen source, merchant ID, authoritative merchant URL, item ID, and Catalog context. Resolve the missing authoritative input; never construct a URL. |
-| `FREEZE_PRODUCT` | Freeze the selected item, quantity, `totalAmountMinor`, currency, and merchant context for this payment intent. Every later step, including a resume after authorization, reuses these frozen values. |
-| `ASK_FOR_FULFILLMENT` | Fulfillment classified as `UNKNOWN`. Ask before checkout; do not guess between `PHYSICAL_GOODS_REQUIRES_SHIPPING` and `NO_SHIPPING_REQUIRED`. |
-| `REFRESH_PAYMENT_INSTRUMENT` | Run `clink card binding-link --no-watch --no-open --format json` and resolve the selected/default instrument before the authorization capability gate. |
-| `EXTRACT_ITEM_ID` | Resolve the item ID for checkout from the frozen `parse-item` selection. |
-| `ASK_FOR_PURCHASE_AUTHORIZATION` | The final frozen amount, merchant, item, card, and delivery expectation are ready, but the current request has not explicitly authorized this purchase. Ask for confirmation and return no command. |
-| `ASK_FOR_PURCHASE_CONFIRMATION` | Helper-level equivalent of `ASK_FOR_PURCHASE_AUTHORIZATION`. Require `explicitPurchaseAuthorized=true` from the current request before returning a mutation command. |
-| `FIX_CHECKOUT_RUN_GATES` | One or more frozen preconditions are not proven. Resume the first missing product, fulfillment/address, card, authorization, restricted-category, or route gate; return no checkout command. |
-| `FIX_CHECKOUT_RUN_INPUT` | A frozen field failed strict validation, including merchant URL, route endpoint rules, MCC, currency, line items, payment instrument, fulfillment, shipping, or digital-delivery contract. Correct that field and rebuild; do not guess or weaken validation. |
-| `RUN_UCP_CHECKOUT` | Execute exactly the `runCommand` returned by `classifyUcpCheckoutRunExecution`: one foreground `clink ucp-checkout run ... --confirm-purchase --format json`. The resolved endpoint is mandatory for both internal and external routes and stays frozen through every observation/resume. Add `--wait-delivery --max-wait 900` only when `digitalDeliveryExpected=true`. Do not query `--help`, background the process, use fixed `sleep`, or manually call create, complete, event poll, or delivery wait. Classify the aggregate JSON result with `classifyUcpCheckoutRunObservation`; any resume command must be read-only. |
-| `RETURN_UCP_CHECKOUT_COMPLETED` | Return the authoritative completed checkout/order data. Do not add an event poll, order fetch, create, complete, or payment retry. Completion is not merchant fulfillment. |
-| `RETURN_UCP_DELIVERY_READY` | Return the authoritative order and nonempty digital-delivery artifacts after the aggregate result reports `stage=delivery,status=ready`. |
-| `RETURN_UCP_DELIVERY_FAILED` | Keep payment confirmed, report the authoritative delivery failure separately, and stop. Do not retry checkout or payment. |
-| `RESUME_UCP_CHECKOUT_READ_ONLY` | Execute only the validated `resumeCommand`: same-checkout and same-endpoint `ucp-checkout get` for pending checkout, or same-order `ucp-order wait-delivery --max-wait 900` for delivery timeout. Then pass the ordinary command output and the returned immutable `resumeContext` to `classifyUcpCheckoutRunResumeObservation`; never feed a non-aggregate resume envelope back into `classifyUcpCheckoutRunObservation`. Never mutate or use `sleep`. |
-| `CREATE_CHECKOUT` | Legacy classifier compatibility only. New product-order execution uses `RUN_UCP_CHECKOUT`; never manually dispatch this mutation after a run attempt. |
-| `COMPLETE_CHECKOUT` | Legacy classifier compatibility only. New product-order execution uses `RUN_UCP_CHECKOUT`; never manually dispatch this mutation after a run attempt. |
-| `WAIT_CHECKOUT` | The checkout is not ready to complete. Keep waiting or re-read status; do not complete or re-create it. |
-| `VERIFY_CHECKOUT_BEFORE_RETRY` | Checkout state is unknown. After complete/get exit 6, execute only the returned `resumeCommand`, which is a read-only `ucp-checkout get` bound to the frozen checkout ID and original endpoint. Create exit 6 has no safe synthesized resume command because no trusted checkout ID may exist. Never blind-retry a checkout that may have charged. |
-| `STOP_CHECKOUT_FAILURE` | Stop the checkout path and report the failure; do not retry automatically or fall back to plain `pay`. |
-| `ASK_FOR_ITEM_SELECTION` | Ask the user to choose when `parse-item` returns multiple available items and the user is present. |
-| `SELECT_ITEM_BY_CONTEXT` | In long tasks when the user is absent, select one available item from `parse-item` output using the frozen user intent and record the reason. |
-| `RESOLVE_CHECKOUT_ROUTE` | Run `classifyUcpCheckoutRoute` after item selection. First execute the returned `clink tool internal-ucp get-endpoint --product-url <item_url> --format json`. A resolved endpoint selects `INTERNAL_UCP_CHECKOUT`; only `NOT_IN_INTERNAL_UCP_LIST` continues to standard UCP profile discovery. |
-| `GET_INTERNAL_UCP_ENDPOINT` | Execute the environment-locked internal endpoint command. On success freeze the returned endpoint and pass it into `classifyUcpCheckoutRunExecution`. On `NOT_IN_INTERNAL_UCP_LIST`, run the returned standard profile probe. Surface every other error without fallback. |
-| `CHECK_STANDARD_UCP_PROFILE` | Only reachable after `NOT_IN_INTERNAL_UCP_LIST`. Run the returned `/.well-known/ucp-clink` probe and feed the result back into `classifyUcpCheckoutRoute`. |
-| `GET_REST_ENDPOINT` | The profile returned parseable JSON. Run `clink tool get-rest-endpoint --url <standard_ucp_url> --format json` and reclassify; `provider=clinkbill` selects internal checkout and any other provider selects external. |
-| `CREATE_INTERNAL_UCP_CHECKOUT` | Legacy route action. Feed the resolved internal endpoint into `classifyUcpCheckoutRunExecution` and use `RUN_UCP_CHECKOUT`; do not manually create the checkout. |
-| `CREATE_EXTERNAL_UCP_CHECKOUT` | Legacy route action. Feed the resolved external endpoint into `classifyUcpCheckoutRunExecution` and use `RUN_UCP_CHECKOUT`; do not manually create the checkout. |
-| `ASK_FOR_CHECKOUT_ROUTE_INPUT` | Route resolution needs a product detail URL or merchant domain it does not have. Ask for or resolve the missing value; do not guess a route. |
-| `POLL_PAYMENT_SUCCESS_EVENT` | Legacy manual-checkout compatibility only; the aggregate `RUN_UCP_CHECKOUT` path classifies its authoritative completed output directly and does not add a separate event poll. When a legacy flow returns this action, immediately run the FSM's exact `clink events poll --type agent_order.succeeded --checkout-id <checkoutId> [--ucp-order-id <frozenUcpOrderId>] [--endpoint <originalEndpoint>] --max-wait 900 --format json` command after UCP checkout complete returns `completed` or `complete_in_progress`. After an exact match with mutually consistent Payment Order aliases, the CLI keeps the event queued while it fetches the UCP order in the same process and ACKs immediately before output; the Agent must not dispatch a second checkout/order command. An uncertain ACK preserves payment success with `eventAckWarning` and may yield a harmless duplicate. Freeze create/update/complete/get `data.ucp.ucp_order_id` as `ucpOrderId` and pass it through the fast-path flag; accept completed checkout `data.order.id` only as a matching compatibility alias. Freeze event `orderId`/`resourceId` separately as `paymentOrderId`. Correlate only canonical processed `data.checkoutId` / `data.checkout_id`; the CLI normalizes a verified nested UCP `agentInstructionInfo` selector to canonical output, while event top-level fields and `resourceId` never become checkout keys. All identifiers must be non-empty strings, all checkout-ID aliases in complete/get/event data must agree, and all UCP-order-ID aliases in checkout/context data must agree; pass `expectedCheckoutId` or `expectedResource.checkoutId` to complete/get classification. A timeout resume must preserve the safely quoted opaque `nextToken`. |
-| `GET_CHECKOUT_FOR_UCP_ORDER` | Legacy-bundle fallback only. The current composite `events poll` resolves a missing `ucpOrderId` internally and must not return this scheduling boundary. If an older event-only envelope produces this action, run only its returned `checkoutCommand` (`clink ucp-checkout get [--endpoint <original_endpoint>] --checkout-id <checkoutId> --format json`) against the original internal endpoint and classify it with `classifyUcpOrderResolutionObservation`, passing the exact event-bearing output from `classifyUcpPaymentSuccessEventObservation`. Never reconstruct this context from IDs, re-poll the acknowledged event, or retry complete/payment. |
-| `WAIT_UCP_ORDER_PROJECTION` | Legacy-bundle fallback only. Retry only the returned read-only checkout GET on the bounded 1/2/4/8-second schedule when an older event-only flow has neither `data.ucp.ucp_order_id` nor `data.order.id`; the current composite CLI owns this retry internally. Projection lag, network errors, HTTP 429, and HTTP 5xx share this bound; validation/auth/identifier/shape errors do not auto-retry. Exhaustion returns the resumable payment-success warning. |
-| `FETCH_UCP_ORDER` | Legacy-bundle fallback only. The current composite poll returns the fetched order directly. If an older event-only envelope produces this action, run its returned `orderCommand` using only the checkout-frozen `ucpOrderId`, then classify the result with `classifyUcpOrderFetchObservation`, again carrying the exact correlated success event rather than reconstructed IDs. Event `paymentOrderId` is payment evidence and must never be passed to `ucp-order get`, even when both IDs share an `order_` prefix. Preserve `message`, `orderPermalinkUrl`, and `checkoutEndpoint` through success or warning; on success, return the full order including OMS data at `data.ucp.success_info` when present. A fetch failure cannot downgrade or retry payment. `FETCH_OMS_ORDER` is a deprecated compatibility name for this action. |
-| `RETURN_PAYMENT_SUCCESS_EVENT` | Return the matched payment success event together with fetched UCP order details after `classifyUcpOrderFetchObservation` succeeds; do not claim merchant fulfillment. |
-| `RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING` | Return confirmed payment evidence plus the separate UCP order-resolution/fetch warning. Do not claim merchant fulfillment and do not retry payment. |
-| `RETURN_SKILL_TABLE` | Run `clink skills list --all --tippable --format json`, preserve CLI Number values, and return exactly Number, publisher, and skill name with all three headers in the user's language. |
-| `RUN_SKILL_TIP_LIST_WORKFLOW` | When no same-context two-hour snapshot resolves a Number, preserve the returned `tipDraft.confirmationRequired=true`, list tippable Skills, and display the table before creating a confirmation pending object. |
-| `ASK_FOR_TIP_CONFIRMATION` | Show the frozen Number, publisher/name, amount, and USD without a version; do not execute payment. |
-| `CLAIM_PENDING_TIP` | Atomically change the same pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
-| `CANCEL_PENDING_TIP` | Atomically change `AWAITING_CONFIRMATION` to `CANCELLED`; never execute payment. |
-| `RUN_SKILL_TIP` | Execute only the exact authorized publisher/name and amount; never pass version or Number to the CLI. Preserve the returned complete `expectedTip` binding for result classification. |
-| `ASK_FOR_TIP_BATCH_CONFIRMATION` | Show every distinct Skill, each USD amount, authorized total, ignored duplicates, and the continue-after-error policy; require one confirmation for the frozen batch. |
-| `CLAIM_PENDING_TIP_BATCH` | Atomically change the same batch from `AWAITING_CONFIRMATION` to `EXECUTING`; return no payment command until the claim succeeds. |
-| `RUN_NEXT_SKILL_TIP` | Run exactly one frozen `clink skills tip` call for the current distinct Skill. Payment calls are sequential. |
-| `WAIT_FOR_SKILL_TIP_ITEM` | Keep the current batch index while an interactive authorization or 3DS continuation is unresolved; do not submit a later payment. |
-| `RETURN_SKILL_TIP_BATCH_RESULT` | Return ordered item statuses and `ALL_PAID`, `PARTIAL`, or `NONE_PAID`; batch `COMPLETED` does not mean all items were paid. |
-| `ASK_FOR_INSTALL_CONFIRMATION` | For a Number target, show the frozen publisher/name/version and create one bound pending confirmation; do not install yet. |
-| `CLAIM_PENDING_INSTALL` | Atomically change the same install pending object from `AWAITING_CONFIRMATION` to `EXECUTING`; return no command until the claim succeeds. |
-| `CANCEL_PENDING_INSTALL` | Atomically change the install pending object from `AWAITING_CONFIRMATION` to `CANCELLED`; never execute installation. |
-| `RUN_SKILL_INSTALL` | Execute `clink skills install <publisher>/<skillName>[@<version>] --format json` using one exact authorized identity. Omit the version to select latest. |
-| `RETURN_INSTALL_PLAN` | Report a dry-run as `PLANNED`, not installed. |
-| `RETURN_INSTALL_SUCCESS` | Return only a binding-matched `INSTALLED`, `UPDATED`, or `UNCHANGED` result. |
-| `SEND_PASSKEY_AND_WAIT` | Handle a legacy tip authorization continuation defensively; it is not the latest Credit-only normal path and no tip payment has occurred yet. |
-| `START_OPTIONAL_ACCOUNT_EVENT_WATCH` | After synchronous Agent Pay or Skill Tip success, keep payment `PAID` and immediately start one bounded `account-created,account-reloaded` any-of poll. Separate typed polls race by acknowledging one another's target. |
-| `WAIT_OPTIONAL_ACCOUNT_EVENT` | Keep `PAID` while the single optional account poll is pending; classify its one result through both event-type wait specs before reporting absence. |
-| `RETURN_SUCCESS_WITH_ACCOUNT_EVENT` | For Agent Pay, return `PAID` plus one uniquely attributed account event, its message key, and allowlisted core information. |
-| `RETURN_SUCCESS_WITHOUT_ACCOUNT_EVENT` | For Agent Pay, return `PAID` when neither optional account event is observed in the bounded window. |
-| `RETURN_SUCCESS_WITH_WARNING` | For Agent Pay, return `PAID` plus `POLL_ERROR` or `AMBIGUOUS`; never claim merchant-order confirmation from uncertain evidence. |
-| `RETURN_TIP_SUCCESS` | Return `PAID` plus one correlated optional account event. |
-| `RETURN_TIP_SUCCESS_WITHOUT_ACCOUNT_EVENT` | Return `PAID` when neither optional account event is observed in the bounded window. |
-| `RETURN_TIP_SUCCESS_WITH_WARNING` | Return `PAID` plus an optional-monitoring warning when account polling fails. |
-| `RUN_PUBLIC_CATALOG_DISCOVERY_WORKFLOW` | Run the public Catalog discovery FSM with the returned query/environment/language and no wallet command. Return candidates with `purchaseIntent=false`, `requiresWallet=false`, `authenticationMode=ANONYMOUS`, `resultMode=DISCOVERY_ONLY`, and `walletGate=SKIP`. If numbered results are retained, store `status=AWAITING_SELECTION` with discovery-only provenance. A later semantic purchase decision must authorize checkout; ordinal or product-id resolution only binds that decision to one frozen candidate and cannot create authorization by itself. |
-| `DO_NOT_RUN_PUBLIC_CATALOG_DISCOVERY` | The semantic contract returned `DENIED` or cannot authorize the search. Run no Catalog, wallet, card, or checkout command; keep discovery-safe metadata and answer the non-executing request. |
-| `DO_NOT_RUN_PAYMENT_WORKFLOW` | The semantic contract denied execution or failed authorization/binding validation. Run no Direct Pay, Catalog purchase, wallet, card, or checkout command. Ambient fields and raw text never repair it. |
-| `RUN_CATALOG_DISCOVERY_WORKFLOW` | Purchase-origin discovery. Run the Catalog FSM with the returned query/context, present candidates, and wait. Store `status=AWAITING_SELECTION`, `purchaseIntent=true`, `resultMode=PURCHASE_SELECTION`, and `walletGate=DEFER_UNTIL_SELECTION`. An optional v2 `target.merchantId` is explicit discovery scope, not a resolved product. Do not enter UCP checkout from a described product alone. |
-| `RUN_UCP_CHECKOUT_WORKFLOW` | The authorized v2 target carries a product URL or item ID; a merchant ID alone is only Catalog scope and cannot select checkout. Enter the UCP checkout FSM at `PARSE_ITEM`, complete the product, fulfillment, card, authorization, restriction, and route gates, then finish through the single `RUN_UCP_CHECKOUT` action. |
-| `RUN_DIRECT_PAY_WORKFLOW` | A v2 authorized `DIRECT_PAY` carries one mutually exclusive `payment.mode`: `DIRECT` requires merchant/positive decimal amount/three-letter currency and forbids session ID; `SESSION` requires session ID and forbids Direct-mode execution fields. Classify fulfillment, refresh instruments, and run `classifyPaymentAuthorizationResolver` before any `clink pay`. |
-| `ASK_FOR_PAYMENT_TARGET` | The request has no resolvable payment target or no explicit purchase intent. Ask for the missing piece named in `missing`; never infer a purchase from a bare verb. |
-| `RUN_UCP_CHECKOUT_FOR_SELECTED_CATALOG_PRODUCT` | First require an authorized semantic purchase decision, then atomically apply the returned `AWAITING_SELECTION -> EXECUTING` transition. Candidate resolution only binds the authorized decision; it never supplies authorization. Continue for the exact validated product with `purchaseIntent=true`, `requiresWallet=true`, `resultMode=PURCHASE_SELECTION`, and `walletGate=REQUIRE_STATUS`. Preserve and validate the frozen query, product aliases, merchant/store identity, channel, URL, price, currency, and quantity. Mark `EXECUTING` consumed after a terminal checkout result. |
-| `ASK_FOR_CATALOG_PRODUCT_SELECTION` | Re-present the candidate list and ask which product to buy. Never guess a product from an ambiguous reply. |
-| `ASK_FOR_CATALOG_DISCOVERY_INPUT` | Ask the caller to repair invalid/conflicting initial Catalog environment or language input before discovery. Also use this when a damaged pending selection has a missing, blank, non-string, or conflicting frozen query alias; invalidate that pending object and ask for the query needed to restart without running either discovery action. |
-| `CANCEL_PENDING_CATALOG_PRODUCT_SELECTION` | Atomically apply the returned `AWAITING_SELECTION -> CANCELLED` transition and stop; no checkout and no payment. |
-| `GET_MERCHANT_LIST` | Run `clink tool internal-ucp get-merchant-list [--test\|--sandbox] --format json` before any Catalog search. Use the frozen public `catalogEnvironment`; omission means production. This command is anonymous and does not read wallet config. |
-| `MATCH_MERCHANT_INTENT` | Match user intent against each candidate's `description` only, then return `merchantMatch: { merchantId, merchantDomain, merchantUrl, reason }` by copying the selected candidate's available identity fields exactly, or `merchantMatch:false` for no match. `merchantDomain`/`merchantUrl` are identity discriminators, not matching evidence; they are required when duplicate IDs exist and must never be constructed. Conflicting fields fail closed. |
-| `RUN_MERCHANT_SCOPED_CATALOG_SEARCH` | Run `clink ucp-catalog search --merchant-id <id> --query <text> --language <BCP47> [--context <json>] [--test\|--sandbox] --format json` for the matched merchant. Preserve the frozen Catalog environment and Agent-selected result language. Keep context language-free. An empty `products` array widens to broad search; an error surfaces and stops. |
-| `RUN_BROAD_CATALOG_SEARCH` | Run `clink catalog search --query <text> [--channel-type <channel>] --language <BCP47> [--context <json>] [--test\|--sandbox] --format json` without `--merchant-id`. Preserve the frozen Catalog environment and language. After the merchant-list preflight, an established channel/store target goes directly here because merchant-scoped search cannot apply either constraint. Put the channel in top-level `--channel-type`; put only HK/SG `address_country` in context. `--ext` is record-only and does not filter. Broad search forwards language to providers but does not guarantee translation. The CLI has no store-search flag, so keep an established `storeId` as target identity, then filter returned groups by exact `store_id` and recompute the product count. |
-| `RETURN_CATALOG_RESULTS` | Return the product candidates as discovery output only. This is not purchase authorization; do not start UCP checkout without explicit buy/order/checkout intent. |
-| `DELEGATE_EXTERNAL_PRODUCT_DISCOVERY` | Clink catalogs are exhausted. Continue discovery with browser, MCP, or another Skill; report no catalog match instead of claiming the product is unavailable, and do not retry the same query. |
-| `ASK_FOR_CATALOG_INPUT` | Ask for required catalog input that is actually missing (query, or `channelType` when a store target is present) before running any search command. An address country outside HK/SG is unknown catalog location, not an input error. |
-| `SURFACE_ERROR` | Surface the CLI/API error and stop without inventing recovery. |
-
-## Routing And Action Matrix
-
-| Observation | Action |
-| --- | --- |
-| User asks which skills support tipping | Run `clink skills list --all --tippable --format json`, classify with `classifySkillListObservation`, and return exactly Number, publisher, and skill name with all headers matching the user's language. |
-| User explicitly authorizes an identity tip | Require exact publisher/name, a positive amount, and USD; run `clink skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json` without a version. |
-| User explicitly authorizes a Number tip with a same-context list displayed within two hours | Resolve Number to the frozen publisher/name and run the versionless identity command without refreshing the list. |
-| Number tip has no valid two-hour context snapshot | List and display tippable Skills, freeze the selected row, then require confirmation before atomically claiming and executing the identity command. |
-| User requests multiple Skill tips with one shared amount | Resolve every target, de-duplicate by case-insensitive publisher/name with the first occurrence and amount winning, then require one confirmation for the complete frozen batch. |
-| User requests multiple Skill tips with per-item amounts | Validate every target and amount before confirmation, freeze the complete batch, then execute one `clink skills tip` invocation per distinct Skill in sequential order. |
-| A batch item is `FAILED` or `UNKNOWN` | Record the item, never automatically retry it, and continue with the next frozen Skill. |
-| A batch item requires authorization or 3DS | Keep it active and do not submit the next payment until the existing single-tip workflow reaches a terminal payment classification. |
-| Skill tip returns code `402` with `Credit 余额不足，请先绑定银行卡` | Payment was not attempted. Return the same stable message and stop the current Tip. Do not run `card binding-link`, start a binding/payment listener, or retry the Tip. Start card binding only after a separate explicit user request. Never suggest recharge/top-up. |
-| Skill tip returns `status=paid` with agent pay `status=1` | Treat synchronous agent pay success as payment success immediately, then start the single optional account-event any-of poll. |
-| Optional skill-tip account poll times out or fails | Keep payment status `PAID`; report `NOT_OBSERVED` or `POLL_ERROR` without claiming the merchant lacks support. |
-| User explicitly authorizes `publisher/name` installation | Run the identity install command without a version so Marketplace selects latest. |
-| User explicitly authorizes `publisher/name@version` installation | Run one exact versioned package operand; never translate it into a separate version flag. |
-| User requests installation by Number from a valid two-hour snapshot | Freeze publisher/name/version/skillId, ask for confirmation, atomically claim the pending object, then run the frozen identity command. |
-| Number installation lacks a valid scoped snapshot | Ask for publisher/name/version or ask the user to list Skills first; never scan Markdown, refresh and reuse Number silently, or guess. |
-| Skill installation returns `planned` | Report `PLANNED`, not installed. |
-| Need current payment-method readiness or refresh payment-instrument list | `clink card binding-link --no-watch --no-open --format json`, then inspect `data.paymentMethodsVoList`; Do not use `card list` alone for freshness |
-| User affirmatively asks to re-login, reauthorize, replace an expired login link, or recover after missing the earlier login | Run `classifyWalletIntent` before `wallet status` or `classifyPaymentIntent`. Resolve the current-request email first and wallet-status email second, then execute `START_FRESH_WALLET_INIT`. A ready wallet or pending old attempt does not suppress this explicit request. |
-| Re-login wording is negated, a question, hypothetical, historical, or part of a bug/test discussion | Execute `DO_NOT_START_WALLET_INIT`; answer the user without starting an init and without asking for a merchant or product. |
-| `wallet init` succeeds with `paymentMethodsCached=true`, `paymentMethodCount=0`, and a non-empty `data.bindingUrl` | Tell the user OAuth initialization succeeded, but do not send the unprotected init copy. Run `clink card binding-link --no-open --format json` without `--no-watch`; after its first envelope says `data.watchReady=true` and `data.watchEventType=payment_method.added`, proving the first scoped Event Hub poll succeeded, and that same process is still running, **return its trusted Agent Portal `/payment-method-setup` `bindingUrl` to the user as a required continuation**. Accept no query except one optional non-empty `email`. Do not return only the OAuth-ready state. Keep the process alive for the matching event and do not add a parallel `events poll`. |
-| Quick setup has a nullable `pendingInstructionId` and the binding watch's second envelope carries `payment_method.added` | Extract that envelope's exact card ID, refresh with `clink card binding-link --no-watch --no-open --format json`, and call `classifyQuickInstructionActivationGate` with the nullable ID, exact `paymentInstrumentId`, refreshed list, and `paymentInstrumentRefreshAttempted=true`. Missing ID and non-Visa branches use the returned regular-resolver action. Visa + Quick ID without VIC readiness runs one returned `WAIT_VIC_READINESS` any-of poll; after any result, refresh and merge its `vicReadinessWaitAttempted=true` continuation before re-entering. Only Visa + VIC-ready + ID runs exact `instruction get`; `ACTIVE` on the same card resumes, while identity mismatch or GET/auth failure stops. A still-activatable instruction gets the returned `singleAttempt` activation poll and one final GET with its `activationWaitAttempted=true` waitSpec; still pending then returns to regular `LIST_AUTHORIZATIONS`, never another Quick poll. |
-| `wallet init` succeeds with `paymentMethodCount>0` | Return wallet ready without starting first-card binding, even if init also returned a non-empty `bindingUrl`. Ignore any returned `pendingInstructionId` for waiting purposes: without a fresh binding ceremony no activation event is coming. |
-| `wallet init` succeeds but payment-method cache refresh fails | Keep OAuth login successful, report `paymentMethodsCacheError`, and do not infer that the user has no card or invent/start a binding handoff. |
-| `wallet init --open` prints `Opening your browser...` and then `Waiting for authorization...` without a browser-launch failure | Set `oauthDevicePollActive=true`. Do not repeat the URL or claim a visible window was confirmed. Tell the user the CLI requested the system browser, ask them to finish email verification and click Confirm in the resulting window, and keep the same OAuth polling process waiting. Do not start `events poll`. |
-| `wallet init --open` reports browser-launch failure and then `Waiting for authorization...` | Set `oauthDevicePollActive=true`, surface the validated URL from the original process exactly once, keep that same OAuth polling process alive, and wait for browser authorization; do not start `events poll` or ask the user to send an email OTP to the agent. |
-| `wallet status` returns `hasAuthorization=true`, `hasStoredAuthorization=true`, `authorizationEnvironmentMatches=true`, `authorizationType=oauth`, `oauthRequired=true`, `hasCustomerApiKey=false`, and a non-empty `customerId` | Continue with `authenticationMode=oauth`; OAuth wins and legacy CSK is permanently disabled for this local wallet. |
-| `wallet status` returns `hasAuthorization=false`, `hasStoredAuthorization=false`, `authorizationEnvironmentMatches=null`, `authorizationType=csk`, `hasCustomerApiKey=true`, `oauthRequired=false`, and a non-empty `customerId` | Continue with `authenticationMode=csk` and mark migration as recommended but non-blocking. This is valid only for a wallet that has never completed OAuth. |
-| `wallet status` returns `oauthRequired=true` without effective OAuth authorization | Start explicit OAuth reauthorization. If `hasStoredAuthorization=true` and `authorizationEnvironmentMatches=false`, re-run `wallet init` under the selected environment lock. Logout, expiry, revocation, malformed authorization, and environment changes never restore CSK fallback. |
-| `wallet status` contains contradictory OAuth/CSK state | Fail closed and require OAuth recovery; never fall back to CSK. |
-| Authenticated command returns exit `4` with HTTP `401` or an expired/invalid/revoked OAuth session | Stop the current operation and start an explicit wallet reauthorization workflow; never manipulate or print Refresh Tokens and never fall back to legacy CSK after OAuth has been enabled. |
-| Authenticated command returns exit `4` with HTTP `403` | Surface the permission/scope error and stop; do not refresh, re-login, or retry automatically. |
-| CLI reports that authentication/login changed while a command, request, logout, payment-method refresh, event poll, or event ACK was in progress | Stop and re-run `wallet status` under the same environment lock. Preserve the newer login, discard the stale command's cache/event result, and never automatically retry a state-changing payment, Tip, checkout, refund, or logout. |
-| CLI reports that a webhook event customer does not match the authenticated wallet | Surface the authentication error, do not acknowledge or cache the event, and inspect wallet/environment state before starting a new poll. |
-| User must bind/manage card or risk rules | Emit the link and have a watch running before the user acts; never wait for the user to report completion before listening. `card binding-link`, `card setup-link`, `card modify-link`, and `risk link` already watch by themselves: omitting `--no-watch` and keeping that same process alive **is** the watch, and starting an extra `events poll` for them creates competing watchers. Start a separate `events poll` only for a hand-built URL the CLI did not print, such as the Visa Passkey registration link. Never substitute a self-invented polling loop over `card list`, which only reads the local cache and never observes the event. |
-| Any URL a person must act on is about to be emitted | Classify it with `classifyPageHandoff` first and hand it off per its actor. `wallet init` uses `--open` to launch the system browser; card, Passkey, 3DS, risk, and instruction update/cancel commands use `--no-open`. Do not let the agent runtime navigate, preview, or screenshot any `USER_DEVICE_ONLY` page. |
-| Quick `wallet init` is about to carry instruction context, or any `clink instruction create` is about to run (direct/session no-match, UCP no-match, or scheduled pre-authorization draft) | Run `classifyInstructionRestriction` from `lib/restricted-categories.mjs` over the complete context described in `references/clink-restricted-categories.md`. Only `CONTINUE_INSTRUCTION_CREATION` may proceed; refuse a restricted category and fix incomplete/invalid gate input before retrying classification. |
-| Selected/default payment method is Visa + VIC ready for purchase/order/book | Use the VIC instruction flow; list ACTIVE instructions before creating a draft |
-| Recurring/scheduled purchase task ("每天/每周…下单…") | Authorize before the schedule exists. Run `classifyScheduledAuthorizationScope`: a stated total budget means a one-time instruction whose `amountLimit` is that budget, anything else means a recurring instruction whose per-cycle `amountLimit` is `per-run cap x runs per cycle`. A daily task folds into `WEEKLY` because there is no `DAILY` frequency. Reuse an existing instruction only when it covers the whole horizon (`classifyScheduledAuthorizationReuse`); otherwise create and activate one while the user is present, then pin `instructionId` + `mandateId` into the schedule. |
-| Scheduled run fires with no user present | Verify the pinned authorization with `clink instruction get --purchase-instruction-id <pinned_id> --format json` and `classifyUnattendedAuthorization`. Do not re-list or re-match. Anything other than `ACTIVE` with the pinned mandate on the same card stops the run with `SURFACE_UNATTENDED_AUTHORIZATION_GAP`. |
-| The complete current turn semantically requests product discovery without purchase | Construct v2 `operation=CATALOG_SEARCH`, `executionDecision=AUTHORIZED`, and a scoped `target.catalogQuery`. Obey `walletGate=SKIP`; freeze Catalog context and run anonymous discovery without wallet commands. |
-| The semantic decision is non-executing or ambiguous | Use `DENIED` or `CLARIFY`. Return the corresponding no-action/input route and run neither Catalog nor wallet/payment commands. Do not add a regex for the observed wording. |
-| The user authorizes buying a described but unresolved product | Construct v2 `CATALOG_PURCHASE` with `authorizationSource`, query/product scope, and optional nested merchant discovery scope. Obey `DEFER_UNTIL_SELECTION`, present candidates, and never enter checkout from a description alone. |
-| User replies to a purchase-origin pending Catalog selection | First classify whether this turn semantically authorizes purchase. Only an authorized decision may be bound to one schema-valid frozen candidate by product ID or index. Candidate binding cannot create authorization; cancellation/clarification runs no checkout, and ambiguous selection is never guessed. |
-| User replies to `DISCOVERY_ONLY` Catalog results | A candidate ID or ordinal identifies a result but is not purchase authorization. Keep the snapshot and require a semantic purchase decision for the same selected candidate. Only after authorization and exact binding may the snapshot be atomically claimed and converted to `UCP_CHECKOUT` with `walletGate=REQUIRE_STATUS`. |
-| `ucp-catalog search/product` or `catalog search` returns `401` or `403` | Surface the anonymous Gateway Catalog API configuration error as CLI exit 5. Do not refresh OAuth, inspect credentials, run `wallet status`, or start wallet re-login. Production `get-merchant-list` is a static document fetch and preserves its network-error exit 6 contract for any non-2xx response. |
-| Catalog discovery context establishes an `eats365` channel, buyer country, or one store | After loading the merchant list, an established channel/store skips merchant-intent matching and goes directly to broad search; merchant-scoped search cannot honor those constraints. Pass normalized `eats365` through top-level `--channel-type` (normalize `eat365`). Add `--context '{"address_country":"HK"}'` or SG only when that country is established; US, JP, and other countries mean unknown catalog location and omit context. Never put channel or store fields in `--ext`: it does not filter. Because the CLI has no store-search flag, require channel context for a known store id, search the channel, then keep only response groups whose exact `store_id` matches and recompute the count. |
-| Both catalog searches return no product | Report that the Clink catalogs had no match and continue product discovery with browser, MCP, or another Skill. Do not report the product as unavailable or retry the same query. |
-| Discovered product order | Resolve or explore to one product detail URL, run `clink tool parse-item --url <item_url> --format json`, select exactly one available item, freeze quantity/amount/MCC/currency/fulfillment, collect shipping for physical goods, refresh the exact payment instrument, and complete Visa/VIC instruction plus restricted-category gates. Resolve the canonical same-wallet-origin HTTPS endpoint through `classifyUcpCheckoutRoute`, then call `classifyUcpCheckoutRunExecution`. Its first execution result is `CLAIM_UCP_CHECKOUT_ATTEMPT`; only the runtime winner of the atomic claim may call it with `checkoutExecutionClaimed=true` and execute the one foreground `runCommand`. Set `digitalDeliveryExpected=true` only for a product whose fulfillment contract explicitly returns digital artifacts. Classify the one result; pending checkout and delivery timeout may return only environment-locked read-only resume commands. |
-| Old direct/session pay fulfillment is `NO_SHIPPING_REQUIRED` | Do not ask for an address; pass the fixed Apple Park default US address placeholder to `clink pay` |
-| Old direct/session pay fulfillment is `PHYSICAL_GOODS_REQUIRES_SHIPPING` | Ask for a real US shipping address and validate it before `instruction list` or `clink pay` |
-| Old direct/session pay fulfillment is `UNKNOWN` | Ask whether the product ships as physical goods; do not run `clink pay` |
-| Direct/session payment is semantically authorized and its v2 mode scope is valid | Classify fulfillment, refresh payment instruments, and run `classifyPaymentAuthorizationResolver`. If the selected/default card is non-Visa or Visa without VIC readiness, run `clink pay` without instruction/mandate IDs. If it is Visa + VIC ready, list/match ACTIVE instruction+mandate first; if no match exists, start the instruction creation workflow and stop until activation. |
-| Merchant/payment fields exist but this request has no positive payment or purchase decision | Return `DO_NOT_RUN_PAYMENT_WORKFLOW` with no wallet, card, instruction, or payment command. Historical context is not authorization. |
-| `pay status=1` | Treat payment as synchronously `PAID`, return the payment result immediately, and start one `account-created,account-reloaded` optional any-of poll. Uniquely attributed evidence may confirm account creation/merchant order; do not claim fulfillment beyond that event. |
-| Optional Agent Pay account poll times out, fails, or cannot select one payment | Keep `PAID`; report `NOT_OBSERVED`, `POLL_ERROR`, or `AMBIGUOUS` without retrying payment or claiming merchant-order confirmation. |
-| `pay status=5` with `customerAction.type=QR_CODE_REQUIRED` | Require that the explicit Alipay pay used `--terminal-qr`. When block characters exist and no warning was emitted, put the exact QR lines in a user-visible fenced `text` block and do not substitute PNG. Use the validated private PNG only after the exact warning or missing block output, then immediately run the returned single any-of order-event poll. Use `expiresSecond` first for the wait and cap it at 900 seconds; `expiresAt` is numeric epoch seconds. |
-| Agent Alipay QR succeeds, fails, expires, times out, or its event poll errors | Call `classifyPaymentQrEventObservation`, return the terminal result, recursively delete `customerAction.cleanupPath`, and never automatically run `pay` again. |
-| `pay status=3/4/6` | Stop or offer recovery; do not report merchant success |
-| `pay exit=6` | Treat state as unknown; verify before retry |
-| `pay exit=7` | Send 3DS redirect URL and wait for the matching order event |
-| `refund create ok` | Treat as submitted only; wait for refund event or `refund get` terminal state |
-| `refund create exit=6` or timeout | Treat submission as unknown; never resubmit automatically |
-| Aggregate UCP `status=completed` | Classify the authoritative `ucp-checkout run` envelope and return its checkout/order result directly. Do not start a second event poll or reconstruct any internal create/complete/order step. |
-| Aggregate UCP create-stage `status=ready_for_complete`, `processing`, or `pending` | Payment was not submitted. Preserve `paymentConfirmed=false`; execute no complete/run mutation. A classifier-validated same-checkout GET is reconciliation only and cannot authorize payment submission. |
-| Aggregate UCP complete-stage `status=unknown`, `complete_in_progress`, `processing`, or `pending` | Payment submission is unknown or unfinished. Execute only the classifier-validated same-checkout, same-endpoint, same-`CLINK_BASE_URL` read-only `ucp-checkout get`, then classify that ordinary envelope with the frozen `resumeContext`. Do not poll events or retry a mutation. |
-
-## Hard Rules
-
-- Never run a Skill installation from a question, tutorial/status request, negated, historical, conditional, malformed, multi-target, or conflicting request. An identity installation requires one exact imperative package target; a Number installation always requires a bound confirmation.
-- For Skill installation, Number is context only. Use the newest explicit-scope (`all` or `tippable`) structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Freeze publisher/name/optional version/skillId; never pass Number to the CLI, scrape Markdown, or fall back to an older snapshot when the newest selected snapshot is invalid.
-- The latest install syntax is one package operand. Omit version to select latest; reject literal `latest` and noncanonical version wording. Do not use a separate version flag, and do not add replacement behavior unless the user explicitly authorizes `--force` after a conflict.
-- Number confirmation first returns `CLAIM_PENDING_INSTALL`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce an install command. Consumed, cancelled, expired, cross-context, or already-executing pending objects never execute again.
-- Treat a Skill install as successful only from one strict `{ok:true,data}` envelope whose publisher, skill name, and requested version match `expectedInstall`. `planned` is preview only; a nonzero exit, malformed envelope, or binding mismatch is not success.
-- Never run `clink skills tip` unless the current request affirmatively authorizes the exact target and positive USD amount, or one complete multi-Skill batch. Negated, cancelled, questioned, historical, conditional, counterfactual, and advice requests are not payment authorization. Ambiguous batch amount wording requires clarification.
-- A batch supports one shared amount or per-item amounts and always requires one confirmation. Resolve the complete batch before confirmation; if one target, Number, amount, currency, or context is invalid, do not confirm or execute a subset.
-- De-duplicate a batch by trimmed case-insensitive publisher/name. The first occurrence wins: preserve its spelling and amount, ignore later duplicates without accumulation, and disclose ignored duplicates in the confirmation.
-- After an atomic `CLAIM_PENDING_TIP_BATCH`, execute one `clink skills tip` call per distinct Skill, sequentially in frozen order. Never submit batch payment calls concurrently or add a CLI batch argument.
-- A terminal `FAILED` or `UNKNOWN` batch item does not stop later items. Record it, continue with the next frozen item, and never automatically retry it. An interactive authorization or 3DS item blocks later payment submission until it becomes terminal.
-- Batch `COMPLETED` means all distinct items were attempted or resolved; it does not mean all were paid. Return every item plus `ALL_PAID`, `PARTIAL`, or `NONE_PAID`.
-- Number is a context index, never a `skills tip` CLI target. Use only the newest structured snapshot displayed within two hours for the same user, conversation/session, and exact environment lock. Resolve Number to frozen publisher/name and optional internal skill ID; never bind a tip to snapshot version, scrape history, or refresh the list when that snapshot is valid.
-- Without a valid Number snapshot, run `skills list --all --tippable`, display exactly the localized three-column table, freeze publisher/name and optional internal skill ID, and require confirmation. Confirmation first returns `CLAIM_PENDING_TIP`; only a successful atomic `AWAITING_CONFIRMATION -> EXECUTING` transition may produce the payment command. Consumed, cancelled, expired, or already-executing pending objects never execute again.
-- The latest Skill Tip command refreshes and uses the explicit default payment method. A default `CARD` is charged directly; a default `BALANCE` must have enough finite `availableBalance`. Do not add VIC instruction, mandate, mixed-payment, currency, or payment-instrument flags.
-- When Skill Tip returns code `402` with the exact error `Credit 余额不足，请先绑定银行卡`, classify it as a terminal `NOT_PAID` error and return the same stable message. Do not run `card binding-link`, start a binding/payment listener, or retry the current Tip. Start card binding only after a separate explicit user request. Never tell the user to recharge, top up, or add funds to Credit/Balance in this branch.
-- Treat a `payment_unknown` payload or exit code 6 as unknown even when the charge request returned an HTTP response. Never retry until an order/idempotency status path proves retry safety.
-- For skill tips, synchronous agent pay success (`status=paid` with underlying `status=1`) is payment success. Do not require an order event or merchant account event before returning `PAID`.
-- A paid Skill Tip result requires the execution-ready `expectedTip` binding and must match its publisher, skill name, optional skill ID, amount, and USD currency. The version resolved by the CLI is result metadata, not an authorization constraint. Missing or mismatched binding is `UNKNOWN`, never an unbound success.
-- `account-created` and `account-reloaded` are optional merchant events and mutually exclusive for one tip. Correlate any observed event to the current tip; timeout or poll failure never downgrades `PAID`.
-- Treat skill-tip exit code 6 or client timeout as an unknown payment state. Never retry the tip automatically.
-- Never run `clink pay` unless the user explicitly authorized this payment in the current context, or an upstream merchant workflow already supplied an explicit payment decision for this exact request.
-- When that exact payment decision selects Alipay, pass `--payment-method-type ALIPAY --terminal-qr`, omit any default Card `--payment-instrument-id`, and keep `--format json`. Do not add `--terminal-qr` to an unknown payment method merely in case a QR might appear.
-- Before old `clink pay`, classify fulfillment. For `NO_SHIPPING_REQUIRED`, use the fixed Apple Park default US address (`One Apple Park Way`, Cupertino, CA 95014, `address_country=US`) as the payment-context placeholder. For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, collect a real US shipping address. For `UNKNOWN`, ask first.
-- Old agent pay must use the fixed merchant category code `5999` in `aiAgentInstructionBo.merchantInfo.merchantCategoryCode`; do not ask the user or merchant skill for this MCC.
-- For Direct/session pay, always refresh payment instruments and run `classifyPaymentAuthorizationResolver` before `clink pay`. If the selected/default card is non-Visa or Visa without VIC readiness, bypass instruction matching and run pay without `instruction_id`/`mandate_id`. If the selected/default card is Visa + VIC ready, `instruction_id` and `mandate_id` are mandatory: run `clink instruction list --valid-only --payment-instrument-id <current/default paymentInstrumentId> --format json`, apply amount hard match plus title/description/merchant semantic match, and inject the matched IDs. If there is no matching instruction+mandate, start the instruction creation workflow and stop; the no-match authorization branch is terminal for the current pay attempt.
-- When no-match Visa + VIC ready pay starts instruction creation, preserve a pending payment intent with its draft instruction, then wait for `purchase_instruction.activated` through the `instruction create`/`sign-url` process's own built-in watch. Resume through `RESUME_AUTHORIZED_PAYMENT` only after that watch's second envelope matches the activation by the same `instructionId` / `purchaseInstructionId` and `classifyAuthorizationActiveVerification` proves the instruction is ACTIVE through `instruction get --purchase-instruction-id <id> --format json`. Activation is authorization, not completion: the frozen intent must continue to checkout or pay in the same turn. A different instruction activation on the same card must not resume this intent. The merchant skill must not manually provide `instruction_id` or `mandate_id` or call pay outside this payment intent.
-- Every mandate `description` passed to `clink instruction create` must be 150 characters or fewer. Rewrite longer authorization wording before presenting it to the user and before creating the draft; never silently truncate reviewed authorization scope. The CLI rejects longer values before sending the request.
-- Quick instruction setup rides the wallet-init journey: when a frozen purchase intent meets an uninitialized wallet, screen the full purchase first, then assemble `--title`, 1-10 mandates, optional description/shipping/expiry, and pass it through `clink wallet init`. Record nullable `pendingInstructionId`; null is ambiguous between deliberate skip and swallowed creation failure, so it always returns to the regular Step 2 authorization resolver and never means “list unconditionally.” After first-card `payment_method.added`, bind the flow to that exact card ID and refresh: non-Visa returns to the regular resolver; Visa + ID waits once for authoritative VIC readiness; only Visa + VIC-ready + ID verifies the exact instruction and same card. A pending Quick instruction never satisfies `instruction list --valid-only`. A repeated Quick init supersedes the older PENDING record — the newest intent wins.
-- Never carry instruction context through Quick `wallet init` and never run `clink instruction create` on any later path — direct/session no-match, UCP no-match, or scheduled pre-authorization — until `classifyInstructionRestriction` answers `CONTINUE_INSTRUCTION_CREATION` for that exact purchase context. Follow `references/clink-restricted-categories.md` for the full category list, semantic assertions, invalid-input handling, and terminal refusal behavior.
-- An authorized purchase for a described product with no product URL routes to `CATALOG_PURCHASE`, never straight to `UCP_CHECKOUT`. A nested v2 `target.merchantId` may narrow anonymous discovery; an ambient top-level merchant ID is ignored and never proves that a product is resolved. After validated selection, a page-backed item ID must be verified against its URL. Only `source=INTERNAL_UCP_CATALOG` with merchant ID, merchant-list `merchantUrl`, item ID, product name, and frozen Catalog context may enter UCP checkout without `productUrl`.
-- A semantic `CATALOG_SEARCH` route returns `purchaseIntent=false`, `requiresWallet=false`, `authenticationMode=ANONYMOUS`, `resultMode=DISCOVERY_ONLY`, and `walletGate=SKIP`. A semantic `CATALOG_PURCHASE` discovery returns `purchaseIntent=true`, `requiresWallet=false`, `authenticationMode=ANONYMOUS`, `resultMode=PURCHASE_SELECTION`, and `walletGate=DEFER_UNTIL_SELECTION`. Neither route runs wallet/card/checkout commands during discovery.
-- Catalog product authorization and candidate binding are separate decisions. The semantic contract must authorize the purchase; an ordinal, product ID, raw text, or legacy `purchaseIntent` boolean can only help bind that already-authorized decision to one frozen candidate. Validate provenance, aliases, merchant/store identity, channel, and selection range before an atomic `AWAITING_SELECTION -> EXECUTING` claim. Only the resulting `UCP_CHECKOUT` handoff sets `requiresWallet=true` and `walletGate=REQUIRE_STATUS`. Never auto-select or infer a product from ambiguity.
-- Catalog product discovery is anonymous and does not require `wallet init` or read `~/.clink-cli/config.json`. Freeze one `catalogEnvironment`: production is the default, test uses `--test`, and sandbox/UAT uses `--sandbox`. Carry its same flag through merchant-list, scoped search, broad search, and product lookup. A Gateway Catalog API (`ucp-catalog search/product` or `catalog search`) `401`/`403` is an anonymous configuration error (exit 5), not a wallet-login problem; surface it without OAuth refresh or re-login. Production `get-merchant-list` fetches a static well-known document and reports any non-2xx as network error exit 6.
-- Catalog product discovery must load `clink tool internal-ucp get-merchant-list [--test|--sandbox] --format json` before the first search, and may match intent only against a candidate's `description`. Candidates require a `merchant_id`, a non-empty `description`, and must not be `enabled:false`. A matched `merchantId` outside the loaded list is rejected, never searched.
-- Catalog search paths are not interchangeable. `clink ucp-catalog search` is merchant-scoped and always needs `--merchant-id`; `clink catalog search` is the cross-merchant path and never takes `--merchant-id`. On new v2 routes, the Agent must freeze a valid BCP47 `catalogLanguage` and pass it as `--language` to scoped search, broad search, and exact product lookup. Keep `address_country` in a separate language-free context. Never read language from wallet config or infer it from query text. An empty scoped result widens to broad search, but a CLI/API error surfaces and stops instead of widening past a real failure.
-- Preserve `catalogEnvironment`, the canonical effective `catalogLanguage`, and the original `catalogQuery` on every new v2 pending selection. The pending environment/language must be present and valid and are authoritative; candidate `catalogEnvironment`/`catalogLanguage` fields are consistency checks only, while a generic product `language` field is unrelated. Missing/invalid context or a conflicting candidate invalidates the pending object and restarts discovery instead of re-asking against the same candidates. Before authenticated checkout, a supplied selected product must carry its frozen environment. Compare the authoritative, successfully parsed `wallet status` origin with that Catalog origin and fail closed if candidate, top-level input, explicit wallet URL, or either wallet-status source conflicts; never fall back to an explicit URL after a malformed/error/missing-origin wallet status. `tool internal-ucp get-endpoint` still follows the wallet environment lock.
-- Catalog broad search uses top-level `--channel-type eats365` (normalize the `eat365` spelling), never `--ext`, for channel filtering. After the required merchant-list preflight, an established channel/store target must skip merchant-intent matching and merchant-scoped search, which cannot honor those constraints. Add `context.address_country` only for established HK/SG buyer location; any other country continues with unknown location and no context. A `storeId` taken from context or an earlier result is not a CLI filter: require its channel, preserve it as target identity, then locally keep only exact matching `store_id` groups and recompute `productCount`. Never invent a channel, country, or store id.
-- Catalog discovery results are discovery only, never purchase authorization. When both searches return nothing, hand product discovery to browser/MCP/Skill tools and report no catalog match rather than claiming the product is unavailable.
-- Never run aggregate UCP checkout for a product order until the selected item, amount, currency, merchant context, fulfillment type, payment instrument, checkout route, and required authorization context are all known and explicitly authorized for the same current request.
-- Never invent payment parameters. Missing `amount`, `currency`, `merchantId`, `sessionId`, `orderId`, or target payment method means stop and ask the caller or user for the missing data.
-- Never expose OAuth Access Tokens, Refresh Tokens, `customerApiKey`, or other secrets in user-visible output.
-- Never add or replace a legacy customer API key through this Skill. A never-OAuth legacy user may keep an already stored key or supply `CLINK_CUSTOMER_API_KEY` through the execution environment; never print it or pass it as a literal shell argument.
-- Never run `wallet init` as hidden recovery inside payment, checkout, tip, or refund execution. For exit code 3 or an OAuth `401`, stop the current operation and start an explicit wallet setup/reauthorization workflow after collecting only the missing email. Do not ask for a name: the CLI uses the email text before `@` and `wallet init --name` exits 2; use `config set name` to change it afterwards. For `403`, surface the permission error without refreshing or retrying.
-- Wallet initialization uses OAuth Device Authorization. Always invoke `wallet init` with `--open`. Keep classifying progress until the current attempt prints the complete `Waiting for authorization...` marker; only then is `oauthDevicePollActive=true`. If it also reported `Opening your browser...`, say only that the CLI requested the system browser; do not claim a visible window was confirmed, and keep the original token-polling process waiting without repeating the URL. Only after both browser-launch failure and that wait marker may the Agent send the validated URL from the same process once. Never start `events poll` for OAuth. Do not start another init merely to recover or repeat the URL for the same active attempt. An explicit `WALLET_RELOGIN`, or an expired or terminal attempt, starts exactly one fresh init and lets the CLI supersede the older attempt. Never navigate, preview, or prefetch the URL with an Agent browser, ask the user to send an email OTP, or add `--otp`.
-- Every page a person must act on belongs to that person's own browser. Classify it with `classifyPageHandoff` before emitting the URL, and never open, navigate, preview, prefetch, unfurl, screenshot, extract from, fill, or submit an `USER_DEVICE_ONLY` or `USER_PREFERRED` page through an agent built-in browser, headless browser, CDP/Playwright/Puppeteer, browser MCP server, computer-use, embedded webview, or link preview — "just checking that it loads" is the same prohibited action. Never satisfy a Passkey page with a CDP virtual authenticator or fabricated `authResult` / `appInstance` / `fidoBlob` / `dfpSessionId`. Merchant product pages remain `AGENT_ALLOWED` and this rule never blocks product exploration.
-- Keep browser launch suppressed for every link-producing command other than `wallet init`: pass `--no-open` to `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, and `instruction cancel`. `--no-open` disables launch only and never disables the built-in watch. Verify `defaultOpenLinks` once per workflow with `clink config get --format json`; it lives in the machine-wide config every build shares.
-- Emit card and 3DS URLs exactly once. For `OAUTH_DEVICE_VERIFICATION`, keep the URL hidden after the system-browser request and emit it once only after a reported launch failure. A fresh-login request creates a new attempt and uses only that process's URL; it never re-sends an older URL as a nudge. These are single-load pages: re-sending can invalidate a one-time token or re-trigger verification-code sending.
-- An unattended or scheduled run that reaches a page only a human can complete is a reported gap, not a wait. Pass `unattended: true` to `classifyPageHandoff` and surface `SURFACE_BROWSER_HANDOFF_GAP`; do not emit the URL with nobody there to read it.
-- OAuth refresh is owned by the CLI. Never read, copy, refresh, or revoke raw tokens outside the Clink CLI; use `wallet logout` for explicit logout. OAuth credentials are environment-bound, so preserve the exact environment lock and re-run `wallet init` when the selected API origin changes. A stored authorization from another origin remains visible through `wallet status` but is not effective; logout and origin changes retain `oauthRequired=true`.
-- Preserve legacy CSK compatibility only for users whose local wallet has never completed OAuth and still has a complete `customerId + customerApiKey` configuration. Once OAuth succeeds, `oauthRequired=true` is permanent: never use stored, environment, or flag CSK after logout, expiry, revocation, malformed OAuth state, or environment changes. New `wallet init` always creates OAuth; recommend migration separately to never-OAuth CSK users or after legacy authentication fails.
-- Bind each long-running command, OAuth refresh/retry, payment-method cache write, and event poll/ACK to the authorization identity observed when that operation started. If the CLI detects a replacement login, different customer, device/session change, or customer-mismatched webhook, stop and preserve the newer wallet state; never reuse or cache the stale result.
-- Treat `pay` exit code 6 or client-side timeout as an unknown payment state. Do not retry until the payment state is verified safe through merchant-side status, operator checks, or a caller-provided idempotency guarantee.
-- For Agent Alipay `QR_CODE_REQUIRED`, accept only the CLI's fixed contract: `mediaType=image/png`, `temporary=true`, `cleanupRequired=true`, nullable `orderId`, nullable `paymentExecutionDetailId`, numeric-or-null epoch-seconds `expiresAt`, numeric-or-null `expiresSecond`, and a caller-owned cleanup directory. Do not reinterpret `paymentExecutionDetailId` as expiry metadata.
-- Prefer `expiresSecond` for the event wait, cap the wait at 900 seconds, and use numeric `expiresAt` only as the absolute expiry/check fallback. Never call `Date.parse` on it.
-- Treat `[redacted:png-data-url]` as safe redaction. An actual `data:image/png...` value in CLI output is a contract violation; do not print or decode it.
-- Display the CLI-emitted terminal QR verbatim in a user-visible fenced `text` block when available. A tool transcript, even when expandable, is not display. Use `customerAction.imagePath` only after the exact CLI warning or missing block output. Do not use Agent Browser, a browser MCP, computer-use, a webview, or a generated HTML page.
-- QR success, failure, expiry, event timeout, and event-poll error are terminal for this attempt. Set no payment retry, then recursively remove the whole `customerAction.cleanupPath`; never remove only the PNG and leave the private directory behind.
-- For Agent Pay `status=1`, payment is already `PAID`. Immediately start one 60-second `account-created,account-reloaded` any-of poll under the same environment lock. Feed its result through both type-specific wait specs; timeout, poll failure, missing merchant support, or account-event ambiguity never downgrades or retries the payment.
-- Agent Pay account events lack `orderId/sessionId`. Use `classifyAgentPayAccountEventCandidate` against active watches in the same environment and wallet/customer scope: require matching amount/currency, reject explicit `customerEmail`/`webSite`/`userId` conflicts, and use those optional identities only as a unique positive tie-breaker. If multiple candidates remain, report `AMBIGUOUS` and keep `PAID`; never select the first event or payment arbitrarily.
-- Preserve the Payment FSM's stable watch identity across both wait specs and the active-watch snapshot. When an upstream payment ID is unavailable, use the generated local `accountWatchId`; never reconstruct a watch from display text.
-- Accept both CLI aliases `account-created` / `account-reloaded` and body types `account.created` / `account.reloaded`. Only a uniquely attributed `account.created` may produce the account-created/order-confirmed message; only a uniquely attributed `account.reloaded` may produce the order-confirmed message.
-- For exit code 7, send the 3DS redirect URL to the user and wait for the matching order event before declaring success.
-- Refunds require an explicit refund request and the original `orderId`. This skill only submits full refunds.
-- Async completion is event-driven for binding, refund, VIC registration, instruction activation, risk updates, and post-3DS orders. Never claim those states until the matching built-in watch or `events poll` evidence is observed. UCP aggregate checkout is the exception: classify the authoritative `ucp-checkout run` result directly, and let its optional built-in digital-delivery wait return `ready`, `failed`, or `timeout`. Do not add a second event poll beside the aggregate command.
-- VIC authorization prepares permission; it is not payment completion. Reuse ACTIVE instructions only when the selected card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request.
-- UCP checkout product orders must classify fulfillment before checkout: use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only for shipped physical goods, `NO_SHIPPING_REQUIRED` for services/subscriptions/hotels/tickets/bookings/reservations/digital goods, and `UNKNOWN` only long enough to ask. Physical shipped goods require a standard complete shipping address before instruction list, instruction creation, or aggregate checkout; do not restrict the address to the US. For `NO_SHIPPING_REQUIRED`, do not ask for an address; pass the fixed Apple Park default address when creating an instruction or when old pay needs a shipping-address placeholder. Use the CWallet instruction address shape (`countryCode` as ISO 3166-1 alpha-2, `line1`, `zip`) for `instruction create`, and the UCP Postal Address shape (`address_country` as ISO 3166-1 alpha-2, `street_address`, `postal_code`) for `ucp-checkout run` and VIC `pay` shipping context.
-- For product URL checkout, agent owns product exploration: use browser tools, page extraction, search, or page request first to find a product detail URL and read title, price, currency, merchant context, availability, and Shopify variant data before asking the user for product fields, then run `clink tool parse-item --url <item_url> --format json`. `parse-item` returns product-page facts only: `itemUrl`, `merchantOrigin`, `merchantDomain`, `merchantName`, `currency`, and `items[]` with `itemId`, `title`, `unitPriceMinor`, `available`, item URL, options, and optional inventory status. It does not return quantity, merchantCategoryCode, fulfillmentType, paymentInstrumentId, instructionId, mandateId, or checkoutId.
-- For an internal merchant-scoped Catalog result, preserve the FSM-added `source=INTERNAL_UCP_CATALOG`, `merchantId`, `merchantDomain`, and `merchantUrl`. The merchant URL comes only from the validated CLI merchant list and its hostname must match the domain. Freeze the selected Catalog item ID, title, price, currency, availability, quantity, environment, and language; skip `parse-item`, but perform every later product, fulfillment, amount, wallet, authorization, route, and aggregate execution guard.
-- UCP checkout product orders must select exactly one available parsed item before checkout. If `parse-item` returns one available item, use it. If it returns multiple available items, ask the user when present; in long tasks when the user is absent, select by frozen user intent and record the reason. The agent/FSM supplies quantity from user intent, defaults to `1` only when unspecified, and otherwise requires a positive safe-integer Number. It computes `totalAmountMinor = unitPriceMinor * quantity`, classifies merchantCategoryCode and fulfillmentType, and then performs mandate matching only when the selected/default card is Visa + VIC ready.
-- For Shopify product URLs, product exploration and `parse-item` must preserve variant selection: direct variant links use the `variant` query parameter; SPU slug links fetch `<product_url>.js`, parse the response body `variants` array, and select by explicit user choice. If multiple variants remain, ask instead of guessing.
-- `--line-items` carries `item.price` as a **major-unit decimal string** such as `"26.00"`, because `ucp-checkout run` scales it by `--currency` on the way out. Every nested `amount` or `price` field entering the same CLI normalization must also be a decimal string, never a JavaScript Number whose original precision may already be lost. Catalog candidates and `parse-item` report `unitPriceMinor` / `price.amount` in **minor units** such as `2600`. Convert once before building `--line-items`; passing minor units straight through bills the customer 100x the agreed amount. `totalAmountMinor` stays in minor units for authorization matching — only the `--line-items` value is converted.
-- A platform-store catalog candidate (`channelType`/`region`/`storeId`, no `merchantId`) has no product detail page. Its `url` is the store ordering page carrying a non-empty `product_id` equal to that candidate's product ID, `parse-item` answers `manual_item_facts` with an empty `items` array, and checkout is built from the facts the catalog already returned: id, title, price, quantity, currency, and the store URL. Treat that envelope as the instruction it is — do not browse for another page, do not ask the user for a link, and do not treat the empty `items` array as a failed lookup.
-- UCP checkout product orders must resolve checkout route before aggregate checkout with `lib/ucp-checkout-route-fsm.mjs`. Always start with `clink tool internal-ucp get-endpoint --product-url <selected_item_url> --format json`; the environment lock selects the matching CLI configuration. Only `NOT_IN_INTERNAL_UCP_LIST` may fall back to the returned `/.well-known/ucp-clink` probe and `get-rest-endpoint`. Every final endpoint—internal, clinkbill fallback, non-clinkbill, or derived gateway—must be absolute HTTPS without credentials/query/fragment, canonicalized exactly like the bundle (URL hostname/default-port/path normalization and trailing-slash removal), and exactly same-origin with the successful current wallet-status origin. Freeze both canonical `walletOrigin` and `endpoint`; never send wallet credentials to a cross-origin endpoint. Missing, unsafe, failed, or conflicting endpoint/environment evidence is terminal. Surface all other internal endpoint errors without profile fallback.
-- UCP has two distinct order identifiers: checkout create/update/complete/get `data.ucp.ucp_order_id` is `ucpOrderId`; completed checkout `data.order.id` is a compatibility alias for the same value. `agent_order.succeeded.data.orderId/resourceId` is `paymentOrderId`. Never infer their type from a prefix and never pass `paymentOrderId` to `ucp-order get`.
-- Legacy event correlation accepts only nested payload `data.checkoutId` / `data.checkout_id`; event `resourceId` and `paymentOrderId` never replace the Checkout or UCP Order identifiers.
-- `classifyUcpCheckoutRunExecution` first returns `CLAIM_UCP_CHECKOUT_ATTEMPT`, never a command, for a nonempty unique frozen `checkoutAttemptId`. The stateful runtime—not this pure FSM—must atomically transition that attempt from `AWAITING_EXECUTION` to `EXECUTING`; only the unique winner may set `checkoutExecutionClaimed=true` and receive the aggregate command. Mark the attempt `CONSUMED` after dispatch/observation. `EXECUTING`, `CONSUMED`, lost-claim, duplicate, and replay paths return no command. Execute the winning command once in the foreground under its frozen `CLINK_BASE_URL`. Never run `--help` to rediscover syntax, put it in the background, use fixed `sleep`, or manually sequence create/complete/event/delivery mutations.
-- Classify aggregate output with `classifyUcpCheckoutRunObservation`. Create-stage pending means payment was not submitted and never authorizes a complete/run mutation. Complete-stage `unknown` permits only same-checkout GET reconciliation. Every read-only checkout or delivery resume must retain the frozen `CLINK_BASE_URL`, endpoint, checkout/order ID, and any frozen UCP order ID. Checkout/create/complete/top-level identifier aliases and UCP order aliases must be nonempty strings and mutually consistent; any conflict fails closed. Delivery is valid only for `ready=true,timedOut=false,status=ready` with artifacts, `ready=false,timedOut=false,status=failed`, or `ready=false,timedOut=true,status=timeout` (where `delivery` may be null or pending); every inconsistent tuple fails closed. Execute a validated resume once, then classify its ordinary output with `classifyUcpCheckoutRunResumeObservation` and the exact `resumeContext`. No result authorizes create, complete, or payment retry.
-- If no matching instruction+mandate is found for a UCP product order, do not run aggregate checkout; start the instruction creation workflow and wait for matching ACTIVE instruction evidence.
-- No-match UCP authorization branch is terminal for the current checkout attempt: after starting the instruction creation workflow, return a waiting/pending state and do not continue to aggregate checkout until activation is observed and the flow restarts from instruction list.
-- UCP checkout completion is not merchant fulfillment; delivery, entitlement, merchant receipt, or downstream business completion belongs to the merchant/product runtime.
-- If the user asks to preview a command or verify inputs without execution, use `--dry-run` when supported.
-
-## Quick Reference
-
-| Need | Command |
-| --- | --- |
-| List tippable public skills | `clink skills list --all --tippable --format json` |
-| Tip by publisher/name | `clink skills tip --publisher <publisher> --name <skill_name> --amount <amount> --format json` |
-| Tip by displayed Number | Resolve the recent-context Number to publisher/name, then use the versionless identity command above. |
-| Tip multiple Skills | Confirm one frozen batch, then repeat the versionless publisher/name command once per distinct Skill in sequential order. |
-| Install latest Skill by identity | `clink skills install <publisher>/<skillName> --format json` |
-| Install exact Skill version | `clink skills install <publisher>/<skillName>@<version> --format json` |
-| Install by displayed Number | Resolve the recent scoped snapshot, freeze publisher/name/version, confirm, atomically claim, then use the identity command. |
-| Wait for optional Agent Pay/Tip account evidence | `clink events poll --type account-created,account-reloaded --max-wait 60 --format json`; classify the same result for both types |
-| Initialize wallet | `clink wallet init --email <email> --open --format json`; the name comes from the email text before `@` and there is no `--name` flag. Wait for the current attempt's complete `Waiting for authorization...` marker before marking its OAuth device-token poll active. Then, if the CLI requested the system browser, tell the user to complete authorization in the resulting window without claiming it was visibly confirmed, and keep the original process running; show the URL only after browser-launch failure plus that wait marker, and never start Event Hub polling for OAuth |
-| Quick instruction setup (frozen purchase intent + uninitialized wallet) | First require `classifyInstructionRestriction(...).action === CONTINUE_INSTRUCTION_CREATION`; then run `clink wallet init --email <email> --title <title> --mandates '<mandates_json>' [--description <text>] [--shipping-address <json_object>] [--effective-until-time <utc>] [--is-recurring] --open --format json`. Record nullable `data.pendingInstructionId`; title is non-blank/max 256, description max 1024, mandates count 1-10, and context max 16384 UTF-8 bytes. |
-| Log out wallet | `clink wallet logout --format json`; this removes current credentials while preserving the existing policy. The logout result no longer echoes `oauthRequired`; use `wallet status` when the post-logout policy must be classified. |
-| Check wallet readiness | `clink wallet status --format json` |
-| Refresh payment-instrument list without waiting | `clink card binding-link --no-watch --no-open --format json` (returns `paymentMethodsVoList` and updates the local cache) |
-| Bind first card and wait | `clink card binding-link --no-open --format json`; omit `--no-watch`, return the first envelope's `bindingUrl` when `watchReady=true`, and keep the same process alive until the second envelope carries `payment_method.added` |
-| Add another payment method | `clink card setup-link --no-open --format json`; emit the returned URL, then keep this same process alive until the second envelope carries `payment_method.added`. Omitting `--no-watch` is what starts the watch; do not also run `events poll` |
-| Switch default card or manage existing cards | `clink card modify-link --no-open --format json`; there is no CLI command that sets a default card directly, so emit this management URL and let the user change it in the browser. Keep the process alive until the second envelope carries canonical `payment_method.update` (or `.updated` compatibility alias) or `payment_method.default_change` |
-| Get risk-rule config URL and wait | `clink risk link --no-open --format json`; keep the process alive until the second envelope carries `risk_rule.updated` |
-| List cached payment methods | `clink card list --format json` |
-| Charge user | `clink pay ... --format json` |
-| Charge with Agent Alipay QR | `clink pay ... --payment-method-type ALIPAY --terminal-qr --format json`; omit a default Card payment instrument |
-| Display Agent Alipay QR and wait | Copy only the stderr QR lines into a user-visible fenced `text` block; do not rely on the command transcript or replace successful output with PNG. After an exact warning or missing block output, attach `customerAction.imagePath` natively. Then run `clink events poll --type agent_order.succeeded,agent_order.failed --max-wait <min(expiresSecond_or_remaining_epoch,900)> --format json`; correlate by `orderId`, `paymentExecutionDetailId`, or the frozen session, and recursively remove `customerAction.cleanupPath` on every terminal result |
-| Submit refund | `clink refund create --order-id <order_id> --format json` |
-| Poll refund | `clink refund get --refund-id <refund_id> --format json` |
-| Wait for event | `clink events poll --type <eventType> --format json` |
-| Wait for instruction activation | Keep the `instruction create`/`sign-url` process alive and read its second envelope. Use `clink events poll --type purchase_instruction.activated --no-ack --format json` only to resume after that watch timed out or was killed |
-| Quick instruction gate after first card | After `payment_method.added`, extract its exact card ID, refresh cards, and call `classifyQuickInstructionActivationGate`. If it returns `WAIT_VIC_READINESS`, run its single `clink events poll --type payment_method.update,vic_device.binding_succeeded --max-wait 900 --no-ack --format json`, refresh once, merge the returned continuation, and re-enter. Only its verify action may run `instruction get`; while activatable, run the returned `clink events poll --type purchase_instruction.activated --max-wait 900 --no-ack --format json` once, then final GET with the returned waitSpec. |
-| View risk rules | `clink risk get --format json` |
-| List reusable VIC instructions | `clink instruction list --valid-only --payment-instrument-id <id> --format json` |
-| Create VIC instruction draft | `clink instruction create ... --no-open --format json`; omit `--no-watch` and keep the process alive — it prints the draft, then blocks watching for `purchase_instruction.activated` and prints a second envelope |
-| Print instruction Passkey URL | `clink instruction sign-url ... --no-open --format json`; omit `--no-watch` and keep the process alive for the same activation watch |
-| Get one VIC instruction | `clink instruction get --purchase-instruction-id <id> --format json` |
-| List catalog-supported merchants | `clink tool internal-ucp get-merchant-list [--test\|--sandbox] --format json` |
-| Search one merchant's catalog | `clink ucp-catalog search --merchant-id <id> --query <text> --language <BCP47> [--context <json>] [--test\|--sandbox] --format json` |
-| Search across merchants and platform stores | `clink catalog search --query <text> --language <BCP47> [--context <json>] [--test\|--sandbox] --format json` |
-| Search eats365 in HK, optionally targeting one known store in the returned groups | `clink catalog search --query <text> --channel-type eats365 --language <BCP47> --context '{"address_country":"HK"}' [--test\|--sandbox] --format json`; when a `storeId` is established locally keep only groups with that exact `store_id` and recompute the count |
-| Analyze UCP product item(s) | `clink tool parse-item --url <item_url> --format json` |
-| Search a merchant UCP catalog | `clink ucp-catalog search --merchant-id <id> --query <text> --language <BCP47> [--limit <n>] [--cursor <cursor>] [--context <json>] [--test\|--sandbox] --format json` |
-| Get one UCP catalog product | `clink ucp-catalog product --merchant-id <id> --product-id <id> --language <same_BCP47_as_search> [--context <json>] [--test\|--sandbox] --format json` |
-| Resolve configured internal UCP endpoint | `clink tool internal-ucp get-endpoint --product-url <item_url> --format json` |
-| Resolve fallback standard-profile REST endpoint | `clink tool get-rest-endpoint --url <standard_ucp_url> --format json` |
-| Execute authorized UCP checkout once | After winning `CLAIM_UCP_CHECKOUT_ATTEMPT`, use the exact foreground `CLINK_BASE_URL=<frozen_wallet_origin> clink ucp-checkout run --endpoint <canonical_same_origin_https_endpoint> --merchant-url <url> --merchant-category-code <mcc> --currency <currency> --line-items <json> --payment-instrument-id <id> --confirm-purchase --format json` returned by `classifyUcpCheckoutRunExecution` |
-| Execute authorized digital-delivery checkout once | The same aggregate command plus `--wait-delivery --max-wait 900`; only when the product contract explicitly expects digital artifacts |
-| Resume pending aggregate checkout | Execute only the classifier's read-only `clink ucp-checkout get` `resumeCommand`, including its frozen `CLINK_BASE_URL` lock |
-| Resume timed-out digital delivery | Execute only the classifier's read-only `clink ucp-order wait-delivery` `resumeCommand`, including its frozen `CLINK_BASE_URL` lock |
-| Get UCP order details | `clink ucp-order get --order-id <ucpOrderId> --format json`; never use event `paymentOrderId` |
-
-## Output Contract
-
-Always pass `--format json` so both success and error output are machine-parseable.
-
-Success envelope on stdout:
-
-```json
-{ "ok": true, "data": { "...": "..." } }
-```
-
-Error envelope on stderr when JSON format is explicit:
-
-```json
-{ "ok": false, "error": { "type": "...", "code": 0, "message": "..." } }
-```
-
-Inspect the exit code first, then parse the stream that contains the envelope. When a command returns a list, treat the list as the payload inside `data`.
-
-## Merchant Integration
-
-When another skill needs to charge the user directly:
+Use only this Skill's bundled launcher:
 
 ```text
-Merchant skill                    Clink payment skill
---------------                    -------------------
-Detects payment needed
-Provides merchantId/amount
-or sessionId
-                                  Pre-checks wallet/card
-                                  Executes clink pay
-Receives raw result
-Confirms merchant receipt
+<Skill Path>/bin/visa-cli
+<Skill Path>\bin\visa-cli.cmd
 ```
 
-Responsibilities:
+Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
+Edition: it includes every Base Command plus Visa discovery and the CLI-owned
+`visa product-search`, `visa commerce-login`, and `visa commerce-run`
+aggregates.
 
-- Merchant skill decides when to pay, how much to pay, and how to confirm receipt.
-- This skill executes Clink operations and returns raw results or event confirmations.
-- This skill can be used for pre-checks only, without executing a payment.
+Keep execution small. During an ordinary run, do not read reference files,
+inspect source or workflow scripts, invoke runtime `--help`, run `date`, use a
+fixed `sleep`, or load JavaScript orchestration modules. Interpret the user's
+intent, collect only missing business facts, obtain the required authorization,
+run the shortest matching CLI capability, and report the structured result.
 
-For a UCP checkout product order, the merchant/product skill owns product discovery and price truth; this skill owns the control flow that converts that target into one frozen, explicitly authorized aggregate checkout command plus read-only recovery.
+## Global Contract
 
-## Common Mistakes
+### Language Lock
 
-- Authorizing Direct Pay or purchase from regexes, keyword presence, raw `text`, legacy booleans, or ambient merchant/payment fields instead of a bound v2 semantic intent contract.
-- Treating install tutorials, status checks, historical/conditional language, product installation services, or malformed package text as authorization to modify local Skills.
-- Passing a displayed Number, a literal latest version, or a separate version flag to the install CLI instead of resolving one canonical identity operand.
-- Installing a Number immediately without freezing the newest scoped snapshot and atomically claiming the user's confirmation.
-- Treating a skill-list query as authorization to tip.
-- Treating a bare amount as a Skill Number, scanning Markdown history, using a snapshot older than two hours, or passing `--number` to `skills tip`.
-- Executing immediately after a confirmation without first atomically claiming its pending object.
-- Waiting for `account-created` / `account-reloaded` before recognizing synchronous tip payment success.
-- Downgrading a paid tip because the merchant emitted no optional account event.
-- Treating the first Agent Pay account event as the current order without unique-candidate attribution.
-- Downgrading or retrying a successful Agent Pay because optional account monitoring timed out, failed, or was ambiguous.
-- Calling `pay` before wallet/card pre-checks.
-- Forcing instruction matching for direct/session pay when the selected/default card is non-Visa or Visa without VIC readiness; this branch bypasses instruction matching.
-- Retrying exit code 6 payments before resolving the unknown state.
-- Inventing missing payment, mandate, or merchant-scope parameters.
-- Searching a catalog before loading the supported merchant list, then guessing a merchant from its domain name instead of its description.
-- Passing `--merchant-id` to `clink catalog search`, or omitting it from `clink ucp-catalog search`.
-- Sending `eat365` as the catalog channel type, putting channel/store predicates in record-only `--ext`, or claiming one-store results without locally filtering returned groups by exact `store_id`.
-- Treating an empty catalog search as proof the product does not exist, instead of handing discovery to browser/MCP/Skill tools.
-- Treating a matched catalog product as authorization to create a checkout.
-- Carrying Quick instruction context through `wallet init` or running `clink instruction create` without screening the purchase first, or treating a clean keyword scan as clearance when the meaning is plainly restricted — assert the category instead of letting the backend reject the draft as illegal content.
-- Rewording, translating, or field-stripping a refused purchase, or rerouting it through plain `pay` or UCP checkout, to get past `REFUSE_RESTRICTED_INSTRUCTION`.
-- Creating a UCP checkout before proving an ACTIVE, not-reserved instruction/mandate matches the exact product amount and merchant semantics.
-- Entering UCP checkout with `UNKNOWN` fulfillment, or trying physical goods without a standard complete shipping address.
-- Passing `--instruction-id` or `--mandate-id` to any UCP checkout command. The exact selected or pinned pair is authorization-gate evidence only; `ucp-checkout` rejects both flags, and the aggregate result must not be described as proof that the backend consumed a particular pair.
-- On a legacy event path, passing `agent_order.succeeded` `orderId`/`resourceId` to `ucp-order get`. It is the Clink Payment `paymentOrderId`; the required `ucpOrderId` comes from checkout `data.ucp.ucp_order_id` (or matching completed-checkout `data.order.id` compatibility alias), regardless of ID prefix.
-- On a legacy event path, re-polling an already matched payment event or retrying checkout complete/payment while waiting for the UCP order projection. Resume only the original-endpoint `ucp-checkout get`.
-- Running `ucp-checkout --help`, backgrounding aggregate checkout, sleeping before reading its result, or manually chaining create, complete, event polling, and delivery polling instead of using one foreground `ucp-checkout run`.
-- Treating aggregate output as permission to reconstruct internal create/complete/payment/event steps. Pending results may expose only the exact validated read-only resume command.
-- Reusing a UCP `checkoutAttemptId`, dispatching after a lost atomic claim, or producing a command from an already `EXECUTING` or `CONSUMED` attempt.
-- Stripping or changing the frozen `CLINK_BASE_URL` on UCP run/reconciliation/delivery resume, accepting HTTP or a cross-origin endpoint, or sending wallet credentials before endpoint-origin validation.
-- Reading `card list` alone when current card state is needed; refresh first with `card binding-link --no-watch --no-open`.
-- Treating refunds as synchronous instead of waiting for `agent_refund.*` events or polling `refund get`.
-- Declaring async flows complete before the matching event is observed.
-- Busy-retrying link commands to check status instead of using the built-in watch or `events poll`.
-- Passing `--no-watch` to `instruction create`/`sign-url` and then sending the Passkey URL with nothing listening, or starting an extra `events poll` beside their built-in watch so two watchers compete for the same event.
-- Reporting authorization as failed when the built-in watch timed out or was killed. The user may have completed the Passkey anyway; verify with `instruction get` before concluding anything.
-- Waiting for the user to report completion before starting to listen; start the event watch the moment the URL is emitted, and for the Visa Passkey registration URL (no built-in watch) start a concurrent `events poll` right away.
-- Letting the agent runtime touch a `USER_DEVICE_ONLY` page — opening, navigating, previewing, prefetching, unfurling, screenshotting, extracting, filling, or "verifying it loads" — through a built-in browser, headless browser, CDP/Playwright/Puppeteer, browser MCP, computer-use, or embedded webview. A Passkey page cannot succeed there at all, a 3DS page gets soft-declined, a card page leaks the PAN into model context, and an OAuth page re-triggers verification-code sending.
-- Reaching for a CDP virtual authenticator, or synthesizing `authResult` / `appInstance` / `fidoBlob` / `dfpSessionId`, to get past a Passkey page. That forges the exact proof the page collects.
-- Applying the browser prohibition to merchant product pages. Those are `AGENT_ALLOWED`, and `parse-item` plus catalog fallback depend on the agent exploring them.
-- Passing `--no-open` only to `wallet init` while `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, and the `instruction` link commands can still launch a browser on the CLI host, or assuming stored `defaultOpenLinks` is `false` when it is machine-wide state any build can have set to `true`.
-- Re-sending a single-load OAuth, card, or 3DS URL as a reminder, which can invalidate a one-time token or re-trigger code sending.
-- Emitting a browser-action URL on an unattended or scheduled run and reporting it as waiting; no one is there to open it, so surface `SURFACE_BROWSER_HANDOFF_GAP` instead.
+Lock one language for the whole run:
+
+- English: `en`
+- Simplified Chinese: `zh-CN`
+- Traditional Chinese for Taiwan: `zh-TW`
+- Traditional Chinese for Hong Kong: `zh-HK`
+
+Pass it to Visa discovery as `--lang <language-tag>` and to Catalog/product
+search as `--language <language-tag>`. Use the same language for guidance,
+questions, errors, browser status, summaries, and the final answer. Preserve
+authoritative Program, merchant, product, and Skill names exactly as returned.
+
+### Environment Lock
+
+Lock one environment before the first command and never mix environments:
+
+- a sandbox/UAT distribution uses `--sandbox` for public search and
+  `"environment": "uat"` in contexts
+- a test distribution uses `--test` and `"environment": "test"`
+- production uses no search environment flag and `"environment": "production"`
+
+The installed distribution lock wins when the user omits the environment.
+Never let an installed UAT or test Skill silently default to production.
+Authenticated commands must agree with the current wallet environment.
+
+### Authorization And Input
+
+- A query, explanation, candidate number, login, card setup, or browser action
+  is not payment, Tip, refund, or purchase authorization.
+- Before a mutation, freeze the exact merchant or publisher, item or purpose,
+  quantity, amount, currency, payment method, environment, and fulfillment
+  facts that apply to that capability.
+- One explicit authorization covers the unchanged frozen mutation. Ask again
+  only if merchant, item, quantity, amount, currency, recipient, refund scope,
+  or fulfillment materially changes.
+- Never invent an amount, currency, merchant ID, session ID, order ID, payment
+  instrument ID, Instruction ID, mandate ID, endpoint, product ID, shipping
+  address, Skill identity, or version.
+- When a complex capability lacks required input, current state, a unique safe
+  match, or a supported continuation, fail closed and ask for the missing fact
+  or report the limitation. This lightweight Skill does not claim complete
+  behavioral equivalence with the former Agent-side orchestration.
+
+### Mutation Safety
+
+- Run a payment, Checkout completion, Tip, refund creation, Skill install, or
+  Instruction mutation at most once for one authorization.
+- Timeout, transport failure, an unknown result, or exit code 6 never authorizes
+  resubmission. Verify through a bound read-only status or continuation.
+- An event is a wake-up hint, not final truth. Refresh the authoritative
+  resource before reporting success.
+- Payment success does not prove merchant receipt, balance top-up, entitlement,
+  or delivery. Report each state separately.
+- Never expose Tokens, OTPs, device codes, raw card data, signatures, secrets,
+  full configuration, private URLs, Base64, or raw CLI envelopes.
+
+### Restricted Instruction Gate
+
+Before `visa commerce-login` carries an Instruction context, or before any
+standalone `instruction create`, screen the complete user request, merchant,
+Program, product, URL, title, description, every mandate, and MCC.
+
+Refuse before login or draft creation when the purchase is, or may reasonably
+be, adult content/services, dating or companionship, gambling or lottery,
+prescription drugs, cryptocurrency, public file-sharing/cyberlocker services,
+paid skill-based prize games, securities or financial-product trading,
+telemarketing, non-face-to-face tobacco, weapons, ammunition, controlled
+knives, or another regulated good. MCC `7273`, `7995`, `6051`, `6211`, `5966`,
+`5967`, `5993`, or an ambiguous/malformed MCC is not allowed.
+
+Do not send a partial context to evade this gate. If meaning is obscured,
+euphemistic, incomplete, or ambiguous, stop instead of trying the backend.
+Never reroute a refused purchase through plain `pay` or UCP.
+
+### Browser Boundary
+
+OAuth verification, card binding/setup/modify, Visa Passkey registration and
+signing, Instruction update/cancel, 3DS, and risk pages must be completed by
+the user in the operating system's browser. Use CLI `--open`; when launch
+fails, surface only the exact CLI-returned `manualOpenUrl`. Never open, preview,
+prefetch, screenshot, inspect, fill, or submit these pages with an Agent
+browser. Merchant product pages may be inspected by the Agent.
+
+An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
+exactly, or use the CLI-returned private `imagePath` only when terminal QR
+rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
+
+## Intent Routing
+
+Use Visa aggregation whenever the target originates from a Visa Program:
+
+```text
+visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
+```
+
+Do not route a Visa Program purchase through generic Catalog, `pay`, atomic
+Instruction, events, or UCP commands. The Visa aggregates preserve Program
+identity, price and currency checks, Quick Instruction handling, Card/VIC
+readiness, Instruction selection, Checkout safety, and delivery.
+
+Use a Base Capability Contract only for a non-Program request whose exact
+inputs and authorization satisfy that contract.
+
+## Visa Benefit Discovery
+
+Queries never proactively log in, bind a card, create an Instruction, or
+prepare payment:
+
+```text
+<Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --lang <language-tag> --format json
+<Skill Path>/bin/visa-cli visa detail <program-code> \
+  --lang <language-tag> --format json
+<Skill Path>/bin/visa-cli visa taxonomy \
+  --lang <language-tag> --format json
+```
+
+For `matching_offers`, evaluate all returned rows against the user's wording,
+geography, eligibility, status, dates, channel, and hard terms. Present at most
+the five best matches and preserve the authoritative matching total. Do not
+rerun recommendation merely to shrink the list.
+
+For `fallback_all_offers` or `no_matching_offers`, report that no relevant
+Offer was found. Do not rank, display, recommend, or purchase fallback rows,
+and do not present their count as a matching total. For count-only wording,
+return only the authoritative matching total.
+
+For explicit food delivery use `--category dining_delivery_food` and exclude
+`instore_only` or dine-in-only Programs. For explicit dine-in use
+`dining_restaurant`. Ask one question when the intent is genuinely ambiguous.
+
+### Token-Free Product Resolution
+
+Immediately product-resolve each of the at-most-five selected query Offers, or
+the one selected purchase Program, before any browser login:
+
+```text
+<Skill Path>/bin/visa-cli visa product-search \
+  --merchant-url "<authoritative-program-commerce-url>" \
+  --query "<localized-selected-program-title>" \
+  --language <language-tag> \
+  --limit 1 \
+  <environment-flag> \
+  --format json
+```
+
+- Use the selected Program's authoritative merchant commerce URL unchanged.
+  Never use a Visa/VSRP campaign URL or a hardcoded brand URL.
+- Use `selectedProgram.title.trim()` unchanged as the query. Do not translate,
+  summarize, or replace it with a generic product phrase.
+- Use the locked search environment and language.
+- The CLI owns internal-first merchant routing, Catalog lookup, external
+  fallback, availability filtering, and exact product normalization.
+- On `PRODUCT_SELECTION_REQUIRED`, rerun once with
+  `--selected-product-id <id>` only when one candidate is uniquely closest by
+  geography/market and merchant/product identity. Otherwise ask one selection
+  question.
+- On `PRODUCT_UNAVAILABLE`, report a Program-Catalog mismatch and stop that
+  candidate. Do not substitute another product or a campaign link.
+- For a query-only request, present the enriched results and stop even when the
+  result could continue to login.
+
+## Visa Purchase Fast Path
+
+An explicit request to buy one unambiguous selected Visa Benefit is the single
+purchase authorization. A reply selecting a previously shown Benefit and
+asking to buy it is also sufficient.
+
+Before login, require all of the following:
+
+1. `PRODUCT_VERIFIED` and `CONTINUE_TO_COMMERCE_LOGIN`.
+2. Program and Catalog identify the same merchant and product.
+3. Catalog total and currency exactly equal the recommendation-backed purchase
+   facts; missing or different price/currency stops the flow.
+4. The Program supplies one authoritative four-digit
+   `commerce.merchantCategoryCode`. Missing, invalid, or ambiguous MCC stops
+   before login; do not infer it from Catalog data or a local lookup table.
+5. Every required product, fulfillment, and environment field is present.
+6. The complete purchase passes the Restricted Instruction Gate.
+
+Create a login context containing only the locked environment and exact
+Instruction context:
+
+```json
+{
+  "environment": "uat",
+  "instructionContext": {
+    "title": "<selected-program-title>",
+    "description": "Purchase the selected Visa Program",
+    "mandates": [
+      {
+        "title": "<selected-program-title>",
+        "description": "Purchase the selected Visa Program",
+        "amountLimit": "<exact-program-price>",
+        "currencyCode": "<program-currency>",
+        "merchantCategoryCode": "<four-digit-program-mcc>"
+      }
+    ]
+  }
+}
+```
+
+Mandate descriptions must be at most 150 characters. The amount is the exact
+authorized price with no buffer.
+
+Tell the user in the locked language that Visa login, card binding, and VIC
+status are being checked and that, if a browser opens, they should complete
+only the missing step shown there. This is status, not another confirmation.
+Then run once in the foreground:
+
+```text
+<Skill Path>/bin/visa-cli visa commerce-login \
+  --context-file <login-context.json> \
+  --confirm-purchase \
+  --open \
+  --format json
+```
+
+Continue only on `ok=true` and `ready=true`. The CLI alone decides whether
+authoritative REGISTER facts permit a bounded Quick Instruction activation
+wait. The Agent must not inspect, persist, infer, or copy registration fields,
+`pendingInstructionId`, or any login-returned Instruction ID. Quick
+Instruction is an internal acceleration path, not purchase identity.
+
+Build one frozen purchase context from the same Program and verified product:
+
+```json
+{
+  "mode": "purchase",
+  "environment": "uat",
+  "requestText": "<original purchase request>",
+  "program": {
+    "code": "<program-code>"
+  },
+  "selection": {
+    "merchantUrl": "<authoritative-program-commerce-url>",
+    "merchantId": "<verified-merchant-id>",
+    "endpoint": "<verified-endpoint>",
+    "productId": "<verified-item-id>",
+    "productQuery": "<selected-program-title>",
+    "quantity": 1
+  },
+  "expected": {
+    "merchantName": "<verified-merchant-name>",
+    "itemTitle": "<provider-source-title>",
+    "amount": "<verified-total-major>",
+    "currency": "<verified-currency>"
+  },
+  "instructionContext": {
+    "title": "<selected-program-title>",
+    "mandates": [
+      {
+        "title": "<selected-program-title>",
+        "description": "Purchase the selected Visa Program",
+        "amountLimit": "<exact-program-price>",
+        "currencyCode": "<program-currency>",
+        "merchantCategoryCode": "<four-digit-program-mcc>"
+      }
+    ]
+  },
+  "digitalDeliveryExpected": true,
+  "metadata": {
+    "productResolution": "<verified-resolution>",
+    "productUrl": "<verified-product-url>",
+    "displayTitle": "<localized-display-title>",
+    "unitPriceMajor": "<verified-unit-major>",
+    "unitPriceMinor": "<verified-unit-minor>",
+    "totalAmountMinor": "<verified-total-minor>",
+    "availability": "<verified-availability>"
+  }
+}
+```
+
+Use native JSON types: `quantity` is a positive integer and
+`digitalDeliveryExpected` is a boolean. Use `true` only for a verified digital
+artifact. Keep Program, Catalog, expected, and Instruction facts unchanged.
+Never add an Instruction ID or caller-generated Checkout ID.
+
+Run exactly once in the foreground:
+
+```text
+<Skill Path>/bin/visa-cli visa commerce-run \
+  --context-file <frozen-context.json> \
+  --confirm-purchase \
+  --open \
+  --format json
+```
+
+The CLI owns card refresh and VIC readiness, restricted-category enforcement,
+eligible ACTIVE Instruction selection or exact-price regular Instruction
+creation, product revalidation, one Checkout creation, at most one completion,
+non-retriable payment handling, and bounded delivery waiting.
+
+Never rerun `visa commerce-run` after it may have created a Checkout. Execute
+only an exact CLI-returned aggregate read-only continuation, once. Never
+reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
+`ucp-order` component commands for this Visa Program purchase.
+
+### Visa Preparation
+
+For explicit login-only or Visa card readiness, use the aggregate in prepare
+mode:
+
+```json
+{
+  "mode": "prepare",
+  "target": "login",
+  "environment": "uat",
+  "requestText": "Log in to Visa Benefit"
+}
+```
+
+Use `target: "visa_card_ready"` for card/VIC preparation.
+
+```text
+<Skill Path>/bin/visa-cli visa commerce-run \
+  --context-file <frozen-context.json> \
+  --open \
+  --format json
+```
+
+Prepare mode must not receive `--confirm-purchase`, an Instruction context, or
+permission to create an Instruction, Checkout, or payment.
+
+## Base Capability Contracts
+
+These capabilities are available through the same Visa Edition bundle for
+non-Program requests. They are deliberately concise. Do not expand them into a
+general workflow engine.
+
+### CAP-WALLET: Wallet And Config
+
+- Use `wallet status --format json` for readiness and environment.
+- Use `wallet init --email <email> --open --format json` only for an explicit
+  setup, login, re-login, or authenticated operation that needs a wallet. Keep
+  that one process alive while OAuth completes.
+- Use `wallet logout --format json` exactly once for explicit logout.
+- Use `config get/set` only for requested local settings. Never print secrets
+  or switch environment to recover from a network error.
+
+### CAP-CARD: Card Management
+
+- Use `card binding-link`, `setup-link`, `modify-link`, or `passkey-link` only
+  for the card action the user requested.
+- Refresh current card state before selecting a payment instrument. Require one
+  exact enabled instrument; never choose from stale or ambiguous data.
+- Card and Passkey pages are user-browser handoffs. A returned event must be
+  followed by an authoritative card refresh.
+
+### CAP-RISK: Risk Rules
+
+- Use `risk get --format json` for inspection and `risk link --open --format
+  json` only for an explicit request to change risk settings.
+- The user completes the risk page. Verify the resulting rule state before
+  reporting an update.
+
+### CAP-CATALOG: General Catalog Discovery
+
+- Search anonymously with `catalog search` when no merchant is known, or
+  `ucp-catalog search/product` when the merchant is authoritative.
+- Pass the locked `--language` and search environment. Discovery never starts
+  wallet setup and never authorizes purchase.
+- Present returned identity, merchant, price, currency, availability, channel,
+  and location facts without invention. A later purchase must freeze one exact
+  selected product.
+
+### CAP-PAY: Direct Or Session Pay
+
+- Direct Pay requires exact `merchantId`, amount, currency, payment instrument,
+  and explicit payment authorization. Session Pay requires an exact current
+  `sessionId` and the same authorization.
+- Refresh the selected card before payment. For a VIC-ready Visa, proceed only
+  with one current matching ACTIVE Instruction and Mandate whose payment
+  instrument, amount, currency, MCC, merchant scope, validity, and use state
+  all match. Otherwise stop or complete CAP-INSTRUCTION while the user is
+  present.
+- Execute one `pay ... --format json`. A 3DS URL belongs to the user's browser;
+  verify the bound order afterward. Never retry an unknown charge.
+
+### CAP-ALIPAY-QR: Alipay QR Pay
+
+- Require exact merchant, amount, currency, selected Alipay method, and explicit
+  authorization.
+- Execute one `pay` with `--payment-method-type ALIPAY --terminal-qr
+  --format json`; do not inject a Card.
+- Make the CLI QR visible to the user, then wait only for the correlated order
+  result. Unknown or expired state stops without another charge.
+
+### CAP-UCP: Aggregate UCP Checkout
+
+- Use only for one exact non-Program product with authoritative merchant URL or
+  Catalog identity, item, quantity, price, currency, fulfillment, required
+  shipping address, payment instrument, canonical HTTPS endpoint, and explicit
+  purchase authorization.
+- Refresh the selected payment instrument first. If it is Visa with VIC
+  enabled, stop: this lightweight generic aggregate cannot carry or safely
+  resolve an Instruction and Mandate. Visa Program purchases must use
+  `visa commerce-run`; another generic Visa+VIC UCP purchase remains
+  unsupported until the CLI owns an authorization aggregate.
+- Run one foreground `ucp-checkout run ... --confirm-purchase --format json`.
+  Add bounded delivery waiting only for verified digital goods.
+- Never split the aggregate into manual create/complete calls. After it starts,
+  use only a CLI-returned read-only continuation bound to the same Checkout,
+  order, endpoint, and environment.
+
+### CAP-INSTRUCTION: Purchase Instructions
+
+- Use `instruction list/get` for read-only inspection.
+- Create, sign, update, or cancel only with exact payment instrument, title,
+  complete mandates, amount limits, currency, merchant scope, validity, and
+  explicit authorization.
+- Apply the Restricted Instruction Gate to the complete context before
+  creation. Mandate descriptions are at most 150 characters. Never add an
+  amount buffer.
+- Passkey and edit pages belong to the user. Only an authoritative `ACTIVE`
+  result makes an Instruction usable.
+- Recurring or scheduled use requires explicit cadence, per-run cap, currency,
+  validity horizon, and pinned Instruction plus Mandate IDs. Missing scope
+  stops; unattended execution never substitutes another authorization.
+
+### CAP-REFUND: Refund
+
+- Current CLI support is full refund only. Require the exact original order ID
+  and explicit full-refund authorization; never claim partial-refund support.
+- Run `refund create` once. Use `refund get` or a bound event only to wake a
+  read-only verification. Do not infer completion from submission alone.
+
+### CAP-EVENTS: Async Events
+
+- Poll only for named event types with the exact resource selector returned by
+  the initiating operation. Do not use broad uncorrelated polling.
+- Acknowledge or consume according to the CLI result, then refresh the
+  authoritative card, Instruction, refund, Checkout, or order state.
+- OAuth Device Authorization is handled by the original `wallet init` process,
+  not `events poll`.
+
+### CAP-SKILLS-LIST: Public Skill Discovery
+
+- Use `skills list --all` for public Skills and add `--tippable` when the user
+  asks what can receive a Tip.
+- Present Number, publisher, Skill name, and requested version facts in the
+  locked language. A displayed Number is selection context, not authorization.
+
+### CAP-SKILLS-TIP: Skill Tips
+
+- Require exact `publisher/name`, USD amount, recipient list, and explicit Tip
+  authorization. Do not attach a version to the Tip identity.
+- Resolve a Number only from the most recent list shown in the same user,
+  session, and environment context. If that snapshot is unavailable or
+  ambiguous, list again and confirm the resolved identity.
+- Run each authorized Tip once and report partial batch results honestly.
+
+### CAP-SKILLS-INSTALL: Public Skill Install
+
+- Install by exact `publisher/name` for latest or
+  `publisher/name@version` for a pinned release.
+- Resolve a Number only from the same current list context and confirm the
+  frozen publisher, name, and version before installation.
+- Report the CLI's installed, updated, unchanged, planned, or failed result.
+  Do not run the installed Skill's tests unless the user separately asks.
+
+## Result Contract
+
+- Continue only from structured `ok=true` results or an exact documented
+  read-only continuation.
+- For Visa discovery, report only verified matching Programs and enriched
+  Catalog availability.
+- For payment or Checkout, distinguish authorized, submitted, paid, failed,
+  unknown, delivery pending, delivery failed, and delivery ready.
+- Report digital delivery only when nonempty authoritative artifacts exist.
+- Preserve successful payment when delivery is pending, timed out, or failed.
+- Keep all user-facing text in the locked language and omit internal workflow
+  narration.
+
+## Safety Summary
+
+- Visa query does not log in.
+- Visa Program purchase always uses the three CLI aggregates.
+- Program and Catalog product, amount, and currency must agree.
+- One unchanged purchase authorization is enough; changed facts require a new
+  authorization.
+- Quick Instruction is owned by `visa commerce-login`.
+- `visa commerce-run` is never rerun after possible Checkout creation.
+- Generic capabilities execute only with complete, authoritative input and
+  fail closed otherwise.
+- No payment, Tip, refund, Checkout completion, or Instruction mutation is
+  blindly retried.

@@ -9334,28 +9334,6 @@ var require_yauzl = __commonJS({
   }
 });
 
-// dist/cli.js
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { homedir } from "node:os";
-import { performance } from "node:perf_hooks";
-
-// node_modules/commander/esm.mjs
-var import_index = __toESM(require_commander(), 1);
-var {
-  program,
-  createCommand,
-  createArgument,
-  createOption,
-  CommanderError,
-  InvalidArgumentError,
-  InvalidOptionArgumentError,
-  // deprecated old name
-  Command,
-  Argument,
-  Option,
-  Help
-} = import_index.default;
-
 // dist/errors.js
 var EXIT_CODES = {
   OK: 0,
@@ -9403,6 +9381,152 @@ function networkError(message) {
 function installError(message) {
   return new CliError("install_error", message, EXIT_CODES.INSTALL);
 }
+
+// dist/command-branding.js
+var MAIN_EXECUTABLE_NAME = "clink";
+var VISA_EXECUTABLE_NAME = "visa-cli";
+var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
+  if (executableName === MAIN_EXECUTABLE_NAME) {
+    return value;
+  }
+  return value.replace(/^clink(?=\r?\n)/u, executableName).replace(CLI_COMMAND_PATTERN, executableName);
+}
+
+// dist/output.js
+function printSuccess(data, format) {
+  const envelope = {
+    ok: true,
+    data
+  };
+  process.stdout.write(serialize(envelope, format));
+}
+function printJson(value, format) {
+  process.stdout.write(serialize(value, format));
+}
+function printError(error, options2) {
+  const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
+  const message = renderCliCommandText(cliError.message, options2.executableName ?? MAIN_EXECUTABLE_NAME);
+  if (!options2.explicitFormat) {
+    process.stderr.write(renderHumanError(message, options2.helpHint));
+    return cliError.exitCode;
+  }
+  const envelope = {
+    ok: false,
+    error: {
+      type: cliError.type,
+      code: cliError.code,
+      message,
+      ...cliError.details ? { details: cliError.details } : {}
+    }
+  };
+  process.stderr.write(serialize(envelope, options2.format));
+  return cliError.exitCode;
+}
+function serialize(value, format) {
+  if (format === "pretty") {
+    return `${JSON.stringify(value, null, 2)}
+`;
+  }
+  return `${JSON.stringify(value)}
+`;
+}
+function renderHumanError(message, helpHint) {
+  const lines = [`Error: ${message}`];
+  if (helpHint) {
+    lines.push(`Hint: ${helpHint}`);
+  }
+  return `${lines.join("\n")}
+`;
+}
+
+// dist/entrypoint.js
+var MAIN_HELP_COMMANDS = [
+  "wallet",
+  "card",
+  "risk",
+  "skills",
+  "pay",
+  "refund",
+  "ucp-checkout",
+  "ucp-catalog",
+  "catalog",
+  "ucp-order",
+  "instruction",
+  "events",
+  "tool",
+  "config"
+];
+async function runEntrypoint(runner, argv, helpCommands, executableName = MAIN_EXECUTABLE_NAME) {
+  try {
+    const exitCode = await runner(argv);
+    process.exitCode = exitCode;
+  } catch (error) {
+    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands, executableName));
+  }
+}
+function detectErrorPresentation(argv, helpCommands, executableName) {
+  const format = detectFormat(argv);
+  const explicitFormat = hasExplicitFormat(argv);
+  const helpHint = detectHelpHint(argv, helpCommands, executableName);
+  return {
+    format,
+    explicitFormat,
+    executableName,
+    ...!explicitFormat && helpHint ? { helpHint } : {}
+  };
+}
+function detectFormat(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === "--format" && argv[index + 1] === "json") {
+      return "json";
+    }
+    if (token === "--format" && argv[index + 1] === "pretty") {
+      return "pretty";
+    }
+    if (token === "--format=json") {
+      return "json";
+    }
+    if (token === "--format=pretty") {
+      return "pretty";
+    }
+  }
+  return "json";
+}
+function hasExplicitFormat(argv) {
+  return argv.some((token) => token === "--format" || token.startsWith("--format="));
+}
+function detectHelpHint(argv, helpCommands, executableName) {
+  const command = argv.find((token) => !token.startsWith("-"));
+  if (!command) {
+    return `Run \`${executableName} --help\`.`;
+  }
+  if (helpCommands.includes(command)) {
+    return `Run \`${executableName} ${command} --help\`.`;
+  }
+  return `Run \`${executableName} --help\`.`;
+}
+
+// dist/visa/edition.js
+import { performance as performance2 } from "node:perf_hooks";
+
+// node_modules/commander/esm.mjs
+var import_index = __toESM(require_commander(), 1);
+var {
+  program,
+  createCommand,
+  createArgument,
+  createOption,
+  CommanderError,
+  InvalidArgumentError,
+  InvalidOptionArgumentError,
+  // deprecated old name
+  Command,
+  Argument,
+  Option,
+  Help
+} = import_index.default;
 
 // dist/args.js
 var OPTION_DEFINITIONS = [
@@ -9592,6 +9716,11 @@ function requireStringFlag(flags, message, ...names) {
 function toCommanderOptionName(value) {
   return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
 }
+
+// dist/cli.js
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { homedir } from "node:os";
+import { performance } from "node:perf_hooks";
 
 // dist/browser-handoff.js
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -10027,16 +10156,6 @@ function systemClock() {
 }
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/command-branding.js
-var MAIN_EXECUTABLE_NAME = "clink";
-var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
-function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
-  if (executableName === MAIN_EXECUTABLE_NAME) {
-    return value;
-  }
-  return value.replace(/^clink(?=\r?\n)/u, executableName).replace(CLI_COMMAND_PATTERN, executableName);
 }
 
 // dist/auth-identity.js
@@ -11053,11 +11172,11 @@ function resolveDashboardBaseUrl(apiBaseUrl) {
   }
   return DASHBOARD_BASE_URLS.production;
 }
-function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, email) {
+function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId2, email) {
   const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
   url.searchParams.set("type", "visa");
-  if (instructionId) {
-    url.searchParams.set("instructionId", instructionId);
+  if (instructionId2) {
+    url.searchParams.set("instructionId", instructionId2);
   }
   if (email) {
     url.searchParams.set("email", email);
@@ -11357,8 +11476,8 @@ var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
   "purchase_instruction.updated",
   "purchase_instruction.cancelled"
 ]);
-function eventMatchesInstruction(event, instructionId) {
-  const expectedInstructionId = resolvedTypedIdentifierAliases([instructionId]);
+function eventMatchesInstruction(event, instructionId2) {
+  const expectedInstructionId = resolvedTypedIdentifierAliases([instructionId2]);
   const candidate = resolvedTypedIdentifierAliases([
     event.data.instructionId,
     event.data.instruction_id,
@@ -14335,14 +14454,14 @@ async function getInternalUcpMerchantList(options2 = {}) {
   };
 }
 async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
-  let productUrl;
+  let productUrl2;
   try {
-    productUrl = new URL(rawProductUrl);
+    productUrl2 = new URL(rawProductUrl);
   } catch {
     throw validationError("invalid --product-url");
   }
   const environment = options2.environment ?? "production";
-  const domainName = canonicalDomain(productUrl.hostname);
+  const domainName = canonicalDomain(productUrl2.hostname);
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
@@ -14468,6 +14587,9 @@ var QUICK_INSTRUCTION_OPTIONS = [
   "payment-instrument-id",
   "extra"
 ];
+function hasQuickInstructionOptions(flags) {
+  return QUICK_INSTRUCTION_OPTIONS.some((name) => name in flags);
+}
 async function buildQuickInstructionContext(flags, commandLabel) {
   if ("payment-instrument-id" in flags) {
     throw validationError(`--payment-instrument-id is not supported by ${commandLabel}; the card is bound after login`);
@@ -14631,8 +14753,8 @@ function requireMandateAmountLimit(mandate, index) {
   }
   if (typeof value === "number") {
     const [integerPart, fractionPart = ""] = text.split(".");
-    const minorUnits = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
-    if (!Number.isSafeInteger(minorUnits)) {
+    const minorUnits2 = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
+    if (!Number.isSafeInteger(minorUnits2)) {
       throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
     }
   }
@@ -15063,53 +15185,6 @@ function mergeOAuthLoginConfig(current, options2) {
   return next;
 }
 
-// dist/output.js
-function printSuccess(data, format) {
-  const envelope = {
-    ok: true,
-    data
-  };
-  process.stdout.write(serialize(envelope, format));
-}
-function printJson(value, format) {
-  process.stdout.write(serialize(value, format));
-}
-function printError(error, options2) {
-  const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
-  const message = renderCliCommandText(cliError.message, options2.executableName ?? MAIN_EXECUTABLE_NAME);
-  if (!options2.explicitFormat) {
-    process.stderr.write(renderHumanError(message, options2.helpHint));
-    return cliError.exitCode;
-  }
-  const envelope = {
-    ok: false,
-    error: {
-      type: cliError.type,
-      code: cliError.code,
-      message,
-      ...cliError.details ? { details: cliError.details } : {}
-    }
-  };
-  process.stderr.write(serialize(envelope, options2.format));
-  return cliError.exitCode;
-}
-function serialize(value, format) {
-  if (format === "pretty") {
-    return `${JSON.stringify(value, null, 2)}
-`;
-  }
-  return `${JSON.stringify(value)}
-`;
-}
-function renderHumanError(message, helpHint) {
-  const lines = [`Error: ${message}`];
-  if (helpHint) {
-    lines.push(`Hint: ${helpHint}`);
-  }
-  return `${lines.join("\n")}
-`;
-}
-
 // dist/payment/amount.js
 function parseAmount(value) {
   const amount = Number(value);
@@ -15193,17 +15268,17 @@ function createTipAuthorizationApi(input, overrides = {}) {
         dryRun: false
       }), dependencies.requestJson);
       const data = unwrapResponse(result, "invalid instruction create response");
-      const instructionId = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
-      if (!instructionId) {
+      const instructionId2 = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
+      if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
       const runtimeConfig = await getRuntimeConfig();
       return {
-        instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId, runtimeConfig.email)
+        instructionId: instructionId2,
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId2, runtimeConfig.email)
       };
     },
-    waitForActivation: async (instructionId) => {
+    waitForActivation: async (instructionId2) => {
       const collected = await dependencies.collectWebhookEvents({
         runtimeConfig: await getRuntimeConfig(),
         getRuntimeConfig,
@@ -15213,7 +15288,7 @@ function createTipAuthorizationApi(input, overrides = {}) {
         type: "purchase_instruction.activated",
         ack: false
       });
-      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
+      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId2));
       if (matches.length === 0) {
         return { activated: false };
       }
@@ -15228,11 +15303,11 @@ function createTipAuthorizationApi(input, overrides = {}) {
       }, eventIds);
       return { activated: true };
     },
-    getInstruction: async (instructionId) => {
+    getInstruction: async (instructionId2) => {
       const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
         baseUrl: runtimeConfig.baseUrl,
         method: "GET",
-        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
+        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId2)}`,
         headers: buildInstructionHeaders(runtimeConfig),
         timeoutMs: input.timeoutMs,
         dryRun: false
@@ -17394,8 +17469,8 @@ async function cancelResponseBody2(response) {
   }
 }
 async function sleepBeforeRetry(dependencies, attempt) {
-  const delay = Math.min(1e3, 100 * 2 ** attempt) + Math.floor(dependencies.random() * 50);
-  await dependencies.sleep(delay);
+  const delay2 = Math.min(1e3, 100 * 2 ** attempt) + Math.floor(dependencies.random() * 50);
+  await dependencies.sleep(delay2);
 }
 
 // dist/skills/marketplace.js
@@ -18744,11 +18819,11 @@ async function resolveCheckoutTotalFromUrl(rawUrl, options2 = {}) {
   if (candidates.length === 0) {
     throw validationError("checkout_total_not_found");
   }
-  const unique = dedupeCheckoutTotals(candidates);
-  if (unique.length > 1) {
+  const unique2 = dedupeCheckoutTotals(candidates);
+  if (unique2.length > 1) {
     throw validationError("ambiguous_checkout_total");
   }
-  const total = unique[0];
+  const total = unique2[0];
   if (!total) {
     throw validationError("checkout_total_not_found");
   }
@@ -19680,13 +19755,13 @@ function collectProposalTotal(proposal, source, candidates) {
   });
 }
 function dedupeCheckoutTotals(candidates) {
-  const unique = /* @__PURE__ */ new Map();
+  const unique2 = /* @__PURE__ */ new Map();
   for (const candidate of candidates) {
-    if (!unique.has(candidate.key)) {
-      unique.set(candidate.key, candidate);
+    if (!unique2.has(candidate.key)) {
+      unique2.set(candidate.key, candidate);
     }
   }
-  return [...unique.values()];
+  return [...unique2.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
   if (!isRecord11(productJson)) {
@@ -19718,8 +19793,8 @@ function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUr
   if (!variantId) {
     throw validationError("shopify_variant_id_not_found");
   }
-  const productTitle = asTrimmedString(productJson.title) ?? "unknown";
-  const title = asTrimmedString(variant.name) ?? asTrimmedString(variant.title) ?? productTitle;
+  const productTitle2 = asTrimmedString(productJson.title) ?? "unknown";
+  const title = asTrimmedString(variant.name) ?? asTrimmedString(variant.title) ?? productTitle2;
   const availability = readAvailability(variant);
   return {
     itemId: variantId,
@@ -19793,11 +19868,11 @@ function resolveInventoryStatus(available) {
   return "unknown";
 }
 function parseUnitPriceMinor(value) {
-  const minorUnits = parseMinorUnits(value);
-  if (minorUnits === void 0 || minorUnits < 0n || minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+  const minorUnits2 = parseMinorUnits(value);
+  if (minorUnits2 === void 0 || minorUnits2 < 0n || minorUnits2 > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw validationError("shopify_variant_price_not_found");
   }
-  return Number(minorUnits);
+  return Number(minorUnits2);
 }
 function parseMinorUnits(value) {
   if (typeof value === "number" && Number.isInteger(value)) {
@@ -19917,11 +19992,11 @@ function resolvePollDelayMs(nextRetryAt, now) {
   if (!nextRetryAt) {
     return DEFAULT_POLL_INTERVAL_MS2;
   }
-  const delay = Date.parse(nextRetryAt) - now;
-  if (!Number.isFinite(delay)) {
+  const delay2 = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay2)) {
     return DEFAULT_POLL_INTERVAL_MS2;
   }
-  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay));
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(DEFAULT_POLL_INTERVAL_MS2, delay2));
 }
 function normalizedText(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
@@ -20023,11 +20098,11 @@ function resolvePollDelayMs2(nextRetryAt, now) {
   if (!nextRetryAt) {
     return DEFAULT_POLL_INTERVAL_MS3;
   }
-  const delay = Date.parse(nextRetryAt) - now;
-  if (!Number.isFinite(delay)) {
+  const delay2 = Date.parse(nextRetryAt) - now;
+  if (!Number.isFinite(delay2)) {
     return DEFAULT_POLL_INTERVAL_MS3;
   }
-  return Math.min(MAX_POLL_INTERVAL_MS2, Math.max(DEFAULT_POLL_INTERVAL_MS3, delay));
+  return Math.min(MAX_POLL_INTERVAL_MS2, Math.max(DEFAULT_POLL_INTERVAL_MS3, delay2));
 }
 function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20535,9 +20610,9 @@ async function toolInternalUcp(context) {
       return EXIT_CODES.OK;
     }
     case "get-endpoint": {
-      const productUrl = requireStringFlag(context.args.flags, "missing --product-url", "product-url");
+      const productUrl2 = requireStringFlag(context.args.flags, "missing --product-url", "product-url");
       try {
-        const result = await resolveInternalUcpEndpoint(productUrl, {
+        const result = await resolveInternalUcpEndpoint(productUrl2, {
           baseUrl,
           environment: configuredEnvironment ?? "production",
           timeoutMs: context.globalOptions.timeoutMs
@@ -20616,6 +20691,31 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) 
     ...onReady ? { onReady } : {}
   });
   printSuccess(result, context.globalOptions.format);
+}
+async function collectCommandEvents(context, options2) {
+  const maxDurationMs = options2.maxWaitSeconds * 1e3;
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: maxDurationMs + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
+  const result = await collectWebhookEvents({
+    runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+    refreshRuntimeConfig,
+    timeoutMs: context.globalOptions.timeoutMs,
+    ack: true,
+    type: options2.type,
+    maxDurationMs,
+    ...options2.expectedResource ? { expectedResource: options2.expectedResource } : {}
+  });
+  return {
+    ...result,
+    ...result.timedOut ? {
+      resumeCommand: buildResumeCommand(options2.type, void 0, asOptionalString(options2.expectedResource?.paymentInstrumentId), result.nextToken, true, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), context.executableName)
+    } : {}
+  };
 }
 function printPendingWatchHandoff(url, eventType, executableName) {
   if (!url || !eventType) {
@@ -21530,15 +21630,15 @@ async function handlePayCommand(context) {
   }
   const legacyPurchaseInstructionId = getStringFlag(flags, "purchase-instruction-id");
   const explicitInstructionId = getStringFlag(flags, "instruction-id");
-  const instructionId = explicitInstructionId ?? legacyPurchaseInstructionId;
+  const instructionId2 = explicitInstructionId ?? legacyPurchaseInstructionId;
   if (legacyPurchaseInstructionId !== void 0 && explicitInstructionId !== void 0 && legacyPurchaseInstructionId !== explicitInstructionId) {
     throw validationError("--instruction-id and --purchase-instruction-id must match when both are provided");
   }
   const mandateId = getStringFlag(flags, "mandate-id");
   const shippingAddress = optionalJsonObjectFlag2(flags, "shipping-address");
   const products = optionalJsonArrayFlag(flags, "products");
-  const authorization = instructionId || mandateId || legacyPurchaseInstructionId ? {
-    ...instructionId ? { instructionId } : {},
+  const authorization = instructionId2 || mandateId || legacyPurchaseInstructionId ? {
+    ...instructionId2 ? { instructionId: instructionId2 } : {},
     ...mandateId ? { mandateId } : {},
     ...legacyPurchaseInstructionId ? { legacyInstructionId: legacyPurchaseInstructionId } : {}
   } : void 0;
@@ -21727,10 +21827,10 @@ async function ucpCatalogProduct(context) {
   rejectPublicCatalogAuthenticationFlags(flags);
   rejectUcpCatalogFlags(flags, "product", ["query", "cursor", "limit"]);
   const merchantId = requireNonBlankFlag(flags, "merchant-id", "missing --merchant-id");
-  const productId = requireNonBlankFlag(flags, "product-id", "missing --product-id");
+  const productId2 = requireNonBlankFlag(flags, "product-id", "missing --product-id");
   const requestContext = publicCatalogContextFlag(flags);
   const body = compact3({
-    id: productId,
+    id: productId2,
     context: requestContext,
     signals: optionalJsonObjectFlag2(flags, "signals"),
     attribution: optionalJsonObjectFlag2(flags, "attribution"),
@@ -21752,6 +21852,50 @@ async function ucpCatalogProduct(context) {
     dryRun: context.globalOptions.dryRun
   });
   return finishPublicCatalogCommand(result, context);
+}
+async function getCommandUcpCatalogProduct(context, merchantId, productId2) {
+  const requestId = randomUUID4();
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "POST",
+    path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/product`,
+    headers: {
+      "Request-Id": requestId,
+      "UCP-Agent": DEFAULT_UCP_AGENT
+    },
+    body: { id: productId2 },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun3(result)) {
+    throw apiError("UCP Catalog product unexpectedly produced a dry-run response");
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
+}
+async function searchCommandUcpCatalog(context, merchantId, query, limit, language) {
+  const requestId = randomUUID4();
+  const result = await requestJson({
+    baseUrl: context.runtimeConfig.baseUrl,
+    method: "POST",
+    path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
+    headers: {
+      "Request-Id": requestId,
+      "UCP-Agent": DEFAULT_UCP_AGENT
+    },
+    body: {
+      query,
+      ...language ? { context: { language } } : {},
+      ...limit !== void 0 ? { pagination: { limit } } : {}
+    },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun3(result)) {
+    throw apiError("UCP Catalog search unexpectedly produced a dry-run response");
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
 }
 function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   const unsupported = unsupportedFlags.find((name) => name in flags);
@@ -22458,11 +22602,11 @@ function consistentUcpCheckoutRunId(values, stage) {
   if (present.some((value) => typeof value !== "string" || !safeUcpCheckoutRunIdentifier(value))) {
     throw apiError(`ucp-checkout run ${stage} response has an invalid Checkout ID`, 502);
   }
-  const unique = [...new Set(present.map((value) => value.trim()))];
-  if (unique.length > 1) {
+  const unique2 = [...new Set(present.map((value) => value.trim()))];
+  if (unique2.length > 1) {
     throw apiError(`ucp-checkout run ${stage} response has conflicting Checkout IDs`, 502);
   }
-  return unique[0];
+  return unique2[0];
 }
 function normalizedUcpCheckoutRunStatus(data) {
   return asOptionalString(data.status)?.trim().toLowerCase() || "unknown";
@@ -22902,11 +23046,11 @@ function majorAmountToMinorUnits(value, currency, fieldPath) {
     throw validationError(`${fieldPath} supports at most ${fractionDigits} decimal places for ${normalizedCurrency}`);
   }
   const scale = 10n ** BigInt(fractionDigits);
-  const minorUnits = BigInt(integerPart) * scale + BigInt(fractionPart.slice(0, fractionDigits).padEnd(fractionDigits, "0") || "0");
-  if (minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+  const minorUnits2 = BigInt(integerPart) * scale + BigInt(fractionPart.slice(0, fractionDigits).padEnd(fractionDigits, "0") || "0");
+  if (minorUnits2 > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw validationError(`${fieldPath} is too large`);
   }
-  return Number(minorUnits);
+  return Number(minorUnits2);
 }
 function numberAmountToString(value, fieldPath) {
   if (!Number.isFinite(value)) {
@@ -23022,15 +23166,15 @@ async function instructionCreate(context) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  const instructionId = asRequiredString(data.instructionId, "missing instructionId in instruction create response");
+  const instructionId2 = asRequiredString(data.instructionId, "missing instructionId in instruction create response");
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
   const mandateIds = extractMandateIds(data);
-  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, context.runtimeConfig.email);
+  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId2, context.runtimeConfig.email);
   await openPortalWithBrowserHandoff(context, passkeyUrl);
   printSuccess({
     ...data,
     action: "created",
-    instructionId,
+    instructionId: instructionId2,
     paymentInstrumentId,
     ...mandateIds.length > 0 ? { mandateIds } : {},
     requiresPasskey: true,
@@ -23038,7 +23182,7 @@ async function instructionCreate(context) {
   }, context.globalOptions.format);
   await maybeWatchEvents(context, passkeyUrl, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId },
+    expectedResource: { instructionId: instructionId2, purchaseInstructionId: instructionId2 },
     staleEventCutoffMs,
     ackUnmatchedEvents: false
   });
@@ -23078,34 +23222,56 @@ async function requestBrowserHandoff(context, request) {
   return result;
 }
 async function instructionGet(context) {
-  const instructionId = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
+  const instructionId2 = requireStringFlag(context.args.flags, "missing --purchase-instruction-id", "purchase-instruction-id");
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
     method: "GET",
-    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId)}`,
+    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId2)}`,
     headers: buildInstructionHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
   return finishApiCommand(result, context);
 }
+async function getCommandInstruction(context, instructionId2) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId2)}`,
+    headers: buildInstructionHeaders(runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("instruction get unexpectedly produced a dry-run response");
+  }
+  if (result.status === 404) {
+    return void 0;
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord14(data)) {
+    throw apiError("invalid instruction get response", 502);
+  }
+  return data;
+}
 async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
-  const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId, context.runtimeConfig.email);
+  const instructionId2 = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email);
   const staleEventCutoffMs = Date.now();
   const browserLaunch = await openPortalWithBrowserHandoff(context, url);
   printSuccess({
     url,
-    instructionId,
+    instructionId: instructionId2,
     paymentInstrumentId,
     manualOpenUrl: url,
     browserLaunch
   }, context.globalOptions.format);
   await maybeWatchEvents(context, url, "purchase instruction authorization", {
     eventType: "purchase_instruction.activated",
-    expectedResource: { instructionId, purchaseInstructionId: instructionId },
+    expectedResource: { instructionId: instructionId2, purchaseInstructionId: instructionId2 },
     staleEventCutoffMs,
     ackUnmatchedEvents: false
   });
@@ -23137,6 +23303,42 @@ async function instructionList(context) {
   assertApiSuccess(result.status, result.body);
   printSuccess(filterValidInstructionsPayload(unwrapApiData(result.body)), context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function listCommandInstructions(context, paymentInstrumentId) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: INSTRUCTION_PATH2,
+    headers: buildInstructionHeaders(runtimeConfig),
+    query: { paymentInstrumentId },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("instruction list unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
+}
+async function createCommandInstruction(context, body) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: INSTRUCTION_PATH2,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("instruction create unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord14(data)) {
+    throw apiError("invalid instruction create response", 502);
+  }
+  return data;
 }
 function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
@@ -23489,73 +23691,6136 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
-// dist/entrypoint.js
-var MAIN_HELP_COMMANDS = [
-  "wallet",
-  "card",
-  "risk",
-  "skills",
-  "pay",
-  "refund",
-  "ucp-checkout",
-  "ucp-catalog",
-  "catalog",
-  "ucp-order",
-  "instruction",
-  "events",
-  "tool",
-  "config"
-];
-async function runEntrypoint(runner, argv, helpCommands, executableName = MAIN_EXECUTABLE_NAME) {
+// dist/visa/context-input.js
+import { readFile as readFile4 } from "node:fs/promises";
+async function readVisaContextInput(flags, commandLabel) {
+  const inline = getStringFlag(flags, "context");
+  const filePath = getStringFlag(flags, "context-file");
+  if (inline !== void 0 && filePath !== void 0) {
+    throw validationError("--context and --context-file cannot be used together");
+  }
+  if (inline === void 0 && filePath === void 0) {
+    throw validationError(`${commandLabel} requires --context <json> or --context-file <path>`);
+  }
+  if (filePath === void 0) {
+    return parseJsonFlag(inline, "--context");
+  }
+  if (!filePath.trim()) {
+    throw validationError("--context-file path must not be blank");
+  }
+  let source;
   try {
-    const exitCode = await runner(argv);
-    process.exitCode = exitCode;
+    source = await readFile4(filePath, "utf8");
   } catch (error) {
-    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands, executableName));
+    const message = error instanceof Error ? error.message : String(error);
+    throw validationError(`could not read --context-file "${filePath}": ${message}`);
   }
-}
-function detectErrorPresentation(argv, helpCommands, executableName) {
-  const format = detectFormat(argv);
-  const explicitFormat = hasExplicitFormat(argv);
-  const helpHint = detectHelpHint(argv, helpCommands, executableName);
-  return {
-    format,
-    explicitFormat,
-    executableName,
-    ...!explicitFormat && helpHint ? { helpHint } : {}
-  };
-}
-function detectFormat(argv) {
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === "--format" && argv[index + 1] === "json") {
-      return "json";
-    }
-    if (token === "--format" && argv[index + 1] === "pretty") {
-      return "pretty";
-    }
-    if (token === "--format=json") {
-      return "json";
-    }
-    if (token === "--format=pretty") {
-      return "pretty";
-    }
-  }
-  return "json";
-}
-function hasExplicitFormat(argv) {
-  return argv.some((token) => token === "--format" || token.startsWith("--format="));
-}
-function detectHelpHint(argv, helpCommands, executableName) {
-  const command = argv.find((token) => !token.startsWith("-"));
-  if (!command) {
-    return `Run \`${executableName} --help\`.`;
-  }
-  if (helpCommands.includes(command)) {
-    return `Run \`${executableName} ${command} --help\`.`;
-  }
-  return `Run \`${executableName} --help\`.`;
+  return parseJsonFlag(source, "--context-file");
 }
 
-// dist/index.js
-void runEntrypoint(runCli, process.argv.slice(2), MAIN_HELP_COMMANDS);
+// dist/visa/instruction-context.js
+var AMOUNT_LIMIT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
+var CURRENCY_FORMAT = /^[A-Z]{3}$/u;
+var MCC_FORMAT = /^\d{4}$/u;
+var UTC_DATETIME_FORMAT2 = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
+var MAX_CONTEXT_BYTES = 16 * 1024;
+function normalizeVisaInstructionContext(raw, options2 = {}) {
+  if (!isRecord15(raw)) {
+    throw validationError("instructionContext must be a JSON object");
+  }
+  if (options2.expectedAmount === void 0 !== (options2.expectedCurrency === void 0)) {
+    throw new Error("expectedAmount and expectedCurrency must be provided together");
+  }
+  const title = requiredText(raw.title, "instructionContext.title");
+  if (title.length > 256) {
+    throw validationError("instructionContext.title must be at most 256 characters");
+  }
+  const description = optionalText(raw.description, "instructionContext.description");
+  if (description && description.length > 1024) {
+    throw validationError("instructionContext.description must be at most 1024 characters");
+  }
+  if (!Array.isArray(raw.mandates)) {
+    throw validationError("instructionContext.mandates must be an array");
+  }
+  const isRecurring = raw.isRecurring === true;
+  if (raw.isRecurring !== void 0 && typeof raw.isRecurring !== "boolean") {
+    throw validationError("instructionContext.isRecurring must be a boolean");
+  }
+  const mandates = normalizeInstructionMandates(raw.mandates, isRecurring, { maxEntries: 10, requireCoreFields: true }).map((mandate, index) => normalizeVisaMandate(mandate, index, isRecurring));
+  if (options2.expectedAmount !== void 0 && options2.expectedCurrency !== void 0) {
+    const expectedCurrency = options2.expectedCurrency.toUpperCase();
+    const mismatched = mandates.find((mandate) => comparableAmount(mandate.amountLimit) !== comparableAmount(options2.expectedAmount) || mandate.currencyCode !== expectedCurrency);
+    if (mismatched) {
+      throw validationError("every instructionContext mandate must use the exact expected amount and currency");
+    }
+  }
+  const merchantCategoryCodes = [
+    ...new Set(mandates.map((mandate) => mandate.merchantCategoryCode))
+  ];
+  if (options2.requireSingleMerchantCategoryCode && merchantCategoryCodes.length > 1) {
+    throw validationError("instructionContext mandates must use one merchantCategoryCode");
+  }
+  const effectiveUntilTime = optionalUtcDateTime(raw.effectiveUntilTime, "instructionContext.effectiveUntilTime");
+  const shippingAddress = optionalObject(raw.shippingAddress, "instructionContext.shippingAddress");
+  const context = {
+    title,
+    mandates,
+    ...description ? { description } : {},
+    ...effectiveUntilTime ? { effectiveUntilTime } : {},
+    ...isRecurring ? { isRecurring: true } : {},
+    ...shippingAddress ? { shippingAddress } : {}
+  };
+  const bytes = Buffer.byteLength(JSON.stringify(context), "utf8");
+  if (bytes > MAX_CONTEXT_BYTES) {
+    throw validationError(`instructionContext must be at most ${MAX_CONTEXT_BYTES} UTF-8 bytes, got ${bytes}`);
+  }
+  return {
+    context,
+    merchantCategoryCodes
+  };
+}
+function normalizeVisaMandate(mandate, index, isRecurring) {
+  const field = `instructionContext.mandates[${index}]`;
+  const title = requiredText(mandate.title, `${field}.title`);
+  const description = requiredText(mandate.description, `${field}.description`);
+  const amountLimit = normalizeAmountLimit(mandate.amountLimit, `${field}.amountLimit`);
+  const currencyCode = requiredText(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
+  if (!CURRENCY_FORMAT.test(currencyCode)) {
+    throw validationError(`${field}.currencyCode must be a three-letter currency code`);
+  }
+  const merchantCategoryCode2 = requiredText(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
+  if (!MCC_FORMAT.test(merchantCategoryCode2)) {
+    throw validationError(`${field}.merchantCategoryCode must be four digits`);
+  }
+  const preferredMerchantName = optionalText(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
+  const merchantCategory = optionalText(mandate.merchantCategory, `${field}.merchantCategory`);
+  if (preferredMerchantName && merchantCategory) {
+    throw validationError(`${field} cannot contain both preferredMerchantName and merchantCategory`);
+  }
+  if (!isRecurring && mandate.recurringFrequency !== void 0) {
+    throw validationError(`${field}.recurringFrequency requires instructionContext.isRecurring=true`);
+  }
+  const recurringFrequency = isRecurring ? requiredText(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
+  const effectiveUntilTime = optionalUtcDateTime(mandate.effectiveUntilTime, `${field}.effectiveUntilTime`);
+  const normalized = {
+    ...structuredClone(mandate),
+    title,
+    description,
+    amountLimit,
+    currencyCode,
+    merchantCategoryCode: merchantCategoryCode2
+  };
+  assignOptional(normalized, "preferredMerchantName", preferredMerchantName);
+  assignOptional(normalized, "merchantCategory", merchantCategory);
+  assignOptional(normalized, "recurringFrequency", recurringFrequency);
+  assignOptional(normalized, "effectiveUntilTime", effectiveUntilTime);
+  return normalized;
+}
+function normalizeAmountLimit(value, field) {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!AMOUNT_LIMIT_FORMAT.test(text) || Number(text) <= 0) {
+    throw validationError(`${field} must be a positive number with at most 2 decimal places`);
+  }
+  return text;
+}
+function comparableAmount(value) {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!AMOUNT_LIMIT_FORMAT.test(text)) {
+    return "";
+  }
+  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
+}
+function optionalUtcDateTime(value, field) {
+  const text = optionalText(value, field);
+  if (text && !UTC_DATETIME_FORMAT2.test(text)) {
+    throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
+  }
+  return text;
+}
+function requiredText(value, field) {
+  const text = optionalText(value, field);
+  if (!text) {
+    throw validationError(`${field} is required and cannot be blank`);
+  }
+  return text;
+}
+function optionalText(value, field) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    throw validationError(`${field} must be a non-blank string`);
+  }
+  return value.normalize("NFKC").trim();
+}
+function optionalObject(value, field) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  if (!isRecord15(value)) {
+    throw validationError(`${field} must be a JSON object`);
+  }
+  return structuredClone(value);
+}
+function assignOptional(target, field, value) {
+  if (value === void 0) {
+    delete target[field];
+  } else {
+    target[field] = value;
+  }
+}
+function isRecord15(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/commerce-context.js
+var MAJOR_AMOUNT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
+var CURRENCY_FORMAT2 = /^[A-Z]{3}$/u;
+var MAX_CONTEXT_BYTES2 = 64 * 1024;
+async function readVisaCommerceContext(flags) {
+  return normalizeVisaCommerceContext(await readVisaContextInput(flags, "visa commerce-run"));
+}
+function normalizeVisaCommerceContext(raw) {
+  if (!isRecord16(raw)) {
+    throw validationError("commerce context must be a JSON object");
+  }
+  const mode = requiredText2(raw.mode, "mode").toLowerCase();
+  const context = mode === "prepare" ? normalizePrepareContext(raw) : mode === "purchase" ? normalizePurchaseRunContext(raw) : (() => {
+    throw validationError('mode must be "prepare" or "purchase"');
+  })();
+  const bytes = Buffer.byteLength(JSON.stringify(context), "utf8");
+  if (bytes > MAX_CONTEXT_BYTES2) {
+    throw validationError(`commerce context must be at most ${MAX_CONTEXT_BYTES2} UTF-8 bytes, got ${bytes}`);
+  }
+  return deepFreeze(context);
+}
+function visaCommerceApiBaseUrl(environment) {
+  switch (environment) {
+    case "uat":
+    case "sandbox":
+      return API_BASE_URLS.sandbox;
+    case "test":
+      return API_BASE_URLS.test;
+    case "production":
+      return API_BASE_URLS.production;
+  }
+}
+function buildCommerceLineItems(purchase) {
+  return [{
+    id: `line_${purchase.productId}`,
+    amount: purchase.totalPrice,
+    item: {
+      id: purchase.productId,
+      title: purchase.title,
+      price: purchase.price
+    },
+    quantity: purchase.quantity
+  }];
+}
+function majorAmountMinorUnits(value, currency) {
+  return majorAmountToMinorUnits2(value, currencyFractionDigits(currency));
+}
+function minorUnitsMajorAmount(value, currency) {
+  return minorUnitsToMajorAmount(value, currencyFractionDigits(currency));
+}
+function normalizePrepareContext(raw) {
+  if (raw.purchaseContext !== void 0) {
+    throw validationError("prepare mode does not accept purchaseContext");
+  }
+  if (raw.instructionContext !== void 0) {
+    throw validationError("prepare mode does not accept instructionContext because it cannot create an Instruction");
+  }
+  const target = requiredText2(raw.target, "target").toLowerCase();
+  if (target !== "login" && target !== "visa_card_ready") {
+    throw validationError('prepare mode target must be "login" or "visa_card_ready"');
+  }
+  const requestText = optionalText2(raw.requestText, "requestText");
+  return {
+    mode: "prepare",
+    target,
+    environment: normalizeVisaCommerceEnvironment(raw.environment),
+    ...requestText ? { requestText } : {}
+  };
+}
+function normalizePurchaseRunContext(raw) {
+  const environment = normalizeVisaCommerceEnvironment(raw.environment);
+  if (raw.instructionId !== void 0) {
+    throw validationError("mode=purchase does not accept instructionId; commerce-run selects a usable ACTIVE Instruction");
+  }
+  const requestText = requiredText2(raw.requestText, "requestText");
+  const program2 = requireObject(raw.program, "program");
+  const selection = requireObject(raw.selection, "selection");
+  const expected = requireObject(raw.expected, "expected");
+  const programCode = requiredText2(program2.code, "program.code");
+  const merchantUrl = requiredHttpUrl(selection.merchantUrl, "selection.merchantUrl");
+  if (isVisaProgramUrl(merchantUrl)) {
+    throw validationError("selection.merchantUrl must be the actual merchant URL, not a Visa/VSRP URL");
+  }
+  const productId2 = requiredText2(selection.productId, "selection.productId");
+  const productQuery = optionalText2(selection.productQuery, "selection.productQuery");
+  const quantity = requiredPositiveInteger(selection.quantity, "selection.quantity");
+  const merchantId = optionalText2(selection.merchantId, "selection.merchantId");
+  const endpoint = optionalHttpUrl(selection.endpoint, "selection.endpoint");
+  const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
+  const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
+  const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
+  const currency = requiredText2(expected.currency, "expected.currency").toUpperCase();
+  if (!CURRENCY_FORMAT2.test(currency)) {
+    throw validationError("expected.currency must be a three-letter currency code");
+  }
+  if (typeof raw.digitalDeliveryExpected !== "boolean") {
+    throw validationError("digitalDeliveryExpected must be a JSON boolean (true or false), not a quoted string");
+  }
+  const normalizedInstruction = normalizeVisaInstructionContext(raw.instructionContext, {
+    expectedAmount: totalPrice,
+    expectedCurrency: currency,
+    requireSingleMerchantCategoryCode: true
+  });
+  const instructionContext = normalizedInstruction.context;
+  const merchantCategoryCode2 = normalizedInstruction.merchantCategoryCodes[0];
+  const price = divideMajorAmount(totalPrice, quantity, currency);
+  const assertedCategory = optionalText2(raw.assertedCategory, "assertedCategory");
+  const shippingAddress = optionalObject2(raw.shippingAddress, "shippingAddress");
+  const metadata = optionalObject2(raw.metadata, "metadata");
+  const normalizedSelection = {
+    merchantUrl,
+    productId: productId2,
+    quantity,
+    ...productQuery ? { productQuery } : {},
+    ...merchantId ? { merchantId } : {},
+    ...endpoint ? { endpoint } : {}
+  };
+  const purchaseContext = {
+    merchantUrl,
+    programCode,
+    ...merchantId ? { merchantId } : {},
+    ...endpoint ? { endpoint } : {},
+    merchantName,
+    productId: productId2,
+    ...productQuery ? { productQuery } : {},
+    title: itemTitle,
+    quantity,
+    price,
+    totalPrice,
+    currency,
+    merchantCategoryCode: merchantCategoryCode2,
+    digitalDeliveryExpected: raw.digitalDeliveryExpected,
+    originalRequest: requestText,
+    ...assertedCategory ? { assertedCategory } : {},
+    ...shippingAddress ? { shippingAddress } : {},
+    ...metadata ? { metadata } : {}
+  };
+  return {
+    mode: "purchase",
+    environment,
+    requestText,
+    program: { code: programCode },
+    selection: normalizedSelection,
+    expected: {
+      merchantName,
+      itemTitle,
+      amount: totalPrice,
+      currency
+    },
+    instructionContext,
+    digitalDeliveryExpected: raw.digitalDeliveryExpected,
+    purchaseContext
+  };
+}
+function normalizeVisaCommerceEnvironment(value) {
+  const environment = requiredText2(value, "environment").toLowerCase();
+  if (environment !== "uat" && environment !== "sandbox" && environment !== "test" && environment !== "production") {
+    throw validationError("environment must be uat, sandbox, test, or production");
+  }
+  const distributionEnvironment = resolveSelectedEnvironment({});
+  if (environment === "production" && distributionEnvironment && distributionEnvironment !== "production") {
+    return distributionEnvironment === "sandbox" ? "uat" : distributionEnvironment;
+  }
+  return environment;
+}
+function isVisaProgramUrl(value) {
+  const hostname = new URL(value).hostname.toLowerCase();
+  return hostname === "vsrp.cn" || hostname.endsWith(".vsrp.cn");
+}
+function divideMajorAmount(total, quantity, currency) {
+  const fractionDigits = currencyFractionDigits(currency);
+  const minorUnits2 = majorAmountToMinorUnits2(total, fractionDigits);
+  if (minorUnits2 % BigInt(quantity) !== 0n) {
+    throw validationError("expected.amount cannot be divided exactly by selection.quantity for the selected currency");
+  }
+  return minorUnitsToMajorAmount(minorUnits2 / BigInt(quantity), fractionDigits);
+}
+function currencyFractionDigits(currency) {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    throw validationError(`unsupported currency: ${currency}`);
+  }
+}
+function majorAmountToMinorUnits2(value, fractionDigits) {
+  const [integerPart = "0", fractionPart = ""] = value.split(".");
+  if (fractionPart.length > fractionDigits && /[1-9]/u.test(fractionPart.slice(fractionDigits))) {
+    throw validationError(`expected.amount supports at most ${fractionDigits} decimal places for its currency`);
+  }
+  return BigInt(integerPart) * 10n ** BigInt(fractionDigits) + BigInt(fractionPart.slice(0, fractionDigits).padEnd(fractionDigits, "0") || "0");
+}
+function minorUnitsToMajorAmount(value, fractionDigits) {
+  if (fractionDigits === 0) {
+    return value.toString();
+  }
+  const digits = value.toString().padStart(fractionDigits + 1, "0");
+  return trimDecimalZeros(`${digits.slice(0, -fractionDigits)}.${digits.slice(-fractionDigits)}`);
+}
+function normalizeMajorAmount(value, field) {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!MAJOR_AMOUNT_FORMAT.test(text) || Number(text) <= 0) {
+    throw validationError(`${field} must be a positive major-unit amount with at most 2 decimals`);
+  }
+  if (typeof value === "number" && !Number.isSafeInteger(Number(text.replace(".", "")))) {
+    throw validationError(`${field} must be a string when its minor units are not a safe integer`);
+  }
+  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  return trimDecimalZeros(`${BigInt(integerPart).toString()}${fractionPart ? `.${fractionPart}` : ""}`);
+}
+function trimDecimalZeros(value) {
+  return value.includes(".") ? value.replace(/0+$/u, "").replace(/\.$/u, "") : value;
+}
+function requiredPositiveInteger(value, field) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw validationError(`${field} must be a positive JSON integer number (for example, 1), not a quoted string or decimal`);
+  }
+  return value;
+}
+function requiredText2(value, field) {
+  const text = optionalText2(value, field);
+  if (!text) {
+    throw validationError(`${field} is required and cannot be blank`);
+  }
+  return text;
+}
+function optionalText2(value, field) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    throw validationError(`${field} must be a non-blank string`);
+  }
+  return value.normalize("NFKC").trim();
+}
+function requiredHttpUrl(value, field) {
+  const url = optionalHttpUrl(value, field);
+  if (!url) {
+    throw validationError(`${field} is required`);
+  }
+  return url;
+}
+function optionalHttpUrl(value, field) {
+  const text = optionalText2(value, field);
+  if (!text) {
+    return void 0;
+  }
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw validationError(`${field} must be an absolute http(s) URL`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw validationError(`${field} must be an absolute http(s) URL`);
+  }
+  return url.toString();
+}
+function requireObject(value, field) {
+  if (!isRecord16(value)) {
+    throw validationError(`${field} must be a JSON object`);
+  }
+  return value;
+}
+function optionalObject2(value, field) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  if (!isRecord16(value)) {
+    throw validationError(`${field} must be a JSON object`);
+  }
+  return structuredClone(value);
+}
+function isRecord16(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function deepFreeze(value) {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    deepFreeze(child);
+  }
+  return Object.freeze(value);
+}
+
+// dist/visa/service.js
+import { createHash as createHash4, randomUUID as randomUUID5 } from "node:crypto";
+
+// dist/visa/client.js
+var BENEFIT_AUTHORIZATION_PATH = "/agent/cwallet/oauth/benefit/authorization";
+var BENEFIT_TOKEN_PATH = "/agent/cwallet/oauth/benefit/token";
+var VSRA_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+var FALLBACK_BENEFIT_EXPIRES_IN_SECONDS = 600;
+var DEFAULT_BENEFIT_POLL_INTERVAL = 2;
+var DEFAULT_VSRA_EXPIRES_IN = 600;
+var DEFAULT_VSRA_POLL_INTERVAL = 5;
+var VISA_FILTER_AXES = [
+  "region",
+  "category",
+  "purpose",
+  "reward_type",
+  "attribute",
+  "card_level",
+  "card_issuer"
+];
+async function createBenefitAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: BENEFIT_AUTHORIZATION_PATH,
+    body: {
+      platform: "vsrp",
+      clientId: OAUTH_CLIENT_ID,
+      deviceId: options2.deviceId,
+      source: OAUTH_CLIENT_ID,
+      agentClient: options2.agentClient,
+      ...options2.instructionContext ? { instructionContext: options2.instructionContext } : {}
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  if (isDryRun4(result)) {
+    return result;
+  }
+  const source = requireSuccessRecord(result, "Benefit authorization");
+  const deviceCode = requiredString3(pick(source, "deviceCode", "device_code"), "Benefit authorization response is missing deviceCode");
+  const state = requiredString3(source.state, "Benefit authorization response is missing state");
+  const authorizationUrl = validateBenefitAuthorizationUrl({
+    authorizationUrl: pick(source, "authorizationUrl", "authorization_url", "redirectUrl", "redirect_url", "verificationUriComplete", "verification_uri_complete"),
+    state,
+    deviceCode
+  });
+  return {
+    deviceCode,
+    state,
+    authorizationUrl,
+    expiresIn: positiveNumber2(pick(source, "expiresIn", "expires_in")) ?? FALLBACK_BENEFIT_EXPIRES_IN_SECONDS,
+    interval: positiveNumber2(source.interval) ?? DEFAULT_BENEFIT_POLL_INTERVAL
+  };
+}
+async function pollBenefitToken(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: BENEFIT_TOKEN_PATH,
+    body: { deviceCode: options2.deviceCode },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun4(result)) {
+    throw apiError("unexpected Benefit token dry-run response");
+  }
+  return normalizeBenefitTokenResult(result.body, result.status);
+}
+async function createVsraDeviceAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: "/api/v1/auth/device/code",
+    body: { scope: "skill:recommend" },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun4(result)) {
+    throw apiError("unexpected VSRA device authorization dry-run response");
+  }
+  const source = requireSuccessRecord(result, "VSRA device authorization");
+  const verificationUri = requiredString3(source.verification_uri, "VSRA device authorization response is missing verification_uri");
+  return {
+    deviceCode: requiredString3(source.device_code, "VSRA device authorization response is missing device_code"),
+    userCode: requiredString3(source.user_code, "VSRA device authorization response is missing user_code"),
+    verificationUri,
+    verificationUriComplete: optionalString3(source.verification_uri_complete) ?? verificationUri,
+    expiresIn: positiveNumber2(source.expires_in) ?? DEFAULT_VSRA_EXPIRES_IN,
+    interval: positiveNumber2(source.interval) ?? DEFAULT_VSRA_POLL_INTERVAL
+  };
+}
+async function pollVsraDeviceToken(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: "/api/v1/auth/device/token",
+    body: {
+      device_code: options2.deviceCode,
+      grant_type: VSRA_DEVICE_GRANT_TYPE
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun4(result)) {
+    throw apiError("unexpected VSRA device token dry-run response");
+  }
+  return normalizeVsraDeviceTokenResult(result.body);
+}
+async function probeVsraApiToken(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "GET",
+    path: "/api/v1/user/recommend",
+    query: { limit: 1, page: 1 },
+    headers: {
+      Authorization: `Bearer ${options2.apiToken}`,
+      "X-Locale": options2.locale
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun4(result)) {
+    throw apiError("unexpected VSRA token probe dry-run response");
+  }
+  if (result.status === 401 || result.status === 403) {
+    return "invalid";
+  }
+  requireHttpSuccess(result, "VSRA token probe");
+  return "valid";
+}
+async function requestVsraRecommendation(options2) {
+  const query = {
+    type: options2.filters.type,
+    keyword: options2.filters.keyword,
+    limit: options2.filters.limit,
+    page: options2.filters.page
+  };
+  for (const axis of VISA_FILTER_AXES) {
+    const values = options2.filters[axis];
+    if (values && values.length > 0) {
+      query[`${axis}[]`] = values;
+    }
+  }
+  const headers = {
+    "X-Locale": options2.locale
+  };
+  if (options2.apiToken) {
+    headers.Authorization = `Bearer ${options2.apiToken}`;
+  }
+  return requestJson({
+    baseUrl: options2.baseUrl,
+    method: "GET",
+    path: options2.apiToken ? "/api/v1/user/recommend" : "/api/v1/programs/recommend",
+    query,
+    headers,
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+}
+async function requestVsraTaxonomy(options2) {
+  return requestJson({
+    baseUrl: options2.baseUrl,
+    method: "GET",
+    path: "/api/v1/taxonomy",
+    headers: { "X-Locale": options2.locale },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+}
+async function requestVsraProgramDetail(options2) {
+  return requestJson({
+    baseUrl: options2.baseUrl,
+    method: "GET",
+    path: `/api/v1/programs/${encodeURIComponent(options2.code)}`,
+    headers: { "X-Locale": options2.locale },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+}
+function normalizeBenefitTokenResult(body, status = 200) {
+  const source = unwrapRecord(body);
+  const accessToken = optionalString3(pick(source, "access_token", "accessToken"));
+  if (accessToken) {
+    const tokenType = optionalString3(pick(source, "token_type", "tokenType")) ?? "Bearer";
+    if (tokenType.toLowerCase() !== "bearer") {
+      return { status: "failed", error: "unsupported_token_type" };
+    }
+    const refreshToken = optionalString3(pick(source, "refresh_token", "refreshToken"));
+    const customerId = optionalString3(pick(source, "customer_id", "customerId"));
+    const agentClientId = optionalString3(pick(source, "agent_client_id", "agentClientId"));
+    const visaRegistrationStatus = parseVisaRegistrationStatus3(pick(source, "visa_registration_status", "visaRegistrationStatus"));
+    const scope = optionalString3(source.scope);
+    const expiresIn = positiveNumber2(pick(source, "expires_in", "expiresIn"));
+    const refreshExpiresIn = positiveNumber2(pick(source, "refresh_expires_in", "refreshExpiresIn"));
+    const email = optionalString3(source.email)?.trim();
+    const pendingInstructionId = optionalString3(pick(source, "pending_instruction_id", "pendingInstructionId"));
+    const oauthMode = parseBenefitOAuthMode(pick(source, "oauth_mode", "oauthMode"));
+    const customerCreated = optionalBoolean(pick(source, "customer_created", "customerCreated"));
+    const activationDriver = parseBenefitActivationDriver(pick(source, "activation_driver", "activationDriver"));
+    if (!refreshToken || !customerId || !agentClientId || !visaRegistrationStatus || !scope || !expiresIn || !refreshExpiresIn || !email) {
+      return { status: "failed", error: "benefit_token_incomplete" };
+    }
+    return {
+      status: "success",
+      token: {
+        tokenType: "Bearer",
+        accessToken,
+        expiresIn,
+        refreshToken,
+        refreshExpiresIn,
+        customerId,
+        agentClientId,
+        visaRegistrationStatus,
+        ...pendingInstructionId ? { pendingInstructionId } : {},
+        ...oauthMode ? { oauthMode } : {},
+        ...customerCreated !== void 0 ? { customerCreated } : {},
+        ...activationDriver ? { activationDriver } : {},
+        scope,
+        email
+      }
+    };
+  }
+  const normalized = normalizedStatus(pick(source, "error", "status", "state", "error_code", "errorCode", "message", "msg", "code"));
+  const interval = positiveNumber2(pick(source, "interval", "retry_after", "retryAfter"));
+  if (normalized === "authorization_pending" || normalized === "pending") {
+    return interval ? { status: "pending", interval } : { status: "pending" };
+  }
+  if (normalized === "slow_down") {
+    return interval ? { status: "slow_down", interval } : { status: "slow_down" };
+  }
+  if (normalized === "processing" || normalized === "exchanging" || normalized === "binding" || normalized === "token_exchanging") {
+    return interval ? { status: "processing", interval } : { status: "processing" };
+  }
+  if (normalized === "access_denied" || normalized === "denied") {
+    return { status: "denied" };
+  }
+  if (normalized === "expired_token" || normalized === "expired") {
+    return { status: "expired" };
+  }
+  return {
+    status: "failed",
+    error: normalized || `benefit_token_http_${status}`
+  };
+}
+function parseVisaRegistrationStatus3(value) {
+  const normalized = optionalString3(value)?.toUpperCase();
+  return normalized === "PENDING" || normalized === "REGISTERING" || normalized === "SUCCEEDED" || normalized === "FAILED" || normalized === "UNKNOWN" ? normalized : void 0;
+}
+function parseBenefitOAuthMode(value) {
+  const normalized = optionalString3(value)?.trim().toUpperCase();
+  return normalized === "REGISTER" || normalized === "LOGIN" ? normalized : void 0;
+}
+function parseBenefitActivationDriver(value) {
+  const normalized = optionalString3(value)?.trim().toUpperCase();
+  return normalized === "PORTAL_AUTO_CARD_SETUP" || normalized === "CLIENT_ACTION_REQUIRED" || normalized === "EXTERNAL_CARD_FLOW" || normalized === "NONE" ? normalized : void 0;
+}
+function normalizeVsraDeviceTokenResult(body) {
+  const source = unwrapRecord(body);
+  const nestedData = isRecord17(source.data) ? source.data : {};
+  const apiToken = optionalString3(nestedData.apiToken) ?? optionalString3(source.apiToken);
+  if (apiToken) {
+    return { status: "success", apiToken };
+  }
+  const error = normalizedStatus(source.error ?? nestedData.error ?? source.code ?? source.status);
+  const interval = positiveNumber2(source.interval ?? source.retry_after ?? source.retryAfter);
+  if (error === "authorization_pending") {
+    return interval ? { status: "pending", interval } : { status: "pending" };
+  }
+  if (error === "slow_down") {
+    return interval ? { status: "slow_down", interval } : { status: "slow_down" };
+  }
+  if (error === "expired_token") {
+    return { status: "expired" };
+  }
+  if (error === "access_denied") {
+    return { status: "denied" };
+  }
+  return { status: "failed", error: error || "vsra_device_token_invalid_response" };
+}
+function requireVsraSuccess(response, action) {
+  requireHttpSuccess(response, action);
+  return response.body;
+}
+function resolveVsraBaseUrl(market, env = process.env) {
+  const direct = trimTrailingSlash(env.VSRA_BASE_URL);
+  if (direct) {
+    return requireHttpsOrLoopback(direct, "VSRA_BASE_URL");
+  }
+  const marketOverride = trimTrailingSlash(env[`VSRA_${market.toUpperCase()}_BASE_URL`]);
+  if (marketOverride) {
+    return requireHttpsOrLoopback(marketOverride, `VSRA_${market.toUpperCase()}_BASE_URL`);
+  }
+  const selectedEnvironment = String(env.VSRA_ENV ?? "production").trim().toLowerCase();
+  const presets = {
+    production: {
+      cn: "https://vsra.offerpluscn.com",
+      hk: "https://vsra.visaselectrewardhk.com",
+      tw: "https://vsra.visaselectrewardtw.com"
+    },
+    staging: {
+      cn: "https://vsra-staging.offerpluscn.com"
+    },
+    test: {
+      cn: "https://vsra-test.offerpluscn.com"
+    },
+    local: {
+      cn: "https://vsraapp.test"
+    }
+  };
+  const preset = presets[selectedEnvironment];
+  if (!preset) {
+    throw configError(`unsupported VSRA environment: ${selectedEnvironment}`);
+  }
+  const value = preset[market];
+  if (!value) {
+    throw configError(`VSRA ${selectedEnvironment} does not support market ${market}`);
+  }
+  return value;
+}
+function validateBenefitAuthorizationUrl(options2) {
+  const value = requiredString3(options2.authorizationUrl, "Benefit authorization response is missing authorizationUrl");
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw apiError("Benefit authorization URL is invalid");
+  }
+  if (url.protocol !== "https:") {
+    throw configError("Benefit authorization URL must use HTTPS");
+  }
+  for (const key of url.searchParams.keys()) {
+    if (normalizeSensitiveName(key) === "devicecode") {
+      throw configError("deviceCode must not appear in the Benefit browser URL");
+    }
+  }
+  const decodedLocation = decodeRepeatedly(`${url.pathname}${url.search}${url.hash}`);
+  const decodedDeviceCode = decodeRepeatedly(options2.deviceCode);
+  if (/(?:^|[/?#&;])device[-_]?code(?:[=/:?&#;]|$)/iu.test(decodedLocation) || url.toString().includes(options2.deviceCode) || decodedLocation.includes(decodedDeviceCode)) {
+    throw configError("deviceCode must not appear in the Benefit browser URL");
+  }
+  if (url.searchParams.getAll("state").length !== 1 || url.searchParams.get("state") !== options2.state) {
+    throw authError("Benefit authorization URL state does not match");
+  }
+  return url.toString();
+}
+function requireSuccessRecord(response, action) {
+  requireHttpSuccess(response, action);
+  const source = unwrapRecord(response.body);
+  if (Object.keys(source).length === 0) {
+    throw apiError(`${action} response body is invalid`);
+  }
+  return source;
+}
+function requireHttpSuccess(response, action) {
+  if (response.status === 401 || response.status === 403) {
+    throw authError(extractMessage(response.body) ?? `${action} failed`, response.status);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw apiError(extractMessage(response.body) ?? `${action} failed with status ${response.status}`, response.status);
+  }
+  if (isRecord17(response.body) && "success" in response.body && response.body.success === false) {
+    throw apiError(extractMessage(response.body) ?? `${action} failed`);
+  }
+  if (isRecord17(response.body) && "code" in response.body) {
+    const code = Number(response.body.code);
+    if (Number.isFinite(code) && code !== 200 && code !== 0) {
+      throw apiError(extractMessage(response.body) ?? `${action} failed with code ${code}`, code);
+    }
+  }
+}
+function unwrapRecord(value) {
+  if (!isRecord17(value)) {
+    return {};
+  }
+  if (isRecord17(value.data)) {
+    return value.data;
+  }
+  if (isRecord17(value.result)) {
+    return value.result;
+  }
+  return value;
+}
+function pick(source, ...keys) {
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== void 0 && value !== null) {
+      return value;
+    }
+  }
+  return void 0;
+}
+function requiredString3(value, message) {
+  const text = optionalString3(value);
+  if (!text) {
+    throw apiError(message);
+  }
+  return text;
+}
+function optionalString3(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function optionalBoolean(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+function positiveNumber2(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : void 0;
+}
+function normalizedStatus(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/gu, "_");
+}
+function decodeRepeatedly(value) {
+  let decoded = value;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        return decoded;
+      }
+      decoded = next;
+    } catch {
+      return decoded;
+    }
+  }
+  return decoded;
+}
+function normalizeSensitiveName(value) {
+  return decodeRepeatedly(value).toLowerCase().replaceAll("-", "").replaceAll("_", "");
+}
+function trimTrailingSlash(value) {
+  return String(value ?? "").trim().replace(/\/+$/u, "");
+}
+function requireHttpsOrLoopback(value, name) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw configError(`${name} must be an absolute URL`);
+  }
+  if (url.protocol === "https:") {
+    return url.toString().replace(/\/$/u, "");
+  }
+  if (url.protocol === "http:" && isLoopback(url.hostname)) {
+    return url.toString().replace(/\/$/u, "");
+  }
+  throw configError(`${name} must use HTTPS outside loopback`);
+}
+function isLoopback(hostname) {
+  const normalized = hostname.toLowerCase();
+  return normalized === "localhost" || normalized.endsWith(".localhost") || normalized === "::1" || /^127(?:\.\d{1,3}){3}$/u.test(normalized);
+}
+function isRecord17(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isDryRun4(value) {
+  return "dryRun" in value;
+}
+
+// dist/visa/state.js
+var VISA_FSM_STATES = /* @__PURE__ */ new Set([
+  "IDLE",
+  "VSRA_LOGIN_REQUIRED",
+  "VSRA_LOGIN_PENDING",
+  "VSRA_READY",
+  "CLINK_LOGIN_CREATING",
+  "CLINK_LOGIN_PENDING",
+  "CLINK_LOGIN_EXCHANGING",
+  "CLINK_READY",
+  "FAILED",
+  "EXPIRED"
+]);
+var LEGAL_TRANSITIONS = {
+  IDLE: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_READY",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  VSRA_LOGIN_REQUIRED: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_PENDING",
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  VSRA_LOGIN_PENDING: /* @__PURE__ */ new Set([
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  VSRA_READY: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_READY",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  CLINK_LOGIN_CREATING: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "CLINK_LOGIN_PENDING",
+    "CLINK_READY",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  CLINK_LOGIN_PENDING: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_LOGIN_EXCHANGING",
+    "CLINK_READY",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  CLINK_LOGIN_EXCHANGING: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_LOGIN_PENDING",
+    "CLINK_READY",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  CLINK_READY: /* @__PURE__ */ new Set([
+    "VSRA_LOGIN_REQUIRED",
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "FAILED",
+    "EXPIRED"
+  ]),
+  FAILED: /* @__PURE__ */ new Set([
+    "IDLE",
+    "VSRA_LOGIN_REQUIRED",
+    "VSRA_LOGIN_PENDING",
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_LOGIN_PENDING",
+    "CLINK_READY",
+    "EXPIRED"
+  ]),
+  EXPIRED: /* @__PURE__ */ new Set([
+    "IDLE",
+    "VSRA_LOGIN_REQUIRED",
+    "VSRA_LOGIN_PENDING",
+    "VSRA_READY",
+    "CLINK_LOGIN_CREATING",
+    "CLINK_LOGIN_PENDING",
+    "CLINK_READY",
+    "FAILED"
+  ])
+};
+function defaultVisaState() {
+  return {
+    fsmState: "IDLE",
+    activeMarket: "cn",
+    vsraTokens: {}
+  };
+}
+function cloneVisaState(state) {
+  return {
+    ...state,
+    vsraTokens: Object.fromEntries(Object.entries(state.vsraTokens).map(([market, token]) => [
+      market,
+      token ? { ...token } : token
+    ])),
+    ...state.lastError ? { lastError: { ...state.lastError } } : {},
+    ...state.benefitConnection ? { benefitConnection: { ...state.benefitConnection } } : {},
+    ...state.pendingVsraLogin ? { pendingVsraLogin: { ...state.pendingVsraLogin } } : {},
+    ...state.pendingBenefitLogin ? { pendingBenefitLogin: { ...state.pendingBenefitLogin } } : {}
+  };
+}
+function normalizeStoredVisaState(raw) {
+  if (!isRecord18(raw)) {
+    return void 0;
+  }
+  const defaults = defaultVisaState();
+  const fsmState = isVisaFsmState(raw.fsmState) ? raw.fsmState : defaults.fsmState;
+  const activeMarket = normalizeVisaMarketValue(raw.activeMarket) ?? defaults.activeMarket;
+  const state = {
+    fsmState,
+    activeMarket,
+    vsraTokens: normalizeVsraTokens(raw.vsraTokens)
+  };
+  assignString(state, "fsmUpdatedAt", raw.fsmUpdatedAt);
+  assignString(state, "deviceId", raw.deviceId);
+  assignString(state, "pendingBenefitLoginGeneration", raw.pendingBenefitLoginGeneration);
+  if (isRecord18(raw.lastError)) {
+    const code = nonEmptyString4(raw.lastError.code);
+    const at = nonEmptyString4(raw.lastError.at);
+    if (code && at) {
+      state.lastError = { code, at };
+    }
+  }
+  if (isRecord18(raw.benefitConnection)) {
+    const customerId = nonEmptyString4(raw.benefitConnection.customerId);
+    const issuerOrigin = httpOrigin2(raw.benefitConnection.issuerOrigin);
+    const connectedAt = nonEmptyString4(raw.benefitConnection.connectedAt);
+    if (customerId && issuerOrigin && connectedAt) {
+      state.benefitConnection = { customerId, issuerOrigin, connectedAt };
+    }
+  }
+  const pendingVsraLogin = normalizePendingVsraLogin(raw.pendingVsraLogin);
+  if (pendingVsraLogin) {
+    state.pendingVsraLogin = pendingVsraLogin;
+  }
+  const pendingBenefitLogin = normalizePendingBenefitLogin(raw.pendingBenefitLogin);
+  if (pendingBenefitLogin) {
+    state.pendingBenefitLogin = pendingBenefitLogin;
+  }
+  return state;
+}
+function transitionVisaState(state, to, options2 = {}) {
+  const from = state.fsmState;
+  if (from !== to && !LEGAL_TRANSITIONS[from].has(to)) {
+    throw configError(`invalid Visa FSM transition: ${from} -> ${to}`);
+  }
+  const next = cloneVisaState(state);
+  const at = new Date(options2.now ?? Date.now()).toISOString();
+  next.fsmState = to;
+  next.fsmUpdatedAt = at;
+  if (options2.errorCode) {
+    next.lastError = { code: options2.errorCode, at };
+  } else {
+    delete next.lastError;
+  }
+  return next;
+}
+function recoverVisaState(state, authorization, now = Date.now()) {
+  const next = cloneVisaState(state);
+  let nextState = next.fsmState;
+  let changed = false;
+  if (next.pendingBenefitLogin && isExpired(next.pendingBenefitLogin.expiresAt, now)) {
+    delete next.pendingBenefitLogin;
+    nextState = "EXPIRED";
+    changed = true;
+  }
+  if (next.pendingVsraLogin && isExpired(next.pendingVsraLogin.expiresAt, now)) {
+    delete next.pendingVsraLogin;
+    nextState = "EXPIRED";
+    changed = true;
+  }
+  if (next.pendingBenefitLogin && nextState !== "CLINK_LOGIN_PENDING" && nextState !== "CLINK_LOGIN_EXCHANGING") {
+    nextState = "CLINK_LOGIN_PENDING";
+    changed = true;
+  } else if (next.pendingBenefitLoginGeneration && nextState !== "CLINK_LOGIN_CREATING") {
+    nextState = "CLINK_LOGIN_CREATING";
+    changed = true;
+  } else if (!next.pendingBenefitLogin && !next.pendingBenefitLoginGeneration && (nextState === "CLINK_LOGIN_CREATING" || nextState === "CLINK_LOGIN_PENDING" || nextState === "CLINK_LOGIN_EXCHANGING")) {
+    nextState = authorizationUsable(authorization, now) ? "CLINK_READY" : Object.keys(next.vsraTokens).length > 0 ? "VSRA_READY" : "IDLE";
+    changed = true;
+  } else if (next.pendingVsraLogin && nextState !== "VSRA_LOGIN_PENDING") {
+    nextState = "VSRA_LOGIN_PENDING";
+    changed = true;
+  }
+  if (nextState === "CLINK_READY" && !authorizationUsable(authorization, now)) {
+    nextState = Object.keys(next.vsraTokens).length > 0 ? "VSRA_READY" : "IDLE";
+    changed = true;
+  }
+  if (!VISA_FSM_STATES.has(nextState)) {
+    nextState = "IDLE";
+    changed = true;
+  }
+  if (!changed) {
+    return next;
+  }
+  next.fsmState = nextState;
+  next.fsmUpdatedAt = new Date(now).toISOString();
+  return next;
+}
+function normalizeVisaMarket(value) {
+  const market = normalizeVisaMarketValue(value);
+  if (!market) {
+    throw configError(`unsupported Visa market: ${String(value ?? "")}`);
+  }
+  return market;
+}
+function normalizeVsraTokens(raw) {
+  if (!isRecord18(raw)) {
+    return {};
+  }
+  const tokens = {};
+  for (const market of ["cn", "hk", "tw"]) {
+    const value = raw[market];
+    if (!isRecord18(value)) {
+      continue;
+    }
+    const apiToken = nonEmptyString4(value.apiToken);
+    const updatedAt = nonEmptyString4(value.updatedAt);
+    if (apiToken && updatedAt) {
+      tokens[market] = { apiToken, updatedAt };
+    }
+  }
+  return tokens;
+}
+function normalizePendingVsraLogin(raw) {
+  if (!isRecord18(raw)) {
+    return void 0;
+  }
+  const market = normalizeVisaMarketValue(raw.market);
+  const baseUrl = absoluteHttpUrl(raw.baseUrl);
+  const deviceCode = nonEmptyString4(raw.deviceCode);
+  const userCode = nonEmptyString4(raw.userCode);
+  const verificationUri = absoluteHttpUrl(raw.verificationUri);
+  const verificationUriComplete = absoluteHttpUrl(raw.verificationUriComplete);
+  const interval = positiveNumber3(raw.interval);
+  const createdAt = nonEmptyString4(raw.createdAt);
+  const expiresAt = nonEmptyString4(raw.expiresAt);
+  if (!market || !baseUrl || !deviceCode || !userCode || !verificationUri || !verificationUriComplete || interval === void 0 || !createdAt || !expiresAt) {
+    return void 0;
+  }
+  return {
+    market,
+    baseUrl,
+    deviceCode,
+    userCode,
+    verificationUri,
+    verificationUriComplete,
+    interval,
+    createdAt,
+    expiresAt
+  };
+}
+function normalizePendingBenefitLogin(raw) {
+  if (!isRecord18(raw)) {
+    return void 0;
+  }
+  const baseUrl = absoluteHttpUrl(raw.baseUrl);
+  const deviceCode = nonEmptyString4(raw.deviceCode);
+  const state = nonEmptyString4(raw.state);
+  const authorizationUrl = absoluteHttpUrl(raw.authorizationUrl);
+  const resumeId = nonEmptyString4(raw.resumeId);
+  const initialAuthorizationFingerprint = raw.initialAuthorizationFingerprint === null ? null : nonEmptyString4(raw.initialAuthorizationFingerprint);
+  const installationId = nonEmptyString4(raw.installationId);
+  const agentClientDeviceId = nonEmptyString4(raw.agentClientDeviceId);
+  const interval = positiveNumber3(raw.interval);
+  const createdAt = nonEmptyString4(raw.createdAt);
+  const expiresAt = nonEmptyString4(raw.expiresAt);
+  if (!baseUrl || !deviceCode || !state || !authorizationUrl || !resumeId || initialAuthorizationFingerprint === void 0 || !installationId || !agentClientDeviceId || interval === void 0 || !createdAt || !expiresAt) {
+    return void 0;
+  }
+  return {
+    baseUrl,
+    deviceCode,
+    state,
+    authorizationUrl,
+    resumeId,
+    initialAuthorizationFingerprint,
+    installationId,
+    agentClientDeviceId,
+    interval,
+    createdAt,
+    expiresAt
+  };
+}
+function authorizationUsable(authorization, now) {
+  return Boolean(authorization && (authorization.accessTokenExpiresAt > now || authorization.refreshTokenExpiresAt > now));
+}
+function isExpired(value, now) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp <= now;
+}
+function isVisaFsmState(value) {
+  return typeof value === "string" && VISA_FSM_STATES.has(value);
+}
+function normalizeVisaMarketValue(value) {
+  const market = String(value ?? "").trim().toLowerCase();
+  return market === "cn" || market === "hk" || market === "tw" ? market : void 0;
+}
+function assignString(target, key, value) {
+  const text = nonEmptyString4(value);
+  if (text) {
+    target[key] = text;
+  }
+}
+function absoluteHttpUrl(value) {
+  const text = nonEmptyString4(value);
+  if (!text) {
+    return void 0;
+  }
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function httpOrigin2(value) {
+  const url = absoluteHttpUrl(value);
+  return url ? new URL(url).origin : void 0;
+}
+function nonEmptyString4(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function positiveNumber3(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : void 0;
+}
+function isRecord18(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/taxonomy.js
+var ALIAS_OVERRIDES = {
+  purpose: {
+    outbound: ["\u51FA\u56FD\u65C5\u884C", "\u6D77\u5916\u65C5\u884C", "travel abroad"],
+    study: ["\u7559\u5B66", "\u6D77\u5916\u5B66\u4E60", "international student"],
+    local: ["\u672C\u5730\u4F18\u60E0", "local offers"],
+    inbound: ["\u6765\u534E\u65C5\u884C", "inbound tourism"],
+    haitao: ["\u8DE8\u5883\u8D2D\u7269", "overseas online shopping"]
+  },
+  region: {
+    hmt: ["\u6E2F\u6FB3\u53F0\u5730\u533A"],
+    kj: ["\u65E5\u672C\u97E9\u56FD", "japan korea"],
+    sea: ["\u4E1C\u5357\u4E9A\u5730\u533A"],
+    anz: ["\u6FB3\u5927\u5229\u4E9A\u65B0\u897F\u5170", "australia new zealand"],
+    global: ["\u5168\u4E16\u754C", "worldwide"],
+    hk: ["\u9999\u6E2F"],
+    mo: ["\u6FB3\u95E8", "macao"],
+    tw: ["\u53F0\u6E7E"],
+    kr: ["\u5357\u97E9", "korea"],
+    id: ["\u5370\u5C3C"],
+    au: ["\u6FB3\u6D32"],
+    gb: ["\u82F1\u683C\u5170", "uk", "britain"],
+    us: ["usa"],
+    ae: ["uae"],
+    sa: ["\u6C99\u7279"]
+  },
+  category: {
+    dining: ["\u5403\u996D", "\u7F8E\u98DF", "food"],
+    dining_restaurant: ["\u9910\u5385", "\u6B63\u9910"],
+    dining_cafe_bakery: ["\u5496\u5561", "\u70D8\u7119", "bakery"],
+    dining_bar: ["\u9152\u5427", "\u9152\u9986", "pub"],
+    dining_fast_casual: ["\u5FEB\u9910", "\u7B80\u9910", "fast food"],
+    dining_delivery_food: [
+      "\u5916\u5356",
+      "\u5916\u5356\u5238",
+      "food delivery",
+      "get food delivered",
+      "delivery offer"
+    ],
+    shopping: ["\u8D2D\u7269", "\u96F6\u552E", "retail"],
+    shopping_department_mall: ["\u767E\u8D27", "\u5546\u573A", "mall"],
+    shopping_supermarket: ["\u8D85\u5E02", "\u4FBF\u5229\u5E97"],
+    shopping_fashion: ["\u670D\u88C5", "\u978B\u5305", "fashion"],
+    shopping_luxury: ["\u5962\u534E\u8D2D\u7269", "luxury"],
+    shopping_beauty: ["\u7F8E\u5986", "\u62A4\u80A4", "beauty"],
+    shopping_jewelry_watches: ["\u73E0\u5B9D", "\u624B\u8868", "watches"],
+    shopping_electronics: ["\u6570\u7801", "\u7535\u5B50\u4EA7\u54C1"],
+    shopping_duty_free: ["\u514D\u7A0E", "duty-free"],
+    lodging: ["\u4F4F\u5BBF", "accommodation"],
+    lodging_hotel: ["\u996D\u5E97"],
+    lodging_apartment: ["\u6C11\u5BBF", "\u516C\u5BD3", "homestay"],
+    airfare: ["\u822A\u7A7A", "\u822A\u73ED", "flight"],
+    airfare_ticket: ["\u98DE\u673A\u7968"],
+    airfare_upgrade: ["\u5347\u8231"],
+    airfare_lounge: ["\u8D35\u5BBE\u5385", "\u673A\u573A\u4F11\u606F\u5BA4", "lounge"],
+    airfare_baggage: ["\u6258\u8FD0\u884C\u674E"],
+    ground_transport: ["\u4EA4\u901A\u51FA\u884C"],
+    transport_car_rental: ["car hire"],
+    transport_ride_taxi: ["\u6253\u8F66", "\u51FA\u79DF\u8F66", "\u7F51\u7EA6\u8F66", "taxi"],
+    transport_airport_transfer: ["\u63A5\u673A", "\u9001\u673A"],
+    transport_transit_rail: ["\u5730\u94C1", "\u706B\u8F66", "\u94C1\u8DEF", "rail"],
+    transport_fuel_parking: ["\u52A0\u6CB9", "\u5145\u7535", "\u505C\u8F66"],
+    travel_service: ["\u65C5\u6E38\u670D\u52A1"],
+    travel_visa: ["\u7B7E\u8BC1\u529E\u7406"],
+    travel_medical: ["\u65C5\u884C\u533B\u7597"],
+    travel_tour_activity: ["\u5F53\u5730\u6D3B\u52A8", "tour"],
+    travel_tax_refund: ["\u9000\u7A0E"],
+    travel_concierge: ["\u793C\u5BBE", "concierge"],
+    entertainment: ["\u5A31\u4E50"],
+    ent_attraction: ["\u666F\u70B9", "\u4E50\u56ED", "attraction"],
+    ent_cinema_show: ["\u7535\u5F71", "\u6F14\u51FA", "cinema"],
+    ent_culture: ["\u827A\u672F", "\u535A\u7269\u9986"],
+    ent_sports: ["\u8FD0\u52A8", "sports"],
+    ent_nightlife_gaming: ["\u591C\u751F\u6D3B", "gaming"],
+    wellness: ["\u517B\u751F", "health"],
+    wellness_spa_massage: ["spa", "\u6309\u6469"],
+    wellness_beauty_salon: ["\u7F8E\u53D1", "\u7F8E\u5BB9\u9662"],
+    wellness_fitness: ["gym"],
+    wellness_medical: ["\u4F53\u68C0"],
+    wellness_onsen: ["\u6CE1\u6C64"],
+    telecom: ["\u901A\u4FE1", "\u6F2B\u6E38"],
+    telecom_sim_esim: ["sim card", "esim"],
+    telecom_wifi: ["wifi"],
+    telecom_mobile: ["\u624B\u673A\u5957\u9910"],
+    financial_service: ["\u91D1\u878D"],
+    fin_fx: ["\u6362\u6C47", "\u6C47\u6B3E", "foreign exchange"],
+    fin_installment: ["\u5206\u671F"],
+    fin_insurance: ["\u7406\u8D22"],
+    education: ["\u6559\u80B2"],
+    edu_study_abroad: ["\u7559\u5B66\u4E2D\u4ECB"],
+    edu_course: ["\u57F9\u8BAD", "\u8BFE\u7A0B"],
+    edu_tuition: ["\u4EA4\u5B66\u8D39", "tuition"],
+    edu_student_living: ["\u5B66\u751F\u4F18\u60E0"]
+  },
+  reward_type: {
+    discount: ["\u6253\u6298"],
+    cashback: ["\u73B0\u91D1\u56DE\u9988", "cash back"],
+    coupon: ["\u5238", "\u4EE3\u91D1\u5238", "\u5151\u6362\u5238", "voucher"],
+    points: ["reward points"],
+    privilege: ["\u7279\u6743"],
+    gift: ["\u8D60\u54C1", "\u793C\u54C1"]
+  },
+  attribute: {
+    new_customer: ["\u65B0\u7528\u6237"],
+    online_only: ["\u4EC5\u7EBF\u4E0A"],
+    instore_only: ["\u4EC5\u5230\u5E97"],
+    app_exclusive: ["\u5E94\u7528\u4E13\u4EAB"],
+    reservation_required: ["\u9700\u8981\u9884\u7EA6"],
+    family_friendly: ["\u4EB2\u5B50"],
+    couple: ["\u60C5\u4FA3"],
+    group: ["\u56E2\u4F53"],
+    senior_friendly: ["\u8001\u4EBA\u53CB\u597D"],
+    exclusive: ["\u4F1A\u5458\u4E13\u5C5E"]
+  },
+  card_level: {
+    signature: ["\u5FA1\u73BA"],
+    infinite: ["\u65E0\u9650"],
+    all: ["\u4E0D\u9650\u5361\u7B49\u7EA7"]
+  },
+  card_issuer: {
+    BOC: ["\u4E2D\u56FD\u94F6\u884C", "\u4E2D\u884C", "Bank of China"],
+    BOCOM: ["\u4EA4\u901A\u94F6\u884C", "\u4EA4\u884C", "Bank of Communications"],
+    CCB: ["\u5EFA\u8BBE\u94F6\u884C", "\u5EFA\u884C", "China Construction Bank"],
+    ICBC: ["\u5DE5\u5546\u94F6\u884C", "\u5DE5\u884C", "Industrial and Commercial Bank of China"],
+    ABC: ["\u519C\u4E1A\u94F6\u884C", "\u519C\u884C", "Agricultural Bank of China"],
+    CITIC: ["\u4E2D\u4FE1\u94F6\u884C", "\u4E2D\u4FE1"],
+    CGB: ["\u5E7F\u53D1\u94F6\u884C", "\u5E7F\u53D1"],
+    CMB: ["\u62DB\u5546\u94F6\u884C", "\u62DB\u884C", "China Merchants Bank"],
+    PAB: ["\u5E73\u5B89\u94F6\u884C"],
+    SPDB: ["\u6D66\u53D1\u94F6\u884C", "\u6D66\u53D1"],
+    CIB: ["\u5174\u4E1A\u94F6\u884C"],
+    HXB: ["\u534E\u590F\u94F6\u884C"],
+    CMBC: ["\u6C11\u751F\u94F6\u884C", "\u6C11\u751F"],
+    CEB: ["\u5149\u5927\u94F6\u884C", "\u5149\u5927"],
+    CITI: ["\u82B1\u65D7\u94F6\u884C", "\u82B1\u65D7", "Citibank"],
+    SCB: ["\u6E23\u6253\u94F6\u884C", "\u6E23\u6253", "Standard Chartered"],
+    PSBC: ["\u90AE\u50A8\u94F6\u884C", "\u4E2D\u56FD\u90AE\u653F\u50A8\u84C4\u94F6\u884C"]
+  }
+};
+var ANCESTOR_OVERRIDES = {
+  category: {
+    dining_delivery_food: ["dining"]
+  }
+};
+var PROGRAM_INTENT_PATTERN = /(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?|rewards?|perks?|promotions?)/iu;
+var EXPLICIT_ALL_PATTERN = /(?:全部|所有|全量|\b(?:all|every)\b)/iu;
+var BROAD_CHINESE_PATTERN = /(?:visa\s*(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?)?\s*(?:都)?(?:有哪些|有那些|有什么|有什麼|有咩)|(?:有哪些|有那些|有什么|有什麼|有咩)\s*(?:visa\s*)?(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?))/iu;
+var BROAD_ENGLISH_PATTERN = /(?:\b(?:what|which)\b.{0,40}\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b|\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b.{0,40}\b(?:available|offered|exist)\b)/iu;
+function buildVisaTaxonomyIndex(payload) {
+  const root = unwrapRecord2(payload);
+  const index = Object.fromEntries(VISA_FILTER_AXES.map((axis) => [axis, []]));
+  for (const axis of VISA_FILTER_AXES) {
+    if (axis === "card_issuer") {
+      continue;
+    }
+    const source = root[axis];
+    collectTaxonomyEntries(source, index[axis]);
+  }
+  for (const axis of VISA_FILTER_AXES) {
+    const knownCodes = new Set(index[axis].map((entry) => entry.code.toLowerCase()));
+    for (const [code, aliases] of Object.entries(ALIAS_OVERRIDES[axis] ?? {})) {
+      const ancestorCodes = [...ANCESTOR_OVERRIDES[axis]?.[code] ?? []];
+      const existing = index[axis].find((entry) => entry.code.toLowerCase() === code.toLowerCase());
+      if (existing) {
+        existing.aliases = unique([...existing.aliases, ...aliases]);
+        existing.ancestorCodes = unique([
+          ...existing.ancestorCodes,
+          ...ancestorCodes
+        ]);
+      } else if (!knownCodes.has(code.toLowerCase())) {
+        index[axis].push({
+          code,
+          aliases: unique(aliases),
+          ancestorCodes
+        });
+      }
+    }
+  }
+  return index;
+}
+function mapNaturalLanguageFilters(query, taxonomy, market) {
+  const text = normalizeText(query);
+  const result = {};
+  if (!text) {
+    return result;
+  }
+  for (const axis of VISA_FILTER_AXES) {
+    for (const entry of taxonomy[axis]) {
+      if (entry.aliases.some((alias) => containsAlias(text, alias))) {
+        addAxisValue(result, axis, entry.code);
+      }
+    }
+  }
+  if (["\u9AD8\u7AEF\u793C\u9047", "\u9AD8\u7AEF\u6743\u76CA", "\u9876\u7EA7\u793C\u9047", "\u5C0A\u4EAB\u793C\u9047", "premium visa benefits"].some((alias) => containsAlias(text, alias))) {
+    addAxisValue(result, "card_level", "infinite");
+    addAxisValue(result, "card_level", "signature");
+  }
+  const explicitAssignments = text.matchAll(/\b(region|category|purpose|reward_type|attribute|card_level|card_issuer)\s*=\s*([a-z0-9_]+)/gu);
+  for (const match of explicitAssignments) {
+    const axis = match[1];
+    const code = match[2];
+    if (axis && code) {
+      const canonical = canonicalCode(taxonomy[axis], code);
+      if (canonical) {
+        addAxisValue(result, axis, canonical);
+      }
+    }
+  }
+  removeInferredAncestorValues(result, taxonomy);
+  if (["\u8FD4\u73B0\u6D3B\u52A8", "\u62A5\u540D\u6D3B\u52A8", "\u9700\u8981\u62A5\u540D", "\u9700\u62A5\u540D", "cashback campaign", "enrollment required"].some((alias) => containsAlias(text, alias))) {
+    result.type = "reward";
+  } else if (["\u53EA\u770B\u793C\u9047", "\u4E0D\u8981\u6D3B\u52A8", "\u4EC5\u793C\u9047", "benefits only", "no campaigns"].some((alias) => containsAlias(text, alias))) {
+    result.type = "benefit";
+  }
+  if (market === "hk") {
+    delete result.card_issuer;
+  }
+  removeIssuingMarketFromDestination(result, text, market);
+  return result;
+}
+function normalizeRecommendationFilters(raw, taxonomy) {
+  const normalized = {};
+  for (const axis of VISA_FILTER_AXES) {
+    const values = raw[axis] ?? [];
+    const canonicalValues = unique(values.map((value) => canonicalCode(taxonomy[axis], value)).filter((value) => value !== void 0));
+    if (canonicalValues.length !== values.length) {
+      const invalid = values.find((value) => !canonicalCode(taxonomy[axis], value));
+      throw validationError(`unsupported Visa ${axis} taxonomy code: ${invalid}`);
+    }
+    if (canonicalValues.length > 0) {
+      assignAxis(normalized, axis, canonicalValues);
+    }
+  }
+  if (raw.type !== void 0) {
+    if (raw.type !== "reward" && raw.type !== "benefit") {
+      throw validationError("Visa offer type must be reward or benefit");
+    }
+    normalized.type = raw.type;
+  }
+  const keyword = raw.keyword?.trim();
+  if (keyword) {
+    normalized.keyword = keyword;
+  }
+  const limit = Number(raw.limit ?? 10);
+  const page = Number(raw.page ?? 1);
+  normalized.limit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
+  normalized.page = Number.isInteger(page) && page > 0 ? page : 1;
+  return normalized;
+}
+function mergeRecommendationFilters(natural, explicit, taxonomy) {
+  const merged = {};
+  for (const axis of VISA_FILTER_AXES) {
+    const explicitValues = explicit[axis];
+    const values = explicitValues && explicitValues.length > 0 ? explicitValues : natural[axis] ?? [];
+    if (values.length > 0) {
+      assignAxis(merged, axis, values);
+    }
+  }
+  for (const key of ["type", "keyword", "limit", "page"]) {
+    const value = explicit[key] ?? natural[key];
+    if (value !== void 0) {
+      Object.assign(merged, { [key]: value });
+    }
+  }
+  return normalizeRecommendationFilters(merged, taxonomy);
+}
+function shouldFetchAllOffers(query, explicitAll, filters = {}, explicitPagination = false) {
+  if (explicitAll) {
+    return true;
+  }
+  const text = normalizeText(query);
+  if (!text || !PROGRAM_INTENT_PATTERN.test(text)) {
+    return false;
+  }
+  if (EXPLICIT_ALL_PATTERN.test(text)) {
+    return true;
+  }
+  if (explicitPagination || hasScopedFilters(filters)) {
+    return false;
+  }
+  return BROAD_CHINESE_PATTERN.test(text) || BROAD_ENGLISH_PATTERN.test(text);
+}
+function collectTaxonomyEntries(value, target, ancestorCodes = []) {
+  if (!isRecord19(value)) {
+    return;
+  }
+  for (const [code, rawEntry] of Object.entries(value)) {
+    if (code === "groups" || code === "countries") {
+      collectTaxonomyEntries(rawEntry, target, ancestorCodes);
+      continue;
+    }
+    if (!isRecord19(rawEntry)) {
+      continue;
+    }
+    const aliases = [
+      stringValue3(rawEntry.zh),
+      stringValue3(rawEntry.zhCN),
+      stringValue3(rawEntry.en),
+      stringValue3(rawEntry.label),
+      stringValue3(rawEntry.def)
+    ].filter((item) => Boolean(item));
+    let childAncestorCodes = ancestorCodes;
+    if (aliases.length > 0) {
+      mergeTaxonomyEntry(target, code, aliases, ancestorCodes);
+      childAncestorCodes = [...ancestorCodes, code];
+    }
+    if (isRecord19(rawEntry.children)) {
+      collectTaxonomyEntries(rawEntry.children, target, childAncestorCodes);
+    }
+  }
+}
+function mergeTaxonomyEntry(target, code, aliases, ancestorCodes) {
+  const existing = target.find((entry) => entry.code.toLowerCase() === code.toLowerCase());
+  if (existing) {
+    existing.aliases = unique([...existing.aliases, ...aliases]);
+    existing.ancestorCodes = unique([
+      ...existing.ancestorCodes,
+      ...ancestorCodes
+    ]);
+    return;
+  }
+  target.push({
+    code,
+    aliases: unique(aliases),
+    ancestorCodes: unique(ancestorCodes)
+  });
+}
+function canonicalCode(entries, value) {
+  const raw = value.trim();
+  const normalized = raw.toLowerCase();
+  return entries.find((entry) => entry.code.toLowerCase() === normalized)?.code ?? (/^[a-z0-9_]+$/iu.test(raw) ? raw : void 0);
+}
+function hasScopedFilters(filters) {
+  return VISA_FILTER_AXES.some((axis) => (filters[axis]?.length ?? 0) > 0) || Boolean(filters.type || filters.keyword);
+}
+function addAxisValue(result, axis, code) {
+  const current = result[axis] ?? [];
+  if (!current.includes(code)) {
+    assignAxis(result, axis, [...current, code]);
+  }
+}
+function assignAxis(target, axis, values) {
+  Object.assign(target, { [axis]: values });
+}
+function removeInferredAncestorValues(result, taxonomy) {
+  for (const axis of VISA_FILTER_AXES) {
+    const values = result[axis];
+    if (!values || values.length < 2) {
+      continue;
+    }
+    const selectedCodes = new Set(values.map((value) => value.toLowerCase()));
+    const ancestorCodes = new Set(taxonomy[axis].filter((entry) => selectedCodes.has(entry.code.toLowerCase())).flatMap((entry) => entry.ancestorCodes).map((code) => code.toLowerCase()));
+    const filtered = values.filter((value) => !ancestorCodes.has(value.toLowerCase()));
+    assignAxis(result, axis, filtered);
+  }
+}
+function removeIssuingMarketFromDestination(result, text, market) {
+  const rules = {
+    cn: {
+      issuing: ["\u5927\u9646\u6301\u5361", "\u4E2D\u56FD\u53D1\u884C", "mainland china-issued", "china-issued card"],
+      destination: ["\u53BB\u4E2D\u56FD\u5927\u9646", "\u5927\u9646\u65C5\u6E38", "\u5927\u9646\u6D88\u8D39", "to mainland china", "in mainland china"],
+      code: "cn"
+    },
+    hk: {
+      issuing: ["\u9999\u6E2F\u6301\u5361", "\u9999\u6E2F\u53D1\u5361", "\u9999\u6E2F\u53D1\u884C", "\u9999\u6E2F\u7248 app", "hong kong-issued", "hk-issued"],
+      destination: ["\u53BB\u9999\u6E2F", "\u9999\u6E2F\u65C5\u6E38", "\u9999\u6E2F\u6D88\u8D39", "to hong kong", "in hong kong"],
+      code: "hk"
+    },
+    tw: {
+      issuing: ["\u53F0\u6E7E\u6301\u5361", "\u53F0\u6E7E\u53D1\u5361", "\u53F0\u6E7E\u53D1\u884C", "\u53F0\u7248 app", "taiwan-issued", "tw-issued"],
+      destination: ["\u53BB\u53F0\u6E7E", "\u53F0\u6E7E\u65C5\u6E38", "\u53F0\u6E7E\u6D88\u8D39", "to taiwan", "in taiwan"],
+      code: "tw"
+    }
+  };
+  const rule = rules[market];
+  if (rule.issuing.some((alias) => containsAlias(text, alias)) && !rule.destination.some((alias) => containsAlias(text, alias)) && result.region) {
+    result.region = result.region.filter((code) => code !== rule.code);
+    if (result.region.length === 0) {
+      delete result.region;
+    }
+  }
+}
+function normalizeText(value) {
+  const replacements = [
+    ["\u9910\u5EF3", "\u9910\u5385"],
+    ["\u8CFC\u7269", "\u8D2D\u7269"],
+    ["\u512A\u60E0", "\u4F18\u60E0"],
+    ["\u79AE\u9047", "\u793C\u9047"],
+    ["\u6D3B\u52D5", "\u6D3B\u52A8"],
+    ["\u98EF\u5E97", "\u9152\u5E97"],
+    ["\u81FA\u7063", "\u53F0\u6E7E"],
+    ["\u53F0\u7063", "\u53F0\u6E7E"],
+    ["\u97D3\u570B", "\u97E9\u56FD"],
+    ["\u73FE\u91D1\u56DE\u994B", "\u8FD4\u73B0"],
+    ["\u6298\u6263\u512A\u60E0", "\u6298\u6263"],
+    ["\u7A4D\u5206", "\u79EF\u5206"],
+    ["\u6A5F\u5834", "\u673A\u573A"],
+    ["\u8CB4\u8CD3\u5EF3", "\u8D35\u5BBE\u5385"],
+    ["\u7C3D\u8B49", "\u7B7E\u8BC1"],
+    ["\u5C08\u5C6C", "\u4E13\u5C5E"],
+    ["\u7121\u9580\u6ABB", "\u65E0\u95E8\u69DB"],
+    ["\u9810\u7D04", "\u9884\u7EA6"],
+    ["\u767C\u5361", "\u53D1\u5361"],
+    ["\u9280\u884C", "\u94F6\u884C"]
+  ];
+  const simplified = replacements.reduce((result, [from, to]) => result.replaceAll(from, to), String(value ?? ""));
+  return simplified.toLowerCase().replace(/[，。！？、；："'`()[\]{}]/gu, " ").replace(/\s+/gu, " ").trim();
+}
+function containsAlias(text, alias) {
+  const normalizedAlias = normalizeText(alias);
+  if (!normalizedAlias) {
+    return false;
+  }
+  if (/^[a-z0-9 .&+/-]+$/u.test(normalizedAlias)) {
+    const pattern = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replace(/\s+/gu, "\\s+");
+    return new RegExp(`(?:^|[^a-z0-9])${pattern}(?:$|[^a-z0-9])`, "u").test(text);
+  }
+  return text.includes(normalizedAlias);
+}
+function unique(values) {
+  return [...new Set(values)];
+}
+function stringValue3(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function unwrapRecord2(value) {
+  if (!isRecord19(value)) {
+    return {};
+  }
+  if (isRecord19(value.data)) {
+    return value.data;
+  }
+  return value;
+}
+function isRecord19(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/service.js
+var BENEFIT_REQUIRED_SCOPE = "benefit:read";
+var BENEFIT_DEFAULT_POLL_SECONDS = 2;
+var POLL_SLOW_DOWN_SECONDS = 5;
+var VSRA_DEFAULT_POLL_SECONDS = 5;
+var ALL_OFFERS_PAGE_SIZE = 50;
+var ALL_OFFERS_MAX_PAGES = 100;
+var MERCHANT_CATEGORY_CODE_PATTERN = /^\d{4}$/u;
+async function startVisaLogin(options2) {
+  if (options2.dryRun) {
+    throw validationError("--start cannot be combined with --dry-run");
+  }
+  const now = options2.now ?? Date.now;
+  const resolveAgentClient = options2.resolveAgentClient ?? resolveAgentClientBootstrap;
+  let storedConfig = await recoverStoredVisaConfig(now());
+  assertBenefitLoginEnvironment(storedConfig.authorization, options2.baseUrl);
+  const existingPending = storedConfig.visa?.pendingBenefitLogin;
+  if (existingPending) {
+    if (!sameHttpOrigin(existingPending.baseUrl, options2.baseUrl)) {
+      throw configError("a pending Visa login belongs to a different API environment; resume it in that environment or wait for it to expire");
+    }
+    if (!options2.instructionContext) {
+      return {
+        result: pendingBenefitResult(existingPending, "authorization_pending", true),
+        storedConfig
+      };
+    }
+  }
+  const deviceId = storedConfig.authorization?.deviceId ?? storedConfig.visa?.deviceId ?? randomUUID5();
+  const agentClient = await resolveAgentClient(deviceId);
+  const pending = await createPendingBenefitLogin({
+    baseUrl: options2.baseUrl,
+    deviceId,
+    agentClient,
+    initialAuthorizationFingerprint: authorizationFingerprint(storedConfig.authorization),
+    timeoutMs: options2.timeoutMs,
+    now,
+    ...options2.instructionContext ? { instructionContext: options2.instructionContext } : {}
+  });
+  storedConfig = await recoverStoredVisaConfig(now());
+  return {
+    result: pendingBenefitResult(pending, "authorization_pending", false),
+    storedConfig
+  };
+}
+async function resumeVisaLogin(options2) {
+  if (options2.dryRun) {
+    throw validationError("--resume cannot be combined with --dry-run");
+  }
+  const now = options2.now ?? Date.now;
+  const storedConfig = await recoverStoredVisaConfig(now());
+  assertBenefitLoginEnvironment(storedConfig.authorization, options2.baseUrl);
+  const pending = storedConfig.visa?.pendingBenefitLogin;
+  if (!pending) {
+    throw authError("No pending Visa login is available to resume.");
+  }
+  if (pending.resumeId !== options2.resumeId) {
+    throw authError("A newer Visa init started; this resume command has been cancelled.");
+  }
+  if (!sameHttpOrigin(pending.baseUrl, options2.baseUrl)) {
+    throw configError("pending Visa login belongs to a different API environment");
+  }
+  if (authorizationFingerprint(storedConfig.authorization) !== pending.initialAuthorizationFingerprint) {
+    await discardPendingBenefitLogin(pending.resumeId, now());
+    throw authError("Authentication changed after Visa login started; the newer login was preserved.");
+  }
+  if (remainingMilliseconds(pending.expiresAt, now()) <= 0) {
+    await failVisaFlow("CLINK_BENEFIT_LOGIN_EXPIRED", "pendingBenefitLogin", now(), "EXPIRED", pending.deviceCode);
+    throw authError("Visa Benefit login expired; run `clink visa init --start` again.");
+  }
+  const polled = await pollBenefitToken({
+    baseUrl: options2.baseUrl,
+    deviceCode: pending.deviceCode,
+    timeoutMs: options2.timeoutMs
+  });
+  if (polled.status === "pending") {
+    return {
+      result: pendingBenefitResult(pending, "authorization_pending", true),
+      storedConfig: await recoverStoredVisaConfig(now())
+    };
+  }
+  if (polled.status === "processing") {
+    await setVisaFsmState("CLINK_LOGIN_EXCHANGING", now(), "pendingBenefitLogin", pending.deviceCode);
+    return {
+      result: pendingBenefitResult(pending, "authorization_processing", true),
+      storedConfig: await recoverStoredVisaConfig(now())
+    };
+  }
+  if (polled.status === "slow_down") {
+    const interval = Math.max(pending.interval + POLL_SLOW_DOWN_SECONDS, polled.interval ?? 0);
+    const slowed = { ...pending, interval };
+    await updateStoredConfig((current) => {
+      const visa = ensureVisaState(current);
+      if (visa.pendingBenefitLogin?.resumeId !== pending.resumeId) {
+        return current;
+      }
+      visa.pendingBenefitLogin = slowed;
+      current.visa = visa;
+      return current;
+    });
+    return {
+      result: pendingBenefitResult(slowed, "authorization_pending", true),
+      storedConfig: await recoverStoredVisaConfig(now())
+    };
+  }
+  if (polled.status === "success") {
+    await setVisaFsmState("CLINK_LOGIN_EXCHANGING", now(), "pendingBenefitLogin", pending.deviceCode);
+    return persistBenefitAuthorization({
+      expectedAuthorizationFingerprint: pending.initialAuthorizationFingerprint,
+      deviceId: pending.installationId,
+      pendingDeviceCode: pending.deviceCode,
+      baseUrl: options2.baseUrl,
+      token: polled.token,
+      timeoutMs: options2.timeoutMs,
+      now
+    });
+  }
+  if (polled.status === "expired") {
+    await failVisaFlow("CLINK_BENEFIT_LOGIN_EXPIRED", "pendingBenefitLogin", now(), "EXPIRED", pending.deviceCode);
+    throw authError("Visa Benefit login expired; run `clink visa init --start` again.");
+  }
+  if (polled.status === "denied") {
+    await failVisaFlow("CLINK_BENEFIT_ACCESS_DENIED", "pendingBenefitLogin", now(), "FAILED", pending.deviceCode);
+    throw authError("Visa Benefit authorization was denied.");
+  }
+  await failVisaFlow(polled.error || "CLINK_BENEFIT_AUTHORIZATION_FAILED", "pendingBenefitLogin", now(), "FAILED", pending.deviceCode);
+  throw authError("Visa Benefit authorization failed.");
+}
+async function initializeVisaLogin(options2) {
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? delay;
+  const resolveAgentClient = options2.resolveAgentClient ?? resolveAgentClientBootstrap;
+  let storedConfig = options2.dryRun ? normalizeVisaConfig(cloneStoredConfig(options2.storedConfig)) : await recoverStoredVisaConfig(now());
+  const deviceId = storedConfig.authorization?.deviceId ?? storedConfig.visa?.deviceId ?? randomUUID5();
+  if (options2.dryRun) {
+    const agentClient2 = await resolveAgentClient(deviceId);
+    const result = await createBenefitAuthorization({
+      baseUrl: options2.baseUrl,
+      deviceId,
+      agentClient: agentClient2,
+      timeoutMs: options2.timeoutMs,
+      dryRun: true,
+      ...options2.instructionContext ? { instructionContext: options2.instructionContext } : {}
+    });
+    return { result, storedConfig };
+  }
+  const existing = storedConfig.authorization;
+  assertBenefitLoginEnvironment(existing, options2.baseUrl);
+  const agentClient = await resolveAgentClient(deviceId);
+  const initialAuthorization = storedConfig.authorization ? { ...storedConfig.authorization } : void 0;
+  let pending = await createPendingBenefitLogin({
+    baseUrl: options2.baseUrl,
+    deviceId,
+    agentClient,
+    initialAuthorizationFingerprint: authorizationFingerprint(initialAuthorization),
+    timeoutMs: options2.timeoutMs,
+    now,
+    ...options2.instructionContext ? { instructionContext: options2.instructionContext } : {}
+  });
+  await options2.onAuthorization?.({
+    provider: "vsrp",
+    url: pending.authorizationUrl,
+    expiresAt: pending.expiresAt
+  });
+  let intervalSeconds = Math.max(BENEFIT_DEFAULT_POLL_SECONDS, positiveNumber4(pending.interval) ?? BENEFIT_DEFAULT_POLL_SECONDS);
+  while (remainingMilliseconds(pending.expiresAt, now()) > 0) {
+    const remaining = remainingMilliseconds(pending.expiresAt, now());
+    await sleep3(Math.min(intervalSeconds * 1e3, remaining));
+    if (remainingMilliseconds(pending.expiresAt, now()) <= 0) {
+      break;
+    }
+    let polled;
+    try {
+      polled = await pollBenefitToken({
+        baseUrl: options2.baseUrl,
+        deviceCode: pending.deviceCode,
+        timeoutMs: options2.timeoutMs
+      });
+    } catch (error) {
+      await failVisaFlow("CWALLET_BENEFIT_POLL_FAILED", "pendingBenefitLogin", now(), "FAILED", pending.deviceCode);
+      throw error;
+    }
+    if (polled.status === "pending") {
+      continue;
+    }
+    if (polled.status === "processing") {
+      await setVisaFsmState("CLINK_LOGIN_EXCHANGING", now(), "pendingBenefitLogin", pending.deviceCode);
+      continue;
+    }
+    if (polled.status === "slow_down") {
+      intervalSeconds = Math.max(intervalSeconds + POLL_SLOW_DOWN_SECONDS, polled.interval ?? 0);
+      pending = { ...pending, interval: intervalSeconds };
+      const nextPending = { ...pending };
+      await updateStoredConfig((current) => {
+        const visa = ensureVisaState(current);
+        if (visa.pendingBenefitLogin?.deviceCode !== nextPending.deviceCode) {
+          return current;
+        }
+        visa.pendingBenefitLogin = nextPending;
+        current.visa = visa;
+        return current;
+      });
+      continue;
+    }
+    if (polled.status === "success") {
+      await setVisaFsmState("CLINK_LOGIN_EXCHANGING", now(), "pendingBenefitLogin", pending.deviceCode);
+      return persistBenefitAuthorization({
+        expectedAuthorizationFingerprint: pending.initialAuthorizationFingerprint,
+        deviceId,
+        pendingDeviceCode: pending.deviceCode,
+        baseUrl: options2.baseUrl,
+        token: polled.token,
+        timeoutMs: options2.timeoutMs,
+        now
+      });
+    }
+    if (polled.status === "expired") {
+      await failVisaFlow("CLINK_BENEFIT_LOGIN_EXPIRED", "pendingBenefitLogin", now(), "EXPIRED", pending.deviceCode);
+      throw authError("Visa Benefit login expired; run `clink visa init` again.");
+    }
+    if (polled.status === "denied") {
+      await failVisaFlow("CLINK_BENEFIT_ACCESS_DENIED", "pendingBenefitLogin", now(), "FAILED", pending.deviceCode);
+      throw authError("Visa Benefit authorization was denied.");
+    }
+    await failVisaFlow(polled.error || "CLINK_BENEFIT_AUTHORIZATION_FAILED", "pendingBenefitLogin", now(), "FAILED", pending.deviceCode);
+    throw authError("Visa Benefit authorization failed.");
+  }
+  await failVisaFlow("CLINK_BENEFIT_LOGIN_EXPIRED", "pendingBenefitLogin", now(), "EXPIRED", pending.deviceCode);
+  throw authError("Visa Benefit login expired; run `clink visa init` again.");
+}
+async function ensureVsraReady(options2) {
+  if (options2.dryRun) {
+    throw validationError("--dry-run cannot be combined with --personalized");
+  }
+  const now = options2.now ?? Date.now;
+  const sleep3 = options2.sleep ?? delay;
+  const baseUrl = resolveVsraBaseUrl(options2.market);
+  let storedConfig = await recoverStoredVisaConfig(now());
+  const existingToken = storedConfig.visa?.vsraTokens[options2.market]?.apiToken;
+  if (existingToken) {
+    try {
+      const status = await probeVsraApiToken({
+        baseUrl,
+        apiToken: existingToken,
+        locale: options2.locale,
+        timeoutMs: options2.timeoutMs
+      });
+      if (status === "valid") {
+        const updated = await updateStoredConfig((current) => {
+          const visa = ensureVisaState(current);
+          visa.activeMarket = options2.market;
+          if (!isClinkFlowState(visa.fsmState)) {
+            current.visa = transitionVisaState(visa, "VSRA_READY", { now: now() });
+          } else {
+            current.visa = visa;
+          }
+          return current;
+        });
+        return { apiToken: existingToken, source: "existing", storedConfig: updated };
+      }
+      storedConfig = await removeVsraToken(options2.market, now());
+    } catch (error) {
+      await failVisaFlow("VSRA_TOKEN_PROBE_FAILED", void 0, now());
+      throw error;
+    }
+  }
+  let pending = reusableVsraPending(storedConfig, options2.market, baseUrl, now());
+  if (!pending) {
+    pending = await createPendingVsraLogin({
+      market: options2.market,
+      baseUrl,
+      timeoutMs: options2.timeoutMs,
+      now
+    });
+  }
+  await options2.onAuthorization?.({
+    provider: "vsra",
+    url: pending.verificationUriComplete,
+    verificationUri: pending.verificationUri,
+    userCode: pending.userCode,
+    expiresAt: pending.expiresAt
+  });
+  let intervalSeconds = Math.max(VSRA_DEFAULT_POLL_SECONDS, positiveNumber4(pending.interval) ?? VSRA_DEFAULT_POLL_SECONDS);
+  while (remainingMilliseconds(pending.expiresAt, now()) > 0) {
+    const remaining = remainingMilliseconds(pending.expiresAt, now());
+    await sleep3(Math.min(intervalSeconds * 1e3, remaining));
+    if (remainingMilliseconds(pending.expiresAt, now()) <= 0) {
+      break;
+    }
+    let polled;
+    try {
+      polled = await pollVsraDeviceToken({
+        baseUrl,
+        deviceCode: pending.deviceCode,
+        timeoutMs: options2.timeoutMs
+      });
+    } catch (error) {
+      await failVisaFlow("VSRA_DEVICE_POLL_FAILED", "pendingVsraLogin", now(), "FAILED", pending.deviceCode);
+      throw error;
+    }
+    if (polled.status === "pending") {
+      continue;
+    }
+    if (polled.status === "slow_down") {
+      intervalSeconds = Math.max(intervalSeconds + POLL_SLOW_DOWN_SECONDS, polled.interval ?? 0);
+      pending = { ...pending, interval: intervalSeconds };
+      const nextPending = { ...pending };
+      await updateStoredConfig((current) => {
+        const visa = ensureVisaState(current);
+        if (visa.pendingVsraLogin?.deviceCode !== nextPending.deviceCode) {
+          return current;
+        }
+        visa.pendingVsraLogin = nextPending;
+        current.visa = visa;
+        return current;
+      });
+      continue;
+    }
+    if (polled.status === "success") {
+      const updated = await updateStoredConfig((current) => {
+        const visa = ensureVisaState(current);
+        visa.activeMarket = options2.market;
+        visa.vsraTokens[options2.market] = {
+          apiToken: polled.apiToken,
+          updatedAt: new Date(now()).toISOString()
+        };
+        delete visa.pendingVsraLogin;
+        current.visa = transitionVisaState(visa, "VSRA_READY", { now: now() });
+        return current;
+      });
+      return {
+        apiToken: polled.apiToken,
+        source: "device_flow",
+        storedConfig: updated
+      };
+    }
+    if (polled.status === "expired") {
+      await failVisaFlow("VSRA_DEVICE_CODE_EXPIRED", "pendingVsraLogin", now(), "EXPIRED", pending.deviceCode);
+      throw authError("VSRA authorization expired; run `clink visa vsra-init` again.");
+    }
+    if (polled.status === "denied") {
+      await failVisaFlow("VSRA_ACCESS_DENIED", "pendingVsraLogin", now(), "FAILED", pending.deviceCode);
+      throw authError("VSRA authorization was denied.");
+    }
+    await failVisaFlow(polled.error || "VSRA_DEVICE_AUTHORIZATION_FAILED", "pendingVsraLogin", now(), "FAILED", pending.deviceCode);
+    throw authError("VSRA authorization failed.");
+  }
+  await failVisaFlow("VSRA_DEVICE_CODE_EXPIRED", "pendingVsraLogin", now(), "EXPIRED", pending.deviceCode);
+  throw authError("VSRA authorization expired; run `clink visa vsra-init` again.");
+}
+async function getVisaStatus(options2) {
+  const now = options2.now ?? Date.now;
+  let storedConfig = await recoverStoredVisaConfig(now());
+  const baseUrl = resolveVsraBaseUrl(options2.market);
+  const token = storedConfig.visa?.vsraTokens[options2.market]?.apiToken;
+  let vsraStatus = "logged_out";
+  let vsraReason;
+  if (token) {
+    try {
+      const status = await probeVsraApiToken({
+        baseUrl,
+        apiToken: token,
+        locale: options2.locale,
+        timeoutMs: options2.timeoutMs
+      });
+      if (status === "valid") {
+        vsraStatus = "logged_in";
+      } else {
+        storedConfig = await removeVsraToken(options2.market, now());
+        vsraReason = "token_expired";
+      }
+    } catch {
+      vsraStatus = "unknown";
+      vsraReason = "probe_failed";
+    }
+  }
+  const authorization = storedConfig.authorization;
+  const visa = storedConfig.visa ?? defaultVisaState();
+  return {
+    result: {
+      fsmState: visa.fsmState,
+      fsmUpdatedAt: visa.fsmUpdatedAt ?? null,
+      lastError: visa.lastError?.code ?? null,
+      market: options2.market,
+      vsra: {
+        status: vsraStatus,
+        ...vsraReason ? { reason: vsraReason } : {}
+      },
+      clink: {
+        status: authorizationUsable2(authorization, now()) ? "ready" : "logged_out",
+        customerId: authorization?.customerId ?? null,
+        hasEmail: Boolean(storedConfig.email),
+        authorizationType: authorization ? "oauth" : null,
+        hasBenefitScope: authorization ? authorizationHasScope(authorization, BENEFIT_REQUIRED_SCOPE) : false,
+        benefitConnected: authorization ? benefitConnectionMatches(storedConfig, authorization) : false,
+        agentClientId: authorization?.agentClientId ?? null,
+        visaRegistrationStatus: authorization?.visaRegistrationStatus ?? null,
+        accessTokenExpiresAt: authorization ? new Date(authorization.accessTokenExpiresAt).toISOString() : null,
+        refreshTokenExpiresAt: authorization ? new Date(authorization.refreshTokenExpiresAt).toISOString() : null
+      },
+      pending: {
+        vsraExpiresAt: visa.pendingVsraLogin?.expiresAt ?? null,
+        benefitExpiresAt: visa.pendingBenefitLogin?.expiresAt ?? null
+      },
+      configPath: "~/.clink-cli/config.json"
+    },
+    storedConfig
+  };
+}
+function getVisaBenefitLoginReadiness(options2) {
+  const now = options2.now ?? Date.now();
+  const authorization = options2.storedConfig.authorization;
+  const environmentMatches = authorization ? sameHttpOrigin(authorization.issuerOrigin, options2.baseUrl) : false;
+  const accessReady = environmentMatches && authorizationUsable2(authorization, now);
+  const hasBenefitScope = accessReady && authorization !== void 0 && authorizationHasScope(authorization, BENEFIT_REQUIRED_SCOPE);
+  const benefitConnected = accessReady && authorization !== void 0 && benefitConnectionMatches(options2.storedConfig, authorization);
+  return {
+    ready: accessReady && hasBenefitScope && benefitConnected,
+    detail: {
+      status: accessReady ? "ready" : "logged_out",
+      environmentMatches,
+      customerId: authorization?.customerId ?? null,
+      hasBenefitScope,
+      benefitConnected,
+      authorizationType: authorization ? "oauth" : null,
+      visaRegistrationStatus: authorization?.visaRegistrationStatus ?? null
+    }
+  };
+}
+async function recommendVisaOffers(options2) {
+  if (options2.personalization === "required" && options2.dryRun) {
+    throw validationError("--dry-run cannot be combined with --personalized");
+  }
+  const baseUrl = resolveVsraBaseUrl(options2.market);
+  let storedConfig = normalizeVisaConfig(options2.storedConfig);
+  let taxonomyPayload = {};
+  if (!options2.dryRun) {
+    const taxonomyResponse = await requestVsraTaxonomy({
+      baseUrl,
+      locale: options2.locale,
+      timeoutMs: options2.timeoutMs,
+      dryRun: false
+    });
+    if (isDryRun5(taxonomyResponse)) {
+      throw apiError("unexpected Visa taxonomy dry-run response");
+    }
+    taxonomyPayload = requireVsraSuccess(taxonomyResponse, "Visa taxonomy");
+  }
+  const taxonomy = buildVisaTaxonomyIndex(taxonomyPayload);
+  const naturalFilters = mapNaturalLanguageFilters(options2.query, taxonomy, options2.market);
+  let filters = mergeRecommendationFilters(naturalFilters, options2.filters, taxonomy);
+  const fetchAll = options2.all || shouldFetchAllOffers(options2.query, false, filters, options2.filters.limit !== void 0 || options2.filters.page !== void 0);
+  if (fetchAll) {
+    filters = { ...filters, limit: ALL_OFFERS_PAGE_SIZE, page: 1 };
+  }
+  let apiToken;
+  if (options2.personalization === "required") {
+    const ready = await ensureVsraReady({
+      ...options2,
+      storedConfig,
+      market: options2.market,
+      locale: options2.locale
+    });
+    storedConfig = ready.storedConfig;
+    apiToken = ready.apiToken;
+  } else if (options2.personalization === "auto" && !options2.dryRun) {
+    const token = storedConfig.visa?.vsraTokens[options2.market]?.apiToken;
+    if (token) {
+      const status = await probeVsraApiToken({
+        baseUrl,
+        apiToken: token,
+        locale: options2.locale,
+        timeoutMs: options2.timeoutMs
+      });
+      if (status === "valid") {
+        apiToken = token;
+      } else {
+        storedConfig = await removeVsraToken(options2.market, options2.now?.() ?? Date.now());
+      }
+    }
+  }
+  let fetched = await fetchRecommendationPages({
+    baseUrl,
+    locale: options2.locale,
+    ...apiToken ? { apiToken } : {},
+    filters,
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun,
+    fetchAll
+  });
+  if (apiToken && options2.personalization !== "required" && !isDryRun5(fetched.response) && (fetched.response.status === 401 || fetched.response.status === 403)) {
+    storedConfig = await removeVsraToken(options2.market, options2.now?.() ?? Date.now());
+    apiToken = void 0;
+    fetched = await fetchRecommendationPages({
+      baseUrl,
+      locale: options2.locale,
+      filters,
+      timeoutMs: options2.timeoutMs,
+      dryRun: false,
+      fetchAll
+    });
+  }
+  if (isDryRun5(fetched.response)) {
+    return { result: fetched.response, storedConfig };
+  }
+  const responseBody = requireVsraSuccess(fetched.response, "Visa recommendation");
+  requireExplicitRecommendationFiltersPreserved(responseBody, options2.filters);
+  const response = enrichRecommendationCommerce(fetched.aggregatedResponse ?? responseBody);
+  const recommendation = describeRecommendationResult(response, fetchAll);
+  return {
+    result: {
+      personalized: Boolean(apiToken),
+      filters,
+      allOffers: fetchAll,
+      pagesFetched: fetched.pagesFetched,
+      ...recommendation,
+      response
+    },
+    storedConfig
+  };
+}
+function describeRecommendationResult(response, allOffersRequested) {
+  const data = responseDataRecord(response);
+  const relaxedAxes = recommendationRelaxedAxes(data);
+  const returnedOfferCount = arrayValue(data.items).length;
+  const recommendationMode = relaxedAxes.length > 0 ? "fallback_all_offers" : allOffersRequested ? "all_offers_requested" : returnedOfferCount === 0 ? "no_matching_offers" : "matching_offers";
+  return {
+    recommendationMode,
+    relaxedAxes,
+    returnedOfferCount
+  };
+}
+function requireExplicitRecommendationFiltersPreserved(body, explicitFilters) {
+  const data = responseDataRecord(body);
+  const relaxedAxes = recommendationRelaxedAxes(data);
+  if (relaxedAxes.length === 0) {
+    return;
+  }
+  const relaxed = new Set(relaxedAxes);
+  const violatedAxes = VISA_FILTER_AXES.filter((axis) => (explicitFilters[axis]?.length ?? 0) > 0 && relaxed.has(axis));
+  if (violatedAxes.length > 0) {
+    throw apiError(`Visa recommendation relaxed explicitly requested filters: ${violatedAxes.join(", ")}`);
+  }
+}
+function recommendationRelaxedAxes(data) {
+  return arrayValue(data.relaxed_axes).filter((value) => typeof value === "string").map((value) => value.trim().toLowerCase()).filter(Boolean);
+}
+async function getVisaTaxonomy(options2) {
+  const response = await requestVsraTaxonomy({
+    baseUrl: resolveVsraBaseUrl(options2.market),
+    locale: options2.locale,
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa taxonomy");
+}
+async function getVisaProgramDetail(options2) {
+  const code = options2.code.trim();
+  if (!code) {
+    throw validationError("Visa Program code is required");
+  }
+  const response = await requestVsraProgramDetail({
+    baseUrl: resolveVsraBaseUrl(options2.market),
+    locale: options2.locale,
+    code,
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa Program detail");
+}
+function parseVisaMarket(value, storedConfig) {
+  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "cn");
+}
+function normalizeVisaLocale(value) {
+  const locale = String(value ?? "zh-CN").trim().replaceAll("_", "-").toLowerCase();
+  if (locale.startsWith("en")) {
+    return "en";
+  }
+  if (locale === "zh-hk" || locale === "zh-mo") {
+    return "zh-HK";
+  }
+  if (locale === "zh-tw" || locale.startsWith("zh-hant")) {
+    return "zh-TW";
+  }
+  return "zh-CN";
+}
+function parseVisaFilterValues(value) {
+  if (!value) {
+    return [];
+  }
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+async function createPendingBenefitLogin(options2) {
+  const resumeId = randomUUID5();
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    delete visa.pendingBenefitLogin;
+    delete visa.pendingVsraLogin;
+    visa.deviceId = options2.deviceId;
+    visa.pendingBenefitLoginGeneration = resumeId;
+    current.visa = transitionVisaState(visa, "CLINK_LOGIN_CREATING", {
+      now: options2.now()
+    });
+    return current;
+  });
+  let authorization;
+  try {
+    const result = await createBenefitAuthorization({
+      baseUrl: options2.baseUrl,
+      deviceId: options2.deviceId,
+      agentClient: options2.agentClient,
+      timeoutMs: options2.timeoutMs,
+      dryRun: false,
+      ...options2.instructionContext ? { instructionContext: options2.instructionContext } : {}
+    });
+    if (isDryRun5(result)) {
+      throw apiError("unexpected Benefit authorization dry-run response");
+    }
+    authorization = result;
+  } catch (error) {
+    await failVisaBenefitCreation(resumeId, "CWALLET_BENEFIT_AUTHORIZATION_FAILED", options2.now());
+    throw error;
+  }
+  const nowValue = options2.now();
+  const expiresIn = authorization.expiresIn;
+  const pending = {
+    baseUrl: options2.baseUrl,
+    deviceCode: authorization.deviceCode,
+    state: authorization.state,
+    authorizationUrl: authorization.authorizationUrl,
+    resumeId,
+    initialAuthorizationFingerprint: options2.initialAuthorizationFingerprint,
+    installationId: options2.deviceId,
+    agentClientDeviceId: options2.agentClient.deviceId,
+    interval: Math.max(BENEFIT_DEFAULT_POLL_SECONDS, positiveNumber4(authorization.interval) ?? BENEFIT_DEFAULT_POLL_SECONDS),
+    createdAt: new Date(nowValue).toISOString(),
+    expiresAt: new Date(nowValue + expiresIn * 1e3).toISOString()
+  };
+  let creationError;
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (visa.pendingBenefitLoginGeneration !== resumeId) {
+      creationError = authError("A newer Visa init started; this login attempt has been cancelled.");
+      return current;
+    }
+    if (authorizationFingerprint(current.authorization) !== options2.initialAuthorizationFingerprint) {
+      creationError = authError("Authentication changed while Visa login was starting; the newer login was preserved.");
+      delete visa.pendingBenefitLoginGeneration;
+      current.visa = recoverVisaState(visa, current.authorization, options2.now());
+      return current;
+    }
+    visa.deviceId = options2.deviceId;
+    visa.pendingBenefitLogin = { ...pending };
+    delete visa.pendingBenefitLoginGeneration;
+    current.visa = transitionVisaState(visa, "CLINK_LOGIN_PENDING", {
+      now: options2.now()
+    });
+    return current;
+  });
+  if (creationError) {
+    throw creationError;
+  }
+  return pending;
+}
+async function createPendingVsraLogin(options2) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    delete visa.pendingBenefitLogin;
+    visa.activeMarket = options2.market;
+    current.visa = transitionVisaState(visa, "VSRA_LOGIN_REQUIRED", {
+      now: options2.now()
+    });
+    return current;
+  });
+  let authorization;
+  try {
+    authorization = await createVsraDeviceAuthorization({
+      baseUrl: options2.baseUrl,
+      timeoutMs: options2.timeoutMs
+    });
+  } catch (error) {
+    await failVisaFlow("VSRA_DEVICE_AUTHORIZATION_FAILED", void 0, options2.now());
+    throw error;
+  }
+  const nowValue = options2.now();
+  const pending = {
+    market: options2.market,
+    baseUrl: options2.baseUrl,
+    deviceCode: authorization.deviceCode,
+    userCode: authorization.userCode,
+    verificationUri: authorization.verificationUri,
+    verificationUriComplete: authorization.verificationUriComplete,
+    interval: Math.max(VSRA_DEFAULT_POLL_SECONDS, positiveNumber4(authorization.interval) ?? VSRA_DEFAULT_POLL_SECONDS),
+    createdAt: new Date(nowValue).toISOString(),
+    expiresAt: new Date(nowValue + authorization.expiresIn * 1e3).toISOString()
+  };
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    visa.activeMarket = options2.market;
+    visa.pendingVsraLogin = { ...pending };
+    current.visa = transitionVisaState(visa, "VSRA_LOGIN_PENDING", {
+      now: options2.now()
+    });
+    return current;
+  });
+  return pending;
+}
+async function persistBenefitAuthorization(options2) {
+  const authorization = toStoredAuthorization(options2.deviceId, options2.token, options2.baseUrl, options2.now());
+  let replacedAuthorization;
+  let persistenceError;
+  const updated = await updateStoredConfig((current) => {
+    if (current.visa?.pendingBenefitLogin?.deviceCode !== options2.pendingDeviceCode) {
+      persistenceError = authError("A newer Visa init started; this login attempt has been cancelled.");
+      return current;
+    }
+    if (authorizationFingerprint(current.authorization) !== options2.expectedAuthorizationFingerprint) {
+      persistenceError = authError("Authentication changed while Visa login was in progress; the newer login was preserved.");
+      return current;
+    }
+    if (current.authorization && current.authorization.customerId !== authorization.customerId) {
+      persistenceError = authError("Visa login returned a different customer; log out before switching accounts.");
+      return current;
+    }
+    replacedAuthorization = current.authorization ? { ...current.authorization } : void 0;
+    const customerChanged = Boolean(current.customerId) && current.customerId !== authorization.customerId;
+    current.baseUrl = options2.baseUrl;
+    current.customerId = authorization.customerId;
+    current.authorization = { ...authorization };
+    current.oauthRequired = true;
+    delete current.customerApiKey;
+    if (customerChanged) {
+      delete current.name;
+      delete current.paymentMethods;
+      delete current.riskRules;
+    }
+    current.email = options2.token.email;
+    const visa = ensureVisaState(current);
+    visa.deviceId = options2.deviceId;
+    visa.benefitConnection = {
+      customerId: authorization.customerId,
+      issuerOrigin: authorization.issuerOrigin,
+      connectedAt: new Date(options2.now()).toISOString()
+    };
+    delete visa.pendingBenefitLogin;
+    delete visa.pendingBenefitLoginGeneration;
+    current.visa = transitionVisaState(visa, "CLINK_READY", { now: options2.now() });
+    return current;
+  });
+  if (persistenceError) {
+    await bestEffortRevoke(authorization, options2.timeoutMs);
+    await discardPendingBenefitLoginByDeviceCode(options2.pendingDeviceCode, options2.now());
+    throw persistenceError;
+  }
+  let previousAuthorizationRevoked = null;
+  if (replacedAuthorization && replacedAuthorization.refreshToken !== authorization.refreshToken) {
+    previousAuthorizationRevoked = await bestEffortRevoke(replacedAuthorization, options2.timeoutMs);
+  }
+  return {
+    result: {
+      status: "ready",
+      source: "benefit_oauth",
+      customerId: authorization.customerId,
+      agentClientId: authorization.agentClientId,
+      visaRegistrationStatus: authorization.visaRegistrationStatus,
+      pendingInstructionId: options2.token.pendingInstructionId ?? null,
+      oauthMode: options2.token.oauthMode ?? null,
+      customerCreated: options2.token.customerCreated ?? null,
+      activationDriver: options2.token.activationDriver ?? null,
+      hasEmail: true,
+      authorizationType: "oauth",
+      replacedAuthorization: Boolean(replacedAuthorization),
+      previousAuthorizationRevoked,
+      configPath: "~/.clink-cli/config.json"
+    },
+    storedConfig: updated
+  };
+}
+async function fetchRecommendationPages(options2) {
+  const firstResponse = await requestVsraRecommendation({
+    ...options2,
+    filters: { ...options2.filters, page: options2.filters.page }
+  });
+  if (isDryRun5(firstResponse) || !options2.fetchAll) {
+    return { response: firstResponse, pagesFetched: isDryRun5(firstResponse) ? 0 : 1 };
+  }
+  if (firstResponse.status === 401 || firstResponse.status === 403) {
+    return { response: firstResponse, pagesFetched: 1 };
+  }
+  const firstBody = requireVsraSuccess(firstResponse, "Visa recommendation");
+  const firstData = responseDataRecord(firstBody);
+  const firstItems = arrayValue(firstData.items);
+  const items = [];
+  const seenKeys = /* @__PURE__ */ new Set();
+  appendUniqueItems(items, seenKeys, firstItems);
+  let expectedTotal = finiteNonNegativeNumber(firstData.total);
+  let pageSize = reportedPageSize(firstData, options2.filters.limit);
+  let pagesFetched = 1;
+  let page = options2.filters.page;
+  let lastFingerprint = pageFingerprint(firstItems);
+  let lastPageCount = firstItems.length;
+  while (pagesFetched < ALL_OFFERS_MAX_PAGES && lastPageCount >= pageSize && (expectedTotal === void 0 || items.length < expectedTotal)) {
+    page += 1;
+    const response = await requestVsraRecommendation({
+      ...options2,
+      dryRun: false,
+      filters: { ...options2.filters, page }
+    });
+    if (isDryRun5(response)) {
+      throw apiError("unexpected Visa pagination dry-run response");
+    }
+    const body = requireVsraSuccess(response, "Visa recommendation");
+    const pageData = responseDataRecord(body);
+    const pageItems = arrayValue(pageData.items);
+    const pageTotal = finiteNonNegativeNumber(pageData.total);
+    if (pageTotal !== void 0) {
+      expectedTotal = expectedTotal === void 0 ? pageTotal : Math.max(expectedTotal, pageTotal);
+    }
+    pageSize = reportedPageSize(pageData, pageSize);
+    pagesFetched += 1;
+    const fingerprint = pageFingerprint(pageItems);
+    const before = items.length;
+    appendUniqueItems(items, seenKeys, pageItems);
+    lastPageCount = pageItems.length;
+    if (pageItems.length === 0 || fingerprint === lastFingerprint || items.length === before) {
+      if (pageItems.length >= pageSize || expectedTotal !== void 0 && items.length < expectedTotal) {
+        throw apiError("Visa recommendation pagination stalled on a repeated page");
+      }
+      break;
+    }
+    if (pageItems.length < pageSize && expectedTotal !== void 0 && items.length < expectedTotal) {
+      throw apiError("Visa recommendation pagination ended before the reported total");
+    }
+    lastFingerprint = fingerprint;
+  }
+  if (pagesFetched >= ALL_OFFERS_MAX_PAGES && lastPageCount >= pageSize && (expectedTotal === void 0 || items.length < expectedTotal)) {
+    throw apiError("Visa recommendation pagination exceeded its safety limit");
+  }
+  return {
+    response: firstResponse,
+    aggregatedResponse: replaceResponseItems(firstBody, items),
+    pagesFetched
+  };
+}
+function replaceResponseItems(body, items) {
+  if (!isRecord20(body)) {
+    return {
+      data: {
+        total: items.length,
+        page: 1,
+        limit: ALL_OFFERS_PAGE_SIZE,
+        count: items.length,
+        items
+      }
+    };
+  }
+  if (isRecord20(body.data)) {
+    return {
+      ...body,
+      data: {
+        ...body.data,
+        total: items.length,
+        page: 1,
+        limit: ALL_OFFERS_PAGE_SIZE,
+        count: items.length,
+        items
+      }
+    };
+  }
+  return {
+    ...body,
+    total: items.length,
+    page: 1,
+    limit: ALL_OFFERS_PAGE_SIZE,
+    count: items.length,
+    items
+  };
+}
+function enrichRecommendationCommerce(body) {
+  if (!isRecord20(body)) {
+    return body;
+  }
+  if (isRecord20(body.data) && Array.isArray(body.data.items)) {
+    return {
+      ...body,
+      data: {
+        ...body.data,
+        items: body.data.items.map(enrichProgramCommerce)
+      }
+    };
+  }
+  if (Array.isArray(body.items)) {
+    return {
+      ...body,
+      items: body.items.map(enrichProgramCommerce)
+    };
+  }
+  return body;
+}
+function enrichProgramCommerce(value) {
+  if (!isRecord20(value)) {
+    return value;
+  }
+  if (value.commerce !== void 0 && !isRecord20(value.commerce)) {
+    return value;
+  }
+  const commerce = isRecord20(value.commerce) ? value.commerce : {};
+  const commerceMerchantCategoryCode = merchantCategoryCode(commerce.merchantCategoryCode);
+  if (commerceMerchantCategoryCode) {
+    return {
+      ...value,
+      commerce: {
+        ...commerce,
+        merchantCategoryCode: commerceMerchantCategoryCode,
+        merchantCategoryCodeSource: commerce.merchantCategoryCodeSource ?? "visa_program"
+      }
+    };
+  }
+  const existingMerchantCategoryCode = merchantCategoryCode(value.merchantCategoryCode);
+  if (existingMerchantCategoryCode) {
+    return {
+      ...value,
+      commerce: {
+        ...commerce,
+        merchantCategoryCode: existingMerchantCategoryCode,
+        merchantCategoryCodeSource: "visa_program"
+      }
+    };
+  }
+  return Object.hasOwn(commerce, "merchantCategoryCode") ? {
+    ...value,
+    commerce: withoutMerchantCategoryCode(commerce)
+  } : value;
+}
+function merchantCategoryCode(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const normalized = value.trim();
+  return MERCHANT_CATEGORY_CODE_PATTERN.test(normalized) ? normalized : void 0;
+}
+function withoutMerchantCategoryCode(commerce) {
+  const result = { ...commerce };
+  delete result.merchantCategoryCode;
+  delete result.merchantCategoryCodeSource;
+  return result;
+}
+function responseDataRecord(body) {
+  if (!isRecord20(body)) {
+    return {};
+  }
+  return isRecord20(body.data) ? body.data : body;
+}
+function appendUniqueItems(target, seenKeys, values) {
+  for (const value of values) {
+    const key = offerKey(value);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    target.push(value);
+  }
+}
+function offerKey(value) {
+  if (isRecord20(value)) {
+    for (const key of ["code", "id", "programCode", "program_code"]) {
+      const candidate = value[key];
+      if (typeof candidate === "string" && candidate.length > 0) {
+        return `${key}:${candidate}`;
+      }
+    }
+  }
+  try {
+    return `json:${JSON.stringify(value)}`;
+  } catch {
+    return `unknown:${String(value)}`;
+  }
+}
+function pageFingerprint(items) {
+  return items.map(offerKey).join("|");
+}
+async function recoverStoredVisaConfig(now) {
+  return updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    current.visa = recoverVisaState(visa, current.authorization, now);
+    return current;
+  });
+}
+async function removeVsraToken(market, now) {
+  return updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    delete visa.vsraTokens[market];
+    visa.activeMarket = market;
+    if (!isClinkFlowState(visa.fsmState)) {
+      current.visa = transitionVisaState(visa, "VSRA_LOGIN_REQUIRED", { now });
+    } else {
+      current.visa = visa;
+    }
+    return current;
+  });
+}
+async function setVisaFsmState(state, now, pendingKey, expectedDeviceCode) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (pendingKey && expectedDeviceCode && visa[pendingKey]?.deviceCode !== expectedDeviceCode) {
+      return current;
+    }
+    current.visa = transitionVisaState(visa, state, { now });
+    return current;
+  });
+}
+async function failVisaFlow(code, pendingKey, now, state = "FAILED", expectedDeviceCode) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (pendingKey && expectedDeviceCode && visa[pendingKey]?.deviceCode !== expectedDeviceCode) {
+      return current;
+    }
+    if (pendingKey) {
+      delete visa[pendingKey];
+    }
+    if (pendingKey === "pendingBenefitLogin") {
+      delete visa.pendingBenefitLoginGeneration;
+    }
+    current.visa = transitionVisaState(visa, state, { now, errorCode: code });
+    return current;
+  });
+}
+async function failVisaBenefitCreation(resumeId, code, now) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (visa.pendingBenefitLoginGeneration !== resumeId) {
+      return current;
+    }
+    delete visa.pendingBenefitLoginGeneration;
+    current.visa = transitionVisaState(visa, "FAILED", {
+      now,
+      errorCode: code
+    });
+    return current;
+  });
+}
+async function discardPendingBenefitLogin(resumeId, now) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (visa.pendingBenefitLogin?.resumeId !== resumeId) {
+      return current;
+    }
+    delete visa.pendingBenefitLogin;
+    current.visa = recoverVisaState(visa, current.authorization, now);
+    return current;
+  });
+}
+async function discardPendingBenefitLoginByDeviceCode(deviceCode, now) {
+  await updateStoredConfig((current) => {
+    const visa = ensureVisaState(current);
+    if (visa.pendingBenefitLogin?.deviceCode !== deviceCode) {
+      return current;
+    }
+    delete visa.pendingBenefitLogin;
+    current.visa = recoverVisaState(visa, current.authorization, now);
+    return current;
+  });
+}
+function reusableVsraPending(config, market, baseUrl, now) {
+  const pending = config.visa?.pendingVsraLogin;
+  return pending && pending.market === market && sameHttpOrigin(pending.baseUrl, baseUrl) && remainingMilliseconds(pending.expiresAt, now) > 0 ? { ...pending } : void 0;
+}
+function ensureVisaState(config) {
+  const visa = normalizeStoredVisaState(config.visa) ?? defaultVisaState();
+  config.visa = visa;
+  return visa;
+}
+function normalizeVisaConfig(config) {
+  const next = cloneStoredConfig(config);
+  const visa = normalizeStoredVisaState(next.visa);
+  if (visa) {
+    next.visa = visa;
+  } else {
+    delete next.visa;
+  }
+  return next;
+}
+function pendingBenefitResult(pending, status, reusedPending) {
+  return {
+    status,
+    source: "benefit_oauth",
+    authorizationUrl: pending.authorizationUrl,
+    resumeId: pending.resumeId,
+    expiresAt: pending.expiresAt,
+    retryAfterSeconds: pending.interval,
+    reusedPending
+  };
+}
+function authorizationFingerprint(authorization) {
+  if (!authorization) {
+    return null;
+  }
+  return createHash4("sha256").update(JSON.stringify({
+    accessToken: authorization.accessToken,
+    customerId: authorization.customerId,
+    deviceId: authorization.deviceId,
+    issuerOrigin: authorization.issuerOrigin,
+    sessionId: authorization.sessionId ?? null
+  })).digest("hex");
+}
+function assertBenefitLoginEnvironment(authorization, baseUrl) {
+  if (authorization && !sameHttpOrigin(authorization.issuerOrigin, baseUrl)) {
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet logout` before `clink visa init`");
+  }
+}
+function authorizationHasScope(authorization, scope) {
+  return new Set(authorization.scope.split(/\s+/u).filter(Boolean)).has(scope);
+}
+function benefitConnectionMatches(config, authorization) {
+  const connection = config.visa?.benefitConnection;
+  return Boolean(connection && connection.customerId === authorization.customerId && sameHttpOrigin(connection.issuerOrigin, authorization.issuerOrigin));
+}
+function authorizationUsable2(authorization, now) {
+  return Boolean(authorization && (authorization.accessTokenExpiresAt > now || authorization.refreshTokenExpiresAt > now));
+}
+function isClinkFlowState(state) {
+  return state === "CLINK_LOGIN_CREATING" || state === "CLINK_LOGIN_PENDING" || state === "CLINK_LOGIN_EXCHANGING" || state === "CLINK_READY";
+}
+async function bestEffortRevoke(authorization, timeoutMs) {
+  try {
+    await revokeStoredAuthorization({
+      authorization,
+      timeoutMs,
+      dryRun: false
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function remainingMilliseconds(expiresAt, now) {
+  const timestamp = Date.parse(expiresAt);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - now) : 0;
+}
+function positiveNumber4(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : void 0;
+}
+function finiteNonNegativeNumber(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : void 0;
+}
+function reportedPageSize(data, fallback) {
+  const value = positiveNumber4(data.limit);
+  return value === void 0 ? fallback : Math.min(value, ALL_OFFERS_PAGE_SIZE);
+}
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+function isRecord20(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isDryRun5(value) {
+  return "dryRun" in value;
+}
+function delay(milliseconds) {
+  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+}
+
+// dist/visa/commerce-cli.js
+var CARD_SETUP_PATH2 = "/payment-method-setup";
+function createVisaCommerceCliDependencies(context, commerceContext) {
+  const loginBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
+  assertCommerceEnvironment(context, commerceContext.environment, loginBaseUrl);
+  const loginDependencies = createVisaBenefitLoginCliDependencies(context, commerceContext.environment);
+  let preparedCardSetup;
+  return {
+    inspectLogin: loginDependencies.inspectLogin,
+    login: async (instructionContext) => {
+      const initialized = await loginDependencies.initializeLogin(instructionContext);
+      return {
+        ready: initialized.ready,
+        detail: initialized.detail
+      };
+    },
+    refreshCards: async () => {
+      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
+      if (prepared.dryRun) {
+        throw apiError("card refresh unexpectedly produced a dry-run response");
+      }
+      preparedCardSetup = {
+        url: prepared.url,
+        cards: normalizeCards(prepared.data.paymentMethodsVoList)
+      };
+      return preparedCardSetup.cards;
+    },
+    prepareCardSetup: async () => {
+      if (preparedCardSetup) {
+        return preparedCardSetup;
+      }
+      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
+      if (prepared.dryRun) {
+        throw apiError("card setup unexpectedly produced a dry-run response");
+      }
+      return {
+        url: prepared.url,
+        cards: normalizeCards(prepared.data.paymentMethodsVoList)
+      };
+    },
+    passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
+    openUserAction: async (url, label) => {
+      const action = label === "card_setup" ? "card setup" : label === "vic_registration" ? "Visa VIC registration" : "Purchase Instruction authorization";
+      process.stderr.write(`Complete ${action} in your browser:
+${url}
+`);
+      return openPortalWithBrowserHandoff(context, url);
+    },
+    waitForEvents: async (options2) => {
+      const result = await collectCommandEvents(context, options2);
+      return {
+        ready: result.ready,
+        timedOut: result.timedOut,
+        events: result.events.map((event) => ({
+          eventType: event.eventType,
+          ...event.resourceId ? { resourceId: event.resourceId } : {},
+          data: event.data
+        })),
+        ...result.resumeCommand ? { resumeCommand: result.resumeCommand } : {}
+      };
+    },
+    getInstruction: (instructionId2) => getCommandInstruction(context, instructionId2),
+    listInstructions: (paymentInstrumentId) => listCommandInstructions(context, paymentInstrumentId),
+    createInstruction: async ({ paymentInstrumentId, instructionContext }) => {
+      const detail = await createCommandInstruction(context, {
+        paymentInstrumentId,
+        title: instructionContext.title,
+        mandates: instructionContext.mandates,
+        ...instructionContext.description ? { description: instructionContext.description } : {},
+        ...instructionContext.effectiveUntilTime ? { effectiveUntilTime: instructionContext.effectiveUntilTime } : {},
+        ...instructionContext.isRecurring ? { isRecurring: true } : {},
+        ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
+      });
+      const instructionId2 = optionalText3(detail.instructionId ?? detail.purchaseInstructionId);
+      if (!instructionId2) {
+        throw apiError("missing instructionId in instruction create response", 502);
+      }
+      return { instructionId: instructionId2, detail };
+    },
+    resolvePurchase: (purchaseContext) => resolveVisaCommercePurchase(context, commerceContext, purchaseContext),
+    runCheckout: async (input) => executeUcpCheckoutRun(checkoutCommandContext(context, input), {
+      returnSafeCompleteFailure: true,
+      readOnlyRecovery: {
+        maxWaitSeconds: input.maxWaitSeconds
+      }
+    })
+  };
+}
+function createVisaBenefitLoginCliDependencies(context, environment) {
+  const baseUrl = visaCommerceApiBaseUrl(environment);
+  assertCommerceEnvironment(context, environment, baseUrl);
+  return {
+    inspectLogin: async () => {
+      const result = getVisaBenefitLoginReadiness({
+        storedConfig: context.storedConfig,
+        baseUrl
+      });
+      return {
+        ready: result.ready,
+        detail: result.detail
+      };
+    },
+    initializeLogin: async (instructionContext) => {
+      let manualOpenUrl;
+      let browserLaunch;
+      const { result, storedConfig } = await initializeVisaLogin({
+        storedConfig: context.storedConfig,
+        baseUrl,
+        timeoutMs: context.globalOptions.timeoutMs,
+        dryRun: false,
+        ...instructionContext ? { instructionContext } : {},
+        onAuthorization: async (event) => {
+          manualOpenUrl = event.url;
+          process.stderr.write(`Complete Visa Benefit authorization in your browser:
+${event.url}
+`);
+          if (context.globalOptions.open) {
+            process.stderr.write("Opening your browser...\n");
+          }
+          browserLaunch = await openBrowserWithResult(context.globalOptions.open, event.url);
+          process.stderr.write("Waiting for authorization...\n");
+        }
+      });
+      applyStoredConfig(context, storedConfig);
+      const detail = isRecord21(result) ? result : { status: "unknown" };
+      const pendingInstructionId = optionalText3(detail.pendingInstructionId);
+      const oauthMode = optionalText3(detail.oauthMode);
+      const customerCreated = optionalBoolean2(detail.customerCreated);
+      const activationDriver = optionalText3(detail.activationDriver);
+      return {
+        ready: detail.status === "ready",
+        ...pendingInstructionId ? { pendingInstructionId } : {},
+        ...oauthMode ? { oauthMode } : {},
+        ...customerCreated !== void 0 ? { customerCreated } : {},
+        ...activationDriver ? { activationDriver } : {},
+        ...manualOpenUrl && browserLaunch?.status !== "launched" ? { manualOpenUrl } : {},
+        ...browserLaunch ? { browserLaunch } : {},
+        detail
+      };
+    },
+    waitForInstructionActivation: async (instructionId2, maxWaitSeconds) => {
+      const result = await collectCommandEvents(context, {
+        type: "purchase_instruction.activated",
+        maxWaitSeconds,
+        expectedResource: {
+          instructionId: instructionId2,
+          purchaseInstructionId: instructionId2
+        }
+      });
+      return {
+        timedOut: result.timedOut,
+        eventTypes: result.events.map((event) => event.eventType),
+        ...result.resumeCommand ? { resumeCommand: result.resumeCommand } : {}
+      };
+    },
+    getInstruction: (instructionId2) => getCommandInstruction(context, instructionId2)
+  };
+}
+async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
+  const expectedBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
+  const environment = commerceContext.environment === "uat" ? "sandbox" : commerceContext.environment;
+  try {
+    const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, {
+      baseUrl: expectedBaseUrl,
+      environment,
+      timeoutMs: context.globalOptions.timeoutMs
+    });
+    assertFrozenRoute(purchase, internal.merchantId, internal.endpoint);
+    const catalog = await getCommandUcpCatalogProduct(context, internal.merchantId, purchase.productId);
+    const product = verifyInternalProduct(catalog, purchase);
+    return {
+      purchaseContext: {
+        ...purchase,
+        merchantId: internal.merchantId,
+        endpoint: internal.endpoint
+      },
+      route: {
+        type: "internal",
+        provider: internal.provider,
+        domainName: internal.domainName,
+        merchantId: internal.merchantId,
+        endpoint: internal.endpoint
+      },
+      product
+    };
+  } catch (error) {
+    if (!(error instanceof CliError) || error.message !== "NOT_IN_INTERNAL_UCP_LIST") {
+      throw error;
+    }
+  }
+  if (purchase.merchantId || purchase.endpoint) {
+    throw validationError("frozen merchantId or endpoint does not match the internal-first merchant route");
+  }
+  const parsed = await resolveParseItemFromUrl(purchase.merchantUrl, {
+    timeoutMs: context.globalOptions.timeoutMs
+  });
+  const variant = parsed.items.find((item) => item.itemId === purchase.productId);
+  if (!variant) {
+    throw validationError("selected product is no longer present in the current merchant product data");
+  }
+  verifyExternalProduct(parsed.currency, parsed.merchantName, variant, purchase);
+  return {
+    purchaseContext: { ...purchase },
+    route: {
+      type: "external",
+      provider: "merchant_product_page",
+      merchantOrigin: parsed.merchantOrigin,
+      merchantDomain: parsed.merchantDomain
+    },
+    product: {
+      productId: variant.itemId,
+      title: variant.title,
+      unitPrice: minorUnitsMajorAmount(BigInt(variant.unitPriceMinor), parsed.currency),
+      totalPrice: purchase.totalPrice,
+      currency: parsed.currency,
+      availability: variant.inventoryStatus
+    }
+  };
+}
+function assertFrozenRoute(purchase, merchantId, endpoint) {
+  if (purchase.merchantId && purchase.merchantId !== merchantId) {
+    throw validationError("resolved merchantId differs from the frozen purchase context");
+  }
+  if (purchase.endpoint && normalizedUrl(purchase.endpoint) !== normalizedUrl(endpoint)) {
+    throw validationError("resolved Checkout endpoint differs from the frozen purchase context");
+  }
+}
+function verifyInternalProduct(payload, purchase) {
+  const root = requireRecord(payload, "invalid UCP Catalog product response");
+  const product = requireRecord(root.product ?? root.data ?? root, "UCP Catalog response is missing product");
+  const productId2 = requiredProductText(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
+  const title = requiredProductText(product.title ?? product.name, "UCP Catalog product is missing title");
+  const variants = internalProductVariants(product);
+  const matchingVariants = variants.filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "UCP Catalog variant is missing id") === purchase.productId);
+  if (matchingVariants.length > 1) {
+    throw validationError("UCP Catalog product contains multiple variants for the frozen product ID");
+  }
+  const variant = matchingVariants[0];
+  const selectedId = variant ? requiredProductText(variant.id ?? variant.productId ?? variant.product_id, "UCP Catalog variant is missing id") : productId2;
+  const selectedTitle = variant ? requiredProductText(variant.title ?? variant.name, "UCP Catalog variant is missing title") : title;
+  if (!variant && productId2 !== purchase.productId) {
+    throw validationError("selected product is no longer present in the current UCP Catalog product");
+  }
+  assertProductAvailable(product);
+  assertProductAvailable(variant ?? product, true);
+  const price = resolveInternalProductPrice(product, variant, productId2 === purchase.productId);
+  assertProductIdentity(selectedId, selectedTitle, price.currency, price.amountMinor, purchase);
+  return {
+    productId: selectedId,
+    title: selectedTitle,
+    unitPrice: minorUnitsMajorAmount(price.amountMinor, price.currency),
+    totalPrice: purchase.totalPrice,
+    currency: price.currency,
+    availability: productAvailability(variant ?? product) ?? productAvailability(product)
+  };
+}
+function internalProductVariants(product) {
+  if (product.variants === void 0 || product.variants === null) {
+    return [];
+  }
+  if (!Array.isArray(product.variants)) {
+    throw validationError("UCP Catalog product variants must be an array");
+  }
+  return product.variants.map((variant) => requireRecord(variant, "UCP Catalog product contains an invalid variant"));
+}
+function resolveInternalProductPrice(product, variant, frozenIdMatchesProduct) {
+  const fallbackCurrency = typeof product.currency === "string" ? product.currency : void 0;
+  const variantPrice = variant ? optionalInternalCatalogPrice(variant.price, "UCP Catalog variant price", fallbackCurrency) : void 0;
+  const productPrice = optionalInternalCatalogPrice(product.price, "UCP Catalog product price", fallbackCurrency);
+  if (variantPrice && productPrice && !sameInternalCatalogPrice(variantPrice, productPrice)) {
+    throw validationError("UCP Catalog variant and product prices conflict");
+  }
+  const range = optionalInternalCatalogPriceRange(product.price_range ?? product.priceRange, fallbackCurrency);
+  const exactPrice = variantPrice ?? productPrice;
+  if (exactPrice) {
+    if (range && (exactPrice.currency !== range.minimum.currency || exactPrice.amountMinor < range.minimum.amountMinor || exactPrice.amountMinor > range.maximum.amountMinor)) {
+      throw validationError("UCP Catalog exact price conflicts with product price_range");
+    }
+    return exactPrice;
+  }
+  if (!range) {
+    throw validationError("UCP Catalog product is missing an exact price");
+  }
+  if (!frozenIdMatchesProduct) {
+    throw validationError("UCP Catalog variant is missing an exact price");
+  }
+  if (!sameInternalCatalogPrice(range.minimum, range.maximum)) {
+    throw validationError("UCP Catalog product price_range is ambiguous");
+  }
+  return {
+    ...range.minimum
+  };
+}
+function optionalInternalCatalogPrice(value, source, fallbackCurrency) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  const price = requireRecord(value, `${source} must be an object`);
+  const amountMinor = parseMinorUnits2(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
+  const currency = requiredProductText(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
+  return { amountMinor, currency };
+}
+function optionalInternalCatalogPriceRange(value, fallbackCurrency) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  const range = requireRecord(value, "UCP Catalog product price_range must be an object");
+  const minimum = optionalInternalCatalogPrice(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
+  const maximum = optionalInternalCatalogPrice(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
+  if (!minimum || !maximum) {
+    throw validationError("UCP Catalog product price_range must contain min and max prices");
+  }
+  if (minimum.currency !== maximum.currency) {
+    throw validationError("UCP Catalog product price_range currencies conflict");
+  }
+  if (minimum.amountMinor > maximum.amountMinor) {
+    throw validationError("UCP Catalog product price_range min exceeds max");
+  }
+  return { minimum, maximum };
+}
+function sameInternalCatalogPrice(left, right) {
+  return left.amountMinor === right.amountMinor && left.currency === right.currency;
+}
+function verifyExternalProduct(currency, merchantName, variant, purchase) {
+  assertProductIdentity(variant.itemId, variant.title, currency, BigInt(variant.unitPriceMinor), purchase);
+  if (normalizedText2(merchantName) !== normalizedText2(purchase.merchantName)) {
+    throw validationError("current merchant name differs from the frozen purchase context");
+  }
+  if (variant.available !== true || variant.inventoryStatus === "out_of_stock") {
+    throw validationError("selected product is currently unavailable");
+  }
+}
+function assertProductIdentity(productId2, title, currency, unitPriceMinor, purchase) {
+  if (productId2 !== purchase.productId) {
+    throw validationError("current product ID differs from the frozen purchase context");
+  }
+  if (normalizedText2(title) !== normalizedText2(purchase.title)) {
+    throw validationError("current product title differs from the frozen purchase context");
+  }
+  if (currency.toUpperCase() !== purchase.currency) {
+    throw validationError("current product currency differs from the frozen purchase context");
+  }
+  const currentTotal = unitPriceMinor * BigInt(purchase.quantity);
+  const expectedTotal = majorAmountMinorUnits(purchase.totalPrice, purchase.currency);
+  if (currentTotal !== expectedTotal) {
+    throw validationError("current product price differs from the authorized purchase amount");
+  }
+}
+function assertProductAvailable(product, requireKnown = false) {
+  const signals = productAvailabilitySignals(product);
+  if (signals.some(isUnavailableProductSignal)) {
+    throw validationError("selected product is currently unavailable");
+  }
+  if (requireKnown && signals.length === 0) {
+    throw validationError("selected product is missing availability");
+  }
+}
+function productAvailability(product) {
+  const signals = productAvailabilitySignals(product);
+  const status = signals.find((signal) => typeof signal === "string");
+  if (typeof status === "string") {
+    return status;
+  }
+  const available = signals.find((signal) => typeof signal === "boolean");
+  return typeof available === "boolean" ? available : null;
+}
+function productAvailabilitySignals(product) {
+  const availability = isRecord21(product.availability) ? product.availability : void 0;
+  const signals = [];
+  for (const value of [
+    product.available,
+    isRecord21(product.availability) ? void 0 : product.availability,
+    availability?.available,
+    availability?.status,
+    product.inventoryStatus,
+    product.inventory_status,
+    product.status
+  ]) {
+    if (typeof value === "boolean") {
+      signals.push(value);
+    }
+    if (typeof value === "string" && value.trim()) {
+      signals.push(value.normalize("NFKC").trim().toUpperCase());
+    }
+  }
+  return signals;
+}
+function isUnavailableProductSignal(value) {
+  return value === false || value === "OUT_OF_STOCK" || value === "SOLD_OUT" || value === "UNAVAILABLE" || value === "INACTIVE" || value === "DISABLED";
+}
+function parseMinorUnits2(value, message) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return BigInt(value);
+  }
+  if (typeof value === "string" && /^\d+$/u.test(value.trim())) {
+    return BigInt(value.trim());
+  }
+  throw validationError(message);
+}
+function requiredProductText(value, message) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw validationError(message);
+  }
+  return value.normalize("NFKC").trim();
+}
+function requireRecord(value, message) {
+  if (!isRecord21(value)) {
+    throw validationError(message);
+  }
+  return value;
+}
+function normalizedText2(value) {
+  return value.normalize("NFKC").trim().toUpperCase();
+}
+function normalizedUrl(value) {
+  return new URL(value).toString().replace(/\/$/u, "");
+}
+function checkoutCommandContext(context, input) {
+  const purchase = input.purchaseContext;
+  const metadata = {
+    ...purchase.metadata ?? {},
+    ...purchase.merchantId ? { merchantId: purchase.merchantId } : {},
+    productId: purchase.productId,
+    programCode: purchase.programCode
+  };
+  const flags = {
+    "merchant-url": purchase.merchantUrl,
+    "merchant-category-code": purchase.merchantCategoryCode,
+    currency: purchase.currency,
+    "line-items": JSON.stringify(buildCommerceLineItems(purchase)),
+    "payment-instrument-id": input.paymentInstrumentId,
+    "confirm-purchase": true,
+    format: context.globalOptions.format
+  };
+  if (purchase.endpoint) {
+    flags.endpoint = purchase.endpoint;
+  }
+  if (purchase.merchantName) {
+    flags["merchant-name"] = purchase.merchantName;
+  }
+  if (purchase.shippingAddress) {
+    flags["shipping-address"] = JSON.stringify(purchase.shippingAddress);
+  }
+  if (Object.keys(metadata).length > 0) {
+    flags.metadata = JSON.stringify(metadata);
+  }
+  if (input.waitDelivery) {
+    flags["wait-delivery"] = true;
+    flags["max-wait"] = String(input.maxWaitSeconds);
+  }
+  return {
+    ...context,
+    args: {
+      positionals: ["ucp-checkout", "run"],
+      flags
+    }
+  };
+}
+function assertCommerceEnvironment(context, environment, expectedBaseUrl) {
+  assertVisaCommerceEnvironmentLock(environment, expectedBaseUrl);
+  const authorization = context.storedConfig.authorization;
+  if (authorization && !sameHttpOrigin(authorization.issuerOrigin, expectedBaseUrl)) {
+    return;
+  }
+  if (authorization && !sameHttpOrigin(context.runtimeConfig.baseUrl, expectedBaseUrl)) {
+    throw validationError("saved authorization and commerce environment resolve to different API origins");
+  }
+}
+function assertVisaCommerceEnvironmentLock(environment, expectedBaseUrl) {
+  const distributionEnvironment = resolveSelectedEnvironment({});
+  const requestedEnvironment = environment === "uat" ? "sandbox" : environment;
+  if (distributionEnvironment && distributionEnvironment !== requestedEnvironment) {
+    throw validationError(`commerce environment ${environment} conflicts with the CLI distribution lock ${distributionEnvironment}`);
+  }
+  if (process.env.CLINK_BASE_URL && !sameHttpOrigin(process.env.CLINK_BASE_URL, expectedBaseUrl)) {
+    throw validationError("CLINK_BASE_URL conflicts with the immutable commerce environment");
+  }
+}
+function applyStoredConfig(context, storedConfig) {
+  context.storedConfig = storedConfig;
+  context.runtimeConfig = resolveRuntimeConfig(storedConfig, context.args.flags);
+  context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
+}
+function normalizeCards(value) {
+  if (!Array.isArray(value) || !value.every((card) => isRecord21(card) && typeof card.paymentInstrumentId === "string" && card.paymentInstrumentId.trim())) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  return value.map((card) => ({ ...card }));
+}
+function optionalText3(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function optionalBoolean2(value) {
+  return typeof value === "boolean" ? value : void 0;
+}
+function isRecord21(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/commerce-login-context.js
+var MAX_CONTEXT_BYTES3 = 64 * 1024;
+async function readVisaCommerceLoginContext(flags) {
+  return normalizeVisaCommerceLoginContext(await readVisaContextInput(flags, "visa commerce-login"));
+}
+function normalizeVisaCommerceLoginContext(raw) {
+  if (!isRecord22(raw)) {
+    throw validationError("commerce login context must be a JSON object");
+  }
+  const environment = normalizeVisaCommerceEnvironment(raw.environment);
+  const instructionContext = normalizeVisaInstructionContext(raw.instructionContext).context;
+  const context = {
+    environment,
+    instructionContext
+  };
+  const bytes = Buffer.byteLength(JSON.stringify(context), "utf8");
+  if (bytes > MAX_CONTEXT_BYTES3) {
+    throw validationError(`commerce login context must be at most ${MAX_CONTEXT_BYTES3} UTF-8 bytes, got ${bytes}`);
+  }
+  return deepFreeze2(context);
+}
+function visaCommerceLoginApiBaseUrl(context) {
+  return visaCommerceApiBaseUrl(context.environment);
+}
+function isRecord22(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function deepFreeze2(value) {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    deepFreeze2(child);
+  }
+  return Object.freeze(value);
+}
+
+// dist/visa/commerce-login.js
+var QUICK_INSTRUCTION_WAIT_SECONDS = 300;
+var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+  "CANCELLED",
+  "CANCELED",
+  "EXPIRED",
+  "DECLINED",
+  "FAILED"
+]);
+async function runVisaCommerceLogin(context, options2, dependencies) {
+  if (!options2.dryRun && !options2.confirmedPurchase) {
+    throw validationError("visa commerce-login requires explicit --confirm-purchase before any live request");
+  }
+  if (options2.dryRun) {
+    return {
+      command: "visa commerce-login",
+      operation: "visa-commerce-login",
+      environment: context.environment,
+      status: "dry_run",
+      ready: false,
+      terminal: true,
+      sideEffects: false,
+      instructionContext: context.instructionContext,
+      steps: [
+        {
+          stage: "benefit_login_status",
+          effect: "inspect local Visa Benefit login readiness"
+        },
+        {
+          stage: "benefit_login_init",
+          when: "not_ready",
+          effect: "start one foreground Visa Benefit login with the exact instructionContext"
+        }
+      ],
+      createsInstruction: false,
+      routesMerchant: false,
+      searchesCatalog: false,
+      preparesCard: false,
+      createsCheckout: false,
+      pays: false
+    };
+  }
+  const current = await dependencies.inspectLogin();
+  if (current.ready) {
+    return {
+      command: "visa commerce-login",
+      operation: "visa-commerce-login",
+      environment: context.environment,
+      state: "LOGIN_READY",
+      action: "CONTINUE_REGULAR_INSTRUCTION_FLOW",
+      reason: "visa_login_already_ready_quick_start_not_available",
+      ready: true,
+      loginReady: true,
+      terminal: true,
+      instructionId: null,
+      instructionStatus: null,
+      instructionReady: false,
+      pendingInstructionId: null,
+      detail: current.detail
+    };
+  }
+  const initialized = await dependencies.initializeLogin(context.instructionContext);
+  if (!initialized.ready) {
+    throw authError("visa init exited without status=ready");
+  }
+  const pendingInstructionId = initialized.pendingInstructionId;
+  const quickActivationEligible = initialized.oauthMode === "REGISTER" && initialized.customerCreated === true && initialized.activationDriver === "PORTAL_AUTO_CARD_SETUP" && Boolean(pendingInstructionId);
+  const instruction = quickActivationEligible && pendingInstructionId ? await resolveCurrentQuickInstruction(pendingInstructionId, dependencies) : void 0;
+  const instructionReady = instruction?.instructionReady ?? false;
+  const instructionTerminal = instruction ? instructionReady || isTerminalInstructionStatus(instruction.instructionStatus) : true;
+  return {
+    command: "visa commerce-login",
+    operation: "visa-commerce-login",
+    environment: context.environment,
+    state: instruction ? instructionReady ? "INSTRUCTION_ACTIVE" : "INSTRUCTION_ACTIVATION_PENDING" : "LOGIN_READY",
+    action: instruction ? instructionReady ? "CONTINUE_PURCHASE_FLOW" : "WAIT_FOR_QUICK_INSTRUCTION" : "CONTINUE_REGULAR_INSTRUCTION_FLOW",
+    reason: instruction ? instructionReady ? "current_quick_instruction_active" : instruction.timedOut ? "current_quick_instruction_activation_timed_out" : "current_quick_instruction_not_active" : "visa_benefit_login_required_without_quick_instruction",
+    ready: instruction ? instructionReady : true,
+    loginReady: true,
+    terminal: instructionTerminal,
+    instructionId: instruction?.instructionId ?? null,
+    instructionStatus: instruction?.instructionStatus ?? null,
+    instructionReady,
+    pendingInstructionId: instruction ? pendingInstructionId : null,
+    ...instruction?.eventTypes.length ? { eventTypes: instruction.eventTypes } : {},
+    ...instruction?.resumeCommand ? { resumeCommand: instruction.resumeCommand } : {},
+    manualOpenUrl: initialized.browserLaunch?.status === "launched" ? null : initialized.manualOpenUrl ?? null,
+    browserLaunch: initialized.browserLaunch ?? null,
+    detail: initialized.detail
+  };
+}
+async function resolveCurrentQuickInstruction(pendingInstructionId, dependencies) {
+  let instruction;
+  let timedOut = false;
+  let eventTypes = [];
+  let resumeCommand;
+  try {
+    instruction = await dependencies.getInstruction(pendingInstructionId);
+  } catch {
+  }
+  if (instruction) {
+    assertExactInstruction(instruction, pendingInstructionId);
+  }
+  const initialStatus = instruction ? instructionStatus(instruction) : void 0;
+  if (!instruction || initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus ?? "UNKNOWN")) {
+    const wait = await dependencies.waitForInstructionActivation(pendingInstructionId, QUICK_INSTRUCTION_WAIT_SECONDS);
+    timedOut = wait.timedOut;
+    eventTypes = wait.eventTypes;
+    resumeCommand = wait.resumeCommand;
+    instruction = await dependencies.getInstruction(pendingInstructionId);
+    assertExactInstruction(instruction, pendingInstructionId);
+  }
+  const status = instructionStatus(instruction);
+  return {
+    instructionId: pendingInstructionId,
+    instructionStatus: status,
+    instructionReady: status === "ACTIVE",
+    timedOut,
+    eventTypes,
+    ...resumeCommand ? { resumeCommand } : {}
+  };
+}
+function isTerminalInstructionStatus(status) {
+  return TERMINAL_INSTRUCTION_STATUSES.has(status);
+}
+function assertExactInstruction(instruction, expectedInstructionId) {
+  if (!instruction) {
+    throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
+  }
+  const observedInstructionId = optionalText4(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  if (observedInstructionId !== expectedInstructionId) {
+    throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
+  }
+}
+function instructionStatus(instruction) {
+  return optionalText4(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
+}
+function optionalText4(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+
+// dist/visa/commerce-restriction.js
+var RESTRICTED_CATEGORIES = [
+  {
+    category: "ADULT_CONTENT",
+    label: "Adult content and services",
+    labelZh: "\u6210\u4EBA\u5185\u5BB9\u4E0E\u670D\u52A1",
+    merchantCategoryCodes: [],
+    keywords: [
+      "porn",
+      "pornography",
+      "pornhub",
+      "onlyfans",
+      "adult content",
+      "adult video",
+      "adult website",
+      "adult live",
+      "adult subscription",
+      "\u6210\u4EBA\u5185\u5BB9",
+      "\u6210\u4EBA\u7F51\u7AD9",
+      "\u6210\u4EBA\u89C6\u9891",
+      "\u6210\u4EBA\u76F4\u64AD",
+      "\u6210\u4EBA\u670D\u52A1",
+      "\u8272\u60C5",
+      "\u60C5\u8272",
+      "\u88F8\u804A"
+    ]
+  },
+  {
+    category: "DATING_COMPANIONSHIP",
+    label: "Dating and companionship services",
+    labelZh: "\u4EA4\u53CB\u53CA\u966A\u4F34\u670D\u52A1",
+    merchantCategoryCodes: ["7273"],
+    keywords: [
+      "dating site",
+      "dating website",
+      "dating app",
+      "dating service",
+      "dating subscription",
+      "escort",
+      "sugar dating",
+      "\u4EA4\u53CB\u7F51\u7AD9",
+      "\u4EA4\u53CB\u8F6F\u4EF6",
+      "\u4EA4\u53CB\u670D\u52A1",
+      "\u76F8\u4EB2",
+      "\u966A\u4F8D",
+      "\u4F34\u6E38",
+      "\u63F4\u4EA4",
+      "\u966A\u4F34\u670D\u52A1"
+    ]
+  },
+  {
+    category: "GAMBLING",
+    label: "Gambling and betting",
+    labelZh: "\u8D4C\u535A/\u535A\u5F69",
+    merchantCategoryCodes: ["7995"],
+    keywords: [
+      "gambling",
+      "casino",
+      "betting",
+      "sportsbook",
+      "wager",
+      "lottery",
+      "poker chips",
+      "slot machine",
+      "roulette",
+      "baccarat",
+      "blackjack",
+      "\u8D4C\u535A",
+      "\u535A\u5F69",
+      "\u8D4C\u573A",
+      "\u6295\u6CE8",
+      "\u4E0B\u6CE8",
+      "\u62BC\u6CE8",
+      "\u5F69\u7968",
+      "\u516D\u5408\u5F69",
+      "\u7B79\u7801",
+      "\u8D4C\u8D44"
+    ]
+  },
+  {
+    category: "PRESCRIPTION_DRUGS",
+    label: "Prescription drugs",
+    labelZh: "\u5904\u65B9\u836F",
+    merchantCategoryCodes: [],
+    keywords: [
+      "prescription drug",
+      "prescription medication",
+      "prescription medicine",
+      "prescription-only",
+      "rx only",
+      "viagra",
+      "cialis",
+      "sildenafil",
+      "ozempic",
+      "xanax",
+      "adderall",
+      "tramadol",
+      "\u5904\u65B9\u836F",
+      "\u51ED\u5904\u65B9",
+      "\u9700\u5904\u65B9",
+      "\u4F1F\u54E5"
+    ]
+  },
+  {
+    category: "CRYPTOCURRENCY",
+    label: "Cryptocurrency",
+    labelZh: "\u52A0\u5BC6\u8D27\u5E01",
+    merchantCategoryCodes: ["6051"],
+    keywords: [
+      "crypto",
+      "cryptocurrency",
+      "bitcoin",
+      "ethereum",
+      "stablecoin",
+      "usdt",
+      "usdc",
+      "btc",
+      "eth",
+      "initial coin offering",
+      "token sale",
+      "defi",
+      "binance",
+      "coinbase",
+      "\u52A0\u5BC6\u8D27\u5E01",
+      "\u865A\u62DF\u8D27\u5E01",
+      "\u6570\u5B57\u8D27\u5E01",
+      "\u6BD4\u7279\u5E01",
+      "\u4EE5\u592A\u574A",
+      "\u6CF0\u8FBE\u5E01",
+      "\u5145\u5E01",
+      "\u63D0\u5E01",
+      "\u7092\u5E01",
+      "\u5E01\u5708",
+      "\u4EE3\u5E01\u53D1\u884C",
+      "\u52A0\u5BC6\u94B1\u5305"
+    ]
+  },
+  {
+    category: "CYBERLOCKER_FILE_SHARING",
+    label: "Cyberlockers and public file sharing",
+    labelZh: "Cyberlocker / \u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+    merchantCategoryCodes: [],
+    keywords: [
+      "cyberlocker",
+      "file locker",
+      "filelocker",
+      "rapidgator",
+      "pay per download",
+      "pay-per-download",
+      "upload rewards",
+      "\u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+      "\u6309\u4E0B\u8F7D\u91CF\u5956\u52B1",
+      "\u4E0A\u4F20\u5956\u52B1",
+      "\u6587\u4EF6\u5206\u4EAB\u5956\u52B1"
+    ]
+  },
+  {
+    category: "SKILL_BASED_PRIZE_GAMES",
+    label: "Skill-based prize games",
+    labelZh: "\u6280\u5DE7\u578B\u6709\u5956\u6E38\u620F",
+    merchantCategoryCodes: [],
+    keywords: [
+      "daily fantasy",
+      "fantasy sports",
+      "draftkings",
+      "fanduel",
+      "skill gaming",
+      "skill-based prize",
+      "prize contest",
+      "cash tournament entry",
+      "paid tournament entry",
+      "\u6280\u5DE7\u578B\u6709\u5956",
+      "\u6709\u5956\u7ADE\u6280",
+      "\u4ED8\u8D39\u7ADE\u8D5B",
+      "\u68A6\u5E7B\u4F53\u80B2",
+      "\u5956\u91D1\u8D5B"
+    ]
+  },
+  {
+    category: "FINANCIAL_PRODUCTS_TRADING",
+    label: "Financial products and trading",
+    labelZh: "\u91D1\u878D\u4EA7\u54C1/\u91D1\u878D\u4EA4\u6613",
+    merchantCategoryCodes: ["6211"],
+    keywords: [
+      "stock trading",
+      "buy stocks",
+      "sell stocks",
+      "share trading",
+      "securities trading",
+      "securities brokerage",
+      "brokerage account",
+      "forex trading",
+      "foreign exchange trading",
+      "options trading",
+      "futures trading",
+      "margin trading",
+      "cfd trading",
+      "\u80A1\u7968\u4EA4\u6613",
+      "\u8D2D\u4E70\u80A1\u7968",
+      "\u4E70\u5165\u80A1\u7968",
+      "\u8BC1\u5238\u4EA4\u6613",
+      "\u8BC1\u5238\u5F00\u6237",
+      "\u80A1\u7968\u5F00\u6237",
+      "\u671F\u8D27\u4EA4\u6613",
+      "\u5916\u6C47\u4EA4\u6613",
+      "\u878D\u8D44\u878D\u5238",
+      "\u7ECF\u7EAA\u670D\u52A1",
+      "\u91D1\u878D\u884D\u751F\u54C1"
+    ]
+  },
+  {
+    category: "TELEMARKETING",
+    label: "Telemarketing",
+    labelZh: "\u7535\u8BDD\u8425\u9500",
+    merchantCategoryCodes: ["5966", "5967"],
+    keywords: [
+      "telemarketing",
+      "robocall",
+      "cold calling",
+      "outbound calling",
+      "\u7535\u8BDD\u8425\u9500",
+      "\u7535\u8BDD\u63A8\u9500",
+      "\u7535\u9500",
+      "\u5916\u547C\u8425\u9500"
+    ]
+  },
+  {
+    category: "TOBACCO",
+    label: "Tobacco products",
+    labelZh: "\u70DF\u8349\u4EA7\u54C1",
+    merchantCategoryCodes: ["5993"],
+    keywords: [
+      "tobacco",
+      "cigarette",
+      "cigarettes",
+      "cigar",
+      "cigars",
+      "e-cigarette",
+      "e-cig",
+      "vape",
+      "vaping",
+      "shisha",
+      "snus",
+      "\u70DF\u8349",
+      "\u9999\u70DF",
+      "\u5377\u70DF",
+      "\u7535\u5B50\u70DF",
+      "\u96EA\u8304",
+      "\u70DF\u4E1D",
+      "\u6C34\u70DF"
+    ]
+  },
+  {
+    category: "OTHER_REGULATED_GOODS",
+    label: "Other regulated goods",
+    labelZh: "\u5176\u4ED6\u53D7\u76D1\u7BA1\u5546\u54C1",
+    merchantCategoryCodes: [],
+    keywords: [
+      "firearm",
+      "firearms",
+      "ammunition",
+      "handgun",
+      "handguns",
+      "explosives",
+      "\u519B\u706B",
+      "\u67AA\u652F",
+      "\u5F39\u836F",
+      "\u7206\u70B8\u7269",
+      "\u7BA1\u5236\u5200\u5177"
+    ]
+  }
+];
+var CATEGORY_BY_NAME = new Map(RESTRICTED_CATEGORIES.map((entry) => [entry.category, entry]));
+var CATEGORY_BY_MCC = new Map(RESTRICTED_CATEGORIES.flatMap((entry) => entry.merchantCategoryCodes.map((code) => [code, entry])));
+function classifyVisaCommerceRestriction(context) {
+  const purchase = context.purchaseContext;
+  if (purchase.assertedCategory) {
+    const asserted = purchase.assertedCategory.trim().toUpperCase();
+    const entry = CATEGORY_BY_NAME.get(asserted);
+    if (entry) {
+      return blocked(entry, "asserted_category", entry.category);
+    }
+  }
+  const mccEntry = CATEGORY_BY_MCC.get(purchase.merchantCategoryCode);
+  if (mccEntry) {
+    return blocked(mccEntry, "merchant_category_code", purchase.merchantCategoryCode);
+  }
+  const text = restrictionText(context);
+  for (const entry of RESTRICTED_CATEGORIES) {
+    for (const keyword of [...entry.keywords].sort((left, right) => right.length - left.length)) {
+      if (keywordPattern(keyword).test(text)) {
+        return blocked(entry, "keyword", keyword);
+      }
+    }
+  }
+  return { allowed: true, reason: "no_restricted_category_match" };
+}
+function restrictionText(context) {
+  const purchase = context.purchaseContext;
+  const instruction = context.instructionContext;
+  const values = [
+    purchase.originalRequest,
+    purchase.title,
+    purchase.productId,
+    purchase.productQuery,
+    purchase.programCode,
+    purchase.merchantName,
+    purchase.merchantUrl,
+    instruction.title,
+    instruction.description,
+    ...instruction.mandates.flatMap((mandate) => [
+      mandate.title,
+      mandate.description,
+      mandate.preferredMerchantName,
+      mandate.merchantCategory
+    ])
+  ];
+  return values.filter((value) => typeof value === "string").flatMap((value) => {
+    const normalized = value.normalize("NFKC");
+    return [
+      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), ""),
+      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), " ")
+    ];
+  }).map((value) => value.trim().replace(/\s+/gu, " ")).filter(Boolean).join("\n");
+}
+function keywordPattern(keyword) {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return /^[\p{Script=Latin}0-9][\p{Script=Latin}0-9 .&'-]*$/u.test(keyword) ? new RegExp(`(?<![\\p{Script=Latin}\\p{N}])${escaped}(?![\\p{Script=Latin}\\p{N}])`, "iu") : new RegExp(escaped, "iu");
+}
+function blocked(entry, matchedBy, matchedValue) {
+  return {
+    allowed: false,
+    reason: `restricted_category_${entry.category.toLowerCase()}`,
+    category: entry.category,
+    categoryLabel: entry.label,
+    categoryLabelZh: entry.labelZh,
+    matchedBy,
+    matchedValue
+  };
+}
+
+// dist/visa/commerce-run.js
+var DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
+async function runVisaCommerce(context, options2, dependencies) {
+  if (context.mode === "prepare") {
+    if (options2.confirmedPurchase) {
+      throw validationError("visa commerce-run prepare mode does not accept purchase confirmation");
+    }
+    return runVisaCommercePreparation(context, options2, dependencies);
+  }
+  if (!options2.dryRun && !options2.confirmedPurchase) {
+    throw validationError("visa commerce-run purchase mode requires explicit purchase confirmation");
+  }
+  const waitDelivery = options2.waitDelivery ?? context.purchaseContext.digitalDeliveryExpected;
+  const maxWaitSeconds = options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS;
+  const restriction = classifyVisaCommerceRestriction(context);
+  if (!restriction.allowed) {
+    return {
+      command: "visa commerce-run",
+      stage: "restriction",
+      status: "refused",
+      terminal: true,
+      restriction
+    };
+  }
+  if (options2.dryRun) {
+    return buildDryRunPlan(context, {
+      confirmedPurchase: options2.confirmedPurchase,
+      waitDelivery,
+      maxWaitSeconds
+    });
+  }
+  let login;
+  try {
+    login = await dependencies.inspectLogin();
+  } catch (error) {
+    return workflowFailure("login_status", error);
+  }
+  if (!login.ready) {
+    return {
+      command: "visa commerce-run",
+      stage: "login",
+      status: "authentication_required",
+      terminal: true,
+      userActionRequired: true,
+      reason: "run_visa_commerce_login_before_product_search",
+      detail: login.detail
+    };
+  }
+  let resolvedPurchase;
+  try {
+    resolvedPurchase = await dependencies.resolvePurchase(context.purchaseContext);
+  } catch (error) {
+    return workflowFailure("product_resolution", error);
+  }
+  const cardResult = await ensureVisaCardReady(dependencies, void 0, maxWaitSeconds);
+  if (!cardResult.ready) {
+    return {
+      command: "visa commerce-run",
+      ...cardResult,
+      login: login.detail
+    };
+  }
+  const card = cardResult.card;
+  const paymentInstrumentId = card.paymentInstrumentId;
+  const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
+  if (!regular.instruction) {
+    return {
+      command: "visa commerce-run",
+      ...regular.result,
+      paymentInstrumentId,
+      card: safeCard(cardResult.card)
+    };
+  }
+  const instruction = regular.instruction;
+  try {
+    resolvedPurchase = await dependencies.resolvePurchase(resolvedPurchase.purchaseContext);
+  } catch (error) {
+    return workflowFailure("product_revalidation", error, {
+      paymentInstrumentId,
+      instruction: publicInstruction(instruction)
+    });
+  }
+  let checkout;
+  try {
+    checkout = await dependencies.runCheckout({
+      paymentInstrumentId,
+      purchaseContext: resolvedPurchase.purchaseContext,
+      waitDelivery,
+      maxWaitSeconds
+    });
+  } catch (error) {
+    return workflowFailure("checkout", error, {
+      paymentInstrumentId,
+      instruction: publicInstruction(instruction)
+    });
+  }
+  const resumeCommand = typeof checkout.resumeCommand === "string" ? checkout.resumeCommand : void 0;
+  return {
+    command: "visa commerce-run",
+    stage: typeof checkout.stage === "string" ? checkout.stage : "checkout",
+    status: typeof checkout.status === "string" ? checkout.status : "unknown",
+    terminal: resumeCommand === void 0,
+    paymentInstrumentId,
+    card: safeCard(card),
+    route: resolvedPurchase.route,
+    product: resolvedPurchase.product,
+    instruction: publicInstruction(instruction),
+    ...resumeCommand ? {
+      resumeCommand,
+      resumeReadOnly: true,
+      paymentRetryAllowed: false
+    } : {},
+    checkout
+  };
+}
+async function runVisaCommercePreparation(context, options2, dependencies) {
+  if (options2.dryRun) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      stage: "plan",
+      status: "dry_run",
+      dryRun: true,
+      sideEffects: false,
+      createsInstruction: false,
+      createsCheckout: false,
+      pays: false,
+      steps: context.target === "login" ? [{ stage: "login", effect: "check_or_complete_benefit_login" }] : [
+        { stage: "login", effect: "check_or_complete_benefit_login" },
+        {
+          stage: "card",
+          effect: "reuse_or_prepare_visa_card_and_verify_vic"
+        }
+      ]
+    };
+  }
+  let login;
+  try {
+    login = await dependencies.inspectLogin();
+    if (!login.ready) {
+      login = await dependencies.login();
+    }
+  } catch (error) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      ...workflowFailure("login", error)
+    };
+  }
+  if (!login.ready) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      stage: "login",
+      status: "authentication_pending",
+      terminal: false,
+      userActionRequired: true,
+      detail: login.detail
+    };
+  }
+  if (context.target === "login") {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: "login",
+      stage: "login",
+      status: "ready",
+      terminal: true,
+      login: login.detail
+    };
+  }
+  const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS);
+  if (!cardResult.ready) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: "visa_card_ready",
+      ...cardResult,
+      login: login.detail
+    };
+  }
+  return {
+    command: "visa commerce-run",
+    mode: "prepare",
+    target: "visa_card_ready",
+    stage: "card",
+    status: "ready",
+    terminal: true,
+    login: login.detail,
+    card: safeCard(cardResult.card)
+  };
+}
+function buildDryRunPlan(context, options2) {
+  return {
+    command: "visa commerce-run",
+    stage: "plan",
+    status: "dry_run",
+    dryRun: true,
+    sideEffects: false,
+    confirmedPurchase: options2.confirmedPurchase,
+    purchase: {
+      merchantUrl: context.purchaseContext.merchantUrl,
+      endpoint: context.purchaseContext.endpoint ?? null,
+      productId: context.purchaseContext.productId,
+      title: context.purchaseContext.title,
+      quantity: context.purchaseContext.quantity,
+      unitPrice: context.purchaseContext.price,
+      totalPrice: context.purchaseContext.totalPrice,
+      currency: context.purchaseContext.currency,
+      merchantCategoryCode: context.purchaseContext.merchantCategoryCode,
+      digitalDeliveryExpected: context.purchaseContext.digitalDeliveryExpected
+    },
+    retryPolicy: {
+      createCheckout: "never",
+      completeCheckout: "never"
+    },
+    steps: [
+      {
+        stage: "card",
+        effect: "reuse an enabled Visa or bind one; require same-card VIC readiness",
+        authority: "visaRegistrationSucceeded=true"
+      },
+      {
+        stage: "instruction",
+        effect: "select the closest sufficient ACTIVE Instruction, exact-GET it, or create one exact regular Instruction",
+        amountLimit: context.purchaseContext.totalPrice
+      },
+      {
+        stage: "product_revalidation",
+        effect: "revalidate exact product identity, availability, and authorized price immediately before checkout",
+        readOnly: true
+      },
+      {
+        stage: "checkout",
+        effect: "create_checkout_then_complete_exactly_once",
+        paymentRetry: false
+      },
+      {
+        stage: "delivery",
+        enabled: options2.waitDelivery,
+        readOnly: true,
+        maxWaitSeconds: options2.maxWaitSeconds
+      }
+    ]
+  };
+}
+async function ensureVisaCardReady(dependencies, requestedPaymentInstrumentId, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS) {
+  let cards;
+  try {
+    cards = await dependencies.refreshCards();
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("card_refresh", error)
+    };
+  }
+  let selection = selectVisaCard(cards, requestedPaymentInstrumentId);
+  if (selection.action === "add") {
+    let setup;
+    let browserLaunch2;
+    try {
+      setup = await dependencies.prepareCardSetup();
+      browserLaunch2 = await dependencies.openUserAction(setup.url, "card_setup");
+    } catch (error) {
+      return {
+        ready: false,
+        ...workflowFailure("card_setup", error)
+      };
+    }
+    let wait2;
+    try {
+      wait2 = await dependencies.waitForEvents({
+        type: "payment_method.added,payment_method.update,vic_device.binding_succeeded",
+        maxWaitSeconds
+      });
+    } catch (error) {
+      return {
+        ready: false,
+        ...workflowFailure("card_binding_wait", error, {
+          ...browserActionOutput(setup.url, browserLaunch2)
+        })
+      };
+    }
+    try {
+      cards = await dependencies.refreshCards();
+    } catch (error) {
+      return {
+        ready: false,
+        ...workflowFailure("card_post_binding_refresh", error, {
+          eventTypes: wait2.events.map((event) => event.eventType),
+          ...browserActionOutput(setup.url, browserLaunch2)
+        })
+      };
+    }
+    const observedPaymentInstrumentIds = wait2.events.filter((event) => event.eventType === "payment_method.added" || event.eventType === "payment_method.update" || event.eventType === "vic_device.binding_succeeded").map(eventPaymentInstrumentId).filter((value) => Boolean(value));
+    const boundVisaId = observedPaymentInstrumentIds.find((paymentInstrumentId2) => cards.some((card) => card.paymentInstrumentId === paymentInstrumentId2 && cardIsVisa(card)));
+    selection = selectVisaCard(cards, boundVisaId);
+    if (selection.action === "add") {
+      return {
+        ready: false,
+        stage: "card_binding",
+        status: wait2.timedOut ? "timeout" : "pending",
+        terminal: false,
+        userActionRequired: true,
+        ...browserActionOutput(setup.url, browserLaunch2),
+        ...wait2.resumeCommand ? { resumeCommand: wait2.resumeCommand } : {}
+      };
+    }
+  }
+  if (selection.action === "select") {
+    return {
+      ready: false,
+      stage: "card_selection",
+      status: "ambiguous",
+      terminal: true,
+      reason: "multiple_enabled_visa_cards_without_one_default",
+      cards: selection.cards.map(safeCard)
+    };
+  }
+  if (selection.action === "unavailable") {
+    return {
+      ready: false,
+      stage: "card_selection",
+      status: "unavailable",
+      terminal: true,
+      reason: selection.reason
+    };
+  }
+  if (cardVicReady(selection.card)) {
+    return { ready: true, card: selection.card };
+  }
+  const paymentInstrumentId = selection.card.paymentInstrumentId;
+  const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId);
+  let browserLaunch;
+  try {
+    browserLaunch = await dependencies.openUserAction(passkeyUrl, "vic_registration");
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("vic_authorization", error, {
+        paymentInstrumentId,
+        manualOpenUrl: passkeyUrl
+      })
+    };
+  }
+  let wait;
+  try {
+    wait = await dependencies.waitForEvents({
+      type: "payment_method.update,vic_device.binding_succeeded",
+      maxWaitSeconds,
+      expectedResource: { paymentInstrumentId }
+    });
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("vic_wait", error, {
+        paymentInstrumentId,
+        ...browserActionOutput(passkeyUrl, browserLaunch)
+      })
+    };
+  }
+  try {
+    cards = await dependencies.refreshCards();
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("vic_final_refresh", error, {
+        paymentInstrumentId,
+        ...browserActionOutput(passkeyUrl, browserLaunch)
+      })
+    };
+  }
+  const verified = cards.find((card) => card.paymentInstrumentId === paymentInstrumentId);
+  if (verified && cardIsVisa(verified) && cardVicReady(verified)) {
+    return { ready: true, card: verified };
+  }
+  return {
+    ready: false,
+    stage: "vic_readiness",
+    status: wait.timedOut ? "timeout" : "pending",
+    terminal: false,
+    userActionRequired: true,
+    paymentInstrumentId,
+    ...browserActionOutput(passkeyUrl, browserLaunch),
+    ...wait.resumeCommand ? { resumeCommand: wait.resumeCommand } : {}
+  };
+}
+function selectVisaCard(cards, requestedPaymentInstrumentId) {
+  const enabled = cards.filter((card) => !cardDisabled(card));
+  if (requestedPaymentInstrumentId) {
+    const selected = enabled.find((card) => card.paymentInstrumentId === requestedPaymentInstrumentId);
+    if (!selected) {
+      return { action: "unavailable", reason: "requested_payment_instrument_not_found" };
+    }
+    return cardIsVisa(selected) ? { action: "use", card: selected } : { action: "unavailable", reason: "requested_payment_instrument_not_visa" };
+  }
+  const visaCards = enabled.filter(cardIsVisa);
+  if (visaCards.length === 0) {
+    return { action: "add" };
+  }
+  const readyCards = visaCards.filter(cardVicReady);
+  const candidates = readyCards.length > 0 ? readyCards : visaCards;
+  const defaultCards = candidates.filter(cardDefault);
+  if (defaultCards.length === 1) {
+    return { action: "use", card: defaultCards[0] };
+  }
+  if (candidates.length === 1) {
+    return { action: "use", card: candidates[0] };
+  }
+  return { action: "select", cards: candidates };
+}
+async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
+  let listed;
+  try {
+    listed = await dependencies.listInstructions(paymentInstrumentId);
+  } catch (error) {
+    return { result: workflowFailure("instruction_list", error) };
+  }
+  const selection = selectActiveInstruction(listed, paymentInstrumentId, context, Date.now());
+  if (selection.kind === "ambiguous") {
+    return {
+      result: {
+        stage: "instruction_selection",
+        status: "ambiguous",
+        terminal: true,
+        reason: selection.reason,
+        instructionIds: selection.instructionIds
+      }
+    };
+  }
+  if (selection.kind === "selected") {
+    const active = selection.candidate;
+    let verified;
+    try {
+      verified = await dependencies.getInstruction(active.instructionId);
+    } catch (error) {
+      return {
+        result: workflowFailure("instruction_active_verify", error, {
+          instructionId: active.instructionId,
+          resumeCommand: instructionGetResumeCommand(active.instructionId)
+        })
+      };
+    }
+    const exact = verified ? activeInstructionCandidate(verified, paymentInstrumentId, context, Date.now()) : void 0;
+    if (!exact || exact.instructionId !== active.instructionId || exact.amountMinorUnits !== active.amountMinorUnits || exact.createdAtMs !== active.createdAtMs) {
+      return {
+        result: {
+          stage: "instruction_selection",
+          status: "stale",
+          terminal: true,
+          reason: "selected_instruction_failed_exact_verification",
+          instructionId: active.instructionId,
+          resumeCommand: instructionGetResumeCommand(active.instructionId)
+        }
+      };
+    }
+    return {
+      instruction: {
+        instructionId: active.instructionId,
+        source: "existing_active",
+        detail: exact.detail,
+        amountLimit: active.amountLimit
+      },
+      result: {}
+    };
+  }
+  let created;
+  try {
+    created = await dependencies.createInstruction({
+      paymentInstrumentId,
+      instructionContext: context.instructionContext
+    });
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_create", error, {
+        resumeCommand: `${VISA_EXECUTABLE_NAME} instruction list --payment-instrument-id ${quoteShell(paymentInstrumentId)} --format json`
+      })
+    };
+  }
+  const authorized = await authorizeInstruction(dependencies, created.instructionId, paymentInstrumentId, context, maxWaitSeconds);
+  return authorized.instruction ? { instruction: authorized.instruction, result: {} } : { result: authorized.result };
+}
+async function authorizeInstruction(dependencies, instructionIdValue, paymentInstrumentId, context, maxWaitSeconds) {
+  const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId, instructionIdValue);
+  let browserLaunch;
+  try {
+    browserLaunch = await dependencies.openUserAction(passkeyUrl, "instruction_authorization");
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_authorization", error, {
+        instructionId: instructionIdValue,
+        paymentInstrumentId,
+        manualOpenUrl: passkeyUrl,
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  let wait;
+  try {
+    wait = await dependencies.waitForEvents({
+      type: "purchase_instruction.activated",
+      maxWaitSeconds,
+      expectedResource: {
+        instructionId: instructionIdValue,
+        purchaseInstructionId: instructionIdValue
+      }
+    });
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_activation_wait", error, {
+        instructionId: instructionIdValue,
+        ...browserActionOutput(passkeyUrl, browserLaunch),
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  let instruction;
+  try {
+    instruction = await dependencies.getInstruction(instructionIdValue);
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_final_get", error, {
+        instructionId: instructionIdValue,
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  if (instruction && instructionId(instruction) === instructionIdValue && createdInstructionMatchesContext(instruction, paymentInstrumentId, context)) {
+    return {
+      instruction: {
+        instructionId: instructionIdValue,
+        source: "created",
+        detail: instruction
+      },
+      result: {}
+    };
+  }
+  return {
+    result: {
+      stage: "instruction_activation",
+      status: wait.timedOut ? "timeout" : "pending",
+      terminal: false,
+      userActionRequired: true,
+      instructionId: instructionIdValue,
+      paymentInstrumentId,
+      ...browserActionOutput(passkeyUrl, browserLaunch),
+      resumeCommand: instructionGetResumeCommand(instructionIdValue)
+    }
+  };
+}
+function browserActionOutput(url, browserLaunch) {
+  return {
+    browserLaunch,
+    ...browserLaunch.status === "launched" ? {} : { manualOpenUrl: url }
+  };
+}
+function selectActiveInstruction(payload, paymentInstrumentId, context, nowMs) {
+  const candidates = instructionArray(payload).map((instruction) => activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs)).filter((candidate) => candidate !== void 0);
+  if (candidates.length === 0) {
+    return { kind: "none" };
+  }
+  const minimumAmount = candidates.reduce((minimum, candidate) => candidate.amountMinorUnits < minimum ? candidate.amountMinorUnits : minimum, candidates[0].amountMinorUnits);
+  const closest = candidates.filter((candidate) => candidate.amountMinorUnits === minimumAmount);
+  if (closest.some((candidate) => candidate.createdAtMs === void 0)) {
+    return {
+      kind: "ambiguous",
+      reason: "best_active_instruction_missing_trusted_creation_time",
+      instructionIds: closest.map((candidate) => candidate.instructionId).sort()
+    };
+  }
+  const latestCreatedAt = Math.max(...closest.map((candidate) => candidate.createdAtMs));
+  const latest = closest.filter((candidate) => candidate.createdAtMs === latestCreatedAt);
+  if (latest.length !== 1) {
+    return {
+      kind: "ambiguous",
+      reason: "best_active_instruction_creation_time_tied",
+      instructionIds: latest.map((candidate) => candidate.instructionId).sort()
+    };
+  }
+  return {
+    kind: "selected",
+    candidate: latest[0]
+  };
+}
+function activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs) {
+  if (instructionStatus2(instruction) !== "ACTIVE") {
+    return void 0;
+  }
+  const observedInstructionId = instructionId(instruction);
+  const observedPaymentInstrumentId = instructionPaymentInstrumentId(instruction);
+  if (!observedInstructionId || observedPaymentInstrumentId !== paymentInstrumentId || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
+    return void 0;
+  }
+  const expectedCurrency = normalizedText3(context.purchaseContext.currency);
+  const instructionCurrency = optionalNormalized(instruction.currencyCode ?? instruction.currency);
+  if (instructionCurrency && instructionCurrency !== expectedCurrency) {
+    return void 0;
+  }
+  const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
+  const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
+    const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
+    if (!optionalText5(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+      return [];
+    }
+    return [{
+      amountLimit: minorUnitsAmountText(amountMinorUnits, context.purchaseContext.currency),
+      amountMinorUnits
+    }];
+  });
+  if (eligibleMandates.length === 0) {
+    return void 0;
+  }
+  eligibleMandates.sort((left, right) => left.amountMinorUnits < right.amountMinorUnits ? -1 : left.amountMinorUnits > right.amountMinorUnits ? 1 : 0);
+  const bestMandate = eligibleMandates[0];
+  const createdAtMs = instructionCreatedAtMs(instruction);
+  return {
+    instructionId: observedInstructionId,
+    amountLimit: bestMandate.amountLimit,
+    amountMinorUnits: bestMandate.amountMinorUnits,
+    ...createdAtMs !== void 0 ? { createdAtMs } : {},
+    detail: instruction
+  };
+}
+function createdInstructionMatchesContext(instruction, paymentInstrumentId, context) {
+  const nowMs = Date.now();
+  if (instructionStatus2(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || normalizedText3(instruction.title) !== normalizedText3(context.instructionContext.title) || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
+    return false;
+  }
+  const expectedMandates = context.instructionContext.mandates;
+  const observedMandates = mandateArray(instruction);
+  return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
+}
+function merchantScopeMatchesContext(candidate, context) {
+  return context.instructionContext.mandates.some((expected) => optionalNormalized(candidate.preferredMerchantName ?? candidate.preferred_merchant_name) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory ?? candidate.merchant_category) === optionalNormalized(expected.merchantCategory));
+}
+function mandatesEqual(candidate, expected) {
+  return normalizedText3(candidate.title) === normalizedText3(expected.title) && normalizedText3(candidate.description) === normalizedText3(expected.description) && comparableAmount2(candidate.amountLimit) === comparableAmount2(expected.amountLimit) && normalizedText3(candidate.currencyCode ?? candidate.currency) === normalizedText3(expected.currencyCode) && normalizedText3(candidate.merchantCategoryCode ?? candidate.merchant_category_code) === normalizedText3(expected.merchantCategoryCode) && optionalNormalized(candidate.preferredMerchantName) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory) === optionalNormalized(expected.merchantCategory);
+}
+function instructionArray(payload) {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord23);
+  }
+  if (!isRecord23(payload)) {
+    return [];
+  }
+  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
+    if (Array.isArray(payload[key])) {
+      return payload[key].filter(isRecord23);
+    }
+  }
+  return [];
+}
+function mandateArray(instruction) {
+  for (const key of ["mandates", "mandateList", "mandateVoList"]) {
+    if (Array.isArray(instruction[key])) {
+      return instruction[key].filter(isRecord23);
+    }
+  }
+  return [];
+}
+function instructionId(instruction) {
+  return optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+}
+function instructionPaymentInstrumentId(instruction) {
+  return optionalText5(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+}
+function instructionStatus2(instruction) {
+  return normalizedText3(instruction.status ?? instruction.state);
+}
+function eventPaymentInstrumentId(event) {
+  return optionalText5(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
+}
+function cardIsVisa(card) {
+  const brand = optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? optionalText5(card.brand) ?? optionalText5(card.network) ?? "";
+  return brand.toUpperCase() === "VISA";
+}
+function cardVicReady(card) {
+  return card.visaRegistrationSucceeded === true;
+}
+function cardDisabled(card) {
+  return card.isDisabled === true || card.is_disabled === true;
+}
+function cardDefault(card) {
+  return card.isDefault === true || card.is_default === true || card.default === true;
+}
+function safeCard(card) {
+  return {
+    paymentInstrumentId: card.paymentInstrumentId,
+    cardScheme: optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? null,
+    cardLastFour: optionalText5(card.cardLastFour) ?? optionalText5(card.card_last_four) ?? null,
+    isDefault: cardDefault(card),
+    visaRegistrationSucceeded: cardVicReady(card)
+  };
+}
+function publicInstruction(instruction) {
+  return {
+    instructionId: instruction.instructionId,
+    source: instruction.source,
+    status: instructionStatus2(instruction.detail),
+    ...instruction.amountLimit ? { amountLimit: instruction.amountLimit } : {}
+  };
+}
+function instructionGetResumeCommand(instructionIdValue) {
+  return `${VISA_EXECUTABLE_NAME} instruction get --purchase-instruction-id ${quoteShell(instructionIdValue)} --format json`;
+}
+function workflowFailure(stage, error, detail = {}) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return {
+    stage,
+    status: "failed",
+    terminal: true,
+    ...detail,
+    error: {
+      name: value.name,
+      message: renderCliCommandText(value.message, VISA_EXECUTABLE_NAME)
+    }
+  };
+}
+function quoteShell(value) {
+  return /^[A-Za-z0-9._:/=-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+function comparableAmount2(value) {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(?:\.\d{1,2})?$/u.test(text)) {
+    return "";
+  }
+  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
+}
+function candidateAmountMinorUnits(value, currency) {
+  const text = typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!text) {
+    return void 0;
+  }
+  try {
+    return majorAmountMinorUnits(text, currency);
+  } catch {
+    return void 0;
+  }
+}
+function minorUnitsAmountText(value, currency) {
+  return minorUnitsMajorAmount(value, currency);
+}
+function instructionCreatedAtMs(instruction) {
+  const values = [
+    optionalText5(instruction.createdAt),
+    optionalText5(instruction.createTime)
+  ].filter((value) => value !== void 0);
+  if (values.length === 0) {
+    return void 0;
+  }
+  const timestamps = values.map(parseTimestamp);
+  if (timestamps.some((value) => value === void 0) || new Set(timestamps).size !== 1) {
+    return void 0;
+  }
+  return timestamps[0];
+}
+function optionalNormalized(value) {
+  return optionalText5(value)?.normalize("NFKC").toUpperCase();
+}
+function normalizedText3(value) {
+  return optionalNormalized(value) ?? "";
+}
+function optionalText5(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isFutureTimestamp(value, nowMs) {
+  const text = optionalText5(value);
+  if (!text) {
+    return false;
+  }
+  const parsed = parseTimestamp(text);
+  return parsed !== void 0 && parsed > nowMs;
+}
+function mandateIsUnexpired(mandate, instruction, nowMs) {
+  const mandateExpiry = optionalText5(mandate.effectiveUntilTime);
+  return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
+}
+function parseTimestamp(value) {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(value) ? `${value.replace(" ", "T")}Z` : value;
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function oneTimeInstruction(instruction) {
+  const value = instruction.isRecurring;
+  return !(value === true || value === 1 || value === "1" || normalizedText3(value) === "TRUE");
+}
+function zeroLike(value) {
+  return value === 0 || value === "0" || value === false;
+}
+function isRecord23(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/help.js
+var OUTPUT_OPTIONS2 = `  --format <json|pretty>        Output format, defaults to json
+  --help, -h                    Show this help`;
+var VISA_HELP = `clink visa
+
+Usage:
+  clink visa init [options]
+  clink visa vsra-init [options]
+  clink visa status [options]
+  clink visa recommend [natural language] [filters]
+  clink visa detail <program-code> [options]
+  clink visa taxonomy [options]
+  clink visa product-search --merchant-url <url> --query <text> [options]
+  clink visa commerce-login --context <json> [options]
+  clink visa commerce-run --context <json> [options]
+
+Subcommands:
+  init         Open direct VSRP OAuth and persist the resulting Clink OAuth authorization
+  vsra-init    Complete VSRA Device Flow for personalized recommendations
+  status       Show Visa FSM, VSRA, and Clink login status without printing secrets
+  recommend    Find Visa campaigns and benefits; broad all-offer requests fetch every page
+  detail       Fetch one Program's redemption details and terms
+  taxonomy     Fetch the current VSRA taxonomy
+  product-search Resolve one purchasable product through internal-first routing
+  commerce-login Check Benefit login and initialize it with a frozen Instruction context
+  commerce-run Complete Card/VIC, Instruction, Checkout, payment, and delivery
+
+Examples:
+  clink visa init --sandbox --open
+  clink visa status --market cn --format pretty
+  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty
+  clink visa recommend "\u65E5\u672C\u9910\u5385\u4F18\u60E0" --region jp --category dining_restaurant
+  clink visa recommend --personalized "\u6211\u7684\u5361\u80FD\u7528\u4EC0\u4E48"
+  clink visa detail P2025110009
+  clink visa product-search --merchant-url https://merchant.example/store --query "meal voucher"
+  clink visa commerce-login --context-file login.json --confirm-purchase --open
+  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
+  clink visa commerce-run --context-file purchase.json --confirm-purchase --open
+`;
+var VISA_PRODUCT_SEARCH_HELP = `clink visa product-search
+
+Usage:
+  clink visa product-search --merchant-url <url> --query <text> [options]
+
+Required Arguments:
+  --merchant-url <url>        Actual HTTP(S) merchant URL; Visa/VSRP URLs are rejected
+  --query <text>              Requested product text used for deterministic selection
+
+Options:
+  --limit <n>                 Internal Catalog result limit, between 1 and 100
+  --language <tag>            Catalog result language as an IETF BCP 47 tag
+  --selected-product-id <id>  Exact ID selected from a prior ambiguous result
+  --product-id <id>           Compatibility alias for --selected-product-id
+  --sandbox                   Use sandbox/UAT Catalog discovery for this command
+  --test                      Use test Catalog discovery; cannot combine with --sandbox
+  --dry-run                   Validate and print the zero-side-effect resolution plan
+  --timeout <ms>              Per-request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  Run this immediately after visa recommend and before visa commerce-login. It requires no wallet,
+  Benefit login, customer Token, or customer API key. It resolves the merchant through the internal
+  UCP list first. An internal match performs one token-free merchant-scoped Catalog search, excludes
+  explicitly unavailable candidates, and selects only one exact title match, one unique
+  title-containing match, or the sole remaining result. It freezes the exact variant, price,
+  currency, availability, merchant name, localized display title, and provider source title directly
+  from that rich search result without calling the customer-authenticated product-detail endpoint.
+
+  Pass the user's product text in the user's language and pass the same language with --language.
+  The CLI sends it as UCP context.language. PRODUCT_VERIFIED returns product.title for localized
+  display and product.sourceTitle for the provider-owned title used by the frozen commerce context.
+  Ambiguity returns PRODUCT_SELECTION_REQUIRED with candidates and has no login, Checkout, or
+  payment side effect. Re-run with --selected-product-id after the user selects.
+
+  External parse-item is allowed only after the exact NOT_IN_INTERNAL_UCP_LIST result. Internal
+  lookup failures, invalid or incomplete search products, unavailable products, ambiguous variants,
+  missing prices, currency conflicts, and Visa/VSRP campaign URLs fail closed. PRODUCT_VERIFIED
+  returns frozen product fields for commerce-login and the final commerce-run context.
+
+Flow:
+  visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
+
+Examples:
+  clink visa product-search \\
+    --merchant-url https://merchant.example/benefits \\
+    --query "Selected Visa Program title" --language en --format json
+  clink visa product-search \\
+    --merchant-url https://merchant.example/store \\
+    --query "meal voucher" --language en --selected-product-id sku_1 --format json
+`;
+var VISA_COMMERCE_LOGIN_HELP = `clink visa commerce-login
+
+Usage:
+  clink visa commerce-login (--context <json> | --context-file <path>) [options]
+
+Options:
+  --context <json>             Login context JSON with environment and instructionContext
+  --context-file <path>        Read the same JSON object from a UTF-8 file
+  --confirm-purchase           Required before every live login check or initialization
+  --open                       Open the Visa Benefit authorization URL when login is required
+  --no-open                    Return manualOpenUrl without opening a browser
+  --dry-run                    Validate and print the zero-side-effect login plan
+  --timeout <ms>               Per-request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  The JSON object contains only the selected environment and the complete frozen
+  instructionContext. Validation covers title, 1-10 mandates, mandate descriptions up to 150
+  characters, positive amount limits, three-letter currencies, four-digit MCCs, merchant-scope
+  conflicts, recurring frequency, UTC expiry, shipping address, and total context size.
+  When the CLI distribution is locked to sandbox/UAT or test, a generic production context
+  defaults to that locked environment. Other incompatible environment values still fail closed.
+
+  Context, environment, and live --confirm-purchase validation finish before the CLI reads its
+  config or touches Tokens or the network. Dry-run performs no login inspection, config mutation,
+  browser launch, or network request.
+
+  Live execution first checks the local Visa Benefit login state. A ready login returns
+  CONTINUE_REGULAR_INSTRUCTION_FLOW with instructionId=null without restarting OAuth or guessing a
+  historical Quick Instruction. Otherwise it runs one foreground Visa Benefit login and sends the
+  exact instructionContext to the authorization request. Only a REGISTER response with
+  customerCreated=true, activationDriver=PORTAL_AUTO_CARD_SETUP, and pendingInstructionId starts
+  the bounded Quick wait. The CLI keeps running for up to 300 seconds, using the exact activation
+  event only as a wake-up, then exact-GETs that same ID. LOGIN, old responses, or missing fields
+  continue the regular Instruction flow without polling. Only status=ACTIVE returns ready=true and
+  allows the purchase flow to continue; a remaining PENDING Instruction returns ready=false
+  without opening another page.
+  With --open, callers should tell the user to finish VSRP login and, when needed, card binding,
+  VIC, and Passkey in the one opened browser flow while the CLI continues waiting. The command
+  never persists an Instruction continuation and never calls the standalone Instruction create
+  API, resolves a merchant, searches Catalog, prepares a card, creates a Checkout, or pays.
+
+Examples:
+  clink visa commerce-login --context-file login.json --dry-run --format pretty
+  clink visa commerce-login --context-file login.json --confirm-purchase --open --format json
+`;
+var VISA_COMMERCE_RUN_HELP = `clink visa commerce-run
+
+Usage:
+  clink visa commerce-run (--context <json> | --context-file <path>) [options]
+
+Options:
+  --context <json>             Preparation or frozen purchase context JSON
+  --context-file <path>        Read the same JSON object from a UTF-8 file
+  --confirm-purchase           Required only for live mode=purchase; forbidden for mode=prepare
+  --open                       Open required card, VIC, and Passkey pages
+  --no-open                    Print required browser URLs without opening them
+  --wait-delivery              Wait for digital delivery even when context does not require it
+  --max-wait <seconds>         Event and delivery wait bound, defaults to 900
+  --dry-run                    Validate and print the no-side-effect execution plan
+  --timeout <ms>               Per-request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Context:
+  mode=prepare requires environment plus target=login or target=visa_card_ready. It does not
+  require or accept purchaseContext or instructionContext, and it never creates an Instruction,
+  Checkout, or payment.
+
+  mode=purchase accepts the Visa Skill frozen shape: environment, requestText, program.code,
+  selection.merchantUrl/productId/productQuery/quantity, expected.merchantName/itemTitle/amount/
+  currency, instructionContext, and digitalDeliveryExpected. Top-level instructionId is rejected;
+  commerce-run selects a usable ACTIVE Instruction from the VIC-ready payment instrument.
+  selection.quantity must be a positive JSON integer number such as 1, never "1" or 1.5.
+  digitalDeliveryExpected must be the JSON boolean true or false, never "true" or "false".
+  selection.merchantId and endpoint are optional frozen routing facts. Every new Instruction
+  mandate must match expected.amount and currency and use one MCC, which becomes the Checkout MCC.
+  The CLI never adds an amount buffer.
+  When the CLI distribution is locked to sandbox/UAT or test, a generic production context
+  defaults to that locked environment. Explicit incompatible non-production values still fail.
+
+Behavior:
+  Validation of mode, environment, and the purchase guard happens before Token refresh or business
+  network access. prepare target=login returns as soon as Benefit login is ready. prepare
+  target=visa_card_ready continues only through Card/VIC readiness.
+
+  purchase requires the separate commerce-login stage to be ready, exact-revalidates the frozen
+  product selected by product-search, then prepares or reuses one VIC-ready Visa card.
+  It lists only that payment instrument's Instructions and considers ACTIVE candidates whose
+  currency, MCC, merchant scope, Instruction expiry, Mandate expiry, and one-time reserve status
+  still permit the actual total. It chooses the smallest amountLimit greater than or equal to the
+  total, then the newest trusted createdAt/createTime. Missing or tied creation time fails closed.
+  The chosen ID is exact-GET again and every condition is revalidated before Checkout.
+
+  Historical PENDING or draft Instructions are never authorized by commerce-run. When no usable
+  ACTIVE candidate exists, the CLI creates one regular Instruction for the exact actual price and
+  authorizes only that new ID. Restricted categories are refused deterministically before any
+  Instruction selection or creation.
+
+  Before card or Instruction work, purchase mode resolves the merchant internally first, fetches
+  the current UCP Catalog product, and rejects ID, title, price, currency, availability, merchant,
+  or endpoint drift. Only an explicit internal-list miss may use external product parsing.
+
+  Checkout uses the shared ucp-checkout run implementation: create and complete are each attempted
+  once, payment is never retried, and non-terminal payment states return a read-only resumeCommand.
+  Digital delivery polling starts only after an authoritative completed Checkout with an order ID;
+  ready output includes the order and digital_delivery artifacts such as voucher codes.
+  A non-terminal Checkout or delivery result exposes resumeReadOnly=true with one bound read-only
+  resumeCommand. Never rerun commerce-run after Checkout creation.
+
+Examples:
+  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
+  clink visa commerce-run --context '{"mode":"prepare","target":"visa_card_ready","environment":"uat"}' --open
+  clink visa commerce-run --context-file purchase.json --dry-run --format pretty
+  clink visa commerce-run --context-file purchase.json --confirm-purchase --open --format json
+`;
+var VISA_INIT_HELP = `clink visa init
+
+Usage:
+  clink visa init [options]
+
+Options:
+  --sandbox                    Use sandbox/UAT CWallet API
+  --test                       Use test CWallet API; cannot be combined with --sandbox
+  --timeout <ms>               Request timeout in milliseconds
+  --open                       Open the direct VSRP OAuth URL in the browser
+  --no-open                    Print the URL without opening a browser
+  --start                      Create or reuse one pending login and return immediately
+  --resume <resume-id>         Probe one previously started login without creating another
+  --dry-run                    Print the Benefit authorization request without executing it
+  --title <text>               Purchase intent title; enables the Quick Instruction context
+  --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
+  --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
+  --description <text>         Optional Quick Instruction description
+  --is-recurring               Mark the Quick Instruction as recurring
+  --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
+  --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  Calls POST /agent/cwallet/oauth/benefit/authorization with clientId clink-cli, a stable UUID v4
+  installation identity, and the Agent Client device metadata also used by wallet init. The returned
+  URL goes directly to VSRP OAuth and never contains deviceCode. The CLI polls
+  POST /agent/cwallet/oauth/benefit/token until the server-provided expiresIn elapses.
+  A missing or invalid expiresIn falls back to ten minutes.
+  --start returns manualOpenUrl, browserLaunch, expiresAt, and resumeCommand without waiting.
+  --resume probes the same pending Device Flow once. Pending results return the same resumeCommand;
+  success atomically persists the authorization. Neither mode exposes deviceCode or OAuth state.
+  Quick Instruction options are accepted only when creating the Benefit authorization, including
+  the first --start call; they are rejected with --resume. The request carries instructionContext
+  with the same validation as wallet init. A new Quick context supersedes a reusable pending login
+  so the server receives the frozen purchase intent. Successful completion reports
+  pendingInstructionId when supplied by CWallet, without persisting it as long-lived authorization.
+  Clink Access and Refresh Tokens plus agentClientId and visaRegistrationStatus are stored only in
+  ~/.clink-cli/config.json authorization. Only SUCCEEDED means Visa registration completed.
+  A login for the same customer replaces the previous authorization and best-effort revokes its
+  Refresh Token family. A different customer is rejected instead of silently switching accounts.
+`;
+var VISA_VSRA_INIT_HELP = `clink visa vsra-init
+
+Usage:
+  clink visa vsra-init [options]
+
+Options:
+  --market <cn|hk|tw>          Issuing market, defaults to the saved market or cn
+  --lang <locale>              zh-CN, zh-TW, zh-HK, or en
+  --open                       Open the VSRA Device Flow URL in the browser
+  --no-open                    Print the URL without opening a browser
+  --timeout <ms>               Request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  Preserves the VSRA personalized recommendation flow separately from Clink OAuth. The VSRA
+  apiToken and recoverable Device Flow state are stored under the Visa section of the same CLI
+  config file. VSRP provider Tokens are never exposed to or stored by the CLI.
+`;
+var VISA_STATUS_HELP = `clink visa status
+
+Usage:
+  clink visa status [options]
+
+Options:
+  --market <cn|hk|tw>          VSRA market to probe
+  --lang <locale>              zh-CN, zh-TW, zh-HK, or en
+  --timeout <ms>               Request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Notes:
+  Probes the selected VSRA token when present and reports Clink authorization metadata without
+  printing Access Tokens, Refresh Tokens, deviceCode, OAuth state, email, or provider credentials.
+`;
+var VISA_RECOMMEND_HELP = `clink visa recommend
+
+Usage:
+  clink visa recommend [natural language] [options]
+
+Filters:
+  --region <code...>           Destination regions; same-axis values are OR
+  --category <code...>         Offer categories
+  --purpose <code...>          outbound, study, local, inbound, or haitao
+  --reward-type <code...>      discount, cashback, coupon, points, privilege, gift, or other
+  --attribute <code...>        Offer attributes
+  --card-level <code...>       Visa card levels
+  --card-issuer <code...>      Issuer codes
+  --type <reward|benefit>      Limit to campaigns or benefits
+  --keyword <text>             Server keyword filter
+  --limit <n>                  Page size, max 50
+  --page <n>                   Page number
+
+Options:
+  --all                        Fetch all matching pages; cannot be combined with --limit/--page
+  --personalized               Require VSRA Device Flow before recommending
+  --anonymous                  Ignore any saved VSRA token
+  --market <cn|hk|tw>          Issuing market
+  --lang <locale>              zh-CN, zh-TW, zh-HK, or en
+  --open                       Open VSRA login when personalized authorization is required
+  --timeout <ms>               Request timeout in milliseconds
+  --dry-run                    Print one recommendation request without executing it
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  Natural-language filters use the current server taxonomy. Explicit --all and broad requests such
+  as "Visa\u6743\u76CA\u6709\u54EA\u4E9B" fetch pageSize 50 repeatedly, de-duplicate Programs, and stop at total, a
+  short page, a repeated page, or the safety limit. Explicit --limit/--page keeps ordinary paging.
+
+  Output recommendationMode is matching_offers when returned Programs still satisfy the requested
+  relevance filters. When many matching offers are returned, callers should rank all returned
+  matches against the request and display only the best ten. If the server relaxes natural-language
+  filters after finding no relevant offers, recommendationMode is fallback_all_offers and
+  relaxedAxes names the relaxed filters. Those fallback Programs are not relevant matches and must
+  not be ranked or displayed as if they matched. Broad user requests use all_offers_requested;
+  an empty non-broad result uses no_matching_offers. returnedOfferCount is the number of rows
+  actually present in response.data.items.
+
+  MCC means Merchant Category Code, the four-digit merchant classification code used by card
+  networks. A Visa Program category is an offer taxonomy value, not an MCC.
+
+  Final Program items preserve Visa response fields except that an invalid
+  commerce.merchantCategoryCode is removed. When a Program provides a valid four-digit
+  commerce.merchantCategoryCode or top-level merchantCategoryCode, the CLI trims and exposes it as
+  commerce.merchantCategoryCode with merchantCategoryCodeSource=visa_program when no source was
+  supplied. The CLI itself does not infer a replacement when Program MCC data is missing or
+  invalid; callers may separately infer one high-confidence four-digit MCC from authoritative
+  metadata of that same selected Program.
+`;
+var VISA_DETAIL_HELP = `clink visa detail
+
+Usage:
+  clink visa detail <program-code> [options]
+
+Options:
+  --market <cn|hk|tw>          Issuing market
+  --lang <locale>              zh-CN, zh-TW, zh-HK, or en
+  --timeout <ms>               Request timeout in milliseconds
+  --dry-run                    Print the Program request without executing it
+${OUTPUT_OPTIONS2}
+`;
+var VISA_TAXONOMY_HELP = `clink visa taxonomy
+
+Usage:
+  clink visa taxonomy [options]
+
+Options:
+  --market <cn|hk|tw>          Issuing market
+  --lang <locale>              zh-CN, zh-TW, zh-HK, or en
+  --timeout <ms>               Request timeout in milliseconds
+  --dry-run                    Print the taxonomy request without executing it
+${OUTPUT_OPTIONS2}
+`;
+function getVisaEditionHelpText(command, subcommand, nestedCommand) {
+  if (!command) {
+    return renderVisaHelp(addVisaRootHelp(getHelpText()).replace("Clink customer wallet CLI.", "Visa wallet CLI."));
+  }
+  if (command !== "visa") {
+    return getHelpText(command, subcommand, nestedCommand, VISA_EXECUTABLE_NAME);
+  }
+  let help;
+  switch (subcommand) {
+    case "init":
+      help = VISA_INIT_HELP;
+      break;
+    case "vsra-init":
+      help = VISA_VSRA_INIT_HELP;
+      break;
+    case "status":
+      help = VISA_STATUS_HELP;
+      break;
+    case "recommend":
+      help = VISA_RECOMMEND_HELP;
+      break;
+    case "detail":
+      help = VISA_DETAIL_HELP;
+      break;
+    case "taxonomy":
+      help = VISA_TAXONOMY_HELP;
+      break;
+    case "commerce-login":
+      help = VISA_COMMERCE_LOGIN_HELP;
+      break;
+    case "product-search":
+      help = VISA_PRODUCT_SEARCH_HELP;
+      break;
+    case "commerce-run":
+      help = VISA_COMMERCE_RUN_HELP;
+      break;
+    default:
+      help = VISA_HELP;
+  }
+  return renderVisaHelp(help);
+}
+function renderVisaHelp(help) {
+  return renderCliCommandText(help, VISA_EXECUTABLE_NAME);
+}
+function addVisaRootHelp(rootHelp) {
+  return rootHelp.replace("  wallet            Initialize wallet and inspect local wallet status\n", "  wallet            Initialize wallet and inspect local wallet status\n  visa              Sign in with Visa and discover Visa offers\n").replace("  clink wallet status --format pretty\n", '  clink wallet status --format pretty\n  clink visa init --sandbox --open\n  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty\n').replace("  clink wallet --help\n", "  clink wallet --help\n  clink visa --help\n").replace("Select an official environment with wallet init:", "Select an official environment with wallet init or visa init:");
+}
+
+// dist/visa/product-search.js
+var INTERNAL_LIST_MISS = "NOT_IN_INTERNAL_UCP_LIST";
+async function runVisaProductSearch(rawInput, dependencies) {
+  const input = normalizeInput(rawInput);
+  let internal;
+  try {
+    internal = await dependencies.resolveInternal(input.merchantUrl);
+  } catch (error) {
+    if (!(error instanceof CliError) || error.message !== INTERNAL_LIST_MISS) {
+      throw error;
+    }
+    return resolveExternalProduct(input, dependencies);
+  }
+  const search = await dependencies.searchInternal(internal.merchantId, input.query, input.limit, input.language);
+  const searchProducts = catalogProducts(search).map((product) => ({
+    candidate: normalizeCandidate(product),
+    product
+  }));
+  if (searchProducts.length === 0) {
+    return {
+      state: "PRODUCT_UNAVAILABLE",
+      action: "STOP_PRODUCT_PURCHASE",
+      terminal: true,
+      reason: "catalog_search_no_products",
+      productResolution: "internal-ucp-catalog",
+      parseItemAllowed: false,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    };
+  }
+  const explicitlySelected = input.selectedProductId ? searchProducts.find(({ candidate, product }) => candidate.productId === input.selectedProductId || productVariants(product).some((variant) => productId(variant) === input.selectedProductId)) : void 0;
+  const explicitlySelectedCandidate = explicitlySelected?.candidate;
+  if (explicitlySelectedCandidate?.available === false) {
+    return unavailableProduct("product_not_available", explicitlySelectedCandidate);
+  }
+  const availableSearchProducts = searchProducts.filter(({ candidate }) => candidate.available !== false);
+  if (availableSearchProducts.length === 0) {
+    return {
+      state: "PRODUCT_UNAVAILABLE",
+      action: "STOP_PRODUCT_PURCHASE",
+      terminal: true,
+      reason: "catalog_search_no_available_products",
+      productResolution: "internal-ucp-catalog",
+      parseItemAllowed: false,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    };
+  }
+  const selected = explicitlySelected ?? selectCatalogSearchProduct(availableSearchProducts, input);
+  if (!selected) {
+    return selectionRequired("catalog_product_selection_required", availableSearchProducts.map(({ candidate }) => candidate), {
+      productResolution: "internal-ucp-catalog",
+      parseItemAllowed: false,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    });
+  }
+  return resolveInternalProductDetail({ product: selected.product }, input.selectedProductId ?? selected.candidate.productId, input, internal);
+}
+function normalizeInput(input) {
+  let merchantUrl;
+  try {
+    merchantUrl = new URL(input.merchantUrl);
+  } catch {
+    throw validationError("--merchant-url must be a valid HTTP(S) URL");
+  }
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:") {
+    throw validationError("--merchant-url must be a valid HTTP(S) URL");
+  }
+  const hostname = merchantUrl.hostname.toLowerCase();
+  if (hostname === "vsrp.cn" || hostname.endsWith(".vsrp.cn")) {
+    throw validationError("--merchant-url must be the actual merchant URL, not a Visa/VSRP URL");
+  }
+  const query = normalizedText4(input.query);
+  if (!query) {
+    throw validationError("--query must not be blank");
+  }
+  const selectedProductId = normalizedText4(input.selectedProductId);
+  const language = normalizedText4(input.language);
+  const quantity = input.quantity ?? 1;
+  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+    throw validationError("--quantity must be a positive integer");
+  }
+  return {
+    merchantUrl: merchantUrl.toString(),
+    query,
+    quantity,
+    ...language ? { language } : {},
+    ...input.limit !== void 0 ? { limit: input.limit } : {},
+    ...selectedProductId ? { selectedProductId } : {}
+  };
+}
+async function resolveExternalProduct(input, dependencies) {
+  const parsed = await dependencies.parseExternal(input.merchantUrl);
+  const candidates = parsed.items.filter(externalProductAvailable).map((item2) => ({
+    productId: item2.itemId,
+    title: item2.title,
+    available: item2.available
+  }));
+  if (candidates.length === 0) {
+    return {
+      state: "PRODUCT_UNAVAILABLE",
+      action: "STOP_PRODUCT_PURCHASE",
+      terminal: true,
+      reason: "parse_item_no_available_items",
+      productResolution: "external-product-page",
+      parseItemAllowed: true
+    };
+  }
+  const selected = selectCandidate(candidates, input);
+  if (!selected) {
+    return selectionRequired("parse_item_selection_required", candidates, {
+      productResolution: "external-product-page",
+      parseItemAllowed: true
+    });
+  }
+  const item = parsed.items.find((candidate) => candidate.itemId === selected.productId);
+  if (!item || !externalProductAvailable(item)) {
+    return {
+      state: "PRODUCT_UNAVAILABLE",
+      action: "STOP_PRODUCT_PURCHASE",
+      terminal: true,
+      reason: "product_not_available",
+      productId: selected.productId,
+      title: selected.title
+    };
+  }
+  return verifiedProduct({
+    resolution: "external-product-page",
+    parseItemAllowed: true,
+    itemId: item.itemId,
+    title: item.title,
+    sourceTitle: item.title,
+    productUrl: item.itemUrl || parsed.itemUrl || input.merchantUrl,
+    currency: parsed.currency,
+    amountMinor: BigInt(item.unitPriceMinor),
+    quantity: input.quantity,
+    merchantName: requiredText3(parsed.merchantName, "parsed merchant is missing name")
+  });
+}
+function resolveInternalProductDetail(payload, selectedProductId, input, internal) {
+  const product = catalogProduct(payload);
+  const parentId = requiredText3(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
+  const parentTitle = requiredText3(product.title ?? product.name, "UCP Catalog product is missing title");
+  const variants = productVariants(product);
+  let selected;
+  if (variants.length === 0) {
+    if (parentId !== selectedProductId) {
+      return selectionRequired("catalog_variant_selection_required", [normalizeCandidate(product)], {
+        productResolution: "internal-ucp-catalog",
+        parseItemAllowed: false,
+        merchantId: internal.merchantId,
+        endpoint: internal.endpoint
+      });
+    }
+    selected = product;
+  } else {
+    const matching = variants.filter((variant) => productId(variant) === selectedProductId);
+    if (matching.length === 1 && productAvailable(matching[0]) === false) {
+      return unavailableProduct("product_not_available", normalizeCandidate(matching[0]));
+    }
+    if (matching.length !== 1) {
+      const candidates = selectableCandidates(variants.map(normalizeCandidate));
+      if (candidates.length === 0) {
+        return {
+          state: "PRODUCT_UNAVAILABLE",
+          action: "STOP_PRODUCT_PURCHASE",
+          terminal: true,
+          reason: "catalog_no_available_variants",
+          productId: parentId,
+          title: parentTitle
+        };
+      }
+      return selectionRequired("catalog_variant_selection_required", candidates, {
+        productResolution: "internal-ucp-catalog",
+        parseItemAllowed: false,
+        merchantId: internal.merchantId,
+        endpoint: internal.endpoint
+      });
+    }
+    selected = matching[0];
+  }
+  const available = productAvailable(selected) ?? productAvailable(product);
+  if (available === false) {
+    return {
+      state: "PRODUCT_UNAVAILABLE",
+      action: "STOP_PRODUCT_PURCHASE",
+      terminal: true,
+      reason: "product_not_available",
+      productId: selectedProductId,
+      title: productTitle(selected) ?? parentTitle
+    };
+  }
+  if (available === null) {
+    throw validationError("UCP Catalog product is missing availability");
+  }
+  const selectedId = productId(selected);
+  if (!selectedId) {
+    throw validationError("UCP Catalog selected product is missing id");
+  }
+  const selectedTitle = productTitle(selected) ?? parentTitle;
+  const sourceTitle = productSourceTitle(selected) ?? selectedTitle;
+  const money = resolveInternalMoney(product, selected === product ? void 0 : selected, parentId === selectedProductId);
+  const merchantName = normalizedText4(selected.merchantName ?? selected.merchant_name ?? sellerName(selected) ?? product.merchantName ?? product.merchant_name ?? sellerName(product) ?? internal.domainName);
+  return verifiedProduct({
+    resolution: "internal-ucp-catalog",
+    parseItemAllowed: false,
+    merchantId: internal.merchantId,
+    endpoint: internal.endpoint,
+    itemId: selectedId,
+    title: selectedTitle,
+    sourceTitle,
+    productUrl: productUrl(selected) ?? productUrl(product) ?? input.merchantUrl,
+    currency: money.currency,
+    amountMinor: money.amountMinor,
+    quantity: input.quantity,
+    merchantName
+  });
+}
+function verifiedProduct(input) {
+  const unitPriceMinor = safeMinorUnits(input.amountMinor);
+  const totalAmountMinor = safeMinorUnits(input.amountMinor * BigInt(input.quantity));
+  return {
+    state: "PRODUCT_VERIFIED",
+    action: "CONTINUE_TO_COMMERCE_LOGIN",
+    terminal: false,
+    reason: "product_verified",
+    productResolution: input.resolution,
+    parseItemAllowed: input.parseItemAllowed,
+    ...input.merchantId ? { merchantId: input.merchantId } : {},
+    ...input.endpoint ? { endpoint: input.endpoint } : {},
+    product: {
+      itemId: input.itemId,
+      title: input.title,
+      sourceTitle: input.sourceTitle,
+      productUrl: input.productUrl,
+      currency: input.currency,
+      unitPriceMajor: minorUnitsMajorAmount(input.amountMinor, input.currency),
+      unitPriceMinor,
+      quantity: input.quantity,
+      totalAmountMajor: minorUnitsMajorAmount(input.amountMinor * BigInt(input.quantity), input.currency),
+      totalAmountMinor,
+      availability: "in_stock",
+      merchantName: input.merchantName
+    }
+  };
+}
+function selectionRequired(reason, candidates, extra) {
+  return {
+    state: "PRODUCT_SELECTION_REQUIRED",
+    action: "ASK_FOR_PRODUCT_SELECTION",
+    terminal: false,
+    reason,
+    ...extra,
+    products: candidates
+  };
+}
+function selectCandidate(candidates, input) {
+  if (input.selectedProductId) {
+    return candidates.find((candidate) => candidate.productId === input.selectedProductId);
+  }
+  const query = comparableText(input.query);
+  const exact = candidates.filter((candidate) => comparableText(candidate.title) === query);
+  if (exact.length === 1) {
+    return exact[0];
+  }
+  const contains = candidates.filter((candidate) => {
+    const title = comparableText(candidate.title);
+    return title.includes(query);
+  });
+  if (contains.length === 1) {
+    return contains[0];
+  }
+  return candidates.length === 1 ? candidates[0] : void 0;
+}
+function selectCatalogSearchProduct(products, input) {
+  const selected = selectCandidate(products.map(({ candidate }) => candidate), input);
+  return selected ? products.find(({ candidate }) => candidate.productId === selected.productId) : void 0;
+}
+function catalogProducts(payload) {
+  const root = requireRecord2(payload, "invalid UCP Catalog search response");
+  const data = isRecord24(root.data) ? root.data : root;
+  const response = isRecord24(data.response) ? data.response : data;
+  const responseData = isRecord24(response.data) ? response.data : response;
+  const products = [
+    responseData.products,
+    responseData.items,
+    responseData.results,
+    data.products,
+    data.items,
+    data.results
+  ].find(Array.isArray);
+  if (!products) {
+    return [];
+  }
+  return products.map((product) => requireRecord2(product, "UCP Catalog search contains an invalid product"));
+}
+function catalogProduct(payload) {
+  const root = requireRecord2(payload, "invalid UCP Catalog product response");
+  const data = isRecord24(root.data) ? root.data : root;
+  return requireRecord2(data.product ?? data, "UCP Catalog response is missing product");
+}
+function productVariants(product) {
+  const variants = [
+    product.variants,
+    product.items,
+    product.skus
+  ].find(Array.isArray);
+  if (!variants) {
+    return [];
+  }
+  return variants.map((variant) => requireRecord2(variant, "UCP Catalog product contains an invalid variant"));
+}
+function normalizeCandidate(product) {
+  return {
+    productId: requiredText3(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
+    title: requiredText3(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
+    available: productAvailable(product)
+  };
+}
+function selectableCandidates(candidates) {
+  return candidates.filter((candidate) => candidate.available !== false);
+}
+function unavailableProduct(reason, candidate) {
+  return {
+    state: "PRODUCT_UNAVAILABLE",
+    action: "STOP_PRODUCT_PURCHASE",
+    terminal: true,
+    reason,
+    productId: candidate.productId,
+    title: candidate.title
+  };
+}
+function productId(product) {
+  return normalizedText4(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku);
+}
+function productTitle(product) {
+  return normalizedText4(product.title ?? product.name ?? product.display_name ?? product.description);
+}
+function productSourceTitle(product) {
+  const metadata = isRecord24(product.metadata) ? product.metadata : void 0;
+  const localization = metadata && (isRecord24(metadata.text_localization) ? metadata.text_localization : isRecord24(metadata.textLocalization) ? metadata.textLocalization : void 0);
+  const origin = isRecord24(localization?.origin) ? localization.origin : void 0;
+  return normalizedText4(origin?.title);
+}
+function productUrl(product) {
+  return normalizedText4(product.url ?? product.itemUrl ?? product.item_url ?? product.productUrl ?? product.product_url);
+}
+function sellerName(product) {
+  const seller = isRecord24(product.seller) ? product.seller : void 0;
+  return normalizedText4(seller?.name);
+}
+function productAvailable(product) {
+  const availability = isRecord24(product.availability) ? product.availability : isRecord24(product.inventory) ? product.inventory : void 0;
+  for (const value of [
+    product.available,
+    product.isAvailable,
+    product.is_available,
+    product.orderable,
+    product.inStock,
+    product.in_stock,
+    availability?.available,
+    availability?.inStock,
+    availability?.in_stock
+  ]) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  const status = normalizedText4((isRecord24(product.availability) ? void 0 : product.availability) ?? product.availabilityStatus ?? product.availability_status ?? product.inventoryStatus ?? product.inventory_status ?? availability?.status ?? product.status)?.toLowerCase();
+  if (!status) {
+    return null;
+  }
+  if (["in_stock", "instock", "available", "active", "orderable", "on_sale"].includes(status)) {
+    return true;
+  }
+  if (["out_of_stock", "unavailable", "inactive", "sold_out", "disabled"].includes(status)) {
+    return false;
+  }
+  return null;
+}
+function externalProductAvailable(item) {
+  return item.available === true && item.inventoryStatus !== "out_of_stock";
+}
+function resolveInternalMoney(product, variant, selectedIdMatchesProduct) {
+  const fallbackCurrency = typeof product.currency === "string" ? product.currency : void 0;
+  const variantPrice = variant ? optionalMoney(variant.price, "UCP Catalog variant price", fallbackCurrency) : void 0;
+  const productPrice = optionalMoney(product.price, "UCP Catalog product price", fallbackCurrency);
+  if (variantPrice && productPrice && !sameMoney(variantPrice, productPrice)) {
+    throw validationError("UCP Catalog variant and product prices conflict");
+  }
+  const range = optionalMoneyRange(product.price_range ?? product.priceRange, fallbackCurrency);
+  const exact = variantPrice ?? productPrice;
+  if (exact) {
+    if (range && (exact.currency !== range.minimum.currency || exact.amountMinor < range.minimum.amountMinor || exact.amountMinor > range.maximum.amountMinor)) {
+      throw validationError("UCP Catalog exact price conflicts with product price_range");
+    }
+    return exact;
+  }
+  if (!range) {
+    throw validationError("UCP Catalog product is missing an exact price");
+  }
+  if (!selectedIdMatchesProduct) {
+    throw validationError("UCP Catalog variant is missing an exact price");
+  }
+  if (!sameMoney(range.minimum, range.maximum)) {
+    throw validationError("UCP Catalog product price_range is ambiguous");
+  }
+  return range.minimum;
+}
+function optionalMoney(value, source, fallbackCurrency) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  const price = requireRecord2(value, `${source} must be an object`);
+  const amountMinor = minorUnits(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
+  const currency = requiredText3(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
+  return { amountMinor, currency };
+}
+function optionalMoneyRange(value, fallbackCurrency) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  const range = requireRecord2(value, "UCP Catalog product price_range must be an object");
+  const minimum = optionalMoney(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
+  const maximum = optionalMoney(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
+  if (!minimum || !maximum) {
+    throw validationError("UCP Catalog product price_range must contain min and max prices");
+  }
+  if (minimum.currency !== maximum.currency) {
+    throw validationError("UCP Catalog product price_range currencies conflict");
+  }
+  if (minimum.amountMinor > maximum.amountMinor) {
+    throw validationError("UCP Catalog product price_range min exceeds max");
+  }
+  return { minimum, maximum };
+}
+function sameMoney(left, right) {
+  return left.amountMinor === right.amountMinor && left.currency === right.currency;
+}
+function minorUnits(value, message) {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return BigInt(value);
+  }
+  if (typeof value === "string" && /^\d+$/u.test(value.trim())) {
+    return BigInt(value.trim());
+  }
+  throw validationError(message);
+}
+function safeMinorUnits(value) {
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw validationError("UCP Catalog product amount is too large");
+  }
+  return Number(value);
+}
+function requiredText3(value, message) {
+  const text = normalizedText4(value);
+  if (!text) {
+    throw validationError(message);
+  }
+  return text;
+}
+function normalizedText4(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function comparableText(value) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+}
+function requireRecord2(value, message) {
+  if (!isRecord24(value)) {
+    throw validationError(message);
+  }
+  return value;
+}
+function isRecord24(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/edition.js
+var VISA_OPTION_DEFINITIONS = [
+  { name: "keyword", flags: "--keyword <text>" },
+  { name: "market", flags: "--market <market>" },
+  { name: "lang", flags: "--lang <locale>" },
+  { name: "personalized", flags: "--personalized" },
+  { name: "anonymous", flags: "--anonymous" },
+  { name: "start", flags: "--start" },
+  { name: "resume", flags: "--resume <resume-id>" },
+  { name: "context-file", flags: "--context-file <path>" },
+  { name: "selected-product-id", flags: "--selected-product-id <id>" }
+];
+var VISA_MULTI_VALUE_OPTIONS = /* @__PURE__ */ new Map([
+  ["--region", "region"],
+  ["--category", "category"],
+  ["--purpose", "purpose"],
+  ["--reward-type", "reward-type"],
+  ["--reward_type", "reward-type"],
+  ["--attribute", "attribute"],
+  ["--card-level", "card-level"],
+  ["--card_level", "card-level"],
+  ["--card-issuer", "card-issuer"],
+  ["--card_issuer", "card-issuer"]
+]);
+var VISA_FLAG_NAMES = [
+  "market",
+  "lang",
+  "personalized",
+  "anonymous",
+  "start",
+  "resume",
+  "region",
+  "category",
+  "purpose",
+  "reward-type",
+  "attribute",
+  "card-level",
+  "card-issuer",
+  "keyword",
+  "context-file",
+  "selected-product-id"
+];
+var VISA_OAUTH_SCOPE = [
+  ...OAUTH_DEFAULT_SCOPE.split(/\s+/u).filter((scope) => scope !== "offline_access"),
+  "benefit:read",
+  "offline_access"
+].join(" ");
+var VISA_EDITION = {
+  executableName: VISA_EXECUTABLE_NAME,
+  commandNames: ["visa"],
+  environmentSelectingInitCommands: ["visa"],
+  environmentSelectingCommands: [
+    { command: "visa", subcommand: "product-search" }
+  ],
+  getHelpText: getVisaEditionHelpText,
+  oauthScope: VISA_OAUTH_SCOPE,
+  parseArgsOptions: {
+    optionDefinitions: VISA_OPTION_DEFINITIONS,
+    multiValueOptions: VISA_MULTI_VALUE_OPTIONS
+  },
+  validateArgs: validateVisaFlagScope,
+  prepareCommand: prepareVisaEditionCommand,
+  handleCommand: handleVisaEditionCommand,
+  configLifecycle: {
+    afterWalletLogin: recoverAfterWalletLogin,
+    afterWalletLogout: recoverAfterWalletLogout,
+    afterBaseUrlChange: recoverAfterBaseUrlChange
+  }
+};
+function runVisaCli(argv, startedAt = performance2.timeOrigin + performance2.now()) {
+  return runCli(argv, startedAt, VISA_EDITION);
+}
+async function handleVisaEditionCommand(command, subcommand, context) {
+  if (command !== "visa") {
+    return void 0;
+  }
+  if (!subcommand) {
+    process.stdout.write(getVisaEditionHelpText("visa"));
+    return EXIT_CODES.OK;
+  }
+  switch (subcommand) {
+    case "init":
+      return visaInit(context);
+    case "vsra-init":
+      return visaVsraInit(context);
+    case "status":
+      return visaStatus(context);
+    case "recommend":
+      return visaRecommend(context);
+    case "detail":
+      return visaDetail(context);
+    case "taxonomy":
+      return visaTaxonomy(context);
+    case "commerce-run":
+      return visaCommerceRun(context);
+    case "commerce-login":
+      return visaCommerceLogin(context);
+    case "product-search":
+      return visaProductSearch(context);
+    default:
+      throw validationError(`unsupported visa command: ${subcommand}`);
+  }
+}
+async function visaProductSearch(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa product-search --merchant-url <url> --query <text> [options]`);
+  const merchantUrl = requiredFlag(context.args.flags, "merchant-url", "visa product-search requires --merchant-url <url>");
+  const query = requiredFlag(context.args.flags, "query", "visa product-search requires --query <text>");
+  const selectedProductId = resolveSelectedProductId(context.args.flags);
+  const language = optionalNonBlankFlag(context.args.flags, "language");
+  const limit = parsePositiveIntFlag(getStringFlag(context.args.flags, "limit"), "--limit must be an integer between 1 and 100");
+  if (limit !== void 0 && limit > 100) {
+    throw validationError("--limit must be an integer between 1 and 100");
+  }
+  if (context.globalOptions.dryRun) {
+    printSuccess({
+      command: "visa product-search",
+      status: "dry_run",
+      sideEffects: false,
+      apiBaseUrl: context.runtimeConfig.baseUrl,
+      merchantUrl,
+      query,
+      ...language ? { language } : {},
+      ...limit !== void 0 ? { limit } : {},
+      ...selectedProductId ? { selectedProductId } : {},
+      steps: [
+        "resolve_internal_ucp",
+        "search_internal_catalog_or_parse_external",
+        "select_unique_product",
+        "freeze_exact_search_product_facts"
+      ]
+    }, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const environment = clinkEnvironmentForApiBaseUrl(context.runtimeConfig.baseUrl);
+  if (!environment) {
+    throw validationError("visa product-search requires an official Clink API environment");
+  }
+  const result = await runVisaProductSearch({
+    merchantUrl,
+    query,
+    ...language ? { language } : {},
+    ...limit !== void 0 ? { limit } : {},
+    ...selectedProductId ? { selectedProductId } : {}
+  }, {
+    resolveInternal: (url) => resolveInternalUcpEndpoint(url, {
+      baseUrl: context.runtimeConfig.baseUrl,
+      environment,
+      timeoutMs: context.globalOptions.timeoutMs
+    }),
+    searchInternal: (merchantId, searchQuery, searchLimit, searchLanguage) => searchCommandUcpCatalog(context, merchantId, searchQuery, searchLimit, searchLanguage),
+    parseExternal: (url) => resolveParseItemFromUrl(url, {
+      timeoutMs: context.globalOptions.timeoutMs
+    })
+  });
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function resolveSelectedProductId(flags) {
+  const selected = getStringFlag(flags, "selected-product-id")?.trim();
+  const compatibility = getStringFlag(flags, "product-id")?.trim();
+  if (selected && compatibility && selected !== compatibility) {
+    throw validationError("--selected-product-id and --product-id must identify the same product");
+  }
+  return selected || compatibility || void 0;
+}
+function requiredFlag(flags, name, message) {
+  const value = getStringFlag(flags, name)?.trim();
+  if (!value) {
+    throw validationError(message);
+  }
+  return value;
+}
+async function prepareVisaEditionCommand(command, subcommand, args) {
+  if (command !== "visa" || subcommand !== "commerce-login") {
+    return void 0;
+  }
+  if (args.positionals.length !== 2) {
+    throw validationError(`usage: ${VISA_EXECUTABLE_NAME} visa commerce-login --context <json> [options]`);
+  }
+  const loginContext = await readVisaCommerceLoginContext(args.flags);
+  if (!getBooleanFlag(args.flags, "dry-run") && !getBooleanFlag(args.flags, "confirm-purchase")) {
+    throw validationError("visa commerce-login requires explicit --confirm-purchase before any live request");
+  }
+  assertVisaCommerceEnvironmentLock(loginContext.environment, visaCommerceLoginApiBaseUrl(loginContext));
+  return {
+    kind: "visa-commerce-login",
+    context: loginContext
+  };
+}
+async function visaCommerceLogin(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa commerce-login --context <json> [options]`);
+  const prepared = context.preparedCommand;
+  if (!isPreparedVisaCommerceLogin(prepared)) {
+    throw validationError("visa commerce-login context was not prepared");
+  }
+  const result = await runVisaCommerceLogin(prepared.context, {
+    dryRun: context.globalOptions.dryRun,
+    confirmedPurchase: getBooleanFlag(context.args.flags, "confirm-purchase")
+  }, createVisaBenefitLoginCliDependencies(context, prepared.context.environment));
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function isPreparedVisaCommerceLogin(value) {
+  return typeof value === "object" && value !== null && value.kind === "visa-commerce-login";
+}
+async function visaCommerceRun(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa commerce-run --context <json> [options]`);
+  const commerceContext = await readVisaCommerceContext(context.args.flags);
+  const confirmedPurchase = getBooleanFlag(context.args.flags, "confirm-purchase");
+  if (commerceContext.mode === "prepare" && confirmedPurchase) {
+    throw validationError("visa commerce-run prepare mode does not accept --confirm-purchase");
+  }
+  if (commerceContext.mode === "purchase" && !context.globalOptions.dryRun && !confirmedPurchase) {
+    throw validationError("visa commerce-run purchase mode requires explicit --confirm-purchase before any live request");
+  }
+  if (commerceContext.mode === "prepare" && getBooleanFlag(context.args.flags, "wait-delivery")) {
+    throw validationError("visa commerce-run prepare mode does not accept --wait-delivery");
+  }
+  const maxWait = parsePositiveIntFlag(getStringFlag(context.args.flags, "max-wait"), "--max-wait must be a positive integer");
+  const result = await runVisaCommerce(commerceContext, {
+    dryRun: context.globalOptions.dryRun,
+    confirmedPurchase,
+    ..."wait-delivery" in context.args.flags ? {
+      waitDelivery: getBooleanFlag(context.args.flags, "wait-delivery")
+    } : {},
+    ...maxWait !== void 0 ? { maxWaitSeconds: maxWait } : {}
+  }, createVisaCommerceCliDependencies(context, commerceContext));
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaInit(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa init [options]`);
+  const baseUrl = resolveWalletInitBaseUrl(context.args.flags);
+  const start = getBooleanFlag(context.args.flags, "start");
+  const resumeId = getStringFlag(context.args.flags, "resume")?.trim();
+  if (start && resumeId) {
+    throw validationError("--start and --resume cannot be used together");
+  }
+  if (resumeId && hasQuickInstructionOptions(context.args.flags)) {
+    throw validationError("--resume cannot be combined with Quick Instruction options; pass them only when starting the login");
+  }
+  if ((start || resumeId) && context.globalOptions.dryRun) {
+    throw validationError("--start/--resume cannot be combined with --dry-run");
+  }
+  const instructionContext = await buildQuickInstructionContext(context.args.flags, "visa init");
+  if (start) {
+    const { result: result2, storedConfig: storedConfig2 } = await startVisaLogin({
+      storedConfig: context.storedConfig,
+      baseUrl,
+      timeoutMs: context.globalOptions.timeoutMs,
+      dryRun: false,
+      ...instructionContext ? { instructionContext } : {}
+    });
+    const browserLaunch = await openBrowserWithResult(context.globalOptions.open, result2.authorizationUrl);
+    applyVisaStoredConfig(context, storedConfig2);
+    printSuccess(publicPendingVisaLogin(context, result2, browserLaunch), context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  if (resumeId) {
+    const { result: result2, storedConfig: storedConfig2 } = await resumeVisaLogin({
+      storedConfig: context.storedConfig,
+      baseUrl,
+      resumeId,
+      timeoutMs: context.globalOptions.timeoutMs,
+      dryRun: false
+    });
+    applyVisaStoredConfig(context, storedConfig2);
+    if (isPendingVisaLoginResult(result2)) {
+      printSuccess(publicPendingVisaLogin(context, result2, await openBrowserWithResult(false, result2.authorizationUrl)), context.globalOptions.format);
+    } else {
+      printSuccess(result2, context.globalOptions.format);
+    }
+    return EXIT_CODES.OK;
+  }
+  const { result, storedConfig } = await initializeVisaLogin({
+    storedConfig: context.storedConfig,
+    baseUrl,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    onAuthorization: createVisaAuthorizationReporter(context),
+    ...instructionContext ? { instructionContext } : {}
+  });
+  applyVisaStoredConfig(context, storedConfig);
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function publicPendingVisaLogin(context, result, browserLaunch) {
+  const { authorizationUrl, ...pending } = result;
+  return {
+    ...pending,
+    manualOpenUrl: authorizationUrl,
+    browserLaunch,
+    resumeCommand: buildVisaResumeCommand(context, result.resumeId),
+    nextAction: "complete_authorization_then_resume"
+  };
+}
+function buildVisaResumeCommand(context, resumeId) {
+  const command = ["visa", "init"];
+  const environment = resolveSelectedEnvironment(context.args.flags);
+  if (environment === "sandbox") {
+    command.push("--sandbox");
+  } else if (environment === "test") {
+    command.push("--test");
+  }
+  command.push("--resume", resumeId, "--format", context.globalOptions.format);
+  return command;
+}
+function isPendingVisaLoginResult(result) {
+  return result.status === "authorization_pending" || result.status === "authorization_processing";
+}
+async function visaVsraInit(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa vsra-init [options]`);
+  const market = parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig);
+  const locale = normalizeVisaLocale(getStringFlag(context.args.flags, "lang"));
+  const result = await ensureVsraReady({
+    storedConfig: context.storedConfig,
+    market,
+    locale,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    onAuthorization: createVisaAuthorizationReporter(context)
+  });
+  applyVisaStoredConfig(context, result.storedConfig);
+  printSuccess({
+    status: "ready",
+    provider: "vsra",
+    market,
+    source: result.source,
+    configPath: "~/.clink-cli/config.json"
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaStatus(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa status [options]`);
+  const market = parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig);
+  const locale = normalizeVisaLocale(getStringFlag(context.args.flags, "lang"));
+  const { result, storedConfig } = await getVisaStatus({
+    storedConfig: context.storedConfig,
+    market,
+    locale,
+    timeoutMs: context.globalOptions.timeoutMs
+  });
+  applyVisaStoredConfig(context, storedConfig);
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaRecommend(context) {
+  const market = parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig);
+  const locale = normalizeVisaLocale(getStringFlag(context.args.flags, "lang"));
+  const query = getStringFlag(context.args.flags, "query") ?? context.args.positionals.slice(2).join(" ");
+  const personalized = getBooleanFlag(context.args.flags, "personalized");
+  const anonymous = getBooleanFlag(context.args.flags, "anonymous");
+  if (personalized && anonymous) {
+    throw validationError("--personalized and --anonymous cannot be used together");
+  }
+  const filters = {};
+  assignVisaFilter(filters, "region", getStringFlag(context.args.flags, "region"));
+  assignVisaFilter(filters, "category", getStringFlag(context.args.flags, "category"));
+  assignVisaFilter(filters, "purpose", getStringFlag(context.args.flags, "purpose"));
+  assignVisaFilter(filters, "reward_type", getStringFlag(context.args.flags, "reward-type"));
+  assignVisaFilter(filters, "attribute", getStringFlag(context.args.flags, "attribute"));
+  assignVisaFilter(filters, "card_level", getStringFlag(context.args.flags, "card-level"));
+  assignVisaFilter(filters, "card_issuer", getStringFlag(context.args.flags, "card-issuer"));
+  const type = getStringFlag(context.args.flags, "type")?.trim().toLowerCase();
+  if (type !== void 0) {
+    if (type !== "reward" && type !== "benefit") {
+      throw validationError("Visa offer type must be reward or benefit");
+    }
+    filters.type = type;
+  }
+  const keyword = getStringFlag(context.args.flags, "keyword")?.trim();
+  if (keyword) {
+    filters.keyword = keyword;
+  }
+  const limit = parsePositiveIntFlag(getStringFlag(context.args.flags, "limit"), "--limit must be a positive integer");
+  const page = parsePositiveIntFlag(getStringFlag(context.args.flags, "page"), "--page must be a positive integer");
+  if (limit !== void 0) {
+    filters.limit = limit;
+  }
+  if (page !== void 0) {
+    filters.page = page;
+  }
+  const all = getBooleanFlag(context.args.flags, "all");
+  if (all && (limit !== void 0 || page !== void 0)) {
+    throw validationError("--all cannot be combined with --limit or --page");
+  }
+  const { result, storedConfig } = await recommendVisaOffers({
+    storedConfig: context.storedConfig,
+    market,
+    locale,
+    query,
+    filters,
+    personalization: personalized ? "required" : anonymous ? "anonymous" : "auto",
+    all,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun,
+    onAuthorization: createVisaAuthorizationReporter(context)
+  });
+  applyVisaStoredConfig(context, storedConfig);
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaDetail(context) {
+  assertVisaPositionalCount(context, 3, `usage: ${context.executableName} visa detail <program-code> [options]`);
+  const result = await getVisaProgramDetail({
+    market: parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig),
+    locale: normalizeVisaLocale(getStringFlag(context.args.flags, "lang")),
+    code: context.args.positionals[2],
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaTaxonomy(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa taxonomy [options]`);
+  const result = await getVisaTaxonomy({
+    market: parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig),
+    locale: normalizeVisaLocale(getStringFlag(context.args.flags, "lang")),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  });
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function validateVisaFlagScope(command, subcommand, flags) {
+  if (command === "visa") {
+    const commerceRun = subcommand === "commerce-run";
+    const commerceLogin = subcommand === "commerce-login";
+    const productSearch = subcommand === "product-search";
+    const commerceContextCommand = commerceRun || commerceLogin;
+    for (const name of ["context-file", "confirm-purchase"]) {
+      if (!commerceContextCommand && flags[name] !== void 0) {
+        throw validationError(`--${name} is only supported by visa commerce-run or visa commerce-login`);
+      }
+    }
+    for (const name of ["wait-delivery", "max-wait"]) {
+      if (!commerceRun && flags[name] !== void 0) {
+        throw validationError(`--${name} is only supported by visa commerce-run`);
+      }
+    }
+    if (!commerceContextCommand && flags.context !== void 0) {
+      throw validationError("--context is only supported by visa commerce-run or visa commerce-login");
+    }
+    if (!productSearch && flags["selected-product-id"] !== void 0) {
+      throw validationError("--selected-product-id is only supported by visa product-search");
+    }
+    return;
+  }
+  for (const name of VISA_FLAG_NAMES) {
+    if (flags[name] !== void 0) {
+      throw validationError(`--${name} is only supported by visa commands`);
+    }
+  }
+}
+function optionalNonBlankFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    throw validationError(`--${name} must not be blank`);
+  }
+  return normalized;
+}
+function createVisaAuthorizationReporter(context) {
+  return (event) => {
+    const provider = event.provider === "vsrp" ? "Visa Benefit" : "VSRA";
+    const writeManualInstructions = () => {
+      process.stderr.write(`Complete ${provider} authorization in your browser:
+${event.url}
+`);
+      if (event.provider === "vsra" && event.verificationUri && event.userCode && event.verificationUri !== event.url) {
+        process.stderr.write(`Fallback: open ${event.verificationUri} and enter code ${event.userCode}.
+`);
+      }
+    };
+    if (context.globalOptions.open) {
+      process.stderr.write("Opening your browser...\n");
+      maybeOpenBrowser(true, event.url, (message) => {
+        process.stderr.write(`${message}
+`);
+        writeManualInstructions();
+      });
+    } else {
+      writeManualInstructions();
+    }
+    process.stderr.write("Waiting for authorization...\n");
+  };
+}
+function applyVisaStoredConfig(context, storedConfig) {
+  context.storedConfig = storedConfig;
+  context.runtimeConfig = resolveRuntimeConfig(storedConfig, context.args.flags);
+  context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
+}
+function assignVisaFilter(filters, axis, rawValue) {
+  const values = parseVisaFilterValues(rawValue);
+  if (values.length > 0) {
+    Object.assign(filters, { [axis]: values });
+  }
+}
+function assertVisaPositionalCount(context, expected, usage) {
+  if (context.args.positionals.length !== expected) {
+    throw validationError(usage);
+  }
+}
+function parsePositiveIntFlag(value, message) {
+  if (value === void 0) {
+    return void 0;
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw validationError(message);
+  }
+  return parsed;
+}
+function recoverAfterWalletLogin(previous, next) {
+  const visa = normalizeStoredVisaState(next.visa);
+  if (!visa) {
+    delete next.visa;
+    return next;
+  }
+  delete visa.pendingBenefitLogin;
+  if (!sameHttpOrigin(previous.baseUrl, next.baseUrl)) {
+    delete visa.benefitConnection;
+  }
+  next.visa = recoverVisaState(visa, next.authorization, Date.now());
+  return next;
+}
+function recoverAfterWalletLogout(config) {
+  const visa = normalizeStoredVisaState(config.visa);
+  if (!visa) {
+    delete config.visa;
+    return config;
+  }
+  delete visa.pendingBenefitLogin;
+  visa.fsmState = "CLINK_READY";
+  config.visa = recoverVisaState(visa, void 0, Date.now());
+  return config;
+}
+function recoverAfterBaseUrlChange(previousBaseUrl, config) {
+  if (sameHttpOrigin(previousBaseUrl, config.baseUrl)) {
+    return config;
+  }
+  const visa = normalizeStoredVisaState(config.visa);
+  if (!visa) {
+    delete config.visa;
+    return config;
+  }
+  delete visa.pendingBenefitLogin;
+  delete visa.benefitConnection;
+  visa.fsmState = "CLINK_READY";
+  config.visa = recoverVisaState(visa, void 0, Date.now());
+  return config;
+}
+
+// dist/visa-index.js
+void runEntrypoint(runVisaCli, process.argv.slice(2), [...MAIN_HELP_COMMANDS, "visa"], VISA_EXECUTABLE_NAME);
