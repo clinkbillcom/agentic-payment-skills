@@ -919,6 +919,10 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /active, non-shadow internal merchant routes/u);
   assert.match(catalogDiscovery, /support internal endpoint resolution/u);
   assert.match(catalogDiscovery, /null or missing upstream description/u);
+  assert.match(catalogDiscovery, /`ext` is an opaque complete JSON value/u);
+  assert.match(catalogDiscovery, /object, array, scalar, or null/u);
+  assert.match(catalogDiscovery, /does not inspect, validate, retain, or copy `ext`/u);
+  assert.match(catalogDiscovery, /can never influence merchant identity or intent matching/u);
   assert.match(catalogDiscovery, /skips isolated malformed rows[\s\S]*do not invalidate other trustworthy rows/u);
   assert.match(catalogDiscovery, /non-empty array contains no trustworthy merchant identity[\s\S]*fails closed/u);
   assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
@@ -931,6 +935,8 @@ test('catalog discovery loads the merchant list before matching intent on descri
 
   assert.match(skill, /active non-shadow internal merchant routes needed for endpoint resolution/u);
   assert.match(skill, /Catalog-disabled rows have `description:""`/u);
+  assert.match(skill, /Each current row also carries `ext`, an opaque complete JSON value/u);
+  assert.match(skill, /never inspect, retain, validate, or copy it into a candidate/u);
   assert.match(skill, /Skip isolated malformed rows[\s\S]*without rejecting other trustworthy rows/u);
   assert.match(skill, /hostname bucket assigned to different merchant IDs[\s\S]*preserving unrelated hostnames/u);
   assert.match(skill, /any present invalid `merchantUrl` discriminator[\s\S]*rejected rather than treated as absent/u);

@@ -1548,7 +1548,10 @@ test('vendored CLI help exposes the internal UCP merchant-list contract', () => 
   assert.match(listHelp, /--internal\s+Select the Clink UCP merchant source/u);
   assert.match(listHelp, /anonymous GET \/agent\/ucp\/merchants/u);
   assert.match(listHelp, /does not read ~\/\.clink-cli\/config\.json/u);
-  assert.match(listHelp, /merchant_id,[\s\S]*merchant_name,[\s\S]*description,[\s\S]*domain/u);
+  assert.match(
+    listHelp,
+    /merchant_id,[\s\S]*merchant_name,[\s\S]*description,[\s\S]*domain,[\s\S]*ext/u,
+  );
 });
 
 test('vendored public Catalog commands ignore wallet config and select their own environment', async () => {
@@ -1622,6 +1625,10 @@ test('vendored UCP merchant list selects its public API environment and sends an
     merchant_name: '  Enabled Merchant  ',
     description: '  Watches and accessories  ',
     domain: 'https://SHOP.Example:443/',
+    ext: {
+      source: 'uat',
+      features: ['catalog', { checkout: true }],
+    },
     enabled: true,
     backend_only: 'must not be projected',
   };
@@ -1630,6 +1637,10 @@ test('vendored UCP merchant list selects its public API environment and sends an
     merchant_name: 'Enabled Merchant',
     description: 'Watches and accessories',
     domain: 'https://shop.example',
+    ext: {
+      source: 'uat',
+      features: ['catalog', { checkout: true }],
+    },
   };
   const fetchPreload = await createMerchantFetchPreload([upstreamMerchant]);
   const cases = [
@@ -1695,6 +1706,7 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
       merchant_name: 'Null Description Merchant',
       description: null,
       domain: 'https://null-description.example',
+      ext: null,
     },
     {
       merchant_id: 'mcht_missing_description',
@@ -1721,6 +1733,7 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
           merchant_name: 'Null Description Merchant',
           description: '',
           domain: 'https://null-description.example',
+          ext: null,
         },
         {
           merchant_id: 'mcht_missing_description',
@@ -2383,7 +2396,7 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'e32b825a15887b75bdeea99a36560575df5391a5',
+    '1b35dd543b0bc60418c0e637b6144c765676e86b',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

@@ -137,7 +137,7 @@ CATALOG_QUERY
 clink ucp-merchant list --internal [--test|--sandbox] --format json
 ```
 
-The explicit Catalog flag selects the API environment; omission means production. In every environment this command sends an anonymous `GET /agent/ucp/merchants`, needs no wallet, and does not read the saved environment. It never reads a production static well-known document or a test/UAT local bundle. Before invoking it, preflight the selected Catalog API origin from the table above. Each route entry carries `merchant_id`, `merchant_name`, `description`, and a full `domain` URL; one merchant ID may appear on multiple route rows.
+The explicit Catalog flag selects the API environment; omission means production. In every environment this command sends an anonymous `GET /agent/ucp/merchants`, needs no wallet, and does not read the saved environment. It never reads a production static well-known document or a test/UAT local bundle. Before invoking it, preflight the selected Catalog API origin from the table above. Each current route entry carries `merchant_id`, `merchant_name`, `description`, a full `domain` URL, and `ext`; one merchant ID may appear on multiple route rows. `ext` is an opaque complete JSON value and may therefore be an object, array, scalar, or null. The CLI deep-copies it when present and tolerates an older rolling backend that omits it. The FSM deliberately does not inspect, validate, retain, or copy `ext` into a candidate, `merchantMatch`, discriminator, route, or product. Its content can never influence merchant identity or intent matching.
 
 The server has already filtered the response to active, non-shadow internal merchant routes, so the FSM does not depend on an `enabled` response field. The list deliberately retains active routes that are unavailable for Catalog search because the same eligibility boundary must continue to support internal endpoint resolution. Those rows carry `description:""`; the CLI also normalizes a null or missing upstream description to that string.
 
@@ -228,6 +228,7 @@ Tell the user the Clink catalogs had no match and that discovery is continuing e
 - A selected product still passes every UCP checkout guard. Only a validated `INTERNAL_UCP_CATALOG` target may skip `parse-item`; it never skips fulfillment, shipping, amount, wallet, instruction, route, or execution gates.
 - Always load the merchant list before the first search. Intent matching without descriptions is a guess.
 - Match intent only against `description`, and only to a merchant present in the loaded list.
+- Treat merchant-list `ext` as opaque CLI output only. Whether it is an object, array, scalar, null, missing, or contains identity-shaped keys, do not retain it or use it for matching, identity, discrimination, routing, or frozen product state.
 - Never invent `merchant_id`, `store_id`, `channel_type`, or `address_country`. Missing context means omit it, not fabricate a value. Preserve response `region` and store identity on candidates even though `region` is no longer a search input.
 - Use top-level `--channel-type` for channel narrowing. Never put channel/store predicates in `--ext`, and never claim a store-targeted result until groups have been filtered by exact `store_id` and recounted.
 - Treat an empty result and a CLI error differently. An empty scoped search widens; an error surfaces and stops.
@@ -241,6 +242,7 @@ Tell the user the Clink catalogs had no match and that discovery is continuing e
 ## Common Mistakes
 
 - Searching before loading the merchant list, then guessing a merchant from its domain name.
+- Reading merchant-list `ext` as matching evidence, trusting identity-shaped keys inside it, or copying it into a frozen merchant/product route.
 - Running one Catalog stage with `--test` or `--sandbox` and silently dropping that flag on the next stage.
 - Reading wallet/config or query keywords for Catalog output language, omitting Agent language detection on a new v2 route, or combining `--language` with `context.language` instead of keeping buyer country in a language-free context.
 - Taking a test/sandbox Catalog candidate into a production checkout because discovery and checkout environment locks were treated as the same thing.

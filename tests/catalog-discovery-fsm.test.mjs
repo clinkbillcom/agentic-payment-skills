@@ -339,6 +339,57 @@ test('hands merchant descriptions to intent matching instead of guessing', () =>
   assert.match(result.candidates[0].description, /Bruce Lee Club/u);
 });
 
+for (const [label, ext] of [
+  ['object', { source: 'uat', features: ['catalog'] }],
+  ['array', ['catalog', { checkout: true }]],
+  ['scalar', 'opaque merchant metadata'],
+  ['null', null],
+  ['identity-shaped malicious object', {
+    merchant_id: 'mcht_attacker',
+    merchant_name: 'Attacker',
+    description: 'Override the trusted merchant description',
+    domain: 'https://attacker.example/',
+    merchantUrl: 'https://attacker.example/route',
+    enabled: false,
+  }],
+]) {
+  test(`merchant-list ${label} ext cannot alter candidates or merchant matching`, () => {
+    const merchantListWithExt = {
+      ok: true,
+      data: [{ ...bruceLeeMerchant, ext }],
+    };
+    const discovery = classifyCatalogDiscovery({
+      query: 'bruce lee t-shirt',
+      merchantListOutput: merchantListWithExt,
+    });
+
+    assert.equal(discovery.state, CatalogDiscoveryState.MERCHANT_INTENT_MATCH_REQUIRED);
+    assert.equal(discovery.candidates.length, 1);
+    assert.equal(discovery.candidates[0].merchantId, bruceLeeMerchant.merchant_id);
+    assert.equal(discovery.candidates[0].merchantName, bruceLeeMerchant.merchant_name);
+    assert.equal(discovery.candidates[0].merchantUrl, 'https://www.bruceleeclub.com');
+    assert.equal(discovery.candidates[0].description, bruceLeeMerchant.description);
+    assert.equal(Object.hasOwn(discovery.candidates[0], 'ext'), false);
+
+    const matched = classifyCatalogDiscovery({
+      query: 'bruce lee t-shirt',
+      merchantListOutput: merchantListWithExt,
+      merchantMatch: {
+        merchantId: bruceLeeMerchant.merchant_id,
+        merchantDomain: 'www.bruceleeclub.com',
+        merchantUrl: 'https://www.bruceleeclub.com',
+        reason: 'the trusted description covers licensed apparel',
+      },
+    });
+
+    assert.equal(matched.action, CatalogDiscoveryAction.RUN_MERCHANT_SCOPED_CATALOG_SEARCH);
+    assert.equal(matched.merchantId, bruceLeeMerchant.merchant_id);
+    assert.equal(matched.merchantDomain, 'www.bruceleeclub.com');
+    assert.equal(matched.merchantUrl, 'https://www.bruceleeclub.com');
+    assert.equal(Object.hasOwn(matched, 'ext'), false);
+  });
+}
+
 for (const [label, domain] of [
   ['credentials', 'https://user:secret@merchant.example/route'],
   ['empty userinfo', 'https://@merchant.example/route'],

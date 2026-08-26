@@ -12692,8 +12692,9 @@ Behavior:
   It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
-  The backend filters enabled merchants. Each result contains only merchant_id, merchant_name,
-  description, and domain; domain is a safe HTTP(S) merchant route URL and may include a path.
+  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
+  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
+  that may include a path.
 
 Examples:
   clink tool internal-ucp get-merchant-list --format json
@@ -13308,9 +13309,10 @@ Behavior:
   --sandbox selects sandbox/UAT and --test selects test for this invocation.
   It does not read ~/.clink-cli/config.json or inherit saved wallet state, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, CSK, customer ID, or customer API key credentials.
-  The backend filters enabled merchants. Each validated result contains only merchant_id,
-  merchant_name, description, and domain. domain must be a safe HTTP(S) merchant route URL and may
-  include a path. Valid rows survive unrelated invalid rows; a non-empty wholly invalid array fails.
+  The backend filters enabled merchants. Each validated result contains merchant_id, merchant_name,
+  description, domain, and optional ext metadata. ext is opaque JSON and never controls routing;
+  domain must be a safe HTTP(S) merchant route URL and may include a path. Valid rows survive
+  unrelated invalid rows; a non-empty wholly invalid array fails.
   Validated successes use a short per-process cache and concurrent loads share one request. The
   read-only GET retries transport, 408, 429, and 5xx once within the total timeout. Other HTTP
   failures, including 401/403, are API errors (exit 5); exhausted transport/timeouts exit 6.
@@ -14293,12 +14295,19 @@ function validateInternalUcpMerchantList(value, source) {
     if (!merchantId || !merchantName || description === void 0 || !domain) {
       continue;
     }
-    merchants.push({
+    const merchant = {
       merchant_id: merchantId,
       merchant_name: merchantName,
       description,
       domain
-    });
+    };
+    if (Object.hasOwn(fields, "ext")) {
+      const ext = safeCloneJsonValue(fields.ext);
+      if (ext !== void 0) {
+        merchant.ext = ext;
+      }
+    }
+    merchants.push(merchant);
   }
   if (value.length > 0 && merchants.length === 0) {
     throw invalidMerchantList(source, "no valid merchant identities");
@@ -14498,6 +14507,53 @@ function stringValue(value) {
 function optionalDescription(value) {
   return value === null || value === void 0 ? "" : stringValue(value);
 }
+function safeCloneJsonValue(value) {
+  try {
+    return cloneJsonValue(value, /* @__PURE__ */ new Set());
+  } catch {
+    return void 0;
+  }
+}
+function cloneJsonValue(value, ancestors) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (!value || typeof value !== "object" || ancestors.has(value)) {
+    return void 0;
+  }
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const result = [];
+      for (const item of value) {
+        const cloned = cloneJsonValue(item, ancestors);
+        if (cloned === void 0) {
+          return void 0;
+        }
+        result.push(cloned);
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return void 0;
+    }
+    const entries = [];
+    for (const [key, item] of Object.entries(value)) {
+      const cloned = cloneJsonValue(item, ancestors);
+      if (cloned === void 0) {
+        return void 0;
+      }
+      entries.push([key, cloned]);
+    }
+    return Object.fromEntries(entries);
+  } finally {
+    ancestors.delete(value);
+  }
+}
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
 }
@@ -14548,7 +14604,21 @@ var ConflictAwareMerchantMap = class extends Map {
   }
 };
 function cloneMerchantList(merchants) {
-  return merchants.map((merchant) => ({ ...merchant }));
+  return merchants.map((merchant) => {
+    const cloned = {
+      merchant_id: merchant.merchant_id,
+      merchant_name: merchant.merchant_name,
+      description: merchant.description,
+      domain: merchant.domain
+    };
+    if (Object.hasOwn(merchant, "ext")) {
+      const ext = safeCloneJsonValue(merchant.ext);
+      if (ext !== void 0) {
+        cloned.ext = ext;
+      }
+    }
+    return cloned;
+  });
 }
 function retryableMerchantListStatus(status) {
   return status === 408 || status === 429 || status >= 500 && status <= 599;
