@@ -1,4 +1,5 @@
 .omx/
+/dist/
 tests/*
 !tests/catalog-discovery-fsm.test.mjs
 !tests/fsm-action-coverage.test.mjs
@@ -13,3 +14,4 @@ tests/*
 !tests/skill-tip-batch-workflow-fsm.test.mjs
 !tests/uat-wrapper-environment.test.mjs
 !tests/payment-intent-contract-v2.test.mjs
+!tests/release-artifact.test.mjs
