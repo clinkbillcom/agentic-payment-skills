@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   UcpCheckoutWorkflowAction,
   UcpCheckoutWorkflowState,
+  classifyUcpCheckoutPrerequisites,
   classifyUcpParseItemObservation,
+  normalizeUcpAmountToMinorUnitLong,
 } from '../lib/ucp-checkout-workflow-fsm.mjs';
 
 const singleItemPayload = {
@@ -25,6 +27,288 @@ const singleItemPayload = {
     },
   ],
 };
+
+const checkoutPrerequisites = {
+  productUrl: 'https://shop.example/products/ski-wax',
+  merchantUrl: 'https://shop.example',
+  title: 'Ski Wax',
+  currency: 'USD',
+  amountMinor: 1299,
+  quantity: 1,
+  fulfillmentType: 'NO_SHIPPING_REQUIRED',
+  paymentInstrumentId: 'pm_123',
+};
+
+test('major-unit normalization rejects Numbers whose original decimal spelling is unknowable', () => {
+  assert.equal(
+    normalizeUcpAmountToMinorUnitLong({ amount: '0.10', currency: 'USD' }),
+    10,
+  );
+  assert.throws(
+    () => normalizeUcpAmountToMinorUnitLong({
+      amount: JSON.parse('0.10000000000000001'),
+      currency: 'USD',
+    }),
+    /major-unit amount must be a decimal string/u,
+  );
+});
+
+test('checkout prerequisites require a positive safe-integer quantity', () => {
+  for (const quantity of [
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    true,
+    [1],
+    '1',
+    '0x1',
+    '1e0',
+  ]) {
+    const result = classifyUcpCheckoutPrerequisites({
+      ...checkoutPrerequisites,
+      quantity,
+      productExplorationAttempted: true,
+    });
+
+    assert.notEqual(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
+    assert.ok(result.missing.includes('quantity'));
+  }
+});
+
+test('catalog candidate checkout continues only when wallet and Catalog origins match', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'sandbox', catalogLanguage: 'zh-Hant-HK' },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
+});
+
+test('internal Catalog checkout uses the frozen item and merchant URL without productUrl', () => {
+  const { productUrl: _productUrl, ...internalPrerequisites } = checkoutPrerequisites;
+  const result = classifyUcpCheckoutPrerequisites({
+    ...internalPrerequisites,
+    itemId: '571d217de068498f8ba545a286900a16',
+    source: 'INTERNAL_UCP_CATALOG',
+    selectedProduct: {
+      source: 'INTERNAL_UCP_CATALOG',
+      productId: '571d217de068498f8ba545a286900a16',
+      merchantId: 'mcht_ftmse61a6az0',
+      merchantUrl: 'https://testa.link2shops.com/',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+    },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.LIST_AUTHORIZATIONS);
+});
+
+test('internal Catalog checkout still requires its authoritative merchant URL', () => {
+  const { productUrl: _productUrl, merchantUrl: _merchantUrl, ...internalPrerequisites } =
+    checkoutPrerequisites;
+  const result = classifyUcpCheckoutPrerequisites({
+    ...internalPrerequisites,
+    itemId: 'voucher_1',
+    source: 'INTERNAL_UCP_CATALOG',
+    selectedProduct: {
+      source: 'INTERNAL_UCP_CATALOG',
+      productId: 'voucher_1',
+      catalogEnvironment: 'sandbox',
+    },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.PRODUCT_INPUT_MISSING);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.ASK_FOR_PRODUCT_INPUT);
+  assert.ok(result.missing.includes('merchantUrl'));
+});
+
+test('catalog candidate checkout fails closed on an environment mismatch', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalog_environment: 'test' },
+    walletStatus: { ok: true, data: { baseUrl: 'https://api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_environment_mismatch');
+  assert.equal(result.expectedWalletOrigin, 'https://api.clinkbill.dev');
+  assert.equal(result.walletOrigin, 'https://api.clinkbill.com');
+  assert.equal(result.terminal, true);
+});
+
+test('catalog candidate checkout does not trust a matching explicit wallet URL without status', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'test' },
+    walletBaseUrl: 'https://api.clinkbill.dev',
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+  assert.equal(result.expectedWalletOrigin, 'https://api.clinkbill.dev');
+  assert.equal(result.terminal, true);
+});
+
+test('catalog candidate checkout fails closed when top-level input conflicts with the selected product', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    catalogEnvironment: 'production',
+    selectedProduct: { catalogEnvironment: 'sandbox' },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_environment_context_conflict');
+  assert.equal(result.selectedCatalogEnvironment, 'sandbox');
+  assert.equal(result.inputCatalogEnvironment, 'production');
+  assert.equal(result.terminal, true);
+});
+
+test('catalog candidate checkout rejects a selected product without its frozen environment', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    catalogEnvironment: 'production',
+    selectedProduct: { productId: 'product_1' },
+    walletStatus: { ok: true, data: { baseUrl: 'https://api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_environment_context_missing');
+  assert.deepEqual(result.missing, ['selectedProduct.catalogEnvironment']);
+});
+
+test('catalog candidate checkout rejects a malformed selected product instead of using top-level input', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    catalogEnvironment: 'production',
+    selectedProduct: 'product_1',
+    walletStatus: { ok: true, data: { baseUrl: 'https://api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_selected_product_context_invalid');
+});
+
+test('catalog candidate checkout fails closed when an explicit URL conflicts with wallet status', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'sandbox' },
+    walletBaseUrl: 'https://api.clinkbill.com',
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_conflict');
+  assert.equal(result.walletStatusOrigin, 'https://uat-api.clinkbill.com');
+  assert.equal(result.inputWalletOrigin, 'https://api.clinkbill.com');
+  assert.equal(result.terminal, true);
+});
+
+test('catalog candidate checkout rejects malformed wallet status instead of falling back to an explicit URL', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'production' },
+    walletBaseUrl: 'https://api.clinkbill.com',
+    walletStatus: { ok: true, data: {} },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+});
+
+test('catalog candidate checkout rejects a string wallet status ok flag without URL fallback', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'production' },
+    walletBaseUrl: 'https://api.clinkbill.com',
+    walletStatus: {
+      ok: 'true',
+      data: { baseUrl: 'https://api.clinkbill.com' },
+    },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+});
+
+test('catalog candidate checkout rejects a non-empty wallet status error without URL fallback', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'production' },
+    walletBaseUrl: 'https://api.clinkbill.com',
+    walletStatus: {
+      ok: true,
+      error: 'wallet status failed',
+      data: { baseUrl: 'https://api.clinkbill.com' },
+    },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+});
+
+for (const malformedData of [null, [], 'not-an-object']) {
+  test(`catalog candidate checkout rejects wallet status data ${JSON.stringify(malformedData)} without URL fallback`, () => {
+    const result = classifyUcpCheckoutPrerequisites({
+      ...checkoutPrerequisites,
+      selectedProduct: { catalogEnvironment: 'production' },
+      walletBaseUrl: 'https://api.clinkbill.com',
+      walletStatus: {
+        ok: true,
+        data: malformedData,
+        baseUrl: 'https://api.clinkbill.com',
+      },
+    });
+
+    assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+    assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+    assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+  });
+}
+
+test('catalog candidate checkout rejects conflicting camel and snake wallet status envelopes', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    selectedProduct: { catalogEnvironment: 'sandbox' },
+    walletStatus: { ok: true, data: { baseUrl: 'https://uat-api.clinkbill.com' } },
+    wallet_status: { ok: true, data: { base_url: 'https://api.clinkbill.com' } },
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_conflict');
+  assert.deepEqual(result.walletStatusOrigins, [
+    'https://uat-api.clinkbill.com',
+    'https://api.clinkbill.com',
+  ]);
+});
+
+test('catalog candidate checkout fails closed until wallet environment is verified', () => {
+  const result = classifyUcpCheckoutPrerequisites({
+    ...checkoutPrerequisites,
+    catalogEnvironment: 'production',
+  });
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_FAILED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.STOP_CHECKOUT_FAILURE);
+  assert.equal(result.reason, 'catalog_checkout_wallet_environment_unverified');
+  assert.equal(result.expectedWalletOrigin, 'https://api.clinkbill.com');
+});
 
 test('parse-item observation selects a single available item and computes total from intent quantity', () => {
   const result = classifyUcpParseItemObservation({

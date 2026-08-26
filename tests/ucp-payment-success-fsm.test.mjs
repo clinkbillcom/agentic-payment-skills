@@ -316,7 +316,11 @@ test('complete observation extracts canonical ucpOrderId and compatibility alias
   assert.equal(result.omsOrderId, ucpOrderId);
   assert.equal(result.checkoutId, checkoutId);
   assert.equal(result.orderPermalinkUrl, 'https://merchant.example/orders/order_ucp_xyz');
-  assert.match(result.pollCommand, /--checkout-id checkout_abc123/u);
+  assert.equal(
+    result.pollCommand,
+    `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} `
+      + `--ucp-order-id ${ucpOrderId} --max-wait 900 --format json`,
+  );
 });
 
 test('create observation freezes ucpOrderId from UCP meta before completion', () => {
@@ -339,10 +343,12 @@ test('create observation freezes ucpOrderId from UCP meta before completion', ()
   assert.equal(result.omsOrderId, ucpOrderId);
 });
 
-test('complete-in-progress observation preserves ucpOrderId from UCP meta', () => {
+test('complete-in-progress observation immediately polls success and preserves the frozen order id', () => {
+  const checkoutEndpoint = 'https://internal.example/agent/ucp/merchant_1';
   const result = classifyUcpCheckoutObservation({
     operation: 'complete',
     expectedCheckoutId: checkoutId,
+    endpoint: checkoutEndpoint,
     exitCode: 0,
     stdout: JSON.stringify({
       ok: true,
@@ -354,9 +360,18 @@ test('complete-in-progress observation preserves ucpOrderId from UCP meta', () =
     }),
   });
 
-  assert.equal(result.action, UcpCheckoutWorkflowAction.WAIT_CHECKOUT);
+  assert.equal(result.state, UcpCheckoutWorkflowState.PAYMENT_SUCCESS_EVENT_REQUIRED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.POLL_PAYMENT_SUCCESS_EVENT);
+  assert.equal(result.reason, 'complete_in_progress_poll_payment_success_event');
   assert.equal(result.ucpOrderId, ucpOrderId);
   assert.equal(result.omsOrderId, ucpOrderId);
+  assert.equal(result.checkoutEndpoint, checkoutEndpoint);
+  assert.equal(
+    result.pollCommand,
+    `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} `
+      + `--ucp-order-id ${ucpOrderId} --endpoint ${checkoutEndpoint} `
+      + '--max-wait 900 --format json',
+  );
 });
 
 test('later checkout responses cannot replace the UCP order id frozen at create', () => {
@@ -393,9 +408,25 @@ test('later checkout responses preserve the frozen UCP order id when they omit i
     }),
   });
 
-  assert.equal(result.action, UcpCheckoutWorkflowAction.WAIT_CHECKOUT);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.POLL_PAYMENT_SUCCESS_EVENT);
   assert.equal(result.ucpOrderId, ucpOrderId);
   assert.equal(result.omsOrderId, ucpOrderId);
+  assert.match(result.pollCommand, new RegExp(`--ucp-order-id ${ucpOrderId}`));
+});
+
+test('generic processing and pending checkout states still wait instead of polling payment success', () => {
+  for (const status of ['processing', 'pending']) {
+    const result = classifyUcpCheckoutObservation({
+      operation: 'complete',
+      expectedCheckoutId: checkoutId,
+      exitCode: 0,
+      stdout: JSON.stringify({ ok: true, data: { id: checkoutId, status } }),
+    });
+
+    assert.equal(result.state, UcpCheckoutWorkflowState.CHECKOUT_PENDING);
+    assert.equal(result.action, UcpCheckoutWorkflowAction.WAIT_CHECKOUT);
+    assert.equal(result.pollCommand, undefined);
+  }
 });
 
 test('exit-6 checkout recovery preserves the UCP order id frozen at create', () => {
@@ -788,6 +819,80 @@ test('event paymentOrderId never overrides frozen ucpOrderId even with the same 
   assert.equal(result.paymentOrderId, paymentOrderId);
   assert.equal(result.orderCommand, `clink ucp-order get --order-id ${ucpOrderId} --format json`);
   assert.doesNotMatch(result.orderCommand, new RegExp(paymentOrderId));
+});
+
+test('events poll with an embedded order result returns terminal success without Agent dispatch', () => {
+  const order = { id: ucpOrderId, status: 'paid', ucp: { success_info: { receipt: 'ok' } } };
+  const envelope = JSON.parse(successEventOutput(checkoutId));
+  Object.assign(envelope.data, {
+    paymentConfirmed: true,
+    ucpOrderId,
+    orderLookupStatus: 'FETCHED',
+    order,
+    eventAckWarning: 'Payment is confirmed, but event ACK is uncertain.',
+  });
+
+  const result = classifyUcpPaymentSuccessEventObservation(
+    { stdout: JSON.stringify(envelope) },
+    { checkoutId, ucpOrderId },
+  );
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_EVENT);
+  assert.equal(result.terminal, true);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.orderLookupStatus, 'FETCHED');
+  assert.deepEqual(result.order, order);
+  assert.equal(
+    result.eventAckWarning,
+    'Payment is confirmed, but event ACK is uncertain.',
+  );
+  assert.equal(result.orderCommand, undefined);
+  assert.equal(result.checkoutCommand, undefined);
+});
+
+test('events poll embedded order failure preserves confirmed payment without Agent dispatch', () => {
+  const envelope = JSON.parse(successEventOutput(checkoutId));
+  Object.assign(envelope.data, {
+    paymentConfirmed: true,
+    ucpOrderId,
+    orderLookupStatus: 'ERROR',
+    orderWarning: 'Order API temporarily unavailable.',
+    orderResumeCommand: `clink ucp-order get --order-id ${ucpOrderId} --format json`,
+  });
+
+  const result = classifyUcpPaymentSuccessEventObservation(
+    { stdout: JSON.stringify(envelope) },
+    { checkoutId, ucpOrderId },
+  );
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING);
+  assert.equal(result.terminal, true);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.orderLookupStatus, 'ERROR');
+  assert.equal(result.warning, 'Order API temporarily unavailable.');
+  assert.match(result.orderResumeCommand, /ucp-order get/u);
+  assert.equal(result.orderCommand, undefined);
+  assert.equal(result.checkoutCommand, undefined);
+});
+
+test('events poll embedded order id cannot replace the order id frozen before payment', () => {
+  const envelope = JSON.parse(successEventOutput(checkoutId));
+  Object.assign(envelope.data, {
+    paymentConfirmed: true,
+    ucpOrderId: 'order_other',
+    orderLookupStatus: 'FETCHED',
+    order: { id: 'order_other' },
+  });
+
+  const result = classifyUcpPaymentSuccessEventObservation(
+    { stdout: JSON.stringify(envelope) },
+    { checkoutId, ucpOrderId },
+  );
+
+  assert.equal(result.action, UcpCheckoutWorkflowAction.RETURN_PAYMENT_SUCCESS_WITH_ORDER_WARNING);
+  assert.equal(result.paymentConfirmed, true);
+  assert.equal(result.orderLookupStatus, 'IDENTIFIER_CONFLICT');
+  assert.equal(result.order, undefined);
 });
 
 test('accepts legacy omsOrderId input but canonicalizes it before UCP order get', () => {
@@ -1484,6 +1589,92 @@ test('returns WAIT_CHECKOUT with event resumeCommand on poll timeout', () => {
     result.resumeCommand,
     `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} --max-wait 900 --format json`,
   );
+});
+
+test('event timeout resume preserves the opaque Event Hub cursor', () => {
+  const result = classifyUcpPaymentSuccessEventObservation(
+    {
+      stdout: JSON.stringify({
+        ok: true,
+        data: { events: [], timedOut: true, nextToken: 'cursor_after_timeout' },
+      }),
+    },
+    { checkoutId },
+  );
+
+  assert.equal(
+    result.resumeCommand,
+    `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} `
+      + '--next-token cursor_after_timeout --max-wait 900 --format json',
+  );
+});
+
+test('event timeout resume preserves frozen UCP order id and checkout endpoint', () => {
+  const checkoutEndpoint = 'https://internal.example/agent/ucp/merchant_1';
+  const result = classifyUcpPaymentSuccessEventObservation(
+    { stdout: JSON.stringify({ ok: true, data: { events: [], timedOut: true } }) },
+    { checkoutId, ucpOrderId, checkoutEndpoint },
+  );
+
+  assert.equal(
+    result.resumeCommand,
+    `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} `
+      + `--ucp-order-id ${ucpOrderId} --endpoint ${checkoutEndpoint} `
+      + '--max-wait 900 --format json',
+  );
+});
+
+test('event timeout resume preserves and safely quotes the Event Hub cursor', () => {
+  const nextToken = "cursor page '2'";
+  const result = classifyUcpPaymentSuccessEventObservation(
+    {
+      stdout: JSON.stringify({
+        ok: true,
+        data: {
+          events: [],
+          timedOut: true,
+          nextToken,
+          resumeCommand: 'clink events poll --type attacker.event --format json',
+        },
+      }),
+    },
+    { checkoutId, ucpOrderId },
+  );
+
+  assert.equal(
+    result.resumeCommand,
+    `clink events poll --type agent_order.succeeded --checkout-id ${checkoutId} `
+      + `--ucp-order-id ${ucpOrderId} --next-token 'cursor page '\\''2'\\''' `
+      + '--max-wait 900 --format json',
+  );
+  assert.doesNotMatch(result.resumeCommand, /attacker\.event/u);
+});
+
+test('event timeout rejects malformed or conflicting Event Hub cursors', () => {
+  for (const data of [
+    { nextToken: null },
+    { nextToken: '' },
+    { nextToken: '   ' },
+    { nextToken: 123 },
+    { nextToken: ['cursor'] },
+    { nextToken: 'cursor_a', next_token: 'cursor_b' },
+  ]) {
+    const result = classifyUcpPaymentSuccessEventObservation(
+      {
+        stdout: JSON.stringify({
+          ok: true,
+          data: { events: [], timedOut: true, ...data },
+        }),
+      },
+      { checkoutId },
+    );
+
+    assert.equal(result.state, UcpCheckoutWorkflowState.CLI_ERROR);
+    assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_ERROR);
+    assert.equal(result.reason, 'payment_success_event_next_token_invalid');
+    assert.equal(result.paymentConfirmed, false);
+    assert.equal(result.resumeCommand, undefined);
+  }
 });
 
 test('event timeout ignores an unsafe legacy resumeCommand', () => {

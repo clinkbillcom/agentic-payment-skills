@@ -6,6 +6,10 @@ tests/*
 !tests/restricted-categories.test.mjs
 !tests/network-preflight.test.mjs
 !tests/ucp-payment-success-fsm.test.mjs
+!tests/ucp-checkout-workflow-fsm.test.mjs
+!tests/ucp-checkout-run-fsm.test.mjs
+!tests/ucp-checkout-run-docs.test.mjs
 !tests/skill-install-workflow-fsm.test.mjs
 !tests/skill-tip-batch-workflow-fsm.test.mjs
 !tests/uat-wrapper-environment.test.mjs
+!tests/payment-intent-contract-v2.test.mjs
