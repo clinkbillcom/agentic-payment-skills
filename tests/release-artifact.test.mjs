@@ -74,6 +74,24 @@ test('contentSha256 follows the shared clink-skill-tree-v1 contract', () => {
   );
 });
 
+test('fallback artifact CLI runs when invoked through a symbolic link', async (t) => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'clink-skill-artifact-cli-'));
+  t.after(async () => {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  });
+  const linkedScript = join(temporaryRoot, 'build-fallback-artifact.mjs');
+  await symlink(
+    join(repositoryRoot, 'scripts', 'build-fallback-artifact.mjs'),
+    linkedScript,
+  );
+
+  const output = execFileSync(process.execPath, [linkedScript, '--help'], {
+    encoding: 'utf8',
+  });
+
+  assert.match(output, /^Usage: node scripts\/build-fallback-artifact\.mjs/u);
+});
+
 test('fallback ZIP and manifest are deterministic and contain only runtime payload', async (t) => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'clink-skill-artifact-test-'));
   t.after(async () => {

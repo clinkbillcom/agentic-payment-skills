@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import {
   mkdir,
   writeFile,
@@ -775,7 +776,9 @@ async function runCli() {
   }, null, 2)}\n`);
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : null;
+const invokedPath = process.argv[1]
+  ? pathToFileURL(realpathSync(resolve(process.argv[1]))).href
+  : null;
 if (invokedPath === import.meta.url) {
   runCli().catch((error) => {
     process.stderr.write(`Failed to build fallback artifact: ${error.message}\n`);
