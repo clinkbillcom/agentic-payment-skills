@@ -20,6 +20,10 @@ export const RESERVED_ROOT_FILES = Object.freeze([
   '.clink-provenance.json',
 ]);
 
+const RESERVED_INSTALLER_SEGMENTS = Object.freeze(
+  RESERVED_ROOT_FILES.map((name) => canonicalInstallerName(name)),
+);
+
 const CONTENT_HASH_DOMAIN = Buffer.from('clink-skill-tree-v1\0', 'utf8');
 const NUL = Buffer.from([0]);
 const REQUIRED_ROOT_FILES = Object.freeze([
@@ -44,7 +48,6 @@ const MAX_ENTRIES = 4_096;
 const MAX_TOTAL_BYTES = 200 * 1024 * 1024;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_ARCHIVE_DEPTH = 20;
-
 const crc32Table = buildCrc32Table();
 
 /**
@@ -61,7 +64,7 @@ export async function collectArtifactEntries(repositoryRoot, revision = 'HEAD') 
     if (PRUNED_DIRECTORIES.includes(rootName)) {
       continue;
     }
-    if (RESERVED_ROOT_FILES.includes(entry.path)) {
+    if (findReservedInstallerPath(entry.path) !== undefined) {
       throw new Error(`reserved installer file must not exist in source: ${entry.path}`);
     }
     if (entry.type !== 'blob' || (entry.mode !== '100644' && entry.mode !== '100755')) {
@@ -284,6 +287,7 @@ function validateConsumerArchiveContract(files, directories) {
 
   const canonicalPaths = new Map();
   for (const directory of directories) {
+    assertNoReservedInstallerPath(directory);
     registerCanonicalPath(canonicalPaths, directory, 'directory');
   }
 
@@ -293,11 +297,7 @@ function validateConsumerArchiveContract(files, directories) {
     if (depth > MAX_ARCHIVE_DEPTH) {
       throw new Error(`artifact path exceeds the Clink CLI depth limit: ${file.path}`);
     }
-    if (file.path.split('/').some(
-      (segment) => segment.normalize('NFC').toLowerCase() === '.clink-install.json',
-    )) {
-      throw new Error(`artifact contains a reserved install marker: ${file.path}`);
-    }
+    assertNoReservedInstallerPath(file.path);
     if (file.data.byteLength > MAX_FILE_BYTES) {
       throw new Error(`artifact file exceeds the Clink CLI size limit: ${file.path}`);
     }
@@ -307,6 +307,24 @@ function validateConsumerArchiveContract(files, directories) {
     }
     registerCanonicalPath(canonicalPaths, file.path, 'file');
   }
+}
+
+function assertNoReservedInstallerPath(path) {
+  const reservedName = findReservedInstallerPath(path);
+  if (reservedName !== undefined) {
+    throw new Error(`artifact contains reserved installer metadata (${reservedName}): ${path}`);
+  }
+}
+
+function findReservedInstallerPath(path) {
+  return path
+    .split('/')
+    .map(canonicalInstallerName)
+    .find((segment) => RESERVED_INSTALLER_SEGMENTS.includes(segment));
+}
+
+function canonicalInstallerName(value) {
+  return value.normalize('NFC').toLowerCase();
 }
 
 function registerCanonicalPath(paths, path, kind) {
@@ -358,29 +376,23 @@ function readSkillIdentity(files) {
   }
   const packageJson = JSON.parse(packageBytes.toString('utf8'));
   const skillDocument = skillBytes.toString('utf8');
-  const versionMatch = skillDocument.match(
-    /^metadata:\s*\r?\n(?: {2}[^\r\n]*\r?\n)*? {2}version:\s*["']?([^"'\r\n]+)["']?\s*$/mu,
-  );
+  const frontmatter = extractSkillFrontmatter(skillDocument);
+  const declaredVersion = readSkillMetadataVersion(frontmatter);
   if (packageJson.name !== 'clink-payment-skill') {
     throw new Error('package.json name must be clink-payment-skill');
   }
-  if (
-    typeof packageJson.version !== 'string'
-    || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(
-      packageJson.version,
-    )
-  ) {
+  if (!isSemanticVersion(packageJson.version)) {
     throw new Error('package.json version must be a semantic version');
   }
-  if (!versionMatch) {
-    throw new Error('SKILL.md metadata.version is missing');
+  if (!isSemanticVersion(declaredVersion)) {
+    throw new Error('SKILL.md metadata.version must be a semantic version');
   }
-  if (versionMatch[1] !== packageJson.version) {
+  if (declaredVersion !== packageJson.version) {
     throw new Error(
-      `Skill version mismatch: package.json=${packageJson.version}, SKILL.md=${versionMatch[1]}`,
+      `Skill version mismatch: package.json=${packageJson.version}, SKILL.md=${declaredVersion}`,
     );
   }
-  if (!/^name:\s*["']?clink-payment-skill["']?\s*$/mu.test(skillDocument)) {
+  if (!/^name:\s*["']?clink-payment-skill["']?\s*$/mu.test(frontmatter)) {
     throw new Error('SKILL.md name must be clink-payment-skill');
   }
   const requiredExecutablePaths = [
@@ -397,6 +409,175 @@ function readSkillIdentity(files) {
     throw new Error('required network preflight script is missing');
   }
   return { skillVersion: packageJson.version };
+}
+
+function extractSkillFrontmatter(skillDocument) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(skillDocument);
+  if (!match) {
+    throw new Error('SKILL.md YAML frontmatter is missing');
+  }
+  return match[1];
+}
+
+function readSkillMetadataVersion(frontmatter) {
+  // Parse an intentionally small YAML subset: plain-key block mappings with
+  // single-line scalar values. Reject flow collections, block scalars, and
+  // indentation constructs whose semantic nesting cannot be inferred safely.
+  const lines = frontmatter.split(/\r?\n/u);
+  const blocks = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^metadata[ \t]*:(.*)$/u.exec(lines[index]);
+    if (!match) {
+      continue;
+    }
+    if (!isEmptyOrYamlComment(match[1])) {
+      throw new Error('SKILL.md metadata must be a YAML mapping block');
+    }
+    let end = index + 1;
+    while (end < lines.length) {
+      const line = lines[end];
+      const trimmed = line.trimStart();
+      if (
+        trimmed.length > 0
+        && !trimmed.startsWith('#')
+        && line.length === trimmed.length
+      ) {
+        break;
+      }
+      end += 1;
+    }
+    blocks.push(lines.slice(index + 1, end));
+    index = end - 1;
+  }
+
+  if (blocks.length === 0) {
+    throw new Error('SKILL.md metadata.version is missing');
+  }
+  if (blocks.length !== 1) {
+    throw new Error('SKILL.md metadata.version must be declared exactly once');
+  }
+
+  let directEntryCanContainMapping = false;
+  const versionScalars = [];
+  for (const line of blocks[0]) {
+    const trimmed = line.trimStart();
+    if (trimmed.length === 0 || trimmed.startsWith('#')) {
+      continue;
+    }
+    const entry = /^( {2}| {4})([A-Za-z][A-Za-z0-9_-]*) *:(.*)$/u.exec(line);
+    if (!entry) {
+      throw new Error('SKILL.md metadata must be a YAML block mapping subset');
+    }
+    const scalar = readSimpleYamlScalar(entry[3]);
+    if (entry[1].length === 2) {
+      directEntryCanContainMapping = !scalar.hasValue;
+      if (entry[2] === 'version') {
+        versionScalars.push(scalar.value);
+      }
+    } else if (!directEntryCanContainMapping) {
+      throw new Error('SKILL.md metadata must be a YAML block mapping subset');
+    }
+  }
+
+  if (versionScalars.length === 0) {
+    throw new Error('SKILL.md metadata.version is missing');
+  }
+  if (versionScalars.length !== 1) {
+    throw new Error('SKILL.md metadata.version must be declared exactly once');
+  }
+  if (versionScalars[0] === null) {
+    throw new Error('SKILL.md metadata.version is missing');
+  }
+  return versionScalars[0];
+}
+
+function readSimpleYamlScalar(rawValue) {
+  const value = rawValue.trimStart();
+  if (value.length === 0 || value.startsWith('#')) {
+    return { hasValue: false, value: null };
+  }
+
+  const quote = value[0];
+  if (quote === '"' || quote === "'") {
+    const closingQuote = value.indexOf(quote, 1);
+    if (closingQuote < 0) {
+      throw new Error('SKILL.md metadata must use single-line YAML scalars');
+    }
+    const suffix = value.slice(closingQuote + 1);
+    if (!/^(?:[ \t]*|[ \t]+#[^\r\n]*)$/u.test(suffix)) {
+      throw new Error('SKILL.md metadata must use single-line YAML scalars');
+    }
+    return { hasValue: true, value: value.slice(1, closingQuote) };
+  }
+
+  const commentOffset = value.search(/[ \t]+#/u);
+  const scalar = (commentOffset < 0 ? value : value.slice(0, commentOffset)).trimEnd();
+  if (
+    scalar.length === 0
+    || /^[|>]/u.test(scalar)
+    || /^[&*!]/u.test(scalar)
+    || /[\[\]{}"']/u.test(scalar)
+  ) {
+    throw new Error('SKILL.md metadata must be a YAML block mapping subset');
+  }
+  return { hasValue: true, value: scalar };
+}
+
+function isEmptyOrYamlComment(value) {
+  const trimmed = value.trimStart();
+  return trimmed.length === 0 || trimmed.startsWith('#');
+}
+
+function isSemanticVersion(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 256) {
+    return false;
+  }
+  const plusIndex = value.indexOf('+');
+  if (plusIndex !== -1 && plusIndex !== value.lastIndexOf('+')) {
+    return false;
+  }
+  const versionWithoutBuild = plusIndex === -1 ? value : value.slice(0, plusIndex);
+  if (
+    plusIndex !== -1
+    && !isDotSeparatedSemanticVersionIdentifiers(value.slice(plusIndex + 1), false)
+  ) {
+    return false;
+  }
+
+  const dashIndex = versionWithoutBuild.indexOf('-');
+  const core = dashIndex === -1
+    ? versionWithoutBuild
+    : versionWithoutBuild.slice(0, dashIndex);
+  const coreParts = core.split('.');
+  if (
+    coreParts.length !== 3
+    || coreParts.some((part) => !/^(?:0|[1-9][0-9]*)$/u.test(part))
+  ) {
+    return false;
+  }
+  if (dashIndex === -1) {
+    return true;
+  }
+  return isDotSeparatedSemanticVersionIdentifiers(
+    versionWithoutBuild.slice(dashIndex + 1),
+    true,
+  );
+}
+
+function isDotSeparatedSemanticVersionIdentifiers(value, prerelease) {
+  if (value.length === 0) {
+    return false;
+  }
+  return value.split('.').every((identifier) => (
+    /^[0-9A-Za-z-]+$/u.test(identifier)
+    && !(
+      prerelease
+      && /^[0-9]+$/u.test(identifier)
+      && identifier.length > 1
+      && identifier.startsWith('0')
+    )
+  ));
 }
 
 function normalizeSourceCommit(value) {

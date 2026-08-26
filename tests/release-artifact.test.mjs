@@ -179,7 +179,7 @@ test('fallback ZIP and manifest are deterministic and contain only runtime paylo
   assert.deepEqual(archivedFiles, expectedTrackedFiles);
 });
 
-test('artifact collection rejects symlinks and installer-owned provenance', async (t) => {
+test('artifact collection enforces installer-owned path scopes canonically', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'clink-skill-artifact-safety-'));
   t.after(async () => {
     await rm(root, { recursive: true, force: true });
@@ -206,14 +206,260 @@ test('artifact collection rejects symlinks and installer-owned provenance', asyn
     /unsupported Git tree entry/u,
   );
   await rm(join(root, 'lib', 'linked-skill'));
-  await writeFile(join(root, '.clink-provenance.json'), '{}\n');
-  gitFixture(root, ['add', '--all', '--force']);
-  commitFixture(root, 'reserved provenance');
-  await assert.rejects(
-    collectArtifactEntries(root),
-    /reserved installer file must not exist/u,
-  );
+
+  for (const reservedPath of [
+    '.CLINK-PROVENANCE.JSON',
+    '.clin\u212A-provenance.json',
+    'lib/.CLINK-INSTALL.JSON',
+    'lib/.clin\u212A-install.json',
+    'lib/.CLINK-PROVENANCE.JSON',
+    'lib/.clin\u212A-provenance.json',
+  ]) {
+    const absolutePath = join(root, reservedPath);
+    await mkdir(join(absolutePath, '..'), { recursive: true });
+    await writeFile(absolutePath, '{}\n');
+    gitFixture(root, ['add', '--all', '--force']);
+    commitFixture(root, `reserved path ${reservedPath}`);
+    await assert.rejects(
+      collectArtifactEntries(root),
+      /reserved installer file must not exist/u,
+    );
+    await rm(absolutePath);
+  }
 });
+
+test('skill identity reads metadata.version only from YAML frontmatter', async (t) => {
+  const buildIdentityArtifact = await createSkillIdentityFixture(t);
+  const version = '1.2.3-beta.1+build.7';
+  for (const declaration of [
+    `  version: "${version}"   # release version`,
+    `  version: '${version}'   `,
+    `  version: ${version}   # release version`,
+  ]) {
+    const document = [
+      '---',
+      'name: clink-payment-skill',
+      'metadata:',
+      '  requires:',
+      '    node: ">=20"',
+      declaration,
+      '---',
+      '',
+      '# Fixture',
+    ].join('\n');
+    const result = await buildIdentityArtifact(document, version);
+    assert.equal(result.manifest.skillVersion, version);
+  }
+
+  const crlfDocument = [
+    '---',
+    'name: clink-payment-skill',
+    'metadata: # release metadata',
+    '  version: "1.2.3"  # current',
+    '---',
+    '# Fixture',
+  ].join('\r\n');
+  const crlfResult = await buildIdentityArtifact(crlfDocument, '1.2.3');
+  assert.equal(crlfResult.manifest.skillVersion, '1.2.3');
+});
+
+test('skill identity rejects ambiguous YAML and invalid semantic versions', async (t) => {
+  const buildIdentityArtifact = await createSkillIdentityFixture(t);
+  const cases = [
+    {
+      label: 'body forgery',
+      document: [
+        '---',
+        'name: clink-payment-skill',
+        'metadata:',
+        '  requires:',
+        '    node: ">=20"',
+        '---',
+        '# Fixture',
+        'metadata:',
+        '  version: "1.2.3"',
+      ].join('\n'),
+      error: /metadata\.version is missing/u,
+    },
+    {
+      label: 'duplicate version',
+      document: skillDocumentWithMetadata([
+        '  version: "1.2.3"',
+        '  version: "1.2.3"',
+      ]),
+      error: /must be declared exactly once/u,
+    },
+    {
+      label: 'conflicting version',
+      document: skillDocumentWithMetadata([
+        '  version: "1.2.3"',
+        '  version: "2.0.0"',
+      ]),
+      error: /must be declared exactly once/u,
+    },
+    {
+      label: 'package metadata conflict',
+      document: skillDocumentWithMetadata(['  version: "2.0.0"']),
+      packageVersion: '1.2.3',
+      error: /Skill version mismatch/u,
+    },
+    {
+      label: 'duplicate metadata block',
+      document: [
+        '---',
+        'name: clink-payment-skill',
+        'metadata:',
+        '  version: "1.2.3"',
+        'metadata:',
+        '  version: "1.2.3"',
+        '---',
+      ].join('\n'),
+      error: /must be declared exactly once/u,
+    },
+    {
+      label: 'invalid semantic version',
+      document: skillDocumentWithMetadata(['  version: 1.2']),
+      packageVersion: '1.2',
+      error: /must be a semantic version/u,
+    },
+    ...[
+      ['leading zero in core version', '01.2.3'],
+      ['empty prerelease identifier', '1.2.3-alpha..1'],
+      ['leading zero in numeric prerelease', '1.2.3-01'],
+      ['empty build identifier', '1.2.3+build..1'],
+    ].map(([label, version]) => ({
+      label,
+      document: skillDocumentWithMetadata([`  version: ${version}`]),
+      packageVersion: version,
+      error: /must be a semantic version/u,
+    })),
+    {
+      label: 'missing version',
+      document: skillDocumentWithMetadata([
+        '  requires:',
+        '    node: ">=20"',
+      ]),
+      error: /metadata\.version is missing/u,
+    },
+    {
+      label: 'invalid inline comment',
+      document: skillDocumentWithMetadata(['  version: "1.2.3"#not-a-comment']),
+      error: /single-line YAML scalars/u,
+    },
+    {
+      label: 'version nested in a flow mapping',
+      document: skillDocumentWithMetadata([
+        '  nested: {',
+        '  version: 1.2.3',
+        '  }',
+      ]),
+      error: /YAML block mapping subset/u,
+    },
+    {
+      label: 'block scalar metadata',
+      document: skillDocumentWithMetadata([
+        '  notes: |',
+        '    release notes',
+        '  version: 1.2.3',
+      ]),
+      error: /YAML block mapping subset/u,
+    },
+    {
+      label: 'opening delimiter with trailing whitespace',
+      document: skillDocumentWithMetadata(['  version: 1.2.3'])
+        .replace(/^---/u, '--- '),
+      error: /YAML frontmatter is missing/u,
+    },
+    {
+      label: 'closing delimiter with trailing whitespace',
+      document: skillDocumentWithMetadata(['  version: 1.2.3'])
+        .replace(/\n---\n/u, '\n--- \n'),
+      error: /YAML frontmatter is missing/u,
+    },
+  ];
+
+  for (const fixture of cases) {
+    await assert.rejects(
+      buildIdentityArtifact(fixture.document, fixture.packageVersion ?? '1.2.3'),
+      fixture.error,
+      fixture.label,
+    );
+  }
+});
+
+function skillDocumentWithMetadata(lines) {
+  return [
+    '---',
+    'name: clink-payment-skill',
+    'metadata:',
+    ...lines,
+    '---',
+    '# Fixture',
+  ].join('\n');
+}
+
+async function createSkillIdentityFixture(t) {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'clink-skill-identity-'));
+  const root = join(temporaryRoot, 'repository');
+  t.after(async () => {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  });
+
+  for (const directory of [
+    'bin',
+    'lib',
+    'references',
+    'scripts',
+    'vendor/clink-cli',
+  ]) {
+    await mkdir(join(root, directory), { recursive: true });
+  }
+  await writeFile(join(root, 'README.md'), '# Fixture\n');
+  await writeFile(join(root, 'README.zh.md'), '# Fixture\n');
+  await writeFile(join(root, 'lib', 'fixture.mjs'), 'export {};\n');
+  await writeFile(join(root, 'references', 'fixture.md'), '# Fixture\n');
+  await writeFile(
+    join(root, 'scripts', 'network-preflight.mjs'),
+    'export {};\n',
+  );
+  await writeFile(join(root, 'bin', 'clink'), '#!/bin/sh\n', { mode: 0o755 });
+  await writeFile(
+    join(root, 'vendor', 'clink-cli', 'clink-cli.bundle.mjs'),
+    'export {};\n',
+    { mode: 0o755 },
+  );
+  await writeFile(join(root, 'package.json'), JSON.stringify({
+    name: 'clink-payment-skill',
+    version: '0.0.0',
+  }));
+  await writeFile(
+    join(root, 'SKILL.md'),
+    skillDocumentWithMetadata(['  version: 0.0.0']),
+  );
+  gitFixture(root, ['init', '--quiet']);
+  gitFixture(root, ['add', '--all', '--force']);
+  commitFixture(root, 'initial identity fixture');
+
+  let buildIndex = 0;
+  return async (skillDocument, version) => {
+    await writeFile(join(root, 'SKILL.md'), skillDocument);
+    await writeFile(join(root, 'package.json'), JSON.stringify({
+      name: 'clink-payment-skill',
+      version,
+    }));
+    gitFixture(root, ['add', '--all', '--force']);
+    commitFixture(root, `identity fixture ${buildIndex}`);
+    const sourceCommit = gitFixture(root, ['rev-parse', 'HEAD']).trim();
+    const outputDirectory = join(temporaryRoot, 'output', String(buildIndex));
+    buildIndex += 1;
+    return buildFallbackArtifact({
+      repositoryRoot: root,
+      outputDirectory,
+      sourceCommit,
+      timestamp: fixedTimestamp,
+    });
+  };
+}
 
 function commitFixture(root, message) {
   gitFixture(root, [
