@@ -1,0 +1,14 @@
+{
+  "name": "visa-cli-vendored",
+  "version": "0.2.30",
+  "upstreamPackage": "@clink-ai/clink-cli",
+  "upstreamCommit": "8dc6eacb13936885c892763aceaabe0eeb78007f",
+  "bundleSha256": "c25bd6bbbc89dc90ab67ee441bd50e6605da4eb9d24e628d10572e930216980a",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "visa-cli": "visa-cli.bundle.mjs"
+  },
+  "description": "Single-file test bundle of the Visa CLI feature build. Playwright remains an optional external fallback and is not required by Visa commands.",
+  "edition": "visa"
+}

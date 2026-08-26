@@ -1,0 +1,16 @@
+interface:
+  display_name: "Visa Skill"
+  short_description: "Visa Benefit discovery, fast Visa commerce, and concise Clink payment capabilities."
+  default_prompt: >-
+    Use the bundled visa-cli only. Lock one user language and one environment.
+    Visa Benefit queries use recommend, detail, taxonomy, and token-free
+    product-search without login. Visa Program purchases must preserve the
+    recommendation and Catalog identity, amount, and currency, obtain one
+    purchase authorization, then use product-search, commerce-login, and
+    commerce-run without decomposing them into card, Instruction, event, pay,
+    or UCP steps. Quick Instruction belongs to commerce-login, and commerce-run
+    is never rerun after possible Checkout creation. For non-Program wallet,
+    card, risk, Catalog, Direct or Session Pay, Alipay QR, UCP, Instruction,
+    refund, event, Skill Tip, and Skill installation requests, follow the short
+    fail-closed Capability Contract in SKILL.md. Do not read references or use
+    runtime --help during ordinary execution.
