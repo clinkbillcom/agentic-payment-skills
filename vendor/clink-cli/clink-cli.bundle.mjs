@@ -14279,7 +14279,7 @@ function validateInternalUcpMerchantList(value, source) {
     const fields = record;
     const merchantId = nonBlankString(fields.merchant_id);
     const merchantName = nonBlankString(fields.merchant_name);
-    const description = stringValue(fields.description);
+    const description = optionalDescription(fields.description);
     const domain = merchantOrigin(fields.domain, source, index);
     if (!merchantId || !merchantName || description === void 0 || !domain) {
       throw invalidMerchant(source, index);
@@ -14408,6 +14408,9 @@ function nonBlankString(value) {
 }
 function stringValue(value) {
   return typeof value === "string" ? value.trim() : void 0;
+}
+function optionalDescription(value) {
+  return value === null || value === void 0 ? "" : stringValue(value);
 }
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");

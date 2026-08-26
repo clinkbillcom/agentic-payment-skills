@@ -139,7 +139,9 @@ clink ucp-merchant list --internal [--test|--sandbox] --format json
 
 The explicit Catalog flag selects the API environment; omission means production. This command sends an anonymous `GET /agent/ucp/merchants`, needs no wallet, and does not read the saved environment. Before invoking it, preflight the selected Catalog API origin from the table above. Each entry carries `merchant_id`, `merchant_name`, `description`, and a full `domain` URL.
 
-The server has already filtered the response to active merchants, so the FSM does not depend on an `enabled` response field. It keeps a merchant as a candidate only when it has a `merchant_id` and a non-empty `description`. A merchant without a description cannot be intent-matched on anything but a guess, so it is excluded. The FSM preserves `merchant_name`, validates the full `domain` as a safe HTTP(S) origin, exposes it as `merchantUrl`, and derives `merchantDomain` from its hostname; it never constructs either value from a brand or merchant name.
+The server has already filtered the response to active, non-shadow internal merchants, so the FSM does not depend on an `enabled` response field. The list deliberately retains active merchants that are unavailable for Catalog search because the same eligibility boundary must continue to support internal endpoint resolution. Those rows carry `description:""`; the CLI also normalizes a null or missing upstream description to that string. The successful CLI contract therefore still requires `description` to be a string.
+
+For intent matching, the FSM keeps a merchant as a candidate only when it has a `merchant_id` and a non-empty `description`. A merchant without a matchable description is skipped individually because matching it would be a guess; it does not invalidate the rest of the merchant list. The FSM preserves `merchant_name`, validates the full `domain` as a safe HTTP(S) origin, exposes it as `merchantUrl`, and derives `merchantDomain` from its hostname; it never constructs either value from a brand or merchant name.
 
 ## Step 2 - Match Intent Against Merchant Descriptions
 

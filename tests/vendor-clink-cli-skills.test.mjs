@@ -1688,6 +1688,53 @@ test('vendored UCP merchant list selects its public API environment and sends an
   }
 });
 
+test('vendored UCP merchant list normalizes null and missing descriptions to empty strings', async () => {
+  const fetchPreload = await createMerchantFetchPreload([
+    {
+      merchant_id: 'mcht_null_description',
+      merchant_name: 'Null Description Merchant',
+      description: null,
+      domain: 'https://null-description.example',
+    },
+    {
+      merchant_id: 'mcht_missing_description',
+      merchant_name: 'Missing Description Merchant',
+      domain: 'https://missing-description.example',
+    },
+  ]);
+  const requestPath = join(fetchPreload.directory, 'request.json');
+
+  try {
+    const result = runBundleRaw([
+      'ucp-merchant', 'list', '--internal', '--format', 'json',
+    ], {
+      ...fetchPreload.env,
+      CLINK_TEST_FETCH_RECORD_PATH: requestPath,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: true,
+      data: [
+        {
+          merchant_id: 'mcht_null_description',
+          merchant_name: 'Null Description Merchant',
+          description: '',
+          domain: 'https://null-description.example',
+        },
+        {
+          merchant_id: 'mcht_missing_description',
+          merchant_name: 'Missing Description Merchant',
+          description: '',
+          domain: 'https://missing-description.example',
+        },
+      ],
+    });
+  } finally {
+    await rm(fetchPreload.directory, { recursive: true, force: true });
+  }
+});
+
 test('vendored UCP merchant list rejects credentials, dry-run, and extra arguments before fetching', async () => {
   const fetchPreload = await createMerchantFetchPreload([]);
   const unexpectedRequestPath = join(fetchPreload.directory, 'unexpected-request.json');
@@ -2336,7 +2383,7 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'b52a40148184f619e42ceca9069604ddc24e7ea6',
+    'e9513a4b952c295f6f32aeb761178f4502b1c060',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

@@ -916,6 +916,22 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
   assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
   assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
+  assert.match(catalogDiscovery, /active, non-shadow internal merchants/u);
+  assert.match(catalogDiscovery, /support internal endpoint resolution/u);
+  assert.match(catalogDiscovery, /null or missing upstream description/u);
+  assert.match(catalogDiscovery, /skipped individually[\s\S]*does not invalidate the rest of the merchant list/u);
+
+  assert.match(skill, /active non-shadow internal merchants needed for endpoint resolution/u);
+  assert.match(skill, /Catalog-disabled rows have `description:""`/u);
+  assert.match(skill, /Skip each empty-description row[\s\S]*without rejecting the complete list/u);
+
+  assert.match(readme, /active non-shadow internal merchants/u);
+  assert.match(readme, /Catalog-disabled merchants[\s\S]*endpoint resolution/u);
+  assert.match(readme, /skips those rows individually without rejecting the list/u);
+  assert.match(readmeZh, /active 非影子内部商户/u);
+  assert.match(readmeZh, /endpoint resolution/u);
+  assert.match(readmeZh, /Catalog-disabled 商户/u);
+  assert.match(readmeZh, /逐条跳过这些记录，不会判坏整张列表/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {

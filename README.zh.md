@@ -64,7 +64,7 @@ https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
 - 支付执行（直接模式和会话模式）
 - Agent 支付宝二维码支付：直接在终端展示 CLI 生成的字符二维码，必要时回退到私有 PNG，等待关联的成功/失败事件，并在每个终态递归清理临时目录
 - 基于语义的 v2 意图路由和派生钱包门禁：匿名公共 Catalog 搜索不读取钱包状态或 `~/.clink-cli/config.json`；带购买意图的商品发现也保持匿名，直到本轮语义明确授权并绑定一个候选商品。候选编号只负责定位商品，本身不能授权购买。Catalog 结果语言由 Agent 根据会话意图决定并冻结为 BCP47，通过 `--language` 传入；query 文本和后端不再猜测目标语言
-- 使用 `clink ucp-merchant list --internal` 匿名获取支持的商户：请求所选环境的 `GET /agent/ucp/merchants`，使用服务端已筛选的 active 商户，并从返回的完整 `domain` 安全派生商户 URL 与 hostname
+- 使用 `clink ucp-merchant list --internal` 匿名获取支持的商户：请求所选环境的 `GET /agent/ucp/merchants`，使用服务端已筛选的 active 非影子内部商户，并从返回的完整 `domain` 安全派生商户 URL 与 hostname。为兼顾 endpoint resolution，Catalog-disabled 商户仍会以空 `description` 返回；Catalog 意图匹配逐条跳过这些记录，不会判坏整张列表
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行
