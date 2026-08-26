@@ -649,8 +649,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.0');
-  assert.equal(packageJson.version, '1.14.0');
+  assert.equal(skillVersion, '1.14.1');
+  assert.equal(packageJson.version, '1.14.1');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -908,9 +908,9 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
+  assert.match(skill, /clink ucp-merchant list --internal[^\n]*--test/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
+  assert.match(catalogDiscovery, /clink ucp-merchant list --internal \[--test\|--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
@@ -939,9 +939,9 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
   assert.match(cliInvocation, /`--sandbox` means sandbox\/UAT/u);
   assert.match(cliInvocation, /`--test` means test/u);
   assert.match(cliInvocation, /send no `Authorization`/u);
-  assert.match(cliInvocation, /three Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
-  assert.match(cliInvocation, /Production `tool internal-ucp get-merchant-list`[\s\S]*network-error exit 6/u);
-  assert.match(cliInvocation, /preflight `https:\/\/www\.clinkbill\.com`[\s\S]*preflight the selected Catalog API origin/u);
+  assert.match(cliInvocation, /four Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
+  assert.match(cliInvocation, /anonymous `GET \/agent\/ucp\/merchants`/u);
+  assert.match(cliInvocation, /Preflight the selected API origin before the merchant-list command/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
   assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
@@ -963,7 +963,7 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
   assert.match(catalogDiscovery, /pending selection is authoritative/u);
   assert.match(catalogDiscovery, /current `wallet status`/u);
   assert.match(catalogDiscovery, /test or sandbox candidate must never flow silently into production checkout/u);
-  assert.match(catalogDiscovery, /production merchant-list non-2xx[\s\S]*network error exit 6/u);
+  assert.match(catalogDiscovery, /merchant-list or Catalog search `401`\/`403`[\s\S]*exit 5/u);
   assert.match(ucpCheckout, /anonymous `POST \/agent\/ucp/u);
   assert.match(ucpCheckout, /require a successful current `wallet status`[\s\S]*verify that its API origin matches[\s\S]*Stop if/u);
   assert.match(ucpCheckout, /selected product without that frozen environment is invalid/u);

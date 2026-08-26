@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   PageHandoffAction,
@@ -120,6 +120,45 @@ function runBundleRaw(args, env = {}) {
 
 function runBundleJson(args) {
   return JSON.parse(runBundle(args));
+}
+
+async function createMerchantFetchPreload(responseBody) {
+  const directory = await mkdtemp(join(tmpdir(), 'clink-merchant-fetch-preload-'));
+  const preloadPath = join(directory, 'preload.mjs');
+  await writeFile(
+    preloadPath,
+    `import { writeFileSync } from 'node:fs';
+
+const responseBody = ${JSON.stringify(responseBody)};
+
+globalThis.fetch = async (input, init = {}) => {
+  const request = new Request(input, init);
+  writeFileSync(
+    process.env.CLINK_TEST_FETCH_RECORD_PATH,
+    JSON.stringify({
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      credentials: init.credentials ?? null,
+      hasBody: request.body !== null,
+    }),
+    'utf8',
+  );
+  return new Response(JSON.stringify(responseBody), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+};
+`,
+    'utf8',
+  );
+  const importOption = `--import=${pathToFileURL(preloadPath).href}`;
+  return {
+    directory,
+    env: {
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, importOption].filter(Boolean).join(' '),
+    },
+  };
 }
 
 function runBundleAsync(args, env = {}) {
@@ -1498,6 +1537,20 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   assert.doesNotMatch(crossMerchantHelp, /--cursor <cursor>|--limit <n>/u);
 });
 
+test('vendored CLI help exposes the internal UCP merchant-list contract', () => {
+  const rootHelp = runBundle(['--help']);
+  const merchantHelp = runBundle(['ucp-merchant', '--help']);
+  const listHelp = runBundle(['ucp-merchant', 'list', '--help']);
+
+  assert.match(rootHelp, /^\s*ucp-merchant\s+Discover enabled UCP merchants$/mu);
+  assert.match(merchantHelp, /ucp-merchant list --internal/u);
+  assert.match(merchantHelp, /List enabled UCP merchants from Clink's public merchant API/u);
+  assert.match(listHelp, /--internal\s+Select the Clink UCP merchant source/u);
+  assert.match(listHelp, /anonymous GET \/agent\/ucp\/merchants/u);
+  assert.match(listHelp, /does not read ~\/\.clink-cli\/config\.json/u);
+  assert.match(listHelp, /merchant_id,[\s\S]*merchant_name,[\s\S]*description,[\s\S]*domain/u);
+});
+
 test('vendored public Catalog commands ignore wallet config and select their own environment', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-vendored-public-catalog-'));
   const configDirectory = join(home, '.clink-cli');
@@ -1548,12 +1601,6 @@ test('vendored public Catalog commands ignore wallet config and select their own
       assert.equal(request.body.context?.language, undefined);
     }
 
-    const merchantList = runBundleRaw([
-      'tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json',
-    ], publicEnv);
-    assert.equal(merchantList.status, 0, merchantList.stderr);
-    assert.ok(JSON.parse(merchantList.stdout).merchants.length > 0);
-
     const credentials = runBundleRaw([
       'catalog', 'search', '--query', 'watch', '--customer-api-key', 'must-not-be-used',
     ], publicEnv);
@@ -1561,6 +1608,135 @@ test('vendored public Catalog commands ignore wallet config and select their own
     assert.match(credentials.stderr, /--customer-api-key is not supported by public Catalog commands/u);
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored UCP merchant list selects its public API environment and sends an anonymous bodyless GET', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'clink-vendored-ucp-merchant-'));
+  const configDirectory = join(home, '.clink-cli');
+  await mkdir(configDirectory, { recursive: true });
+  await writeFile(join(configDirectory, 'config.json'), '{ malformed config', 'utf8');
+
+  const upstreamMerchant = {
+    merchant_id: '  mcht_enabled_1  ',
+    merchant_name: '  Enabled Merchant  ',
+    description: '  Watches and accessories  ',
+    domain: 'https://SHOP.Example:443/',
+    enabled: true,
+    backend_only: 'must not be projected',
+  };
+  const expectedMerchant = {
+    merchant_id: 'mcht_enabled_1',
+    merchant_name: 'Enabled Merchant',
+    description: 'Watches and accessories',
+    domain: 'https://shop.example',
+  };
+  const fetchPreload = await createMerchantFetchPreload([upstreamMerchant]);
+  const cases = [
+    {
+      name: 'production',
+      args: ['ucp-merchant', 'list', '--internal', '--format', 'json'],
+      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchants',
+    },
+    {
+      name: 'sandbox',
+      args: ['ucp-merchant', 'list', '--internal', '--sandbox', '--format', 'json'],
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchants',
+    },
+    {
+      name: 'test',
+      args: ['ucp-merchant', 'list', '--internal', '--test', '--format', 'json'],
+      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/merchants',
+    },
+  ];
+
+  try {
+    for (const { name, args, expectedUrl } of cases) {
+      const recordPath = join(fetchPreload.directory, `${name}-request.json`);
+      const result = runBundleRaw(args, {
+        ...fetchPreload.env,
+        HOME: home,
+        CLINK_TEST_FETCH_RECORD_PATH: recordPath,
+        CLINK_BASE_URL: 'https://must-be-ignored.example.com',
+        CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+        CLINK_CUSTOMER_ID: 'customer_must_not_be_sent',
+        CLINK_CUSTOMER_API_KEY: 'key_must_not_be_sent',
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        ok: true,
+        data: [expectedMerchant],
+      });
+
+      const request = JSON.parse(await readFile(recordPath, 'utf8'));
+      assert.equal(request.url, expectedUrl);
+      assert.equal(request.method, 'GET');
+      assert.equal(request.credentials, 'omit');
+      assert.equal(request.hasBody, false);
+      assert.equal(request.headers.accept, 'application/json');
+      for (const headerName of Object.keys(request.headers)) {
+        assert.notEqual(headerName, 'authorization');
+        assert.notEqual(headerName, 'cookie');
+        assert.equal(headerName.includes('customer'), false);
+        assert.equal(headerName.includes('signature'), false);
+        assert.notEqual(headerName, 'x-timestamp');
+      }
+    }
+  } finally {
+    await rm(fetchPreload.directory, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored UCP merchant list rejects credentials, dry-run, and extra arguments before fetching', async () => {
+  const fetchPreload = await createMerchantFetchPreload([]);
+  const unexpectedRequestPath = join(fetchPreload.directory, 'unexpected-request.json');
+  const cases = [
+    {
+      args: ['ucp-merchant', 'list', '--format', 'json'],
+      message: /requires --internal/u,
+    },
+    {
+      args: ['ucp-merchant', 'list', '--internal', '--dry-run', '--format', 'json'],
+      message: /--dry-run is not supported by ucp-merchant list/u,
+    },
+    {
+      args: ['ucp-merchant', 'list', '--internal', '--customer-id', 'customer_1', '--format', 'json'],
+      message: /--customer-id is not supported by ucp-merchant list/u,
+    },
+    {
+      args: ['ucp-merchant', 'list', '--internal', '--customer-api-key', 'secret', '--format', 'json'],
+      message: /--customer-api-key is not supported by ucp-merchant list/u,
+    },
+    {
+      args: ['ucp-merchant', 'list', 'extra', '--internal', '--format', 'json'],
+      message: /does not accept positional arguments/u,
+    },
+    {
+      args: ['ucp-merchant', 'list', '--internal', '--query', 'watch', '--format', 'json'],
+      message: /--query is not supported by ucp-merchant list/u,
+    },
+  ];
+
+  try {
+    for (const { args, message } of cases) {
+      const result = runBundleRaw(args, {
+        ...fetchPreload.env,
+        CLINK_TEST_FETCH_RECORD_PATH: unexpectedRequestPath,
+      });
+      assert.equal(result.status, 2, result.stdout + result.stderr);
+      const output = JSON.parse(result.stderr);
+      assert.equal(output.ok, false);
+      assert.equal(output.error.type, 'validation_error');
+      assert.match(output.error.message, message);
+      assert.doesNotMatch(result.stdout + result.stderr, /customer_1|secret/u);
+    }
+    await assert.rejects(
+      readFile(unexpectedRequestPath, 'utf8'),
+      (error) => error?.code === 'ENOENT',
+    );
+  } finally {
+    await rm(fetchPreload.directory, { recursive: true, force: true });
   }
 });
 
@@ -2156,11 +2332,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.30');
+  assert.equal(vendorPackage.version, '0.2.31');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '8dc6eacb13936885c892763aceaabe0eeb78007f',
+    'b52a40148184f619e42ceca9069604ddc24e7ea6',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

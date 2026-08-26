@@ -18,13 +18,13 @@ Catalog discovery is anonymous. It does not require `wallet init` and must not r
 
 Freeze one `catalogEnvironment` for the discovery:
 
-| `catalogEnvironment` | CLI flag | Catalog API origin | Merchant-list source |
+| `catalogEnvironment` | CLI flag | Catalog API origin | Merchant-list API |
 | --- | --- | --- | --- |
-| `production` (default) | none | `https://api.clinkbill.com` | `https://www.clinkbill.com/.well-known/ucp-merchants.json` |
-| `sandbox` | `--sandbox` | `https://uat-api.clinkbill.com` | local `public/uat` bundle |
-| `test` | `--test` | `https://api.clinkbill.dev` | local `public/test` bundle |
+| `production` (default) | none | `https://api.clinkbill.com` | `GET https://api.clinkbill.com/agent/ucp/merchants` |
+| `sandbox` | `--sandbox` | `https://uat-api.clinkbill.com` | `GET https://uat-api.clinkbill.com/agent/ucp/merchants` |
+| `test` | `--test` | `https://api.clinkbill.dev` | `GET https://api.clinkbill.dev/agent/ucp/merchants` |
 
-Only those three values are valid. Carry the same environment flag through `get-merchant-list`, merchant-scoped search, broad search, and any later `ucp-catalog product` lookup. Never infer the Catalog environment from wallet status or silently switch it between stages.
+Only those three values are valid. Carry the same environment flag through `ucp-merchant list --internal`, merchant-scoped search, broad search, and any later `ucp-catalog product` lookup. Never infer the Catalog environment from wallet status or silently switch it between stages.
 
 The Agent owns result-language detection. Before the first Catalog call, follow the priority in `references/clink-payment-intent-contract.md` and freeze one `catalogLanguage`: an explicit result-language request first, then the established conversation reply language, then the current user's language and script. New v2 `CATALOG_SEARCH` and `CATALOG_PURCHASE` inputs require `target.catalogLanguage`. Do not infer it from product keywords, brand names, query text alone, buyer country, wallet/config state, or a backend default.
 
@@ -34,7 +34,7 @@ Merchant-scoped `ucp-catalog search` and `ucp-catalog product` implement Catalog
 
 These rules apply only to the public Catalog discovery commands. `tool internal-ucp get-endpoint` and the later checkout remain under the authenticated wallet environment lock. Preserve `catalogEnvironment` on every candidate. The pending selection is authoritative over candidate-level copies; reject a conflict instead of replacing the frozen value. Before starting checkout for a selected candidate, compare the authoritative `wallet status` origin with the origin above; top-level/candidate or explicit/status wallet-origin conflicts also stop checkout. A test or sandbox candidate must never flow silently into production checkout or payment.
 
-The three Gateway Catalog APIs (`ucp-catalog search/product` and `catalog search`) are anonymous. Their HTTP `401` or `403` is a Gateway public-access configuration error, surfaced by the CLI as API error exit 5. Stop with `SURFACE_ERROR`. Do not inspect wallet credentials, refresh OAuth, run `wallet init`, or retry through CSK; none of those can repair an anonymous route. Production `get-merchant-list` is a static well-known-document fetch, so any non-2xx remains network error exit 6; sandbox/UAT and test load that document locally.
+The four Gateway Catalog APIs (`ucp-merchant list --internal`, `ucp-catalog search/product`, and `catalog search`) are anonymous. Their HTTP `401` or `403` is a Gateway public-access configuration error, surfaced by the CLI as API error exit 5. Stop with `SURFACE_ERROR`. Do not inspect wallet credentials, refresh OAuth, run `wallet init`, or retry through CSK; none of those can repair an anonymous route. Other HTTP failures remain API errors; transport failures remain network errors.
 
 ## Anonymous Product Search Route
 
@@ -68,7 +68,7 @@ When the semantic operation is `CATALOG_PURCHASE`, follow the purchase route bel
 
 ## Described Product Purchase Route
 
-When the user authorizes buying a product they described but gave no link, construct v2 `CATALOG_PURCHASE` rather than `UCP_CHECKOUT`. It returns `requiresWallet:false`, `authenticationMode:ANONYMOUS`, and `walletGate:DEFER_UNTIL_SELECTION`. Page-backed products still need a product URL before checkout. An internal merchant-scoped Catalog result may instead become a frozen `INTERNAL_UCP_CATALOG` target when the validated merchant-list entry supplies an authoritative `merchant_url`.
+When the user authorizes buying a product they described but gave no link, construct v2 `CATALOG_PURCHASE` rather than `UCP_CHECKOUT`. It returns `requiresWallet:false`, `authenticationMode:ANONYMOUS`, and `walletGate:DEFER_UNTIL_SELECTION`. Page-backed products still need a product URL before checkout. An internal merchant-scoped Catalog result may instead become a frozen `INTERNAL_UCP_CATALOG` target when the validated merchant-list entry supplies an authoritative full `domain` URL.
 
 The legacy router resolves every non-empty `catalogEnvironment`/`catalog_environment` alias and every non-empty `catalogLanguage`/`catalog_language`/`language` alias together. Equivalent spellings are canonicalized with the CLI's exact rules; conflicting or invalid values return `ASK_FOR_CATALOG_DISCOVERY_INPUT` instead of silently choosing one. The v2 contract accepts only exact `target.catalogLanguage` and requires it for Catalog operations. A valid v2 route explicitly returns production, test, or sandbox plus the canonical effective language. Pass those returned fields together with `catalogQuery` into `classifyCatalogDiscovery`; do not restart from the query alone.
 
@@ -84,7 +84,7 @@ The product remains unresolved when there is no `target.productUrl` unless the s
 
 ### Presenting Purchase Candidates
 
-For `CATALOG_PURCHASE`, present the products from `CATALOG_RESULTS_READY` as a numbered list and record a pending selection object with `status: 'AWAITING_SELECTION'`, `purchaseIntent:true`, `resultMode:'PURCHASE_SELECTION'`, the original `catalogQuery`, the frozen valid `catalogEnvironment`, the effective canonical `catalogLanguage`, and its `candidates`. Both provenance fields are mandatory and must agree; neither is a compatibility fallback for the other. The original query is also mandatory; every present `catalogQuery` / `catalog_query` / `query` alias must be a non-empty string and agree. The pending fields are authoritative. `candidates` and the compatibility alias `products` may coexist only when they are the same frozen array; conflicting snapshots invalidate the pending object. Candidate `catalogEnvironment`/`catalogLanguage` fields may only confirm consistency and never supply or override context; a generic candidate `language` field is product data and is ignored here. Each present product ID and product name alias must be non-empty and consistent. Page-backed and platform-store candidates also require their absolute URL. An internal candidate carries `source=INTERNAL_UCP_CATALOG`, exactly one `merchantId`, a `merchantDomain`, and the authoritative HTTP(S) `merchantUrl` copied from the validated merchant-list entry; that URL's hostname must match the domain. An external platform store candidate instead carries `channelType`, optional `region`, and exactly one `storeId`. Merchant/store identity is mutually exclusive, and a store without `channelType` is invalid. Its ordering URL must carry one or more non-empty `product_id` values, all equal to the candidate product ID. Preserve the complete validated candidate facts, especially price, currency, quantity, source, and merchant URL; never synthesize a merchant or URL.
+For `CATALOG_PURCHASE`, present the products from `CATALOG_RESULTS_READY` as a numbered list and record a pending selection object with `status: 'AWAITING_SELECTION'`, `purchaseIntent:true`, `resultMode:'PURCHASE_SELECTION'`, the original `catalogQuery`, the frozen valid `catalogEnvironment`, the effective canonical `catalogLanguage`, and its `candidates`. Both provenance fields are mandatory and must agree; neither is a compatibility fallback for the other. The original query is also mandatory; every present `catalogQuery` / `catalog_query` / `query` alias must be a non-empty string and agree. The pending fields are authoritative. `candidates` and the compatibility alias `products` may coexist only when they are the same frozen array; conflicting snapshots invalidate the pending object. Candidate `catalogEnvironment`/`catalogLanguage` fields may only confirm consistency and never supply or override context; a generic candidate `language` field is product data and is ignored here. Each present product ID and product name alias must be non-empty and consistent. Page-backed and platform-store candidates also require their absolute URL. An internal candidate carries `source=INTERNAL_UCP_CATALOG`, exactly one `merchantId`, a `merchantDomain`, and the authoritative HTTP(S) `merchantUrl` copied from the validated merchant-list entry's `domain`; the FSM safely parses that URL and derives `merchantDomain` from its hostname. An external platform store candidate instead carries `channelType`, optional `region`, and exactly one `storeId`. Merchant/store identity is mutually exclusive, and a store without `channelType` is invalid. Its ordering URL must carry one or more non-empty `product_id` values, all equal to the candidate product ID. Preserve the complete validated candidate facts, especially price, currency, quantity, source, and merchant URL; never synthesize a merchant or URL.
 
 Do not preselect a product, even when only one candidate came back. Buying is the user's decision.
 
@@ -134,12 +134,12 @@ CATALOG_QUERY
 ## Step 1 - Load Supported Merchants
 
 ```bash
-clink tool internal-ucp get-merchant-list [--test|--sandbox] --format json
+clink ucp-merchant list --internal [--test|--sandbox] --format json
 ```
 
-The explicit Catalog flag selects the document; omission means production. This command does not need a wallet and does not read its saved environment. For production, run the network preflight against `https://www.clinkbill.com` before invoking it because it fetches the well-known document there. Sandbox/UAT and test read the bundled list and need no preflight for this step. Each entry carries `merchant_id`, `domain_name`, `enabled`, and `description`.
+The explicit Catalog flag selects the API environment; omission means production. This command sends an anonymous `GET /agent/ucp/merchants`, needs no wallet, and does not read the saved environment. Before invoking it, preflight the selected Catalog API origin from the table above. Each entry carries `merchant_id`, `merchant_name`, `description`, and a full `domain` URL.
 
-The FSM keeps a merchant as a candidate only when it has a `merchant_id`, is not `enabled:false`, and has a non-empty `description`. A merchant without a description cannot be intent-matched on anything but a guess, so it is excluded from matching rather than matched blindly. This mirrors the server-side candidate rule for cross-merchant search.
+The server has already filtered the response to active merchants, so the FSM does not depend on an `enabled` response field. It keeps a merchant as a candidate only when it has a `merchant_id` and a non-empty `description`. A merchant without a description cannot be intent-matched on anything but a guess, so it is excluded. The FSM preserves `merchant_name`, validates the full `domain` as a safe HTTP(S) origin, exposes it as `merchantUrl`, and derives `merchantDomain` from its hostname; it never constructs either value from a brand or merchant name.
 
 ## Step 2 - Match Intent Against Merchant Descriptions
 
@@ -147,13 +147,13 @@ Match the user's request against each candidate's `description`, not against its
 
 Skip this inference step when `channelType` or `storeId` is already established. After the merchant-list preflight, go directly to broad search: the merchant-scoped endpoint accepts neither the channel selector nor store identity, so a scoped match would silently discard the target constraint. A buyer country alone remains a hint and does not skip matching.
 
-Report a match as `merchantMatch: { merchantId, merchantDomain, merchantUrl, reason }`, copying `merchantId`, `domainName` as `merchantDomain`, and the optional `merchantUrl` exactly from the one selected candidate. The description remains the only matching evidence; domain and URL only preserve that candidate's identity. Return `merchantMatch:false` for no match. When multiple candidates share a merchant ID, a matching domain or URL discriminator is mandatory; omission returns `merchant_match_ambiguous`. Any supplied discriminator that conflicts with the selected list entry also fails closed. Never construct a replacement URL. The FSM rejects an ID outside the loaded list as `merchant_match_not_in_candidates`.
+Report a match as `merchantMatch: { merchantId, merchantDomain, merchantUrl, reason }`, copying `merchantId`, the hostname-derived `merchantDomain`, and `merchantUrl` exactly from the one selected candidate. The description remains the only matching evidence; merchant name, domain, and URL only preserve that candidate's identity. Return `merchantMatch:false` for no match. When multiple candidates share a merchant ID, a matching domain or URL discriminator is mandatory; omission returns `merchant_match_ambiguous`. Any supplied discriminator that conflicts with the selected list entry also fails closed. Never construct a replacement URL. The FSM rejects an ID outside the loaded list as `merchant_match_not_in_candidates`.
 
 Match only when the description genuinely covers the request. A weak match that returns nothing costs an extra round trip; a wrong match sends the user a confident answer from the wrong catalog.
 
 ## Step 3 - Merchant-Scoped Search
 
-Before the first search, run the network preflight against the API origin in the environment table. This is a second origin in production; the earlier `www.clinkbill.com` merchant-list preflight does not cover `api.clinkbill.com`.
+The merchant list and searches use the same Catalog API origin. Reuse the successful preflight from Step 1 for that exact origin in this workflow; preflight again only if the destination changes.
 
 ```bash
 clink ucp-catalog search --merchant-id <merchant_id> --query <text> --language <BCP47> [--context <json>] [--test|--sandbox] --format json
@@ -238,7 +238,7 @@ Tell the user the Clink catalogs had no match and that discovery is continuing e
 - Running one Catalog stage with `--test` or `--sandbox` and silently dropping that flag on the next stage.
 - Reading wallet/config or query keywords for Catalog output language, omitting Agent language detection on a new v2 route, or combining `--language` with `context.language` instead of keeping buyer country in a language-free context.
 - Taking a test/sandbox Catalog candidate into a production checkout because discovery and checkout environment locks were treated as the same thing.
-- Treating a Gateway Catalog API `401`/`403` as an expired wallet login and starting OAuth recovery instead of surfacing the Gateway configuration error, or treating a production merchant-list non-2xx as exit 5 instead of its static-fetch network error exit 6.
+- Treating an anonymous merchant-list or Catalog search `401`/`403` as an expired wallet login instead of surfacing the Gateway public-route configuration error (exit 5).
 - Sending a described product straight to UCP checkout, then failing at `parse-item` because there is no product detail URL.
 - Auto-selecting the first or only candidate instead of letting the user choose.
 - Resolving an ambiguous reply such as "那个便宜点的吧" to a product by guessing which one is meant.

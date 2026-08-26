@@ -31,22 +31,21 @@ import {
 } from '../lib/ucp-checkout-workflow-fsm.mjs';
 
 const bruceLeeMerchant = {
-  domain_name: 'www.bruceleeclub.com',
-  merchant_url: 'https://www.bruceleeclub.com/',
+  domain: 'https://WWW.BruceLeeClub.com',
   merchant_id: 'mcht_frnz6yfrz1sd',
-  enabled: true,
+  merchant_name: 'Bruce Lee Club',
   description: 'Official online store of Bruce Lee Club. Licensed fan and collector goods: apparel and T-shirts, memorabilia, books, posters, accessories.',
 };
 
 const shopifyMerchant = {
-  domain_name: 'uebmaw-it.myshopify.com',
-  merchant_url: 'https://uebmaw-it.myshopify.com/',
+  domain: 'https://uebmaw-it.myshopify.com/',
   merchant_id: 'mcht_frnagwqi4k43',
-  enabled: true,
+  merchant_name: 'Bruce Lee Collaboration Store',
   description: 'Shopify storefront selling Bruce Lee Club collaboration merchandise, mainly limited-run tops and shirts.',
 };
 
-const merchantListOutput = { merchants: [bruceLeeMerchant, shopifyMerchant] };
+const merchantListData = [bruceLeeMerchant, shopifyMerchant];
+const merchantListOutput = { ok: true, data: merchantListData };
 
 function classifyCatalogDiscovery(input = {}) {
   const hasLanguage = ['catalogLanguage', 'catalog_language', 'language']
@@ -73,7 +72,7 @@ test('loads the supported merchant list before any catalog search', () => {
   assert.equal(result.action, CatalogDiscoveryAction.GET_MERCHANT_LIST);
   assert.equal(result.reason, 'merchant_list_required');
   assert.equal(result.catalogEnvironment, CatalogEnvironment.PRODUCTION);
-  assert.equal(result.command, 'clink tool internal-ucp get-merchant-list --format json');
+  assert.equal(result.command, 'clink ucp-merchant list --internal --format json');
 });
 
 test('uses one explicit catalog environment across merchant-list, scoped, and broad commands', () => {
@@ -88,7 +87,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(merchantList.catalogEnvironment, catalogEnvironment);
     assert.equal(
       merchantList.command,
-      `clink tool internal-ucp get-merchant-list ${flag} --format json`,
+      `clink ucp-merchant list --internal ${flag} --format json`,
     );
 
     const scoped = classifyCatalogDiscovery({
@@ -334,23 +333,76 @@ test('hands merchant descriptions to intent matching instead of guessing', () =>
   assert.equal(result.reason, 'merchant_intent_match_required');
   assert.equal(result.candidates.length, 2);
   assert.equal(result.candidates[0].merchantId, 'mcht_frnz6yfrz1sd');
+  assert.equal(result.candidates[0].merchantName, 'Bruce Lee Club');
+  assert.equal(result.candidates[0].merchantUrl, 'https://www.bruceleeclub.com');
+  assert.equal(result.candidates[0].domainName, 'www.bruceleeclub.com');
   assert.match(result.candidates[0].description, /Bruce Lee Club/u);
 });
 
-test('drops disabled and description-less merchants from the candidate set', () => {
+test('rejects an unsafe API domain instead of exposing a matchable merchant', () => {
   const result = classifyCatalogDiscovery({
-    query: 'bruce lee t-shirt',
+    query: 'voucher',
     merchantListOutput: {
-      merchants: [
-        bruceLeeMerchant,
-        { ...shopifyMerchant, enabled: false },
-        { domain_name: 'silent.example.com', merchant_id: 'mcht_silent' },
-      ],
+      ok: true,
+      data: [{
+        merchant_id: 'mcht_unsafe',
+        merchant_name: 'Unsafe Merchant',
+        description: 'Digital vouchers',
+        domain: 'https://user:secret@merchant.example/',
+      }],
     },
   });
 
+  assert.equal(result.state, CatalogDiscoveryState.CLI_ERROR);
+  assert.equal(result.reason, 'invalid_merchant_list_output');
+  assert.equal(result.errorCode, 'invalid_merchant_list_output');
+});
+
+for (const [field, value] of [
+  ['merchant_id', 123],
+  ['merchant_name', '   '],
+  ['description', null],
+]) {
+  test(`rejects an invalid merchant API ${field}`, () => {
+    const result = classifyCatalogDiscovery({
+      query: 'voucher',
+      merchantListOutput: {
+        ok: true,
+        data: [{
+          merchant_id: 'mcht_1',
+          merchant_name: 'Merchant',
+          description: 'Digital vouchers',
+          domain: 'https://merchant.example',
+          [field]: value,
+        }],
+      },
+    });
+
+    assert.equal(result.state, CatalogDiscoveryState.CLI_ERROR);
+    assert.equal(result.reason, 'invalid_merchant_list_output');
+  });
+}
+
+test('trusts the API active filter and drops only description-less merchants', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'bruce lee t-shirt',
+    merchantListOutput: { ok: true, data: [
+        bruceLeeMerchant,
+        { ...shopifyMerchant, enabled: false },
+        {
+          domain: 'https://silent.example.com/',
+          merchant_id: 'mcht_silent',
+          merchant_name: 'Silent Merchant',
+          description: '   ',
+        },
+      ] },
+  });
+
   assert.equal(result.state, CatalogDiscoveryState.MERCHANT_INTENT_MATCH_REQUIRED);
-  assert.deepEqual(result.candidates.map((entry) => entry.merchantId), ['mcht_frnz6yfrz1sd']);
+  assert.deepEqual(
+    result.candidates.map((entry) => entry.merchantId),
+    ['mcht_frnz6yfrz1sd', 'mcht_frnagwqi4k43'],
+  );
 });
 
 test('rejects a merchant-list envelope without a merchants array', () => {
@@ -361,6 +413,46 @@ test('rejects a merchant-list envelope without a merchants array', () => {
 
   assert.equal(result.state, CatalogDiscoveryState.CLI_ERROR);
   assert.equal(result.reason, 'invalid_merchant_list_output');
+});
+
+test('keeps the legacy merchants envelope as a compatibility adapter', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'legacy voucher',
+    merchantListOutput: {
+      merchants: [{
+        domain_name: 'legacy.example.com',
+        merchant_url: 'https://legacy.example.com/shop/',
+        merchant_id: 'mcht_legacy',
+        description: 'Legacy voucher catalog',
+      }, {
+        domain_name: 'disabled.example.com',
+        merchant_url: 'https://disabled.example.com/',
+        merchant_id: 'mcht_disabled',
+        description: 'Disabled legacy merchant',
+        enabled: false,
+      }],
+    },
+  });
+
+  assert.equal(result.state, CatalogDiscoveryState.MERCHANT_INTENT_MATCH_REQUIRED);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].merchantId, 'mcht_legacy');
+  assert.equal(result.candidates[0].merchantUrl, 'https://legacy.example.com/shop/');
+  assert.equal(result.candidates[0].domainName, 'legacy.example.com');
+});
+
+test('treats an empty merchant API data array as a valid list with no matchable merchants', () => {
+  const result = classifyCatalogDiscovery({
+    query: 'coffee',
+    merchantListOutput: { ok: true, data: [] },
+  });
+
+  assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
+  assert.equal(result.reason, 'no_matchable_merchant_candidate');
+  assert.equal(
+    result.command,
+    'clink catalog search --query coffee --language en --format json',
+  );
 });
 
 test('runs a merchant-scoped search when intent matches one merchant', () => {
@@ -398,19 +490,18 @@ test('rejects an ambiguous scoped merchant id without a URL or domain discrimina
   const result = classifyCatalogDiscovery({
     query: 'vtravel voucher',
     merchantListOutput: {
-      merchants: [
+      ok: true,
+      data: [
         {
-          domain_name: 'testa.link2shops.com',
-          merchant_url: 'https://testa.link2shops.com/',
+          domain: 'https://testa.link2shops.com/',
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Testa',
           description: 'Testa vouchers',
         },
         {
-          domain_name: 'vtravel.link2shops.com',
-          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          domain: 'https://vtravel.link2shops.com/',
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Vtravel',
           description: 'Vtravel vouchers',
         },
       ],
@@ -425,25 +516,24 @@ test('rejects an ambiguous scoped merchant id without a URL or domain discrimina
 
 test('scoped matching uses the selected candidate identity to disambiguate duplicate merchant ids', () => {
   const duplicateMerchantId = 'mcht_ftmse61a6az0';
-  const vtravelUrl = 'https://vtravel.link2shops.com/yiyuan/';
+  const vtravelUrl = 'https://vtravel.link2shops.com';
   const result = classifyCatalogDiscovery({
     query: 'vtravel voucher',
     catalogEnvironment: 'sandbox',
     catalogLanguage: 'zh-Hans',
     merchantListOutput: {
-      merchants: [
+      ok: true,
+      data: [
         {
-          domain_name: 'testa.link2shops.com',
-          merchant_url: 'https://testa.link2shops.com/',
+          domain: 'https://testa.link2shops.com/',
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Testa',
           description: 'Testa vouchers',
         },
         {
-          domain_name: 'vtravel.link2shops.com',
-          merchant_url: vtravelUrl,
+          domain: vtravelUrl,
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Vtravel',
           description: 'Vtravel vouchers',
         },
       ],
@@ -473,8 +563,8 @@ test('scoped matching rejects conflicting merchant domain and URL discriminators
     merchantListOutput,
     merchantMatch: {
       merchantId: bruceLeeMerchant.merchant_id,
-      merchantDomain: bruceLeeMerchant.domain_name,
-      merchantUrl: shopifyMerchant.merchant_url,
+      merchantDomain: 'www.bruceleeclub.com',
+      merchantUrl: shopifyMerchant.domain,
       reason: 'description match',
     },
   });
@@ -489,19 +579,18 @@ test('broad results use their domain to disambiguate duplicate merchant ids', ()
   const result = classifyCatalogDiscovery({
     query: 'vtravel voucher',
     merchantListOutput: {
-      merchants: [
+      ok: true,
+      data: [
         {
-          domain_name: 'testa.link2shops.com',
-          merchant_url: 'https://testa.link2shops.com/',
+          domain: 'https://testa.link2shops.com/',
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Testa',
           description: 'Testa vouchers',
         },
         {
-          domain_name: 'vtravel.link2shops.com',
-          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          domain: 'https://vtravel.link2shops.com/',
           merchant_id: duplicateMerchantId,
-          enabled: true,
+          merchant_name: 'Vtravel',
           description: 'Vtravel vouchers',
         },
       ],
@@ -517,10 +606,12 @@ test('broad results use their domain to disambiguate duplicate merchant ids', ()
     },
   });
 
+  assert.equal(result.groups[0].merchantName, 'Vtravel');
   assert.equal(result.groups[0].merchantDomain, 'vtravel.link2shops.com');
-  assert.equal(result.groups[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
+  assert.equal(result.groups[0].merchantUrl, 'https://vtravel.link2shops.com');
+  assert.equal(result.groups[0].products[0].merchantName, 'Vtravel');
   assert.equal(result.groups[0].products[0].merchantDomain, 'vtravel.link2shops.com');
-  assert.equal(result.groups[0].products[0].merchantUrl, 'https://vtravel.link2shops.com/yiyuan/');
+  assert.equal(result.groups[0].products[0].merchantUrl, 'https://vtravel.link2shops.com');
 });
 
 test('returns merchant-scoped products without widening the search', () => {
@@ -544,21 +635,22 @@ test('returns merchant-scoped products without widening the search', () => {
     title: 'Bruce Lee Tee',
     source: 'INTERNAL_UCP_CATALOG',
     merchantId: 'mcht_frnz6yfrz1sd',
+    merchantName: 'Bruce Lee Club',
     merchantDomain: 'www.bruceleeclub.com',
-    merchantUrl: 'https://www.bruceleeclub.com/',
+    merchantUrl: 'https://www.bruceleeclub.com',
   });
   assert.equal(result.messages.length, 1);
   assert.equal(result.terminal, true);
 });
 
-test('merchant-scoped discovery does not synthesize a merchant URL when the list omits it', () => {
+test('rejects a new merchant API entry when its domain is missing', () => {
   const result = classifyCatalogDiscovery({
     query: 'voucher',
     merchantListOutput: {
-      merchants: [{
-        domain_name: 'merchant.example',
+      ok: true,
+      data: [{
         merchant_id: 'mcht_1',
-        enabled: true,
+        merchant_name: 'Merchant',
         description: 'Digital vouchers',
       }],
     },
@@ -568,9 +660,8 @@ test('merchant-scoped discovery does not synthesize a merchant URL when the list
     },
   });
 
-  assert.equal(result.products[0].source, 'INTERNAL_UCP_CATALOG');
-  assert.equal(result.products[0].merchantDomain, 'merchant.example');
-  assert.equal(Object.hasOwn(result.products[0], 'merchantUrl'), false);
+  assert.equal(result.state, CatalogDiscoveryState.CLI_ERROR);
+  assert.equal(result.reason, 'invalid_merchant_list_output');
 });
 
 test('falls back to broad search when the merchant-scoped search is empty', () => {
@@ -867,7 +958,7 @@ test('delegates to external discovery when a scoped store search returns nothing
 test('parses JSON string CLI output for every stage', () => {
   const result = classifyCatalogDiscovery({
     query: 'bruce lee t-shirt',
-    merchantListOutput: JSON.stringify({ ok: true, data: merchantListOutput }),
+    merchantListOutput: JSON.stringify({ ok: true, data: merchantListData }),
     matchedMerchantId: 'mcht_frnz6yfrz1sd',
     merchantSearchOutput: JSON.stringify({ ok: true, data: { products: [{ id: 'product_1' }] } }),
   });
@@ -879,13 +970,16 @@ test('parses JSON string CLI output for every stage', () => {
 test('surfaces a merchant-list CLI error without falling back to a search', () => {
   const result = classifyCatalogDiscovery({
     query: 'bruce lee t-shirt',
-    merchantListOutput: { ok: false, error: { type: 'config_error', message: 'run wallet init' } },
+    merchantListOutput: {
+      ok: false,
+      error: { type: 'api_error', message: 'public merchant route unavailable' },
+    },
   });
 
   assert.equal(result.state, CatalogDiscoveryState.CLI_ERROR);
   assert.equal(result.action, CatalogDiscoveryAction.SURFACE_ERROR);
   assert.equal(result.reason, 'merchant_list_error');
-  assert.equal(result.errorCode, 'config_error');
+  assert.equal(result.errorCode, 'api_error');
   assert.equal(result.terminal, true);
 });
 
@@ -977,7 +1071,7 @@ test('formats an internal-only diagnostic marker', () => {
 
 test('frozen internal Catalog product reaches checkout guards without productUrl', () => {
   const merchantId = 'mcht_ftmse61a6az0';
-  const merchantUrl = 'https://testa.link2shops.com/';
+  const merchantUrl = 'https://testa.link2shops.com';
   const merchantDomain = 'testa.link2shops.com';
   const itemId = '571d217de068498f8ba545a286900a16';
   const walletOrigin = 'https://uat-api.clinkbill.com';
@@ -987,15 +1081,12 @@ test('frozen internal Catalog product reaches checkout guards without productUrl
     query: '熊猫外卖券',
     catalogEnvironment: 'sandbox',
     catalogLanguage: 'zh-Hans',
-    merchantListOutput: {
-      merchants: [{
-        domain_name: merchantDomain,
-        merchant_url: merchantUrl,
+    merchantListOutput: { ok: true, data: [{
+        domain: merchantUrl,
         merchant_id: merchantId,
-        enabled: true,
+        merchant_name: 'Testa Vouchers',
         description: 'Fuhui UAT digital vouchers and coupons',
-      }],
-    },
+      }] },
     matchedMerchantId: merchantId,
     merchantSearchOutput: {
       products: [{

@@ -53,7 +53,7 @@ Catalog scope is nested under `target`. `merchantId` is mutually exclusive with 
 
 `INTERNAL_UCP_CATALOG` is not a general item-ID bypass. It is valid only for a
 candidate produced by the Catalog FSM from a validated merchant-list entry. Its
-`merchantUrl` must come from that entry's `merchant_url`, not from Agent URL
+`merchantUrl` must come from that anonymous API entry's full `domain`, not from Agent URL
 construction, a brand default, or a prior run. A bare item ID still requires a
 product URL and remains outside the wallet gate. The no-parse v2 handoff must
 also carry the claimed `pendingCatalogProductSelection` in `EXECUTING` state

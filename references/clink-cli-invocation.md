@@ -52,7 +52,7 @@ A successful initialization saves the selected environment, so every later authe
 Public Catalog discovery is the deliberate exception. These commands are anonymous and do not read `~/.clink-cli/config.json`, saved OAuth/CSK state, the saved wallet `baseUrl`, or `CLINK_BASE_URL`. Start them directly for `CATALOG_SEARCH` and for the discovery stage of `CATALOG_PURCHASE`; do not initialize a wallet as a prerequisite:
 
 ```text
-tool internal-ucp get-merchant-list
+ucp-merchant list --internal
 ucp-catalog search
 ucp-catalog product
 catalog search
@@ -62,7 +62,7 @@ For Gateway Catalog API calls, no environment flag means production (`https://ap
 
 The Agent owns Catalog result-language detection. Before the first search, choose and freeze one canonical BCP47 `catalogLanguage` from the user's explicit result-language request, the established conversation reply language, or the current user's language/script, in that order. New v2 Catalog intent must carry it as `target.catalogLanguage`. Pass it to `ucp-catalog search`, `ucp-catalog product`, and `catalog search` with `--language <tag>`; never read it from wallet config or infer it from product keywords/query text. The CLI normalizes the tag, including Chinese to `zh-Hans` or `zh-Hant`, writes the effective value to request `context.language`, and sends the same value as `Accept-Language`. Keep `--context` for non-language hints such as `address_country`; `--language` and `context.language` are mutually exclusive. A legacy caller that omits both receives untranslated/original provider text and sends no `Accept-Language`; the query is never used to guess a target language. Merchant-scoped search/product implement Catalog translation, while broad search only forwards the language to providers and localization may vary.
 
-The merchant-list source is different from the search API origin. Production `get-merchant-list` fetches `https://www.clinkbill.com/.well-known/ucp-merchants.json`; preflight `https://www.clinkbill.com` before that first remote command, then preflight the selected Catalog API origin before search. Sandbox/UAT and test read their bundled merchant-list documents locally, so their list step needs no network preflight; preflight only their Catalog API origin before search.
+`ucp-merchant list --internal` sends an anonymous `GET /agent/ucp/merchants` to that same environment's Catalog API origin. Preflight the selected API origin before the merchant-list command; the successful probe is reusable for the later search calls to that exact origin in the same workflow. The command never reads a static public document or a bundled merchant list.
 
 `tool internal-ucp get-endpoint`, `tool parse-item`, checkout, payment, and order commands are not part of this exception. They continue to use the authenticated wallet environment lock. Before a Catalog candidate enters checkout, compare that wallet origin with the candidate's frozen `catalogEnvironment`; a mismatch stops checkout until the environments align. Never carry a test or sandbox candidate silently into production payment.
 
@@ -138,7 +138,7 @@ Before OAuth completion, the running `wallet init` process polls the OAuth devic
 | 7 | 3DS required | Send redirect URL and wait for order event. |
 | 8 | Install error | Surface the installation conflict or transaction failure; do not claim success. |
 
-The three Gateway Catalog API actions — `ucp-catalog search`, `ucp-catalog product`, and `catalog search` — are anonymous. Their HTTP `401` or `403` is mapped to API error exit 5 and means the Gateway public-access configuration is wrong. Surface it and stop; the authenticated-command exit-4 recovery rule does not apply, and wallet status, OAuth refresh, or re-login cannot repair it. Production `tool internal-ucp get-merchant-list` is instead a static document fetch: any non-2xx preserves its network-error exit 6 contract. Sandbox/UAT and test read that document from the local bundle.
+The four Gateway Catalog API actions — `ucp-merchant list --internal`, `ucp-catalog search`, `ucp-catalog product`, and `catalog search` — are anonymous. Their HTTP `401` or `403` is mapped to API error exit 5 and means the Gateway public-access configuration is wrong. Surface it and stop; the authenticated-command exit-4 recovery rule does not apply, and wallet status, OAuth refresh, or re-login cannot repair it. Other HTTP failures are ordinary API errors (exit 5); transport failures remain exit 6.
 
 ## Global Options
 

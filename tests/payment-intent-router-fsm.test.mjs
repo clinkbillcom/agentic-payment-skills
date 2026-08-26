@@ -1518,7 +1518,7 @@ test('initial catalog purchase routing canonicalizes and preserves test environm
   });
   assert.equal(
     discovery.command,
-    'clink tool internal-ucp get-merchant-list --test --format json',
+    'clink ucp-merchant list --internal --test --format json',
   );
   assert.equal(discovery.catalogLanguage, 'zh-Hant');
 });
@@ -2963,7 +2963,7 @@ test('rejects an internal Catalog candidate whose merchant URL is absent', () =>
   assert.deepEqual(result.missing, ['merchantUrl']);
 });
 
-test('rejects an internal Catalog product URL when the merchant list has no merchant_url', () => {
+test('rejects an internal Catalog product URL when normalized merchant API domain evidence is missing', () => {
   const {
     merchant_url: _merchantUrl,
     ...candidateWithoutMerchantUrl
@@ -3215,7 +3215,7 @@ test('candidate-level catalog context conflict invalidates the pending selection
   });
   assert.equal(
     merchantListRestart.command,
-    'clink tool internal-ucp get-merchant-list --sandbox --format json',
+    'clink ucp-merchant list --internal --sandbox --format json',
   );
 
   const scopedSearchRestart = classifyCatalogDiscovery({
@@ -3223,9 +3223,11 @@ test('candidate-level catalog context conflict invalidates the pending selection
     catalogEnvironment: result.catalogEnvironment,
     catalogLanguage: result.catalogLanguage,
     merchantListOutput: {
-      merchants: [{
+      ok: true,
+      data: [{
         merchant_id: 'mcht_frnz6yfrz1sd',
-        enabled: true,
+        merchant_name: 'Bruce Lee Club',
+        domain: 'https://www.bruceleeclub.com/',
         description: 'Bruce Lee apparel',
       }],
     },
@@ -3264,7 +3266,7 @@ test('a damaged candidate preserves a trusted test discovery environment instead
   });
   assert.equal(
     restarted.command,
-    'clink tool internal-ucp get-merchant-list --test --format json',
+    'clink ucp-merchant list --internal --test --format json',
   );
 });
 
