@@ -1,9 +1,0 @@
-#!/usr/bin/env sh
-set -eu
-
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-BUNDLE="$SCRIPT_DIR/../vendor/clink-cli/clink-cli.bundle.mjs"
-
-CLINK_WALLET_INIT_ENVIRONMENT=production
-export CLINK_WALLET_INIT_ENVIRONMENT
-exec node "$BUNDLE" "$@"
