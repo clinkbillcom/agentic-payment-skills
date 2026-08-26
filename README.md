@@ -14,7 +14,7 @@ A Claude Code skill for Clink payment operations — wallet, card, payment, publ
 Ask your agent to install the current Clink Payment Skills package:
 
 ```text
-Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
+Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-skills
 ```
 
 After installation, route the user's complete semantic intent before touching the wallet. New Catalog/payment callers construct the versioned contract in `references/clink-payment-intent-contract.md`; they do not authorize purchase from regexes, keywords, raw text, legacy booleans, or ambient payment fields. A product search runs anonymously with `walletGate=SKIP`, and described-product purchase discovery uses `DEFER_UNTIL_SELECTION`; neither runs `wallet status` or `wallet init`.
@@ -27,6 +27,32 @@ Use this status-first setup path only when the validated route returns `walletGa
 4. When init succeeds with `paymentMethodsCached=true`, `paymentMethodCount=0`, and a non-empty `bindingUrl`, treat the init URL only as a signal that first-card binding is next. Start `clink card binding-link --no-open --format json` with its built-in watch enabled. Its first envelope is delayed until the scoped watch's first poll succeeds and contains a trusted Agent Portal `/payment-method-setup` `bindingUrl` with only an optional encoded `email` query, plus `watchReady=true` and `watchEventType=payment_method.added`; then you **must return that watched `bindingUrl` to the user** while keeping the same process waiting for the matching event. Do not end the flow at OAuth-ready or omit the link. A positive count means the wallet is already card-ready; a cache-refresh error does not undo successful OAuth login.
 
 An explicit request to log in again, reauthorize, replace an expired link, or recover after missing the earlier login always starts a fresh `wallet init`. The new attempt supersedes the old one, and the agent must never reuse a login URL from chat history or earlier terminal output.
+
+## Build The Fallback Release Artifact
+
+The fallback package for Clink CLI auto-installation is generated from a clean Git checkout:
+
+```bash
+npm run build:fallback-artifact
+```
+
+This writes two ignored release files under `dist/`:
+
+- `agentic-payment-skill.zip`, with the single package root `agentic-payment-skills/`
+- `agentic-payment-skill.manifest.json`, the schema-v1 integrity and provenance sidecar
+
+The ZIP is derived directly from the committed Git `HEAD` tree and keeps every tracked regular file except the root `docs/` and `tests/` trees. It therefore includes `SKILL.md`, `package.json`, both README files, `.gitignore`, and the complete runtime directories without admitting local ignored files. Symbolic links, submodules, special entries, and source-owned `.clink-install.json` or `.clink-provenance.json` files make the build fail.
+
+The build uses the source commit timestamp for deterministic ZIP metadata. Set standard `SOURCE_DATE_EPOCH` when release infrastructure needs an explicit timestamp. No signing key or other private key is required. Publish the resulting pair together as:
+
+```text
+https://www.clinkbill.com/public/skills/agentic-payment-skill.zip
+https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
+```
+
+`archiveSha256` hashes the exact ZIP bytes. `contentSha256` is the installer-compatible canonical tree hash: SHA-256 starts with `clink-skill-tree-v1\0`, then processes every regular file after pruning in POSIX-path order using UTF-8 byte comparison. Each record is `path + NUL + executable-bit + NUL + byte-size + NUL + file-bytes + NUL`; the executable bit is `1` when any Unix execute bit is set, otherwise `0`. Installer-owned `.clink-install.json` and `.clink-provenance.json` are excluded from this tree hash.
+
+For the two fixed public URLs, publish and invalidate the ZIP first, confirm that its public byte size and SHA-256 match the new manifest, and publish the manifest last. Invalidate both CDN paths together and run a public download check before announcing the release. Never expose a new manifest while the public ZIP still serves another generation; the CLI deliberately fails closed on that mismatch.
 
 ## What It Does
 

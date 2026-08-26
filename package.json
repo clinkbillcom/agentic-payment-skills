@@ -10,6 +10,7 @@
     "clink": "./bin/clink"
   },
   "scripts": {
+    "build:fallback-artifact": "node scripts/build-fallback-artifact.mjs",
     "test": "node --test"
   }
 }

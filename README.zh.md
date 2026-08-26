@@ -14,7 +14,7 @@
 直接让 Agent 安装当前的 Clink Payment Skills：
 
 ```text
-Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skills
+Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-skills
 ```
 
 安装完成后，Agent 必须先理解完整语义意图，不能直接操作钱包。新的 Catalog/支付调用要构造 `references/clink-payment-intent-contract.md` 中的版本化契约，不得用正则、关键词、原始文本、旧布尔字段或环境中的支付参数来授权购买。商品搜索使用 `walletGate=SKIP`；描述商品后的购买发现使用 `DEFER_UNTIL_SELECTION`，两者都不执行 `wallet status` 或 `wallet init`。
@@ -27,6 +27,32 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agent-payment-skil
 4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含受信 Agent Portal 上精确的 `/payment-method-setup` `bindingUrl`（只允许受控的可选 `email` 参数）、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
+
+## 构建 fallback 发布工件
+
+Clink CLI 自动安装所用的 fallback 包必须从干净的 Git 工作区生成：
+
+```bash
+npm run build:fallback-artifact
+```
+
+命令会在已忽略的 `dist/` 下生成两个文件：
+
+- `agentic-payment-skill.zip`，ZIP 内只有一个统一包根 `agentic-payment-skills/`
+- `agentic-payment-skill.manifest.json`，schema v1 的完整性与来源 sidecar
+
+ZIP 直接从已提交的 Git `HEAD` 树生成：除根 `docs/`、`tests/` 外，所有 tracked regular file 都会保留。因此 `SKILL.md`、`package.json`、两个 README、`.gitignore` 和完整运行目录都会进入工件，本地 ignored 文件不会被误打包。发现符号链接、submodule、特殊条目，或源码预带 `.clink-install.json` / `.clink-provenance.json` 时，构建会直接失败。
+
+构建默认使用源码 commit 的时间戳固定 ZIP 元数据；发布基础设施也可以通过标准 `SOURCE_DATE_EPOCH` 显式指定时间。不依赖签名私钥或其他私钥。生成后必须成对发布到：
+
+```text
+https://www.clinkbill.com/public/skills/agentic-payment-skill.zip
+https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
+```
+
+`archiveSha256` 校验 ZIP 原始字节。`contentSha256` 使用与安装器一致的规范树哈希：SHA-256 先写入 `clink-skill-tree-v1\0`，再对裁剪后的全部 regular file 按 POSIX 相对路径的 UTF-8 字节序处理；每条记录是 `path + NUL + executable-bit + NUL + byte-size + NUL + file-bytes + NUL`。任意 Unix 执行位存在时 executable-bit 为 `1`，否则为 `0`。安装器拥有的 `.clink-install.json` 与 `.clink-provenance.json` 不参与该树哈希。
+
+这两个固定公网 URL 发布时，必须先上传并刷新 ZIP，确认公网文件大小和 SHA-256 已与新 manifest 一致，再最后发布 manifest；随后同时刷新两个 CDN 路径，并执行一次公网下载校验。公网 ZIP 仍是上一代时不得提前暴露新 manifest，CLI 遇到跨代不匹配会按安全策略直接失败。
 
 ## 功能说明
 
