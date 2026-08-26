@@ -12640,8 +12640,9 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   get-endpoint uses the effective wallet API base and does not accept environment flags.
   get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
-  Both commands fetch the selected environment's anonymous GET /agent/ucp/merchants API.
+  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
+  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12662,12 +12663,16 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
   using the environment saved by wallet init. Re-run wallet init to switch environments.
-  It fetches the selected environment's anonymous GET /agent/ucp/merchants API on every call.
-  The API returns enabled merchants only; each domain is a complete HTTP(S) origin whose hostname
-  is matched exactly against the product URL hostname.
+  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
+  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
+  miss is refreshed before it can become an external-route decision; errors are never cached.
+  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
+  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
+  independently from the effective wallet API base and merchant_id.
   Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
-  HTTP and response-contract failures are API errors (exit 5). Network failures and timeouts are
-  network errors (exit 6). Neither failure is reported as a missing merchant.
+  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
+  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
+  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12688,7 +12693,7 @@ Behavior:
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
   It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
   The backend filters enabled merchants. Each result contains only merchant_id, merchant_name,
-  description, and domain; domain is a complete HTTP(S) origin.
+  description, and domain; domain is a safe HTTP(S) merchant route URL and may include a path.
 
 Examples:
   clink tool internal-ucp get-merchant-list --format json
@@ -13304,8 +13309,11 @@ Behavior:
   It does not read ~/.clink-cli/config.json or inherit saved wallet state, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, CSK, customer ID, or customer API key credentials.
   The backend filters enabled merchants. Each validated result contains only merchant_id,
-  merchant_name, description, and domain. domain must be a complete HTTP(S) origin.
-  HTTP failures, including 401/403, are API errors (exit 5); network failures and timeouts exit 6.
+  merchant_name, description, and domain. domain must be a safe HTTP(S) merchant route URL and may
+  include a path. Valid rows survive unrelated invalid rows; a non-empty wholly invalid array fails.
+  Validated successes use a short per-process cache and concurrent loads share one request. The
+  read-only GET retries transport, 408, 429, and 5xx once within the total timeout. Other HTTP
+  failures, including 401/403, are API errors (exit 5); exhausted transport/timeouts exit 6.
 
 Examples:
   clink ucp-merchant list --internal --format json
@@ -14261,44 +14269,41 @@ function getRawHelpText(command, subcommand, nestedCommand) {
 var MERCHANT_LIST_PATH = "/agent/ucp/merchants";
 var MERCHANT_LIST_USER_AGENT = "clink-cli";
 var MERCHANT_LIST_TIMEOUT_MS = 15e3;
+var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
+var MERCHANT_LIST_MAX_ATTEMPTS = 2;
+var MERCHANT_LIST_RETRY_DELAY_MS = 50;
+var merchantListRequests = /* @__PURE__ */ new WeakMap();
 async function getInternalUcpMerchantList(options2 = {}) {
-  const environment = options2.environment ?? "production";
-  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
-  const document2 = await fetchMerchantListDocument(url, options2.timeoutMs, options2.fetchMerchantList);
-  return validateInternalUcpMerchantList(document2, url);
+  return (await loadInternalUcpMerchantList(options2)).merchants;
 }
 function validateInternalUcpMerchantList(value, source) {
   if (!Array.isArray(value)) {
     throw invalidMerchantList(source, "expected an array");
   }
-  const seenDomains = /* @__PURE__ */ new Set();
-  return value.map((record, index) => {
+  const merchants = [];
+  for (const record of value) {
     if (!record || typeof record !== "object" || Array.isArray(record)) {
-      throw invalidMerchant(source, index);
+      continue;
     }
     const fields = record;
     const merchantId = nonBlankString(fields.merchant_id);
     const merchantName = nonBlankString(fields.merchant_name);
     const description = optionalDescription(fields.description);
-    const domain = merchantOrigin(fields.domain, source, index);
+    const domain = merchantRouteUrl(fields.domain);
     if (!merchantId || !merchantName || description === void 0 || !domain) {
-      throw invalidMerchant(source, index);
+      continue;
     }
-    const domainName = canonicalDomain(new URL(domain).hostname);
-    if (!domainName) {
-      throw invalidMerchant(source, index);
-    }
-    if (seenDomains.has(domainName)) {
-      throw invalidMerchantList(source, `duplicate merchant domain: ${domainName}`);
-    }
-    seenDomains.add(domainName);
-    return {
+    merchants.push({
       merchant_id: merchantId,
       merchant_name: merchantName,
       description,
       domain
-    };
-  });
+    });
+  }
+  if (value.length > 0 && merchants.length === 0) {
+    throw invalidMerchantList(source, "no valid merchant identities");
+  }
+  return merchants;
 }
 async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl;
@@ -14312,8 +14317,17 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  const merchants = options2.merchants ?? await loadInternalUcpMerchants(options2);
-  const merchantId = merchants.get(domainName);
+  let merchantId;
+  if (options2.merchants) {
+    merchantId = options2.merchants.get(domainName);
+  } else {
+    let loaded = await loadInternalUcpMerchants(options2);
+    merchantId = loaded.merchants.get(domainName);
+    if (!merchantId && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchants(options2, true);
+      merchantId = loaded.merchants.get(domainName);
+    }
+  }
   if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
@@ -14324,7 +14338,7 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   } catch {
     throw validationError("invalid internal UCP base URL");
   }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
     throw validationError("invalid internal UCP base URL");
   }
   return {
@@ -14334,74 +14348,146 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     endpoint: endpoint.toString()
   };
 }
-async function loadInternalUcpMerchants(options2) {
-  const merchants = await getInternalUcpMerchantList(options2);
-  return new Map(merchants.map((merchant) => [
-    canonicalDomain(new URL(merchant.domain).hostname),
-    merchant.merchant_id
-  ]));
+async function loadInternalUcpMerchants(options2, forceRefresh = false) {
+  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
+  const environment = options2.environment ?? "production";
+  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+  return {
+    merchants: merchantMap(loaded.merchants, source),
+    fromCache: loaded.fromCache
+  };
+}
+async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
+  const environment = options2.environment ?? "production";
+  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
+  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
+  if (!requestsByUrl) {
+    requestsByUrl = /* @__PURE__ */ new Map();
+    merchantListRequests.set(fetchMerchantList, requestsByUrl);
+  }
+  let state = requestsByUrl.get(url);
+  if (!state) {
+    state = {};
+    requestsByUrl.set(url, state);
+  }
+  const now = Date.now();
+  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
+    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
+  }
+  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
+  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
+  if (inFlight) {
+    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
+  }
+  const requestState = state;
+  const request = (async () => {
+    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
+    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
+    const cached = Object.freeze(validated);
+    requestState.cached = {
+      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
+      merchants: cached
+    };
+    return cached;
+  })();
+  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
+  requestState.inFlightByTimeout.set(timeoutMs, request);
+  try {
+    return { merchants: cloneMerchantList(await request), fromCache: false };
+  } finally {
+    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
+      requestState.inFlightByTimeout.delete(timeoutMs);
+      if (requestState.inFlightByTimeout.size === 0) {
+        delete requestState.inFlightByTimeout;
+      }
+    }
+  }
 }
 async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
-  try {
-    response = await fetchMerchantList(url, {
-      method: "GET",
-      credentials: "omit",
-      headers: {
-        Accept: "application/json",
-        "Accept-Language": "en-US",
-        "User-Agent": MERCHANT_LIST_USER_AGENT,
-        [CLI_VERSION_HEADER]: CLI_VERSION
-      },
-      signal: controller.signal
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    if (error.name === "AbortError") {
-      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+  const deadline = Date.now() + timeoutMs;
+  let lastFailure;
+  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
     }
-    const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
-    throw networkError(`internal UCP merchant list request failed: ${message}`);
-  }
-  if (!response.ok) {
-    clearTimeout(timeout);
-    throw apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
-  }
-  let rawText;
-  try {
-    rawText = await response.text();
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), remainingMs);
+    let response;
+    try {
+      response = await fetchMerchantList(url, {
+        method: "GET",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          "Accept-Language": "en-US",
+          "User-Agent": MERCHANT_LIST_USER_AGENT,
+          [CLI_VERSION_HEADER]: CLI_VERSION
+        },
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
     }
-    const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network response failed";
-    throw networkError(`internal UCP merchant list response failed: ${message}`);
-  } finally {
-    clearTimeout(timeout);
+    if (!response.ok) {
+      clearTimeout(timeout);
+      discardMerchantListResponse(response);
+      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
+      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    }
+    let rawText;
+    try {
+      rawText = await response.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    } finally {
+      clearTimeout(timeout);
+    }
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw apiError("internal UCP merchant list response is not valid JSON", 502);
+    }
   }
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    throw apiError("internal UCP merchant list response is not valid JSON", 502);
-  }
+  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
 }
-function merchantOrigin(value, source, index) {
+function merchantRouteUrl(value) {
   const rawDomain = nonBlankString(value);
   if (!rawDomain) {
+    return void 0;
+  }
+  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
     return void 0;
   }
   let domain;
   try {
     domain = new URL(rawDomain);
   } catch {
-    throw invalidMerchant(source, index);
+    return void 0;
   }
-  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.pathname !== "/" || domain.search || domain.hash || !canonicalDomain(domain.hostname)) {
-    throw invalidMerchant(source, index);
+  const domainName = canonicalDomain(domain.hostname);
+  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
+    return void 0;
   }
-  return domain.origin;
+  domain.hostname = domainName;
+  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
+    domain.port = "";
+  }
+  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
 }
 function nonBlankString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
@@ -14415,8 +14501,79 @@ function optionalDescription(value) {
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
 }
-function invalidMerchant(source, index) {
-  return invalidMerchantList(source, `invalid merchant at index ${index}`);
+function merchantMap(merchants, source) {
+  const merchantIdsByDomain = /* @__PURE__ */ new Map();
+  for (const merchant of merchants) {
+    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
+    if (!domainName) {
+      continue;
+    }
+    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
+    merchantIds.add(merchant.merchant_id);
+    merchantIdsByDomain.set(domainName, merchantIds);
+  }
+  const mapped = new ConflictAwareMerchantMap(source);
+  for (const [domainName, merchantIds] of merchantIdsByDomain) {
+    if (merchantIds.size === 1) {
+      mapped.set(domainName, merchantIds.values().next().value);
+    } else {
+      mapped.addConflict(domainName);
+    }
+  }
+  return mapped;
+}
+var ConflictAwareMerchantMap = class extends Map {
+  source;
+  conflicts = /* @__PURE__ */ new Set();
+  constructor(source) {
+    super();
+    this.source = source;
+  }
+  addConflict(domainName) {
+    this.delete(domainName);
+    this.conflicts.add(domainName);
+  }
+  get(domainName) {
+    this.assertUnambiguous(domainName);
+    return super.get(domainName);
+  }
+  has(domainName) {
+    this.assertUnambiguous(domainName);
+    return super.has(domainName);
+  }
+  assertUnambiguous(domainName) {
+    if (this.conflicts.has(domainName)) {
+      throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
+    }
+  }
+};
+function cloneMerchantList(merchants) {
+  return merchants.map((merchant) => ({ ...merchant }));
+}
+function retryableMerchantListStatus(status) {
+  return status === 408 || status === 429 || status >= 500 && status <= 599;
+}
+function discardMerchantListResponse(response) {
+  if (response.body) {
+    void response.body.cancel().catch(() => {
+    });
+  }
+}
+async function waitForMerchantListRetry(deadline) {
+  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
+    return false;
+  }
+  await new Promise((resolve4) => {
+    setTimeout(resolve4, MERCHANT_LIST_RETRY_DELAY_MS);
+  });
+  return Date.now() < deadline;
+}
+function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
+  if (error?.name === "AbortError") {
+    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+  }
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
+  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
 }
 function invalidMerchantList(source, reason) {
   return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
@@ -18896,8 +19053,8 @@ async function resolveCanonicalShopifyItemUrl(rawUrl, options2, finalSiteUrl) {
     return itemUrl.toString();
   }
   const merchantCnameDeadline = createCnameLookupDeadline(options2.timeoutMs, DEFAULT_RESOURCE_TIMEOUT_MS);
-  for (const merchantOrigin2 of readShopifyMerchantOrigins(profile)) {
-    const canonicalOrigin = parseMerchantOrigin(merchantOrigin2);
+  for (const merchantOrigin of readShopifyMerchantOrigins(profile)) {
+    const canonicalOrigin = parseMerchantOrigin(merchantOrigin);
     if (!canonicalOrigin) {
       continue;
     }
@@ -18959,10 +19116,10 @@ function readShopifyMerchantOrigins(profile) {
         continue;
       }
       const merchantInfo = isRecord11(handler.config.merchant_info) ? handler.config.merchant_info : isRecord11(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
-      const merchantOrigin2 = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
-      if (merchantOrigin2 && !seenOrigins.has(merchantOrigin2)) {
-        seenOrigins.add(merchantOrigin2);
-        origins.push(merchantOrigin2);
+      const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
+      if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
+        seenOrigins.add(merchantOrigin);
+        origins.push(merchantOrigin);
       }
     }
   }

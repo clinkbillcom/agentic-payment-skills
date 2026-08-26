@@ -916,22 +916,37 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
   assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
   assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
-  assert.match(catalogDiscovery, /active, non-shadow internal merchants/u);
+  assert.match(catalogDiscovery, /active, non-shadow internal merchant routes/u);
   assert.match(catalogDiscovery, /support internal endpoint resolution/u);
   assert.match(catalogDiscovery, /null or missing upstream description/u);
-  assert.match(catalogDiscovery, /skipped individually[\s\S]*does not invalidate the rest of the merchant list/u);
+  assert.match(catalogDiscovery, /skips isolated malformed rows[\s\S]*do not invalidate other trustworthy rows/u);
+  assert.match(catalogDiscovery, /non-empty array contains no trustworthy merchant identity[\s\S]*fails closed/u);
+  assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
+  assert.match(catalogDiscovery, /preserves a non-root path such as `\/yiyuan\/`/u);
+  assert.match(catalogDiscovery, /never reads a production static well-known document or a test\/UAT local bundle/u);
+  assert.match(catalogDiscovery, /compatibility adapter only[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
+  assert.match(catalogDiscovery, /merchant_match_invalid_discriminator[\s\S]*never discarded[\s\S]*absent discriminator/u);
+  assert.match(catalogDiscovery, /broad Catalog group contract[\s\S]*does not carry a merchant route hostname or URL/u);
+  assert.match(catalogDiscovery, /multiple validated merchant-list routes[\s\S]*leaves the broad group and its products unenriched/u);
 
-  assert.match(skill, /active non-shadow internal merchants needed for endpoint resolution/u);
+  assert.match(skill, /active non-shadow internal merchant routes needed for endpoint resolution/u);
   assert.match(skill, /Catalog-disabled rows have `description:""`/u);
-  assert.match(skill, /Skip each empty-description row[\s\S]*without rejecting the complete list/u);
+  assert.match(skill, /Skip isolated malformed rows[\s\S]*without rejecting other trustworthy rows/u);
+  assert.match(skill, /hostname bucket assigned to different merchant IDs[\s\S]*preserving unrelated hostnames/u);
+  assert.match(skill, /any present invalid `merchantUrl` discriminator[\s\S]*rejected rather than treated as absent/u);
+  assert.match(skill, /broad internal Catalog group currently carries `merchant_id` but no merchant route discriminator/u);
+  assert.match(skill, /List active internal UCP merchant routes/u);
 
-  assert.match(readme, /active non-shadow internal merchants/u);
-  assert.match(readme, /Catalog-disabled merchants[\s\S]*endpoint resolution/u);
-  assert.match(readme, /skips those rows individually without rejecting the list/u);
-  assert.match(readmeZh, /active 非影子内部商户/u);
-  assert.match(readmeZh, /endpoint resolution/u);
-  assert.match(readmeZh, /Catalog-disabled 商户/u);
-  assert.match(readmeZh, /逐条跳过这些记录，不会判坏整张列表/u);
+  assert.match(readme, /active non-shadow internal routes/u);
+  assert.match(readme, /One merchant ID may have multiple routes/u);
+  assert.match(readme, /isolated malformed\/unmatchable rows are skipped individually/u);
+  assert.match(readme, /hostname assigned to different merchant IDs is removed without hiding unrelated routes/u);
+  assert.match(readme, /no environment reads a static or bundled merchant list/u);
+  assert.match(readmeZh, /active 非影子内部 route/u);
+  assert.match(readmeZh, /同一 merchant ID 可有多条 route/u);
+  assert.match(readmeZh, /单条脏数据或不可匹配记录会被逐条跳过/u);
+  assert.match(readmeZh, /同一 hostname 若指向不同 merchant ID，只剔除该冲突 hostname/u);
+  assert.match(readmeZh, /任何环境都不再读取静态或内置商户列表/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
