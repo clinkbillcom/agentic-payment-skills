@@ -1514,7 +1514,7 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
   const crossMerchantHelp = runBundle(['catalog', 'search', '--help']);
   assert.match(crossMerchantHelp, /Takes no --merchant-id/u);
   assert.match(crossMerchantHelp, /use ucp-catalog search when the merchant is already known/iu);
-  assert.match(crossMerchantHelp, /address_country is a discovery hint, not a strict filter/u);
+  assert.match(crossMerchantHelp, /address_region is a discovery hint, not a strict filter/u);
   assert.match(crossMerchantHelp, /Published external-store mappings\s+currently cover HK and SG/u);
   assert.match(crossMerchantHelp, /other ISO codes may leave results un-narrowed/u);
   assert.match(crossMerchantHelp, /bounded, non-exhaustive result window and currently exposes no pagination/u);
@@ -2193,11 +2193,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.34');
+  assert.equal(vendorPackage.version, '0.2.37');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '4ef480b4efb38ea96cac2899f4e80225f2f9b604',
+    '5f22799dd87e0c0612b3fb7316d2d25d127d4533',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

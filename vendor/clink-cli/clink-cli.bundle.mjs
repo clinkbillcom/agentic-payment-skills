@@ -10617,7 +10617,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.34";
+var CLI_VERSION = "0.2.37";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -13386,7 +13386,7 @@ Optional Request Fields:
   --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
                               zh-Hans, or fr-CA
   --context <json>            UCP Catalog context JSON object. Fields:
-                              - address_country: ISO 3166-1 alpha-2 region hint (e.g., "SG", "HK")
+                              - address_region: regional discovery hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
   --language <tag>            Convenience override for context.language
@@ -13407,7 +13407,7 @@ Behavior:
   invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
-  address_country is a discovery hint, not a strict filter. Published external-store mappings
+  address_region is a discovery hint, not a strict filter. Published external-store mappings
   currently cover HK and SG; other ISO codes may leave results un-narrowed.
   Broad discovery returns a bounded, non-exhaustive result window and currently exposes no pagination.
   Use ucp-catalog search for real cursor pagination when a merchant is already known.
@@ -13429,7 +13429,7 @@ Examples:
     --format pretty
   clink catalog search \\
     --query coffee \\
-    --language en --context '{"address_country":"SG","currency":"SGD"}' \\
+    --language en --context '{"address_region":"SG","currency":"SGD"}' \\
     --format json
 `;
 var UCP_ORDER_HELP = `clink ucp-order
