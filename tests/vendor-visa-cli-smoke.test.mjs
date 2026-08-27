@@ -604,22 +604,31 @@ function jsonResponse(body) {
 
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
-  if (scenario === 'merchant-list') {
-    if (url.href !== 'https://mock.clink.invalid/agent/ucp/merchants') {
-      throw new Error('unexpected Merchant API URL: ' + url.href);
-    }
+  if (url.pathname.endsWith('/agent/ucp/merchants')) {
     if ((init?.method ?? 'GET') !== 'GET') {
       throw new Error('unexpected Merchant API method: ' + init?.method);
     }
-    return jsonResponse({
-      merchants: [{
-        merchant_id: 'mcht_fuhuismoke',
-        domain_name: 'vtravel.link2shops.com',
-        merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
-        description: 'Fuhui Visa Offer merchant',
-        enabled: true,
-      }],
-    });
+    if (url.hostname === 'mock.clink.invalid') {
+      return jsonResponse({
+        merchants: [{
+          merchant_id: 'mcht_fuhuismoke',
+          domain_name: 'vtravel.link2shops.com',
+          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+          description: 'Fuhui Visa Offer merchant',
+          enabled: true,
+        }],
+      });
+    }
+    return jsonResponse([{
+      merchant_id: 'mcht_fuhuismoke',
+      merchant_name: 'Fuhui UAT',
+      description: 'Fuhui Visa benefit redemption and internal Catalog checkout',
+      domain: 'https://vtravel.link2shops.com/yiyuan/',
+    }]);
+  }
+
+  if (scenario === 'merchant-list') {
+    throw new Error('unexpected non-Merchant API URL: ' + url.href);
   }
 
   if (scenario === 'eats365-success') {

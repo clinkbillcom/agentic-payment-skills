@@ -209,10 +209,15 @@ Use `--region hk` when Hong Kong is the requested place of use. Do not add
 For Case 2 or Case 3, run `visa recommend` once with the current user request
 and add `--all` when the user asks for every matching Benefit.
 
-Present every returned Program in `matching_offers` or
-`all_offers_requested` without a display cap. Preserve the authoritative total
-and Program order while clearly marking Programs that do not have a
-purchasable Catalog match.
+Treat returned Programs as authoritative candidates, then retain only rows
+that satisfy the original request's explicit brand, merchant, product, and
+category constraints. A generic coupon or lifestyle Program is not relevant
+to "household goods" or "Watsons" merely because it shares the coupon reward
+type. Present every semantically relevant returned Program without adding a
+second Skill-side display cap; preserve their relative Program order while
+clearly marking Programs that do not have a purchasable Catalog match. If no
+Program survives this semantic filter, say that no matching Visa Program was
+found and still present relevant Fuhui products.
 
 For `fallback_all_offers` or `no_matching_offers`, report that no relevant
 Offer was found. Do not rank, display, recommend, or purchase fallback rows,
@@ -236,8 +241,12 @@ Then locate Fuhui from the complete public internal-merchant list:
   `merchant_url`. Never hardcode a Fuhui merchant ID or construct a merchant
   URL.
 - Multiple Fuhui domains may share one `merchant_id`. Deduplicate by the
-  returned merchant ID for Catalog search while retaining the authoritative
-  URL belonging to the selected product route.
+  returned merchant ID for Catalog search. For purchase, freeze a merchant URL
+  only when exactly one returned route description explicitly establishes the
+  Visa benefit redemption/internal Catalog and checkout route for the selected
+  Fuhui product. Copy that route's returned URL unchanged. A generic UAT
+  storefront route does not win merely because it has the same merchant ID.
+  If multiple or no routes establish that authority, stop before login.
 - If Fuhui is absent, disabled, or not uniquely identifiable, report that
   Fuhui Catalog coverage is unavailable. Continue to present the Visa results,
   but do not guess a merchant.
@@ -506,8 +515,11 @@ geography, channel, and other hard constraints.
 Before login, resolve the selected item to one authoritative orderable product.
 For an internal merchant, use the selected `merchant_id` and
 `ucp-catalog product`; use the public merchant list for its authoritative
-`merchant_url`. Do not purchase directly from a broad-search display row when
-the exact product detail has not been resolved.
+`merchant_url`. When duplicate routes share the merchant ID, apply the same
+unique Visa-redemption/internal-Catalog route rule from joined discovery; never
+choose a route by list order, hostname familiarity, or a hardcoded domain. Do
+not purchase directly from a broad-search display row when the exact product
+detail has not been resolved.
 
 For an external/platform result, use its exact returned product URL with
 `tool parse-item`. For an Eats365 platform-store candidate,
