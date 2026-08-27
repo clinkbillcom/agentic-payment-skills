@@ -1,6 +1,6 @@
 interface:
   display_name: "Visa Skill"
-  short_description: "Visa Benefits, registered provider products, and fast aggregate Catalog shopping."
+  short_description: "Payments, ordering, checkout, shopping, coupons, vouchers, benefits, and Visa commerce."
   default_prompt: >-
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Treat Hong
