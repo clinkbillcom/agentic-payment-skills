@@ -26,22 +26,27 @@ The lightweight shopping routes cover:
 
 - broad, category, and merchant-specific Visa Benefit queries joined with the
   paginated Fuhui internal Catalog
-- explicit `EXACT_MATCH`, `BENEFIT_ONLY`, and `CATALOG_ONLY` classification
+- constant `FUHUI_VISA_PRODUCT` typing for every Fuhui product, with
+  `PROGRAM_FUHUI_MATCH` only as an optional proven relation label and
+  `VISA_PROGRAM_ONLY` for unmatched Program rows
 - the existing Program purchase path through `product-search`,
   `commerce-login`, and `commerce-run`
 - broad non-Visa Catalog discovery for direct shopping requests
-- a Catalog-only purchase contract using `commerce-login` followed by
+- a Fuhui/platform Catalog purchase contract using `commerce-login` followed by
   `commerce-run` with `mode=catalog_purchase`
 
-Visa Program and Catalog-only purchases remain CLI-aggregated. The Skill does
-not contain runtime workflow JavaScript, long action tables, or operation
-references. General wallet, card, risk, payment, Alipay QR, UCP, Instruction,
-refund, event, Tip, and Skill installation capabilities remain short
-fail-closed contracts in `SKILL.md`.
+Visa Program, Fuhui, and other Catalog purchases remain CLI-aggregated. The
+Skill does not contain runtime workflow JavaScript, long action tables, or
+operation references. General wallet, card, risk, payment, Alipay QR, UCP,
+Instruction, refund, event, Tip, and Skill installation capabilities remain
+short fail-closed contracts in `SKILL.md`.
 
-The vendored Visa CLI `0.2.32` supports `mode=catalog_purchase`. The Skill
-still stops instead of falling back to Program mode or atomic payment commands
-when an older or incompatible installation rejects that mode.
+Skill `0.1.28` vendors Visa CLI `0.2.33` from upstream commit
+`55fd330ca8eb6f3cef4ca5b5721a71ca1f5fbabd`. It supports optional legacy
+`program.code`, complete Eats365 `manual_item_facts` revalidation, and
+`mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
+contexts. An incompatible installation must stop instead of falling back to
+Program mode or atomic payment commands.
 
 ## Requirements
 
@@ -57,7 +62,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.27`
+Skill version: `0.1.28`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.32";
+var CLI_VERSION = "0.2.33";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -23940,6 +23940,30 @@ async function searchCommandUcpCatalog(context, merchantId, query, limit, langua
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
 }
+async function searchCommandCatalog(context, input) {
+  const result = await requestJson({
+    baseUrl: input.baseUrl,
+    method: "POST",
+    path: EXTRA_CATALOG_SEARCH_PATH,
+    acceptLanguage: input.language,
+    headers: {
+      "Request-Id": randomUUID4(),
+      "UCP-Agent": DEFAULT_UCP_AGENT
+    },
+    body: {
+      query: input.query,
+      context: { language: input.language },
+      channel_type: input.channelType
+    },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun3(result)) {
+    throw apiError("Catalog search unexpectedly produced a dry-run response");
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
+}
 function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   const unsupported = unsupportedFlags.find((name) => name in flags);
   if (unsupported) {
@@ -25832,8 +25856,8 @@ function normalizeVisaMandate(mandate, index, isRecurring) {
     throw validationError(`${field}.currencyCode must be a three-letter currency code`);
   }
   const merchantCategoryCode2 = requiredText(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
-  if (!MCC_FORMAT.test(merchantCategoryCode2)) {
-    throw validationError(`${field}.merchantCategoryCode must be four digits`);
+  if (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000") {
+    throw validationError(`${field}.merchantCategoryCode must be a nonzero four-digit MCC`);
   }
   const preferredMerchantName = optionalText(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
   const merchantCategory = optionalText(mandate.merchantCategory, `${field}.merchantCategory`);
@@ -25921,25 +25945,35 @@ function isRecord19(value) {
 var MAJOR_AMOUNT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
 var CURRENCY_FORMAT2 = /^[A-Z]{3}$/u;
 var MAX_CONTEXT_BYTES2 = 64 * 1024;
-var CATALOG_PURCHASE_FIELDS = /* @__PURE__ */ new Set([
+var PURCHASE_FIELDS = /* @__PURE__ */ new Set([
   "mode",
   "environment",
   "requestText",
+  "program",
   "selection",
   "expected",
   "instructionContext",
   "digitalDeliveryExpected",
   "fulfillmentType",
   "assertedCategory",
-  "shippingAddress"
+  "shippingAddress",
+  "metadata"
 ]);
-var CATALOG_SELECTION_FIELDS = /* @__PURE__ */ new Set([
+var PURCHASE_SELECTION_FIELDS = /* @__PURE__ */ new Set([
   "merchantUrl",
   "productId",
   "quantity",
   "productQuery",
   "merchantId",
   "endpoint"
+]);
+var CATALOG_SELECTION_FIELDS = /* @__PURE__ */ new Set([
+  ...PURCHASE_SELECTION_FIELDS,
+  "channelType",
+  "storeId",
+  "catalogQuery",
+  "catalogEnvironment",
+  "catalogLanguage"
 ]);
 var CATALOG_EXPECTED_FIELDS = /* @__PURE__ */ new Set([
   "merchantName",
@@ -25966,6 +26000,38 @@ var CATALOG_MANDATE_FIELDS = /* @__PURE__ */ new Set([
   "merchantCategory",
   "recurringFrequency",
   "effectiveUntilTime"
+]);
+var RESERVED_PURCHASE_METADATA_FIELDS = /* @__PURE__ */ new Set([
+  "programcode",
+  "merchantid",
+  "endpoint",
+  "merchanturl",
+  "merchantname",
+  "productid",
+  "productquery",
+  "channeltype",
+  "storeid",
+  "catalogquery",
+  "catalogenvironment",
+  "cataloglanguage",
+  "title",
+  "quantity",
+  "price",
+  "totalprice",
+  "currency",
+  "merchantcategorycode",
+  "authorizedavailability",
+  "fulfillmenttype",
+  "digitaldeliveryexpected",
+  "originalrequest",
+  "assertedcategory",
+  "shippingaddress",
+  "paymentinstrumentid",
+  "instructionid",
+  "purchaseinstructionid",
+  "checkoutid",
+  "checkoutattemptid",
+  "orderid"
 ]);
 async function readVisaCommerceContext(flags) {
   return normalizeVisaCommerceContext(await readVisaContextInput(flags, "visa commerce-run"));
@@ -26033,27 +26099,18 @@ function normalizePrepareContext(raw) {
   };
 }
 function normalizePurchaseRunContext(raw, mode) {
-  if (mode === "catalog_purchase") {
-    assertOnlyFields(raw, CATALOG_PURCHASE_FIELDS, "catalog_purchase context");
-  }
-  const environment = normalizeVisaCommerceEnvironment(raw.environment);
   if (raw.instructionId !== void 0) {
-    throw validationError(`mode=${mode} does not accept instructionId; commerce-run selects a usable ACTIVE Instruction`);
+    throw validationError("purchase context does not accept instructionId; commerce-run selects a usable ACTIVE Instruction");
   }
+  assertOnlyFields(raw, PURCHASE_FIELDS, "purchase context");
+  const environment = normalizeVisaCommerceEnvironment(raw.environment);
   const requestText = requiredText2(raw.requestText, "requestText");
-  const programCode = mode === "purchase" ? requiredText2(requireObject(raw.program, "program").code, "program.code") : (() => {
-    if (raw.program !== void 0) {
-      throw validationError("mode=catalog_purchase does not accept program");
-    }
-    return void 0;
-  })();
+  const programCode = optionalProgramCode(raw.program);
   const selection = requireObject(raw.selection, "selection");
   const expected = requireObject(raw.expected, "expected");
-  if (mode === "catalog_purchase") {
-    assertOnlyFields(selection, CATALOG_SELECTION_FIELDS, "selection");
-    assertOnlyFields(expected, CATALOG_EXPECTED_FIELDS, "expected");
-    assertCatalogInstructionShape(raw.instructionContext);
-  }
+  assertOnlyFields(selection, mode === "catalog_purchase" ? CATALOG_SELECTION_FIELDS : PURCHASE_SELECTION_FIELDS, "selection");
+  assertOnlyFields(expected, CATALOG_EXPECTED_FIELDS, "expected");
+  assertCatalogInstructionShape(raw.instructionContext);
   const merchantUrl = requiredHttpUrl(selection.merchantUrl, "selection.merchantUrl");
   if (isVisaProgramUrl(merchantUrl)) {
     throw validationError("selection.merchantUrl must be the actual merchant URL, not a Visa/VSRP URL");
@@ -26063,6 +26120,33 @@ function normalizePurchaseRunContext(raw, mode) {
   const quantity = requiredPositiveInteger(selection.quantity, "selection.quantity");
   const merchantId = optionalText2(selection.merchantId, "selection.merchantId");
   const endpoint = optionalHttpUrl(selection.endpoint, "selection.endpoint");
+  const channelType = optionalText2(selection.channelType, "selection.channelType")?.toLowerCase();
+  const storeId = optionalText2(selection.storeId, "selection.storeId");
+  const catalogQuery = optionalText2(selection.catalogQuery, "selection.catalogQuery");
+  const catalogEnvironment = optionalCatalogEnvironment(selection.catalogEnvironment);
+  const catalogLanguage = optionalCatalogLanguage(selection.catalogLanguage);
+  const platformCatalogFields = [
+    channelType,
+    storeId,
+    catalogQuery,
+    catalogEnvironment,
+    catalogLanguage
+  ];
+  const providedPlatformCatalogFields = platformCatalogFields.filter((value) => value !== void 0).length;
+  if (providedPlatformCatalogFields !== 0 && providedPlatformCatalogFields !== platformCatalogFields.length) {
+    throw validationError("selection.channelType, storeId, catalogQuery, catalogEnvironment, and catalogLanguage must be provided together");
+  }
+  if (providedPlatformCatalogFields > 0) {
+    if (!channelType || !/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(channelType)) {
+      throw validationError("selection.channelType must be a Catalog channel identifier");
+    }
+    if (merchantId || endpoint) {
+      throw validationError("platform Catalog selection does not accept merchantId or endpoint");
+    }
+    if (!sameCommerceEnvironment(environment, catalogEnvironment)) {
+      throw validationError("selection.catalogEnvironment does not match the commerce environment");
+    }
+  }
   const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
   const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
   const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
@@ -26070,7 +26154,8 @@ function normalizePurchaseRunContext(raw, mode) {
   if (!CURRENCY_FORMAT2.test(currency)) {
     throw validationError("expected.currency must be a three-letter currency code");
   }
-  const authorizedAvailability = mode === "catalog_purchase" ? requiredText2(expected.availability, "expected.availability") : optionalText2(expected.availability, "expected.availability");
+  const availabilityText = mode === "catalog_purchase" ? requiredText2(expected.availability, "expected.availability") : optionalText2(expected.availability, "expected.availability");
+  const authorizedAvailability = availabilityText ? normalizeCatalogAvailability(availabilityText) : void 0;
   const fulfillmentType = mode === "catalog_purchase" ? normalizeFulfillmentType(raw.fulfillmentType) : optionalFulfillmentType(raw.fulfillmentType);
   if (typeof raw.digitalDeliveryExpected !== "boolean") {
     throw validationError("digitalDeliveryExpected must be a JSON boolean (true or false), not a quoted string");
@@ -26100,14 +26185,19 @@ function normalizePurchaseRunContext(raw, mode) {
       throw validationError("shippingAddress must exactly match instructionContext.shippingAddress");
     }
   }
-  const metadata = optionalObject2(raw.metadata, "metadata");
+  const metadata = normalizePurchaseMetadata(raw.metadata);
   const normalizedSelection = {
     merchantUrl,
     productId: productId2,
     quantity,
     ...productQuery ? { productQuery } : {},
     ...merchantId ? { merchantId } : {},
-    ...endpoint ? { endpoint } : {}
+    ...endpoint ? { endpoint } : {},
+    ...channelType ? { channelType } : {},
+    ...storeId ? { storeId } : {},
+    ...catalogQuery ? { catalogQuery } : {},
+    ...catalogEnvironment ? { catalogEnvironment } : {},
+    ...catalogLanguage ? { catalogLanguage } : {}
   };
   const purchaseContext = {
     merchantUrl,
@@ -26117,6 +26207,11 @@ function normalizePurchaseRunContext(raw, mode) {
     merchantName,
     productId: productId2,
     ...productQuery ? { productQuery } : {},
+    ...channelType ? { channelType } : {},
+    ...storeId ? { storeId } : {},
+    ...catalogQuery ? { catalogQuery } : {},
+    ...catalogEnvironment ? { catalogEnvironment } : {},
+    ...catalogLanguage ? { catalogLanguage } : {},
     title: itemTitle,
     quantity,
     price,
@@ -26146,14 +26241,19 @@ function normalizePurchaseRunContext(raw, mode) {
     digitalDeliveryExpected,
     purchaseContext
   };
-  return mode === "purchase" ? {
+  return {
     mode,
     ...normalized,
-    program: { code: programCode }
-  } : {
-    mode,
-    ...normalized
+    ...programCode ? { program: { code: programCode } } : {}
   };
+}
+function optionalProgramCode(value) {
+  if (value === void 0 || value === null) {
+    return void 0;
+  }
+  const program2 = requireObject(value, "program");
+  assertOnlyFields(program2, /* @__PURE__ */ new Set(["code"]), "program");
+  return requiredText2(program2.code, "program.code");
 }
 function normalizeFulfillmentType(value) {
   const fulfillmentType = requiredText2(value, "fulfillmentType").toUpperCase();
@@ -26167,6 +26267,90 @@ function optionalFulfillmentType(value) {
     return void 0;
   }
   return normalizeFulfillmentType(value);
+}
+function isOrderableAvailability(value) {
+  return [
+    "IN_STOCK",
+    "AVAILABLE",
+    "ACTIVE",
+    "ORDERABLE"
+  ].includes(value);
+}
+function normalizeCatalogAvailability(value) {
+  const normalized = value.normalize("NFKC").trim().toUpperCase();
+  if (!isOrderableAvailability(normalized)) {
+    throw validationError("expected.availability must be currently orderable");
+  }
+  return normalized;
+}
+function optionalCatalogEnvironment(value) {
+  const environment = optionalText2(value, "selection.catalogEnvironment")?.toLowerCase();
+  if (!environment) {
+    return void 0;
+  }
+  if (environment !== "uat" && environment !== "sandbox" && environment !== "test" && environment !== "production") {
+    throw validationError("selection.catalogEnvironment must be uat, sandbox, test, or production");
+  }
+  return environment === "uat" ? "sandbox" : environment;
+}
+function optionalCatalogLanguage(value) {
+  const language = optionalText2(value, "selection.catalogLanguage");
+  if (!language) {
+    return void 0;
+  }
+  if (language.length > 64) {
+    throw validationError("selection.catalogLanguage must be an IETF BCP 47 language tag");
+  }
+  try {
+    const locale = new Intl.Locale(language);
+    const normalizedLanguage = locale.language.toLowerCase();
+    if (!normalizedLanguage || normalizedLanguage === "und") {
+      throw new Error("undefined language");
+    }
+    if (normalizedLanguage === "zh") {
+      if (locale.script === "Hant") {
+        return "zh-Hant";
+      }
+      if (locale.script === "Hans") {
+        return "zh-Hans";
+      }
+      if (locale.script) {
+        throw new Error("unsupported Chinese script");
+      }
+      switch (locale.region ?? "") {
+        case "TW":
+        case "HK":
+        case "MO":
+          return "zh-Hant";
+        case "":
+        case "CN":
+        case "SG":
+        case "MY":
+          return "zh-Hans";
+        default:
+          throw new Error("unsupported Chinese region");
+      }
+    }
+    return locale.toString();
+  } catch {
+    throw validationError("selection.catalogLanguage must be an IETF BCP 47 language tag");
+  }
+}
+function normalizePurchaseMetadata(value) {
+  const metadata = optionalObject2(value, "metadata");
+  if (!metadata) {
+    return void 0;
+  }
+  const reserved = Object.keys(metadata).find((key) => RESERVED_PURCHASE_METADATA_FIELDS.has(key.normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]/gu, "")));
+  if (reserved) {
+    throw validationError(`metadata contains reserved field: ${reserved}`);
+  }
+  return metadata;
+}
+function sameCommerceEnvironment(environment, catalogEnvironment) {
+  const normalizedCommerce = environment === "uat" ? "sandbox" : environment;
+  const normalizedCatalog = catalogEnvironment === "uat" ? "sandbox" : catalogEnvironment;
+  return normalizedCommerce === normalizedCatalog;
 }
 function assertCatalogInstructionShape(value) {
   const instruction = requireObject(value, "instructionContext");
@@ -28929,9 +29113,17 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
   if (purchase.merchantId || purchase.endpoint) {
     throw validationError("frozen merchantId or endpoint does not match the internal-first merchant route");
   }
-  const parsed = await resolveParseItemFromUrl(purchase.merchantUrl, {
-    timeoutMs: context.globalOptions.timeoutMs
-  });
+  let parsed;
+  try {
+    parsed = await resolveParseItemFromUrl(purchase.merchantUrl, {
+      timeoutMs: context.globalOptions.timeoutMs
+    });
+  } catch (error) {
+    if (commerceContext.mode === "catalog_purchase" && error instanceof CliError && error.message === "EATS365_MANUAL_ITEM_REQUIRED") {
+      return resolvePlatformCatalogPurchase(context, expectedBaseUrl, purchase);
+    }
+    throw error;
+  }
   const variant = parsed.items.find((item) => item.itemId === purchase.productId);
   if (!variant) {
     throw validationError("selected product is no longer present in the current merchant product data");
@@ -28954,6 +29146,151 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
       availability: variant.inventoryStatus
     }
   };
+}
+async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase) {
+  if (purchase.channelType !== "eats365" || !purchase.storeId || !purchase.catalogQuery || !purchase.catalogEnvironment || !purchase.catalogLanguage) {
+    throw validationError("manual platform Catalog purchase requires the complete frozen Eats365 Catalog provenance");
+  }
+  const productUrl2 = new URL(purchase.merchantUrl);
+  const hostname = productUrl2.hostname.toLowerCase();
+  if (hostname !== "eats365pos.com" && !hostname.endsWith(".eats365pos.com")) {
+    throw validationError("Eats365 Catalog product URL must use an eats365pos.com host");
+  }
+  const pathSegments = productUrl2.pathname.split("/").filter(Boolean).map((value) => decodeUrlPathSegment(value));
+  const menuIndex = pathSegments.lastIndexOf("menu");
+  if (menuIndex < 1 || pathSegments[menuIndex - 1] !== purchase.storeId) {
+    throw validationError("Eats365 Catalog product URL store does not match the frozen storeId");
+  }
+  const productIds = productUrl2.searchParams.getAll("product_id").map((value) => value.trim()).filter(Boolean);
+  if (productIds.length === 0 || productIds.some((productId2) => productId2 !== purchase.productId)) {
+    throw validationError("platform Catalog product URL must contain only the frozen product_id");
+  }
+  const catalog = await searchCommandCatalog(context, {
+    baseUrl: catalogBaseUrl,
+    query: purchase.catalogQuery,
+    channelType: purchase.channelType,
+    language: purchase.catalogLanguage
+  });
+  const candidate = resolveUniquePlatformCatalogCandidate(catalog, purchase);
+  return {
+    purchaseContext: { ...purchase },
+    route: {
+      type: "external_platform",
+      provider: "eats365",
+      channelType: purchase.channelType,
+      storeId: purchase.storeId,
+      catalogQuery: purchase.catalogQuery,
+      catalogEnvironment: purchase.catalogEnvironment,
+      catalogLanguage: purchase.catalogLanguage,
+      merchantOrigin: productUrl2.origin,
+      merchantDomain: productUrl2.hostname
+    },
+    product: {
+      productId: candidate.productId,
+      title: candidate.title,
+      unitPrice: candidate.unitPrice,
+      totalPrice: purchase.totalPrice,
+      currency: candidate.currency,
+      availability: candidate.availability
+    }
+  };
+}
+function resolveUniquePlatformCatalogCandidate(payload, purchase) {
+  const root = requireRecord(payload, "invalid broad Catalog search response");
+  if (!Array.isArray(root.groups)) {
+    throw validationError("broad Catalog search response is missing groups");
+  }
+  const groups = root.groups.map((value) => requireRecord(value, "invalid broad Catalog group")).filter((group2) => normalizedText2(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText2(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
+  if (groups.length === 0) {
+    throw validationError("frozen Eats365 store is no longer present in broad Catalog results");
+  }
+  if (groups.length > 1) {
+    throw validationError("broad Catalog returned multiple matching Eats365 store groups");
+  }
+  const group = groups[0];
+  const merchantName = requiredProductText(group.name ?? group.merchant_name ?? group.merchantName, "broad Catalog group is missing merchant name");
+  if (normalizedText2(merchantName) !== normalizedText2(purchase.merchantName)) {
+    throw validationError("current broad Catalog merchant name differs from the frozen purchase context");
+  }
+  if (!Array.isArray(group.products)) {
+    throw validationError("broad Catalog group is missing products");
+  }
+  const products = group.products.map((value) => requireRecord(value, "invalid broad Catalog product")).filter((product2) => requiredProductText(product2.id ?? product2.productId ?? product2.product_id, "broad Catalog product is missing id") === purchase.productId);
+  if (products.length === 0) {
+    throw validationError("selected product is no longer present in the frozen Eats365 store");
+  }
+  if (products.length > 1) {
+    throw validationError("broad Catalog returned multiple matching Eats365 products");
+  }
+  const product = products[0];
+  const productUrl2 = requiredProductText(product.url ?? product.item_url ?? product.product_url, "broad Catalog product is missing URL");
+  if (normalizedUrl(productUrl2) !== normalizedUrl(purchase.merchantUrl)) {
+    throw validationError("current broad Catalog product URL differs from the frozen purchase context");
+  }
+  const productTitle2 = requiredProductText(product.title ?? product.name, "broad Catalog product is missing title");
+  if (normalizedText2(productTitle2) !== normalizedText2(purchase.title)) {
+    throw validationError("current broad Catalog product title differs from the frozen purchase context");
+  }
+  if (!Array.isArray(product.variants)) {
+    throw validationError("broad Catalog product is missing variants");
+  }
+  const variants = product.variants.map((value) => requireRecord(value, "invalid broad Catalog variant")).filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "broad Catalog variant is missing id") === purchase.productId);
+  if (variants.length !== 1) {
+    throw validationError(variants.length === 0 ? "broad Catalog product is missing the selected variant" : "broad Catalog returned multiple matching Eats365 variants");
+  }
+  const variant = variants[0];
+  const variantTitle = requiredProductText(variant.title ?? variant.name, "broad Catalog variant is missing title");
+  if (normalizedText2(variantTitle) !== normalizedText2(purchase.title)) {
+    throw validationError("current broad Catalog variant title differs from the frozen purchase context");
+  }
+  if (variant.seller !== void 0) {
+    const seller = requireRecord(variant.seller, "broad Catalog variant seller must be an object");
+    const sellerName2 = requiredProductText(seller.name, "broad Catalog variant seller is missing name");
+    if (normalizedText2(sellerName2) !== normalizedText2(purchase.merchantName)) {
+      throw validationError("current broad Catalog seller differs from the frozen purchase context");
+    }
+  }
+  const price = requireRecord(variant.price, "broad Catalog variant is missing structured price");
+  const currency = requiredProductText(price.currency ?? price.currencyCode ?? price.currency_code, "broad Catalog variant price is missing currency").toUpperCase();
+  const unitPrice = minorUnitsMajorAmount(parseMinorUnits2(price.amount, "broad Catalog variant price amount must be non-negative minor units"), currency);
+  if (currency !== purchase.currency) {
+    throw validationError("current broad Catalog currency differs from the frozen purchase context");
+  }
+  if (majorAmountMinorUnits(unitPrice, currency) !== majorAmountMinorUnits(purchase.price, purchase.currency)) {
+    throw validationError("current broad Catalog price differs from the frozen purchase context");
+  }
+  const availability = requireRecord(variant.availability, "broad Catalog variant is missing availability");
+  if (availability.available !== true) {
+    throw validationError("current broad Catalog product is not explicitly available");
+  }
+  const availabilityStatus = requiredProductText(availability.status, "broad Catalog variant availability is missing status").toUpperCase();
+  if (availabilityStatus !== "IN_STOCK" && availabilityStatus !== "AVAILABLE" && availabilityStatus !== "ACTIVE" && availabilityStatus !== "ORDERABLE") {
+    throw validationError("current broad Catalog product is not currently orderable");
+  }
+  if (availabilityStatus !== purchase.authorizedAvailability) {
+    throw validationError("current broad Catalog availability differs from the frozen purchase context");
+  }
+  const metadata = product.metadata;
+  if (metadata !== void 0) {
+    const facts = requireRecord(metadata, "broad Catalog product metadata must be an object");
+    if (requiredProductText(facts.channel_type ?? facts.channelType, "broad Catalog product metadata is missing channel_type").toLowerCase() !== purchase.channelType || requiredProductText(facts.store_id ?? facts.storeId, "broad Catalog product metadata is missing store_id") !== purchase.storeId) {
+      throw validationError("broad Catalog product metadata differs from the frozen platform identity");
+    }
+  }
+  return {
+    productId: purchase.productId,
+    title: productTitle2,
+    unitPrice,
+    currency,
+    availability: availabilityStatus
+  };
+}
+function decodeUrlPathSegment(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw validationError("Eats365 Catalog product URL has invalid path encoding");
+  }
 }
 function assertFrozenRoute(purchase, merchantId, endpoint) {
   if (purchase.merchantId && purchase.merchantId !== merchantId) {
@@ -29188,6 +29525,11 @@ function checkoutCommandContext(context, input) {
     ...purchase.metadata ?? {},
     ...purchase.merchantId ? { merchantId: purchase.merchantId } : {},
     productId: purchase.productId,
+    ...purchase.channelType ? { channelType: purchase.channelType } : {},
+    ...purchase.storeId ? { storeId: purchase.storeId } : {},
+    ...purchase.catalogQuery ? { catalogQuery: purchase.catalogQuery } : {},
+    ...purchase.catalogEnvironment ? { catalogEnvironment: purchase.catalogEnvironment } : {},
+    ...purchase.catalogLanguage ? { catalogLanguage: purchase.catalogLanguage } : {},
     ...purchase.authorizedAvailability ? { authorizedAvailability: purchase.authorizedAvailability } : {},
     ...purchase.fulfillmentType ? { fulfillmentType: purchase.fulfillmentType } : {},
     ...purchase.programCode ? { programCode: purchase.programCode } : {}
@@ -29830,7 +30172,7 @@ async function runVisaCommerce(context, options2, dependencies) {
       status: "authentication_required",
       terminal: true,
       userActionRequired: true,
-      reason: context.mode === "catalog_purchase" ? "run_visa_commerce_login_before_purchase" : "run_visa_commerce_login_before_product_search",
+      reason: "run_visa_commerce_login_before_purchase",
       detail: login.detail
     };
   }
@@ -30744,7 +31086,7 @@ Context:
   require or accept purchaseContext or instructionContext, and it never creates an Instruction,
   Checkout, or payment.
 
-  mode=purchase accepts the Visa Skill frozen shape: environment, requestText, program.code,
+  mode=purchase accepts the Visa Skill frozen shape: environment, requestText, optional program.code,
   selection.merchantUrl/productId/productQuery/quantity, expected.merchantName/itemTitle/amount/
   currency, instructionContext, and digitalDeliveryExpected. Top-level instructionId is rejected;
   commerce-run selects a usable ACTIVE Instruction from the VIC-ready payment instrument.
@@ -30753,14 +31095,22 @@ Context:
 
   mode=catalog_purchase starts from a product selected through broad Catalog discovery and does
   not call visa recommend. It accepts the same frozen selection, expected product, complete
-  instructionContext, and delivery facts without requiring program or program.code. It still
-  requires visa commerce-login before visa commerce-run. Its Instruction context must carry the
-  authoritative four-digit MCC supplied by Catalog for the selected merchant/product; the CLI
-  does not infer or replace a missing Catalog MCC. expected.availability and fulfillmentType are
+  instructionContext, and delivery facts; program.code is optional compatibility metadata in
+  both purchase modes. It still requires visa commerce-login before visa commerce-run. Its
+  Instruction context must carry one four-digit MCC classified from the frozen merchant/product
+  context; callers must ask when that classification is uncertain. expected.availability and fulfillmentType are
   required. fulfillmentType is NO_SHIPPING_REQUIRED or PHYSICAL_GOODS_REQUIRES_SHIPPING; physical
   goods require identical top-level and instructionContext shippingAddress values, and
-  digitalDeliveryExpected cannot be true for physical goods. Unknown catalog_purchase authority
-  fields are rejected rather than silently ignored.
+  digitalDeliveryExpected cannot be true for physical goods. Unknown purchase authority fields
+  are rejected rather than silently ignored in both modes. Platform Catalog provenance is accepted
+  only by catalog_purchase and freezes selection.channelType/storeId/catalogQuery/
+  catalogEnvironment/catalogLanguage as one complete set. The Catalog environment must match the
+  commerce environment. An Eats365 candidate may use its frozen item ID, title, structured purchase
+  price/currency, availability, store ID, channel, query, environment, language, and product URL
+  after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL host, store path, and product_id
+  must match those frozen facts. Before Instruction or Checkout work, commerce-run repeats that
+  anonymous broad Catalog search and requires one exact store/product/URL match whose title,
+  structured price/currency, and orderable availability still match the frozen candidate.
 
   Both purchase modes use the following shared contract.
   selection.quantity must be a positive JSON integer number such as 1, never "1" or 1.5.
@@ -30793,7 +31143,8 @@ Behavior:
   Before card or Instruction work, both purchase modes resolve the merchant internally first,
   exact-GET the current UCP Catalog product, and reject ID, title, price, currency, availability,
   merchant, or endpoint drift. Only an explicit internal-list miss may use external product
-  parsing. Checkout metadata includes programCode only when the frozen context contains one.
+  parsing. Eats365 is the platform-store exception described above. Checkout metadata includes
+  programCode only when the frozen context contains one.
 
   Checkout uses the shared ucp-checkout run implementation: create and complete are each attempted
   once, payment is never retried, and non-terminal payment states return a read-only resumeCommand.
