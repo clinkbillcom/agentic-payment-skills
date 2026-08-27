@@ -30,24 +30,43 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.30');
+  assert.equal(packageJson.version, '0.1.31');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.30/u);
-  assert.match(skill, /version: "0\.1\.30"/u);
+  assert.match(skill, /Visa Skill 0\.1\.31/u);
+  assert.match(skill, /version: "0\.1\.31"/u);
   assert.match(
     readme,
-    /Skill `0\.1\.30` vendors Visa CLI `0\.2\.34`[\s\S]*42af4fadc12413623a4a64fee108a26d9342174a/iu,
+    /Skill `0\.1\.31` vendors Visa CLI `0\.2\.34`[\s\S]*42af4fadc12413623a4a64fee108a26d9342174a/iu,
   );
-  assert.match(readmeZh, /Skill `0\.1\.30`/u);
+  assert.match(readmeZh, /Skill `0\.1\.31`/u);
   assert.match(readmeZh, /Visa CLI `0\.2\.34`/u);
   assert.match(readmeZh, /42af4fadc12413623a4a64fee108a26d9342174a/u);
   assert.doesNotMatch(`${readme}\n${readmeZh}`, /0\.2\.32|0\.2\.33/u);
   assert.match(skill, /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
   assert.match(combined, /bin\/visa-cli/u);
   assert.doesNotMatch(combined, /vendor\/clink-cli|bin\/clink\b/u);
+});
+
+test('description routes broad payment and commerce intent without naming a product', () => {
+  const description = skill.match(/^description:\s*"([^"]+)"/mu)?.[1] ?? '';
+
+  assert.match(description, /even when Visa is not named/iu);
+  assert.match(description, /pay\/支付\/付款/iu);
+  assert.match(description, /buy or order\/购买\/下单\/订购/iu);
+  assert.match(description, /place an order\/点单\/点餐/iu);
+  assert.match(description, /checkout/iu);
+  assert.match(description, /shopping\/购物/iu);
+  assert.match(description, /coupons\/优惠券/iu);
+  assert.match(description, /vouchers\/代金券/iu);
+  assert.match(description, /discounts\/优惠/iu);
+  assert.match(description, /benefits\/权益/iu);
+  assert.match(description, /gift cards/iu);
+  assert.match(description, /merchant offers/iu);
+  assert.match(description, /product discovery/iu);
+  assert.doesNotMatch(description, /coffee|咖啡/iu);
 });
 
 test('legacy provider labels are absent from Skill-facing files and tests', async () => {
