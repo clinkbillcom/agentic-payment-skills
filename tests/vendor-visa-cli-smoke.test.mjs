@@ -525,11 +525,6 @@ function providerCatalogPurchaseContext() {
         merchantCategoryCode: '5999',
       }],
     },
-    buyer: {
-      first_name: 'Test',
-      last_name: 'Buyer',
-      phone_number: '+85261234567',
-    },
     fulfillmentType: 'NO_SHIPPING_REQUIRED',
     digitalDeliveryExpected: true,
   };
@@ -571,6 +566,11 @@ function eats365CatalogPurchaseContext(overrides = {}) {
         currencyCode: 'HKD',
         merchantCategoryCode: '5814',
       }],
+    },
+    buyer: {
+      first_name: 'Test',
+      last_name: 'Buyer',
+      phone_number: '+85261234567',
     },
     fulfillmentType: 'NO_SHIPPING_REQUIRED',
     digitalDeliveryExpected: false,
