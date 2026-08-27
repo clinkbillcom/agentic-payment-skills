@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.33";
+var CLI_VERSION = "0.2.34";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -23917,25 +23917,43 @@ async function getCommandUcpCatalogProduct(context, merchantId, productId2) {
   return unwrapApiData(result.body);
 }
 async function searchCommandUcpCatalog(context, merchantId, query, limit, language) {
+  const result = await searchCommandUcpCatalogPage(context, {
+    merchantId,
+    query,
+    ...limit !== void 0 ? { limit } : {},
+    ...language ? { language } : {},
+    dryRun: false
+  });
+  if (typeof result === "object" && result !== null && isDryRun3(result)) {
+    throw apiError("UCP Catalog search unexpectedly produced a dry-run response");
+  }
+  return result;
+}
+async function searchCommandUcpCatalogPage(context, input) {
   const requestId = randomUUID4();
+  const pagination = {
+    ...input.cursor ? { cursor: input.cursor } : {},
+    ...input.limit !== void 0 ? { limit: input.limit } : {}
+  };
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
-    path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
+    path: `/agent/ucp/${encodeURIComponent(input.merchantId)}/catalog/search`,
+    acceptLanguage: input.language ?? null,
     headers: {
       "Request-Id": requestId,
       "UCP-Agent": DEFAULT_UCP_AGENT
     },
     body: {
-      query,
-      ...language ? { context: { language } } : {},
-      ...limit !== void 0 ? { pagination: { limit } } : {}
+      query: input.query,
+      ...input.language ? { context: { language: input.language } } : {},
+      ...Object.keys(pagination).length > 0 ? { pagination } : {}
     },
     timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: false
+    dryRun: input.dryRun
   });
   if (isDryRun3(result)) {
-    throw apiError("UCP Catalog search unexpectedly produced a dry-run response");
+    return result;
   }
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
@@ -25758,6 +25776,367 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
+// dist/visa/benefit-catalog-provider.js
+var VISA_BENEFIT_CATALOG_REGISTRY_VERSION = "2026-08-27.1";
+var VISA_BENEFIT_CATALOG_PROVIDERS = Object.freeze([
+  Object.freeze({
+    providerKey: "visa_benefit_catalog",
+    environments: Object.freeze({
+      sandbox: Object.freeze({
+        merchantId: "mcht_ftmse61a6az0",
+        merchantUrl: "https://vtravel.link2shops.com/yiyuan/",
+        merchantName: "vtravel.link2shops.com"
+      }),
+      test: Object.freeze({
+        merchantId: "mcht_f5xuyduv1a0j",
+        merchantUrl: "https://testa.link2shops.com/",
+        merchantName: "testa.link2shops.com"
+      })
+    })
+  })
+]);
+function resolveVisaBenefitCatalogProvider(input) {
+  if (input.mode !== "catalog_purchase") {
+    return void 0;
+  }
+  const routes = visaBenefitCatalogProviderRoutes(input.environment, input.baseUrl);
+  const merchantIdMatch = input.merchantId ? routes.find((route) => route.merchantId === input.merchantId) : void 0;
+  const merchantUrlMatch = routes.find((route) => route.merchantUrl === input.merchantUrl);
+  if (!merchantIdMatch && !merchantUrlMatch) {
+    if (registryContainsMerchantId(input.merchantId) || registryContainsMerchantUrl(input.merchantUrl)) {
+      throw validationError("Visa Benefit Catalog provider identity does not match the locked environment registry");
+    }
+    return void 0;
+  }
+  if (!merchantIdMatch || !merchantUrlMatch || merchantIdMatch.providerKey !== merchantUrlMatch.providerKey) {
+    throw validationError("Visa Benefit Catalog provider merchantId and merchantUrl must exactly match the registry");
+  }
+  if (input.endpoint && input.endpoint !== merchantIdMatch.endpoint) {
+    throw validationError("Visa Benefit Catalog provider endpoint must exactly match the locked environment");
+  }
+  return merchantIdMatch;
+}
+function registryContainsMerchantId(merchantId) {
+  return Boolean(merchantId && VISA_BENEFIT_CATALOG_PROVIDERS.some((provider) => Object.values(provider.environments).some((identity) => identity?.merchantId === merchantId)));
+}
+function registryContainsMerchantUrl(merchantUrl) {
+  return VISA_BENEFIT_CATALOG_PROVIDERS.some((provider) => Object.values(provider.environments).some((identity) => identity?.merchantUrl === merchantUrl));
+}
+function visaBenefitCatalogProviderRoutes(environment, baseUrl) {
+  return visaBenefitCatalogRegistrySnapshot(environment, baseUrl).providers;
+}
+function visaBenefitCatalogRegistrySnapshot(environment, baseUrl) {
+  const providers = [];
+  const unconfiguredProviderKeys = [];
+  for (const provider of VISA_BENEFIT_CATALOG_PROVIDERS) {
+    const identity = provider.environments[environment];
+    if (!identity) {
+      unconfiguredProviderKeys.push(provider.providerKey);
+      continue;
+    }
+    providers.push({
+      registryVersion: VISA_BENEFIT_CATALOG_REGISTRY_VERSION,
+      environment,
+      providerKey: provider.providerKey,
+      domainName: new URL(identity.merchantUrl).hostname.toLowerCase(),
+      merchantId: identity.merchantId,
+      merchantUrl: identity.merchantUrl,
+      merchantName: identity.merchantName,
+      provider: "clinkbill",
+      endpoint: providerEndpoint(baseUrl, identity.merchantId)
+    });
+  }
+  return {
+    registryVersion: VISA_BENEFIT_CATALOG_REGISTRY_VERSION,
+    environment,
+    providers,
+    unconfiguredProviderKeys
+  };
+}
+function providerEndpoint(baseUrl, merchantId) {
+  let endpoint;
+  try {
+    endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchantId)}`, baseUrl);
+  } catch {
+    throw validationError("invalid Visa Benefit Catalog API base URL");
+  }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    throw validationError("invalid Visa Benefit Catalog API base URL");
+  }
+  return endpoint.toString();
+}
+
+// dist/visa/benefit-catalog-discovery.js
+var PROVIDER_PAGE_LIMIT = 100;
+var PROVIDER_MAX_PAGES = 100;
+var CURRENCY_PATTERN = /^[A-Z]{3}$/u;
+var ORDERABLE_AVAILABILITY = /* @__PURE__ */ new Set([
+  "IN_STOCK",
+  "AVAILABLE",
+  "ACTIVE",
+  "ORDERABLE"
+]);
+async function discoverVisaBenefitCatalogProducts(rawInput, dependencies) {
+  const input = normalizeInput(rawInput);
+  const registry = visaBenefitCatalogRegistrySnapshot(input.environment, input.baseUrl);
+  const routes = registry.providers;
+  const results = await Promise.all(routes.map((route) => discoverProvider(route, input, dependencies)));
+  const providerProducts = results.flatMap((result) => result.products);
+  const failures = [
+    ...registry.unconfiguredProviderKeys.map((providerKey) => ({
+      providerKey,
+      reason: "provider_registry_unconfigured",
+      message: `provider registry ${registry.registryVersion} has no ${input.environment} identity`
+    })),
+    ...results.flatMap((result) => result.failures)
+  ];
+  const dryRunRequests = results.flatMap((result) => result.dryRunRequests);
+  const coverage = input.dryRun ? "dry_run" : failures.length > 0 ? "partial" : "complete";
+  return {
+    registryVersion: registry.registryVersion,
+    environment: registry.environment,
+    coverage,
+    query: input.query,
+    language: input.language,
+    directlyOrderableBenefits: true,
+    programMatching: "not_performed",
+    providerCount: routes.length + registry.unconfiguredProviderKeys.length,
+    successfulProviderCount: results.filter((result) => result.complete).length,
+    providerIdentities: routes.map(providerIdentity),
+    pagesFetched: results.reduce((total, result) => total + result.pagesFetched, 0),
+    returnedProductCount: providerProducts.length,
+    providerProducts,
+    failures,
+    ...dryRunRequests.length > 0 ? { dryRunRequests } : {}
+  };
+}
+function catalogLanguageForVisaLocale(locale) {
+  switch (locale) {
+    case "zh-HK":
+    case "zh-TW":
+      return "zh-Hant";
+    case "zh-CN":
+      return "zh-Hans";
+    default:
+      return "en";
+  }
+}
+async function discoverProvider(route, input, dependencies) {
+  if (input.dryRun) {
+    try {
+      const request = await dependencies.searchPage({
+        merchantId: route.merchantId,
+        query: input.query,
+        language: input.language,
+        limit: PROVIDER_PAGE_LIMIT,
+        dryRun: true
+      });
+      return {
+        complete: false,
+        pagesFetched: 0,
+        products: [],
+        failures: [],
+        dryRunRequests: [{
+          providerIdentity: providerIdentity(route),
+          request
+        }]
+      };
+    } catch (error) {
+      return providerFailure(route, error);
+    }
+  }
+  const products = [];
+  const seenProducts = /* @__PURE__ */ new Map();
+  const seenCursors = /* @__PURE__ */ new Set();
+  let cursor;
+  let pagesFetched = 0;
+  try {
+    while (pagesFetched < PROVIDER_MAX_PAGES) {
+      const payload = await dependencies.searchPage({
+        merchantId: route.merchantId,
+        query: input.query,
+        language: input.language,
+        limit: PROVIDER_PAGE_LIMIT,
+        ...cursor ? { cursor } : {},
+        dryRun: false
+      });
+      pagesFetched += 1;
+      const page = providerCatalogPage(payload);
+      for (const rawProduct of page.products) {
+        const product = orderableProviderProduct(rawProduct, route);
+        if (!product) {
+          continue;
+        }
+        const productId2 = requiredText(product.product.id ?? product.product.productId ?? product.product.product_id, "provider Catalog product is missing id");
+        const fingerprint = JSON.stringify(product.product);
+        const previous = seenProducts.get(productId2);
+        if (previous === fingerprint) {
+          continue;
+        }
+        if (previous !== void 0) {
+          throw validationError("provider Catalog product changed across cursor pages");
+        }
+        seenProducts.set(productId2, fingerprint);
+        products.push(product);
+      }
+      if (!page.nextCursor) {
+        return {
+          complete: true,
+          pagesFetched,
+          products,
+          failures: [],
+          dryRunRequests: []
+        };
+      }
+      if (seenCursors.has(page.nextCursor)) {
+        throw validationError("provider Catalog pagination repeated a cursor");
+      }
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+    throw validationError("provider Catalog pagination exceeded its safety limit");
+  } catch (error) {
+    const failed = providerFailure(route, error);
+    return {
+      ...failed,
+      pagesFetched,
+      products
+    };
+  }
+}
+function providerFailure(route, error) {
+  return {
+    complete: false,
+    pagesFetched: 0,
+    products: [],
+    failures: [{
+      providerKey: route.providerKey,
+      merchantId: route.merchantId,
+      reason: "provider_search_failed",
+      message: safeErrorMessage(error)
+    }],
+    dryRunRequests: []
+  };
+}
+function providerCatalogPage(payload) {
+  const root = requireRecord(payload, "invalid provider Catalog search response");
+  if (!Array.isArray(root.products)) {
+    throw validationError("provider Catalog search response is missing products");
+  }
+  const products = root.products.map((product) => requireRecord(product, "provider Catalog contains an invalid product"));
+  const pagination = root.pagination === void 0 ? {} : requireRecord(root.pagination, "provider Catalog pagination must be an object");
+  const nextCursor = optionalText(pagination.next_cursor ?? pagination.nextCursor ?? root.next_cursor ?? root.nextCursor);
+  const rawHasNext = pagination.has_next_page ?? pagination.hasNextPage ?? root.has_next_page ?? root.hasNextPage;
+  if (rawHasNext !== void 0 && typeof rawHasNext !== "boolean") {
+    throw validationError("provider Catalog has_next_page must be a boolean");
+  }
+  const hasNext = rawHasNext ?? Boolean(nextCursor);
+  if (hasNext && !nextCursor) {
+    throw validationError("provider Catalog pagination is missing next_cursor");
+  }
+  return {
+    products,
+    ...hasNext && nextCursor ? { nextCursor } : {}
+  };
+}
+function orderableProviderProduct(rawProduct, route) {
+  const product = structuredClone(rawProduct);
+  requiredText(product.id ?? product.productId ?? product.product_id, "provider Catalog product is missing id");
+  requiredText(product.title ?? product.name, "provider Catalog product is missing title");
+  let candidates;
+  if (product.variants === void 0 || product.variants === null) {
+    candidates = [product];
+  } else {
+    if (!Array.isArray(product.variants)) {
+      throw validationError("provider Catalog product variants must be an array");
+    }
+    const variants = product.variants.map((variant) => requireRecord(variant, "provider Catalog product contains an invalid variant"));
+    candidates = variants.length > 0 ? variants : [product];
+  }
+  const orderableVariantIds = [];
+  for (const candidate of candidates) {
+    const candidateId = requiredText(candidate.id ?? candidate.productId ?? candidate.product_id, "provider Catalog variant is missing id");
+    requiredText(candidate.title ?? candidate.name, "provider Catalog variant is missing title");
+    if (!isExplicitlyOrderable(candidate)) {
+      continue;
+    }
+    validateStructuredPrice(candidate.price);
+    orderableVariantIds.push(candidateId);
+  }
+  if (orderableVariantIds.length === 0) {
+    return void 0;
+  }
+  return {
+    providerIdentity: providerIdentity(route),
+    directlyOrderable: true,
+    orderableVariantIds,
+    product
+  };
+}
+function providerIdentity(route) {
+  return {
+    registryVersion: route.registryVersion,
+    environment: route.environment,
+    providerKey: route.providerKey,
+    merchantId: route.merchantId,
+    merchantUrl: route.merchantUrl,
+    merchantName: route.merchantName,
+    endpoint: route.endpoint
+  };
+}
+function isExplicitlyOrderable(value) {
+  const availability = requireRecord(value.availability, "provider Catalog variant is missing availability");
+  if (availability.available !== true) {
+    return false;
+  }
+  const status = requiredText(availability.status, "provider Catalog variant availability is missing status").toUpperCase();
+  return ORDERABLE_AVAILABILITY.has(status);
+}
+function validateStructuredPrice(value) {
+  const price = requireRecord(value, "orderable provider Catalog variant is missing structured price");
+  const amount = price.amount;
+  if (!(typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0) && !(typeof amount === "string" && /^\d+$/u.test(amount.trim()))) {
+    throw validationError("orderable provider Catalog price amount must be non-negative minor units");
+  }
+  const currency = requiredText(price.currency ?? price.currencyCode ?? price.currency_code, "orderable provider Catalog price is missing currency").toUpperCase();
+  if (!CURRENCY_PATTERN.test(currency)) {
+    throw validationError("orderable provider Catalog price currency must be a three-letter code");
+  }
+}
+function normalizeInput(input) {
+  if (!input.query.normalize("NFKC").trim()) {
+    throw validationError("--include-provider-products requires a non-blank recommendation query");
+  }
+  const language = input.language.normalize("NFKC").trim();
+  if (!language) {
+    throw validationError("provider Catalog language must not be blank");
+  }
+  return {
+    ...input,
+    language
+  };
+}
+function requiredText(value, message) {
+  const text = optionalText(value);
+  if (!text) {
+    throw validationError(message);
+  }
+  return text;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function requireRecord(value, message) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw validationError(message);
+  }
+  return value;
+}
+function safeErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "provider Catalog search failed";
+  return message.normalize("NFKC").replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 300) || "provider Catalog search failed";
+}
+
 // dist/visa/context-input.js
 import { readFile as readFile5 } from "node:fs/promises";
 async function readVisaContextInput(flags, commandLabel) {
@@ -25798,11 +26177,11 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
   if (options2.expectedAmount === void 0 !== (options2.expectedCurrency === void 0)) {
     throw new Error("expectedAmount and expectedCurrency must be provided together");
   }
-  const title = requiredText(raw.title, "instructionContext.title");
+  const title = requiredText2(raw.title, "instructionContext.title");
   if (title.length > 256) {
     throw validationError("instructionContext.title must be at most 256 characters");
   }
-  const description = optionalText(raw.description, "instructionContext.description");
+  const description = optionalText2(raw.description, "instructionContext.description");
   if (description && description.length > 1024) {
     throw validationError("instructionContext.description must be at most 1024 characters");
   }
@@ -25848,26 +26227,26 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
 }
 function normalizeVisaMandate(mandate, index, isRecurring) {
   const field = `instructionContext.mandates[${index}]`;
-  const title = requiredText(mandate.title, `${field}.title`);
-  const description = requiredText(mandate.description, `${field}.description`);
+  const title = requiredText2(mandate.title, `${field}.title`);
+  const description = requiredText2(mandate.description, `${field}.description`);
   const amountLimit = normalizeAmountLimit(mandate.amountLimit, `${field}.amountLimit`);
-  const currencyCode = requiredText(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
+  const currencyCode = requiredText2(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
   if (!CURRENCY_FORMAT.test(currencyCode)) {
     throw validationError(`${field}.currencyCode must be a three-letter currency code`);
   }
-  const merchantCategoryCode2 = requiredText(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
+  const merchantCategoryCode2 = requiredText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
   if (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000") {
     throw validationError(`${field}.merchantCategoryCode must be a nonzero four-digit MCC`);
   }
-  const preferredMerchantName = optionalText(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
-  const merchantCategory = optionalText(mandate.merchantCategory, `${field}.merchantCategory`);
+  const preferredMerchantName = optionalText2(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
+  const merchantCategory = optionalText2(mandate.merchantCategory, `${field}.merchantCategory`);
   if (preferredMerchantName && merchantCategory) {
     throw validationError(`${field} cannot contain both preferredMerchantName and merchantCategory`);
   }
   if (!isRecurring && mandate.recurringFrequency !== void 0) {
     throw validationError(`${field}.recurringFrequency requires instructionContext.isRecurring=true`);
   }
-  const recurringFrequency = isRecurring ? requiredText(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
+  const recurringFrequency = isRecurring ? requiredText2(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
   const effectiveUntilTime = optionalUtcDateTime(mandate.effectiveUntilTime, `${field}.effectiveUntilTime`);
   const normalized = {
     ...structuredClone(mandate),
@@ -25899,20 +26278,20 @@ function comparableAmount(value) {
   return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
 }
 function optionalUtcDateTime(value, field) {
-  const text = optionalText(value, field);
+  const text = optionalText2(value, field);
   if (text && !UTC_DATETIME_FORMAT2.test(text)) {
     throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
   }
   return text;
 }
-function requiredText(value, field) {
-  const text = optionalText(value, field);
+function requiredText2(value, field) {
+  const text = optionalText2(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText(value, field) {
+function optionalText2(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26040,7 +26419,7 @@ function normalizeVisaCommerceContext(raw) {
   if (!isRecord20(raw)) {
     throw validationError("commerce context must be a JSON object");
   }
-  const mode = requiredText2(raw.mode, "mode").toLowerCase();
+  const mode = requiredText3(raw.mode, "mode").toLowerCase();
   const context = mode === "prepare" ? normalizePrepareContext(raw) : mode === "purchase" ? normalizePurchaseRunContext(raw, "purchase") : mode === "catalog_purchase" ? normalizePurchaseRunContext(raw, "catalog_purchase") : (() => {
     throw validationError('mode must be "prepare", "purchase", or "catalog_purchase"');
   })();
@@ -26086,11 +26465,11 @@ function normalizePrepareContext(raw) {
   if (raw.instructionContext !== void 0) {
     throw validationError("prepare mode does not accept instructionContext because it cannot create an Instruction");
   }
-  const target = requiredText2(raw.target, "target").toLowerCase();
+  const target = requiredText3(raw.target, "target").toLowerCase();
   if (target !== "login" && target !== "visa_card_ready") {
     throw validationError('prepare mode target must be "login" or "visa_card_ready"');
   }
-  const requestText = optionalText2(raw.requestText, "requestText");
+  const requestText = optionalText3(raw.requestText, "requestText");
   return {
     mode: "prepare",
     target,
@@ -26104,7 +26483,7 @@ function normalizePurchaseRunContext(raw, mode) {
   }
   assertOnlyFields(raw, PURCHASE_FIELDS, "purchase context");
   const environment = normalizeVisaCommerceEnvironment(raw.environment);
-  const requestText = requiredText2(raw.requestText, "requestText");
+  const requestText = requiredText3(raw.requestText, "requestText");
   const programCode = optionalProgramCode(raw.program);
   const selection = requireObject(raw.selection, "selection");
   const expected = requireObject(raw.expected, "expected");
@@ -26115,14 +26494,14 @@ function normalizePurchaseRunContext(raw, mode) {
   if (isVisaProgramUrl(merchantUrl)) {
     throw validationError("selection.merchantUrl must be the actual merchant URL, not a Visa/VSRP URL");
   }
-  const productId2 = requiredText2(selection.productId, "selection.productId");
-  const productQuery = optionalText2(selection.productQuery, "selection.productQuery");
+  const productId2 = requiredText3(selection.productId, "selection.productId");
+  const productQuery = optionalText3(selection.productQuery, "selection.productQuery");
   const quantity = requiredPositiveInteger(selection.quantity, "selection.quantity");
-  const merchantId = optionalText2(selection.merchantId, "selection.merchantId");
+  const merchantId = optionalText3(selection.merchantId, "selection.merchantId");
   const endpoint = optionalHttpUrl(selection.endpoint, "selection.endpoint");
-  const channelType = optionalText2(selection.channelType, "selection.channelType")?.toLowerCase();
-  const storeId = optionalText2(selection.storeId, "selection.storeId");
-  const catalogQuery = optionalText2(selection.catalogQuery, "selection.catalogQuery");
+  const channelType = optionalText3(selection.channelType, "selection.channelType")?.toLowerCase();
+  const storeId = optionalText3(selection.storeId, "selection.storeId");
+  const catalogQuery = optionalText3(selection.catalogQuery, "selection.catalogQuery");
   const catalogEnvironment = optionalCatalogEnvironment(selection.catalogEnvironment);
   const catalogLanguage = optionalCatalogLanguage(selection.catalogLanguage);
   const platformCatalogFields = [
@@ -26147,14 +26526,14 @@ function normalizePurchaseRunContext(raw, mode) {
       throw validationError("selection.catalogEnvironment does not match the commerce environment");
     }
   }
-  const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
-  const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
+  const merchantName = requiredText3(expected.merchantName, "expected.merchantName");
+  const itemTitle = requiredText3(expected.itemTitle, "expected.itemTitle");
   const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
-  const currency = requiredText2(expected.currency, "expected.currency").toUpperCase();
+  const currency = requiredText3(expected.currency, "expected.currency").toUpperCase();
   if (!CURRENCY_FORMAT2.test(currency)) {
     throw validationError("expected.currency must be a three-letter currency code");
   }
-  const availabilityText = mode === "catalog_purchase" ? requiredText2(expected.availability, "expected.availability") : optionalText2(expected.availability, "expected.availability");
+  const availabilityText = mode === "catalog_purchase" ? requiredText3(expected.availability, "expected.availability") : optionalText3(expected.availability, "expected.availability");
   const authorizedAvailability = availabilityText ? normalizeCatalogAvailability(availabilityText) : void 0;
   const fulfillmentType = mode === "catalog_purchase" ? normalizeFulfillmentType(raw.fulfillmentType) : optionalFulfillmentType(raw.fulfillmentType);
   if (typeof raw.digitalDeliveryExpected !== "boolean") {
@@ -26169,7 +26548,7 @@ function normalizePurchaseRunContext(raw, mode) {
   const instructionContext = normalizedInstruction.context;
   const merchantCategoryCode2 = normalizedInstruction.merchantCategoryCodes[0];
   const price = divideMajorAmount(totalPrice, quantity, currency);
-  const assertedCategory = optionalText2(raw.assertedCategory, "assertedCategory");
+  const assertedCategory = optionalText3(raw.assertedCategory, "assertedCategory");
   const shippingAddress = optionalObject2(raw.shippingAddress, "shippingAddress");
   if (fulfillmentType === "PHYSICAL_GOODS_REQUIRES_SHIPPING" && !shippingAddress) {
     throw validationError("shippingAddress is required when fulfillmentType is PHYSICAL_GOODS_REQUIRES_SHIPPING");
@@ -26253,10 +26632,10 @@ function optionalProgramCode(value) {
   }
   const program2 = requireObject(value, "program");
   assertOnlyFields(program2, /* @__PURE__ */ new Set(["code"]), "program");
-  return requiredText2(program2.code, "program.code");
+  return requiredText3(program2.code, "program.code");
 }
 function normalizeFulfillmentType(value) {
-  const fulfillmentType = requiredText2(value, "fulfillmentType").toUpperCase();
+  const fulfillmentType = requiredText3(value, "fulfillmentType").toUpperCase();
   if (fulfillmentType !== "NO_SHIPPING_REQUIRED" && fulfillmentType !== "PHYSICAL_GOODS_REQUIRES_SHIPPING") {
     throw validationError("fulfillmentType must be NO_SHIPPING_REQUIRED or PHYSICAL_GOODS_REQUIRES_SHIPPING");
   }
@@ -26284,7 +26663,7 @@ function normalizeCatalogAvailability(value) {
   return normalized;
 }
 function optionalCatalogEnvironment(value) {
-  const environment = optionalText2(value, "selection.catalogEnvironment")?.toLowerCase();
+  const environment = optionalText3(value, "selection.catalogEnvironment")?.toLowerCase();
   if (!environment) {
     return void 0;
   }
@@ -26294,7 +26673,7 @@ function optionalCatalogEnvironment(value) {
   return environment === "uat" ? "sandbox" : environment;
 }
 function optionalCatalogLanguage(value) {
-  const language = optionalText2(value, "selection.catalogLanguage");
+  const language = optionalText3(value, "selection.catalogLanguage");
   if (!language) {
     return void 0;
   }
@@ -26383,7 +26762,7 @@ function normalizeJsonValue(value) {
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalizeJsonValue(value[key])]));
 }
 function normalizeVisaCommerceEnvironment(value) {
-  const environment = requiredText2(value, "environment").toLowerCase();
+  const environment = requiredText3(value, "environment").toLowerCase();
   if (environment !== "uat" && environment !== "sandbox" && environment !== "test" && environment !== "production") {
     throw validationError("environment must be uat, sandbox, test, or production");
   }
@@ -26449,14 +26828,14 @@ function requiredPositiveInteger(value, field) {
   }
   return value;
 }
-function requiredText2(value, field) {
-  const text = optionalText2(value, field);
+function requiredText3(value, field) {
+  const text = optionalText3(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText2(value, field) {
+function optionalText3(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26473,7 +26852,7 @@ function requiredHttpUrl(value, field) {
   return url;
 }
 function optionalHttpUrl(value, field) {
-  const text = optionalText2(value, field);
+  const text = optionalText3(value, field);
   if (!text) {
     return void 0;
   }
@@ -28993,7 +29372,7 @@ ${url}
         ...instructionContext.isRecurring ? { isRecurring: true } : {},
         ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
       });
-      const instructionId2 = optionalText3(detail.instructionId ?? detail.purchaseInstructionId);
+      const instructionId2 = optionalText4(detail.instructionId ?? detail.purchaseInstructionId);
       if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -29045,10 +29424,10 @@ ${event.url}
       });
       applyStoredConfig(context, storedConfig);
       const detail = isRecord25(result) ? result : { status: "unknown" };
-      const pendingInstructionId = optionalText3(detail.pendingInstructionId);
-      const oauthMode = optionalText3(detail.oauthMode);
+      const pendingInstructionId = optionalText4(detail.pendingInstructionId);
+      const oauthMode = optionalText4(detail.oauthMode);
       const customerCreated = optionalBoolean2(detail.customerCreated);
-      const activationDriver = optionalText3(detail.activationDriver);
+      const activationDriver = optionalText4(detail.activationDriver);
       return {
         ready: detail.status === "ready",
         ...pendingInstructionId ? { pendingInstructionId } : {},
@@ -29081,30 +29460,24 @@ ${event.url}
 async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
   const expectedBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
   const environment = commerceContext.environment === "uat" ? "sandbox" : commerceContext.environment;
+  const registeredProvider = resolveVisaBenefitCatalogProvider({
+    mode: commerceContext.mode,
+    environment,
+    ...purchase.merchantId ? { merchantId: purchase.merchantId } : {},
+    merchantUrl: purchase.merchantUrl,
+    ...purchase.endpoint ? { endpoint: purchase.endpoint } : {},
+    baseUrl: expectedBaseUrl
+  });
+  if (registeredProvider) {
+    return resolveInternalCatalogPurchase(context, commerceContext, purchase, registeredProvider);
+  }
   try {
     const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, {
       baseUrl: expectedBaseUrl,
       environment,
       timeoutMs: context.globalOptions.timeoutMs
     });
-    assertFrozenRoute(purchase, internal.merchantId, internal.endpoint);
-    const catalog = await getCommandUcpCatalogProduct(context, internal.merchantId, purchase.productId);
-    const product = verifyInternalProduct(catalog, purchase, internal.merchantId, commerceContext.mode === "catalog_purchase");
-    return {
-      purchaseContext: {
-        ...purchase,
-        merchantId: internal.merchantId,
-        endpoint: internal.endpoint
-      },
-      route: {
-        type: "internal",
-        provider: internal.provider,
-        domainName: internal.domainName,
-        merchantId: internal.merchantId,
-        endpoint: internal.endpoint
-      },
-      product
-    };
+    return resolveInternalCatalogPurchase(context, commerceContext, purchase, internal);
   } catch (error) {
     if (!(error instanceof CliError) || error.message !== "NOT_IN_INTERNAL_UCP_LIST") {
       throw error;
@@ -29145,6 +29518,26 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
       currency: parsed.currency,
       availability: variant.inventoryStatus
     }
+  };
+}
+async function resolveInternalCatalogPurchase(context, commerceContext, purchase, internal) {
+  assertFrozenRoute(purchase, internal.merchantId, internal.endpoint);
+  const catalog = await getCommandUcpCatalogProduct(context, internal.merchantId, purchase.productId);
+  const product = verifyInternalProduct(catalog, purchase, internal.merchantId, commerceContext.mode === "catalog_purchase");
+  return {
+    purchaseContext: {
+      ...purchase,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    },
+    route: {
+      type: "internal",
+      provider: internal.provider,
+      domainName: internal.domainName,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    },
+    product
   };
 }
 async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase) {
@@ -29196,11 +29589,11 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
   };
 }
 function resolveUniquePlatformCatalogCandidate(payload, purchase) {
-  const root = requireRecord(payload, "invalid broad Catalog search response");
+  const root = requireRecord2(payload, "invalid broad Catalog search response");
   if (!Array.isArray(root.groups)) {
     throw validationError("broad Catalog search response is missing groups");
   }
-  const groups = root.groups.map((value) => requireRecord(value, "invalid broad Catalog group")).filter((group2) => normalizedText2(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText2(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
+  const groups = root.groups.map((value) => requireRecord2(value, "invalid broad Catalog group")).filter((group2) => normalizedText2(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText2(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
   if (groups.length === 0) {
     throw validationError("frozen Eats365 store is no longer present in broad Catalog results");
   }
@@ -29215,7 +29608,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (!Array.isArray(group.products)) {
     throw validationError("broad Catalog group is missing products");
   }
-  const products = group.products.map((value) => requireRecord(value, "invalid broad Catalog product")).filter((product2) => requiredProductText(product2.id ?? product2.productId ?? product2.product_id, "broad Catalog product is missing id") === purchase.productId);
+  const products = group.products.map((value) => requireRecord2(value, "invalid broad Catalog product")).filter((product2) => requiredProductText(product2.id ?? product2.productId ?? product2.product_id, "broad Catalog product is missing id") === purchase.productId);
   if (products.length === 0) {
     throw validationError("selected product is no longer present in the frozen Eats365 store");
   }
@@ -29234,7 +29627,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (!Array.isArray(product.variants)) {
     throw validationError("broad Catalog product is missing variants");
   }
-  const variants = product.variants.map((value) => requireRecord(value, "invalid broad Catalog variant")).filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "broad Catalog variant is missing id") === purchase.productId);
+  const variants = product.variants.map((value) => requireRecord2(value, "invalid broad Catalog variant")).filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "broad Catalog variant is missing id") === purchase.productId);
   if (variants.length !== 1) {
     throw validationError(variants.length === 0 ? "broad Catalog product is missing the selected variant" : "broad Catalog returned multiple matching Eats365 variants");
   }
@@ -29244,13 +29637,13 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
     throw validationError("current broad Catalog variant title differs from the frozen purchase context");
   }
   if (variant.seller !== void 0) {
-    const seller = requireRecord(variant.seller, "broad Catalog variant seller must be an object");
+    const seller = requireRecord2(variant.seller, "broad Catalog variant seller must be an object");
     const sellerName2 = requiredProductText(seller.name, "broad Catalog variant seller is missing name");
     if (normalizedText2(sellerName2) !== normalizedText2(purchase.merchantName)) {
       throw validationError("current broad Catalog seller differs from the frozen purchase context");
     }
   }
-  const price = requireRecord(variant.price, "broad Catalog variant is missing structured price");
+  const price = requireRecord2(variant.price, "broad Catalog variant is missing structured price");
   const currency = requiredProductText(price.currency ?? price.currencyCode ?? price.currency_code, "broad Catalog variant price is missing currency").toUpperCase();
   const unitPrice = minorUnitsMajorAmount(parseMinorUnits2(price.amount, "broad Catalog variant price amount must be non-negative minor units"), currency);
   if (currency !== purchase.currency) {
@@ -29259,7 +29652,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (majorAmountMinorUnits(unitPrice, currency) !== majorAmountMinorUnits(purchase.price, purchase.currency)) {
     throw validationError("current broad Catalog price differs from the frozen purchase context");
   }
-  const availability = requireRecord(variant.availability, "broad Catalog variant is missing availability");
+  const availability = requireRecord2(variant.availability, "broad Catalog variant is missing availability");
   if (availability.available !== true) {
     throw validationError("current broad Catalog product is not explicitly available");
   }
@@ -29272,7 +29665,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   }
   const metadata = product.metadata;
   if (metadata !== void 0) {
-    const facts = requireRecord(metadata, "broad Catalog product metadata must be an object");
+    const facts = requireRecord2(metadata, "broad Catalog product metadata must be an object");
     if (requiredProductText(facts.channel_type ?? facts.channelType, "broad Catalog product metadata is missing channel_type").toLowerCase() !== purchase.channelType || requiredProductText(facts.store_id ?? facts.storeId, "broad Catalog product metadata is missing store_id") !== purchase.storeId) {
       throw validationError("broad Catalog product metadata differs from the frozen platform identity");
     }
@@ -29301,8 +29694,8 @@ function assertFrozenRoute(purchase, merchantId, endpoint) {
   }
 }
 function verifyInternalProduct(payload, purchase, internalMerchantId, requireMerchantNameMatch) {
-  const root = requireRecord(payload, "invalid UCP Catalog product response");
-  const product = requireRecord(root.product ?? root.data ?? root, "UCP Catalog response is missing product");
+  const root = requireRecord2(payload, "invalid UCP Catalog product response");
+  const product = requireRecord2(root.product ?? root.data ?? root, "UCP Catalog response is missing product");
   const productId2 = requiredProductText(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
   const title = requiredProductText(product.title ?? product.name, "UCP Catalog product is missing title");
   const variants = internalProductVariants(product);
@@ -29334,10 +29727,10 @@ function verifyInternalProduct(payload, purchase, internalMerchantId, requireMer
 }
 function assertInternalCatalogMerchant(product, variant, internalMerchantId, frozenMerchantName) {
   const merchantIds = [
-    optionalText3(variant?.merchantId),
-    optionalText3(variant?.merchant_id),
-    optionalText3(product.merchantId),
-    optionalText3(product.merchant_id)
+    optionalText4(variant?.merchantId),
+    optionalText4(variant?.merchant_id),
+    optionalText4(product.merchantId),
+    optionalText4(product.merchant_id)
   ].filter((value) => value !== void 0);
   if (merchantIds.some((merchantId) => merchantId !== internalMerchantId)) {
     throw validationError("current Catalog merchant ID differs from the resolved internal merchant");
@@ -29356,7 +29749,7 @@ function internalCatalogMerchantName(value) {
   }
   const merchant = isRecord25(value.merchant) ? value.merchant : void 0;
   const seller = isRecord25(value.seller) ? value.seller : void 0;
-  return optionalText3(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
+  return optionalText4(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
 }
 function internalProductVariants(product) {
   if (product.variants === void 0 || product.variants === null) {
@@ -29365,7 +29758,7 @@ function internalProductVariants(product) {
   if (!Array.isArray(product.variants)) {
     throw validationError("UCP Catalog product variants must be an array");
   }
-  return product.variants.map((variant) => requireRecord(variant, "UCP Catalog product contains an invalid variant"));
+  return product.variants.map((variant) => requireRecord2(variant, "UCP Catalog product contains an invalid variant"));
 }
 function resolveInternalProductPrice(product, variant, frozenIdMatchesProduct) {
   const fallbackCurrency = typeof product.currency === "string" ? product.currency : void 0;
@@ -29399,7 +29792,7 @@ function optionalInternalCatalogPrice(value, source, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const price = requireRecord(value, `${source} must be an object`);
+  const price = requireRecord2(value, `${source} must be an object`);
   const amountMinor = parseMinorUnits2(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
   const currency = requiredProductText(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
   return { amountMinor, currency };
@@ -29408,7 +29801,7 @@ function optionalInternalCatalogPriceRange(value, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const range = requireRecord(value, "UCP Catalog product price_range must be an object");
+  const range = requireRecord2(value, "UCP Catalog product price_range must be an object");
   const minimum = optionalInternalCatalogPrice(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
   const maximum = optionalInternalCatalogPrice(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
   if (!minimum || !maximum) {
@@ -29507,7 +29900,7 @@ function requiredProductText(value, message) {
   }
   return value.normalize("NFKC").trim();
 }
-function requireRecord(value, message) {
+function requireRecord2(value, message) {
   if (!isRecord25(value)) {
     throw validationError(message);
   }
@@ -29598,7 +29991,7 @@ function normalizeCards(value) {
   }
   return value.map((card) => ({ ...card }));
 }
-function optionalText3(value) {
+function optionalText4(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function optionalBoolean2(value) {
@@ -29774,15 +30167,15 @@ function assertExactInstruction(instruction, expectedInstructionId) {
   if (!instruction) {
     throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
   }
-  const observedInstructionId = optionalText4(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  const observedInstructionId = optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
   if (observedInstructionId !== expectedInstructionId) {
     throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
   }
 }
 function instructionStatus(instruction) {
-  return optionalText4(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
+  return optionalText5(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
 }
-function optionalText4(value) {
+function optionalText5(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 
@@ -30735,7 +31128,7 @@ function activeInstructionCandidate(instruction, paymentInstrumentId, context, n
   const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
   const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
     const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText5(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+    if (!optionalText6(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
       return [];
     }
     return [{
@@ -30795,19 +31188,19 @@ function mandateArray(instruction) {
   return [];
 }
 function instructionId(instruction) {
-  return optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+  return optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
 }
 function instructionPaymentInstrumentId(instruction) {
-  return optionalText5(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+  return optionalText6(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
 }
 function instructionStatus2(instruction) {
   return normalizedText3(instruction.status ?? instruction.state);
 }
 function eventPaymentInstrumentId(event) {
-  return optionalText5(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
+  return optionalText6(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
 }
 function cardIsVisa(card) {
-  const brand = optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? optionalText5(card.brand) ?? optionalText5(card.network) ?? "";
+  const brand = optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? optionalText6(card.brand) ?? optionalText6(card.network) ?? "";
   return brand.toUpperCase() === "VISA";
 }
 function cardVicReady(card) {
@@ -30822,8 +31215,8 @@ function cardDefault(card) {
 function safeCard(card) {
   return {
     paymentInstrumentId: card.paymentInstrumentId,
-    cardScheme: optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? null,
-    cardLastFour: optionalText5(card.cardLastFour) ?? optionalText5(card.card_last_four) ?? null,
+    cardScheme: optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? null,
+    cardLastFour: optionalText6(card.cardLastFour) ?? optionalText6(card.card_last_four) ?? null,
     isDefault: cardDefault(card),
     visaRegistrationSucceeded: cardVicReady(card)
   };
@@ -30879,8 +31272,8 @@ function minorUnitsAmountText(value, currency) {
 }
 function instructionCreatedAtMs(instruction) {
   const values = [
-    optionalText5(instruction.createdAt),
-    optionalText5(instruction.createTime)
+    optionalText6(instruction.createdAt),
+    optionalText6(instruction.createTime)
   ].filter((value) => value !== void 0);
   if (values.length === 0) {
     return void 0;
@@ -30892,16 +31285,16 @@ function instructionCreatedAtMs(instruction) {
   return timestamps[0];
 }
 function optionalNormalized(value) {
-  return optionalText5(value)?.normalize("NFKC").toUpperCase();
+  return optionalText6(value)?.normalize("NFKC").toUpperCase();
 }
 function normalizedText3(value) {
   return optionalNormalized(value) ?? "";
 }
-function optionalText5(value) {
+function optionalText6(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function isFutureTimestamp(value, nowMs) {
-  const text = optionalText5(value);
+  const text = optionalText6(value);
   if (!text) {
     return false;
   }
@@ -30909,7 +31302,7 @@ function isFutureTimestamp(value, nowMs) {
   return parsed !== void 0 && parsed > nowMs;
 }
 function mandateIsUnexpired(mandate, instruction, nowMs) {
-  const mandateExpiry = optionalText5(mandate.effectiveUntilTime);
+  const mandateExpiry = optionalText6(mandate.effectiveUntilTime);
   return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
 }
 function parseTimestamp(value) {
@@ -31105,7 +31498,11 @@ Context:
   are rejected rather than silently ignored in both modes. Platform Catalog provenance is accepted
   only by catalog_purchase and freezes selection.channelType/storeId/catalogQuery/
   catalogEnvironment/catalogLanguage as one complete set. The Catalog environment must match the
-  commerce environment. An Eats365 candidate may use its frozen item ID, title, structured purchase
+  commerce environment. A registered Visa Benefit Catalog provider must freeze the exact registered
+  selection.merchantId and merchantUrl; selection.endpoint, when supplied, must exactly match the
+  endpoint derived from the locked commerce environment. This allows direct anonymous product
+  revalidation without a merchant-list request and does not accept caller-defined internal routes.
+  An Eats365 candidate may use its frozen item ID, title, structured purchase
   price/currency, availability, store ID, channel, query, environment, language, and product URL
   after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL host, store path, and product_id
   must match those frozen facts. Before Instruction or Checkout work, commerce-run repeats that
@@ -31140,11 +31537,13 @@ Behavior:
   authorizes only that new ID. Restricted categories are refused deterministically before any
   Instruction selection or creation.
 
-  Before card or Instruction work, both purchase modes resolve the merchant internally first,
-  exact-GET the current UCP Catalog product, and reject ID, title, price, currency, availability,
-  merchant, or endpoint drift. Only an explicit internal-list miss may use external product
-  parsing. Eats365 is the platform-store exception described above. Checkout metadata includes
-  programCode only when the frozen context contains one.
+  Before card or Instruction work, both purchase modes use internal-first merchant routing by
+  default, exact-GET the current UCP Catalog product, and reject ID, title, price, currency,
+  availability, merchant, or endpoint drift. Only catalog_purchase may use the exact registered
+  Visa Benefit Catalog provider route described above without loading the merchant list. Program
+  purchase and unregistered merchants keep the default internal-first lookup. Only an explicit
+  internal-list miss may use external product parsing. Eats365 is the platform-store exception
+  described above. Checkout metadata includes programCode only when the frozen context contains one.
 
   Checkout uses the shared ucp-checkout run implementation: create and complete are each attempted
   once, payment is never retried, and non-terminal payment states return a read-only resumeCommand.
@@ -31254,6 +31653,7 @@ Filters:
 
 Options:
   --all                        Fetch all matching pages; cannot be combined with --limit/--page
+  --include-provider-products  Also search registered directly-orderable benefit Catalogs
   --personalized               Require VSRA Device Flow before recommending
   --anonymous                  Ignore any saved VSRA token
   --market <cn|hk|tw>          Issuing market
@@ -31268,14 +31668,29 @@ Behavior:
   as "Visa\u6743\u76CA\u6709\u54EA\u4E9B" fetch pageSize 50 repeatedly, de-duplicate Programs, and stop at total, a
   short page, a repeated page, or the safety limit. Explicit --limit/--page keeps ordinary paging.
 
+  Without --include-provider-products, output is unchanged. With the flag, the command concurrently
+  searches the existing Visa recommendation service and every provider identity configured for the
+  locked Clink environment in the versioned Visa Benefit Catalog registry. Each provider uses the
+  same original query and maps --lang to Catalog context.language. Provider cursor pages are fetched
+  until completion or a safety stop without loading the merchant list.
+
+  Existing Visa Offers remain in response.data.items. providerProducts is a separate dynamic
+  collection of registry identity plus the provider-owned product and variant structures, exact
+  structured price/currency, availability, and directlyOrderable=true. The CLI does not assign
+  display numbers, impose a presentation count, rank the two collections together, or claim a Visa
+  Offer-to-product match. resultSections identifies the two independent collections. providerProductSearch
+  returns the registry version, environment, identities, page counts, and coverage. A provider or
+  registry failure preserves the Visa result, sets aggregateCoverage and provider coverage to
+  partial, and reports the failed scope; callers must not describe that joined result as complete.
+
   Output recommendationMode is matching_offers when returned Programs still satisfy the requested
-  relevance filters. When many matching offers are returned, callers should rank all returned
-  matches against the request and display only the best ten. If the server relaxes natural-language
-  filters after finding no relevant offers, recommendationMode is fallback_all_offers and
-  relaxedAxes names the relaxed filters. Those fallback Programs are not relevant matches and must
-  not be ranked or displayed as if they matched. Broad user requests use all_offers_requested;
-  an empty non-broad result uses no_matching_offers. returnedOfferCount is the number of rows
-  actually present in response.data.items.
+  relevance filters. Callers may rank the complete dynamic result against the request and choose
+  presentation details without relying on CLI-assigned numbering or a fixed display count. If the
+  server relaxes natural-language filters after finding no relevant offers, recommendationMode is
+  fallback_all_offers and relaxedAxes names the relaxed filters. Those fallback Programs are not
+  relevant matches and must not be ranked or displayed as if they matched. Broad user requests use
+  all_offers_requested; an empty non-broad result uses no_matching_offers. returnedOfferCount is the
+  number of rows actually present in response.data.items.
 
   MCC means Merchant Category Code, the four-digit merchant classification code used by card
   networks. A Visa Program category is an offer taxonomy value, not an MCC.
@@ -31363,7 +31778,7 @@ function addVisaRootHelp(rootHelp) {
 // dist/visa/product-search.js
 var INTERNAL_LIST_MISS = "NOT_IN_INTERNAL_UCP_LIST";
 async function runVisaProductSearch(rawInput, dependencies) {
-  const input = normalizeInput(rawInput);
+  const input = normalizeInput2(rawInput);
   let internal;
   try {
     internal = await dependencies.resolveInternal(input.merchantUrl);
@@ -31419,7 +31834,7 @@ async function runVisaProductSearch(rawInput, dependencies) {
   }
   return resolveInternalProductDetail({ product: selected.product }, input.selectedProductId ?? selected.candidate.productId, input, internal);
 }
-function normalizeInput(input) {
+function normalizeInput2(input) {
   let merchantUrl;
   try {
     merchantUrl = new URL(input.merchantUrl);
@@ -31497,13 +31912,13 @@ async function resolveExternalProduct(input, dependencies) {
     currency: parsed.currency,
     amountMinor: BigInt(item.unitPriceMinor),
     quantity: input.quantity,
-    merchantName: requiredText3(parsed.merchantName, "parsed merchant is missing name")
+    merchantName: requiredText4(parsed.merchantName, "parsed merchant is missing name")
   });
 }
 function resolveInternalProductDetail(payload, selectedProductId, input, internal) {
   const product = catalogProduct(payload);
-  const parentId = requiredText3(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
-  const parentTitle = requiredText3(product.title ?? product.name, "UCP Catalog product is missing title");
+  const parentId = requiredText4(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
+  const parentTitle = requiredText4(product.title ?? product.name, "UCP Catalog product is missing title");
   const variants = productVariants(product);
   let selected;
   if (variants.length === 0) {
@@ -31640,7 +32055,7 @@ function selectCatalogSearchProduct(products, input) {
   return selected ? products.find(({ candidate }) => candidate.productId === selected.productId) : void 0;
 }
 function catalogProducts(payload) {
-  const root = requireRecord2(payload, "invalid UCP Catalog search response");
+  const root = requireRecord3(payload, "invalid UCP Catalog search response");
   const data = isRecord28(root.data) ? root.data : root;
   const response = isRecord28(data.response) ? data.response : data;
   const responseData = isRecord28(response.data) ? response.data : response;
@@ -31655,12 +32070,12 @@ function catalogProducts(payload) {
   if (!products) {
     return [];
   }
-  return products.map((product) => requireRecord2(product, "UCP Catalog search contains an invalid product"));
+  return products.map((product) => requireRecord3(product, "UCP Catalog search contains an invalid product"));
 }
 function catalogProduct(payload) {
-  const root = requireRecord2(payload, "invalid UCP Catalog product response");
+  const root = requireRecord3(payload, "invalid UCP Catalog product response");
   const data = isRecord28(root.data) ? root.data : root;
-  return requireRecord2(data.product ?? data, "UCP Catalog response is missing product");
+  return requireRecord3(data.product ?? data, "UCP Catalog response is missing product");
 }
 function productVariants(product) {
   const variants = [
@@ -31671,12 +32086,12 @@ function productVariants(product) {
   if (!variants) {
     return [];
   }
-  return variants.map((variant) => requireRecord2(variant, "UCP Catalog product contains an invalid variant"));
+  return variants.map((variant) => requireRecord3(variant, "UCP Catalog product contains an invalid variant"));
 }
 function normalizeCandidate(product) {
   return {
-    productId: requiredText3(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
-    title: requiredText3(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
+    productId: requiredText4(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
+    title: requiredText4(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
     available: productAvailable(product)
   };
 }
@@ -31774,16 +32189,16 @@ function optionalMoney(value, source, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const price = requireRecord2(value, `${source} must be an object`);
+  const price = requireRecord3(value, `${source} must be an object`);
   const amountMinor = minorUnits(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
-  const currency = requiredText3(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
+  const currency = requiredText4(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
   return { amountMinor, currency };
 }
 function optionalMoneyRange(value, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const range = requireRecord2(value, "UCP Catalog product price_range must be an object");
+  const range = requireRecord3(value, "UCP Catalog product price_range must be an object");
   const minimum = optionalMoney(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
   const maximum = optionalMoney(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
   if (!minimum || !maximum) {
@@ -31815,7 +32230,7 @@ function safeMinorUnits(value) {
   }
   return Number(value);
 }
-function requiredText3(value, message) {
+function requiredText4(value, message) {
   const text = normalizedText4(value);
   if (!text) {
     throw validationError(message);
@@ -31828,7 +32243,7 @@ function normalizedText4(value) {
 function comparableText(value) {
   return value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
 }
-function requireRecord2(value, message) {
+function requireRecord3(value, message) {
   if (!isRecord28(value)) {
     throw validationError(message);
   }
@@ -31845,6 +32260,10 @@ var VISA_OPTION_DEFINITIONS = [
   { name: "lang", flags: "--lang <locale>" },
   { name: "personalized", flags: "--personalized" },
   { name: "anonymous", flags: "--anonymous" },
+  {
+    name: "include-provider-products",
+    flags: "--include-provider-products"
+  },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
   { name: "context-file", flags: "--context-file <path>" },
@@ -31867,6 +32286,7 @@ var VISA_FLAG_NAMES = [
   "lang",
   "personalized",
   "anonymous",
+  "include-provider-products",
   "start",
   "resume",
   "region",
@@ -32224,7 +32644,12 @@ async function visaRecommend(context) {
   if (all && (limit !== void 0 || page !== void 0)) {
     throw validationError("--all cannot be combined with --limit or --page");
   }
-  const { result, storedConfig } = await recommendVisaOffers({
+  const includeProviderProducts = getBooleanFlag(context.args.flags, "include-provider-products");
+  if (includeProviderProducts && !query.normalize("NFKC").trim()) {
+    throw validationError("--include-provider-products requires a non-blank recommendation query");
+  }
+  const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
+  const recommendation = recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
     locale,
@@ -32236,8 +32661,12 @@ async function visaRecommend(context) {
     dryRun: context.globalOptions.dryRun,
     onAuthorization: createVisaAuthorizationReporter(context)
   });
+  const [{ result, storedConfig }, providerResult] = await Promise.all([
+    recommendation,
+    providerDiscovery ?? Promise.resolve(void 0)
+  ]);
   applyVisaStoredConfig(context, storedConfig);
-  printSuccess(result, context.globalOptions.format);
+  printSuccess(providerResult ? joinVisaRecommendationWithProviderProducts(result, providerResult) : result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function visaDetail(context) {
@@ -32268,6 +32697,7 @@ function validateVisaFlagScope(command, subcommand, flags) {
     const commerceRun = subcommand === "commerce-run";
     const commerceLogin = subcommand === "commerce-login";
     const productSearch = subcommand === "product-search";
+    const recommend = subcommand === "recommend";
     const commerceContextCommand = commerceRun || commerceLogin;
     for (const name of ["context-file", "confirm-purchase"]) {
       if (!commerceContextCommand && flags[name] !== void 0) {
@@ -32285,6 +32715,9 @@ function validateVisaFlagScope(command, subcommand, flags) {
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
     }
+    if (!recommend && flags["include-provider-products"] !== void 0) {
+      throw validationError("--include-provider-products is only supported by visa recommend");
+    }
     return;
   }
   for (const name of VISA_FLAG_NAMES) {
@@ -32292,6 +32725,62 @@ function validateVisaFlagScope(command, subcommand, flags) {
       throw validationError(`--${name} is only supported by visa commands`);
     }
   }
+}
+async function discoverProviderProducts(context, query, locale) {
+  const environment = visaBenefitCatalogEnvironment(context);
+  const baseUrl = API_BASE_URLS[environment];
+  const catalogContext = {
+    ...context,
+    runtimeConfig: {
+      baseUrl,
+      defaultOpenLinks: false
+    },
+    authorizationIdentity: runtimeAuthorizationIdentity({
+      baseUrl,
+      defaultOpenLinks: false
+    })
+  };
+  return discoverVisaBenefitCatalogProducts({
+    environment,
+    baseUrl,
+    query,
+    language: catalogLanguageForVisaLocale(locale),
+    dryRun: context.globalOptions.dryRun
+  }, {
+    searchPage: ({ merchantId, query: providerQuery, language, limit, cursor, dryRun }) => searchCommandUcpCatalogPage(catalogContext, {
+      merchantId,
+      query: providerQuery,
+      language,
+      limit,
+      ...cursor ? { cursor } : {},
+      dryRun
+    })
+  });
+}
+function visaBenefitCatalogEnvironment(context) {
+  const distributionEnvironment = resolveSelectedEnvironment({});
+  if (distributionEnvironment) {
+    return distributionEnvironment;
+  }
+  const runtimeEnvironment = clinkEnvironmentForApiBaseUrl(context.runtimeConfig.baseUrl);
+  if (!runtimeEnvironment) {
+    throw validationError("provider product aggregation requires an official Clink API environment");
+  }
+  return runtimeEnvironment;
+}
+function joinVisaRecommendationWithProviderProducts(visaRecommendation, providerResult) {
+  const { providerProducts, ...providerProductSearch } = providerResult;
+  return {
+    ...visaRecommendation,
+    aggregateCoverage: providerResult.coverage,
+    resultSections: {
+      visaOffers: "response.data.items",
+      providerProducts: "providerProducts",
+      relationship: "independent_dynamic_sets"
+    },
+    providerProducts,
+    providerProductSearch
+  };
 }
 function optionalNonBlankFlag(flags, name) {
   const value = getStringFlag(flags, name);
