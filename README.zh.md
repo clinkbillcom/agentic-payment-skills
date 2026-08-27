@@ -60,7 +60,7 @@ events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-close
 Capability Contract 提供。
 
 Skill `0.1.34` 已 vendor 上游提交
-`a51266f243d05af5b061480d4921884764d68631` 的 Visa CLI `0.2.37`。它支持
+`b19377c1d2ce9f1654bb012cd19bd99adcc87ce3` 的 Visa CLI `0.2.37`。它支持
 Visa Offer 与 provider 商品 joined 查询、可选的旧版 `program.code`、
 完整 Eats365 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。vendor

@@ -66,7 +66,7 @@ Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
 Skill `0.1.34` vendors Visa CLI `0.2.37` from upstream commit
-`a51266f243d05af5b061480d4921884764d68631`. It supports joined Visa Offer and
+`b19377c1d2ce9f1654bb012cd19bd99adcc87ce3`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
