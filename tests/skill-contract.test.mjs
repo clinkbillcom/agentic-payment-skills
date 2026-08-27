@@ -30,18 +30,18 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.29');
+  assert.equal(packageJson.version, '0.1.30');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.29/u);
-  assert.match(skill, /version: "0\.1\.29"/u);
+  assert.match(skill, /Visa Skill 0\.1\.30/u);
+  assert.match(skill, /version: "0\.1\.30"/u);
   assert.match(
     readme,
-    /Skill `0\.1\.29` vendors Visa CLI `0\.2\.34`[\s\S]*42af4fadc12413623a4a64fee108a26d9342174a/iu,
+    /Skill `0\.1\.30` vendors Visa CLI `0\.2\.34`[\s\S]*42af4fadc12413623a4a64fee108a26d9342174a/iu,
   );
-  assert.match(readmeZh, /Skill `0\.1\.29`/u);
+  assert.match(readmeZh, /Skill `0\.1\.30`/u);
   assert.match(readmeZh, /Visa CLI `0\.2\.34`/u);
   assert.match(readmeZh, /42af4fadc12413623a4a64fee108a26d9342174a/u);
   assert.doesNotMatch(`${readme}\n${readmeZh}`, /0\.2\.32|0\.2\.33/u);
