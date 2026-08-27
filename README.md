@@ -38,9 +38,10 @@ The lightweight shopping routes cover:
   followed by `commerce-run` with `mode=catalog_purchase`
 
 The CLI is the sole authority for the Visa Benefit Catalog provider registry
-and provider identity. Cases 1-3 make one joined CLI call; the CLI traverses
-and paginates providers internally. The Skill never copies provider entries or
-assembles those results with a second Catalog or merchant-list request.
+and provider identity. Visa-related Benefit discovery makes one joined CLI
+call; the CLI traverses and paginates providers internally. The Skill never
+copies provider entries or assembles those results with a second Catalog or
+merchant-list request.
 
 The Skill reads the joined Visa Offer and directly orderable provider-product
 collections as authoritative candidate groups. The Agent independently filters
@@ -57,8 +58,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.31` vendors Visa CLI `0.2.34` from upstream commit
-`42af4fadc12413623a4a64fee108a26d9342174a`. It supports joined Visa Offer and
+Skill `0.1.33` vendors Visa CLI `0.2.36` from upstream commit
+`9cc700b840ba383a04fd295c1b0c680bee674636`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -80,7 +81,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.31`
+Skill version: `0.1.33`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
