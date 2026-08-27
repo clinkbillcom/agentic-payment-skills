@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.39";
+var CLI_VERSION = "0.2.40";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -26068,7 +26068,14 @@ var PURCHASE_FIELDS = /* @__PURE__ */ new Set([
   "fulfillmentType",
   "assertedCategory",
   "shippingAddress",
+  "buyer",
   "metadata"
+]);
+var BUYER_FIELDS = /* @__PURE__ */ new Set([
+  "first_name",
+  "last_name",
+  "email",
+  "phone_number"
 ]);
 var PURCHASE_SELECTION_FIELDS = /* @__PURE__ */ new Set([
   "merchantUrl",
@@ -26137,6 +26144,7 @@ var RESERVED_PURCHASE_METADATA_FIELDS = /* @__PURE__ */ new Set([
   "originalrequest",
   "assertedcategory",
   "shippingaddress",
+  "buyer",
   "paymentinstrumentid",
   "instructionid",
   "purchaseinstructionid",
@@ -26254,6 +26262,7 @@ function normalizePurchaseRunContext(raw, mode) {
       throw validationError("selection.catalogEnvironment does not match the commerce environment");
     }
   }
+  const buyer = normalizeCommerceBuyer(raw.buyer, mode === "catalog_purchase" && channelType === "eats365");
   const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
   const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
   const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
@@ -26331,6 +26340,7 @@ function normalizePurchaseRunContext(raw, mode) {
     originalRequest: requestText,
     ...assertedCategory ? { assertedCategory } : {},
     ...shippingAddress ? { shippingAddress } : {},
+    ...buyer ? { buyer } : {},
     ...metadata ? { metadata } : {}
   };
   const normalized = {
@@ -26345,6 +26355,7 @@ function normalizePurchaseRunContext(raw, mode) {
       ...authorizedAvailability ? { availability: authorizedAvailability } : {}
     },
     instructionContext,
+    ...buyer ? { buyer } : {},
     digitalDeliveryExpected,
     purchaseContext
   };
@@ -26353,6 +26364,33 @@ function normalizePurchaseRunContext(raw, mode) {
     ...normalized,
     ...programCode ? { program: { code: programCode } } : {}
   };
+}
+function normalizeCommerceBuyer(value, required) {
+  if (value === void 0) {
+    if (required) {
+      throw validationError("Eats365 catalog purchase requires buyer first_name, last_name, and phone_number");
+    }
+    return void 0;
+  }
+  const buyer = requireObject(value, "buyer");
+  assertOnlyFields(buyer, BUYER_FIELDS, "buyer");
+  const firstName = optionalText2(buyer.first_name, "buyer.first_name");
+  const lastName = optionalText2(buyer.last_name, "buyer.last_name");
+  const email = optionalText2(buyer.email, "buyer.email");
+  const phoneNumber = optionalText2(buyer.phone_number, "buyer.phone_number");
+  if (required && (!firstName || !lastName || !phoneNumber)) {
+    throw validationError("Eats365 catalog purchase requires buyer first_name, last_name, and phone_number");
+  }
+  if (phoneNumber && !/^\+[1-9]\d{1,14}$/u.test(phoneNumber)) {
+    throw validationError("buyer.phone_number must be in E.164 format");
+  }
+  const normalized = {
+    ...firstName ? { first_name: firstName } : {},
+    ...lastName ? { last_name: lastName } : {},
+    ...email ? { email } : {},
+    ...phoneNumber ? { phone_number: phoneNumber } : {}
+  };
+  return Object.keys(normalized).length > 0 ? normalized : void 0;
 }
 function optionalProgramCode(value) {
   if (value === void 0 || value === null) {
@@ -30484,6 +30522,9 @@ function checkoutCommandContext(context, input) {
   }
   if (purchase.shippingAddress) {
     flags["shipping-address"] = JSON.stringify(purchase.shippingAddress);
+  }
+  if (purchase.buyer) {
+    flags.buyer = JSON.stringify(purchase.buyer);
   }
   if (Object.keys(metadata).length > 0) {
     flags.metadata = JSON.stringify(metadata);
