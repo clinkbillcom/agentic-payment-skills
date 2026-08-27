@@ -30,11 +30,21 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.27');
+  assert.equal(packageJson.version, '0.1.28');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
+  assert.match(skill, /Visa Skill 0\.1\.28/u);
+  assert.match(skill, /version: "0\.1\.28"/u);
+  assert.match(
+    readme,
+    /Skill `0\.1\.28` vendors Visa CLI `0\.2\.33`[\s\S]*55fd330ca8eb6f3cef4ca5b5721a71ca1f5fbabd/iu,
+  );
+  assert.match(readmeZh, /Skill `0\.1\.28`/u);
+  assert.match(readmeZh, /Visa CLI `0\.2\.33`/u);
+  assert.match(readmeZh, /55fd330ca8eb6f3cef4ca5b5721a71ca1f5fbabd/u);
+  assert.doesNotMatch(`${readme}\n${readmeZh}`, /0\.2\.32/u);
   assert.match(skill, /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
   assert.match(combined, /bin\/visa-cli/u);
   assert.doesNotMatch(combined, /vendor\/clink-cli|bin\/clink\b/u);
@@ -152,9 +162,18 @@ test('Case 1 lists every returned Visa Benefit and joins paginated Fuhui Catalog
     joined,
     /Deduplicate only by stable merchant, product, and variant\s+identifiers, never by title/iu,
   );
-  for (const classification of ['EXACT_MATCH', 'BENEFIT_ONLY', 'CATALOG_ONLY']) {
-    assert.ok(joined.includes(`\`${classification}\``));
-  }
+  assert.match(
+    joined,
+    /productType=FUHUI_VISA_PRODUCT[\s\S]*every relevant, available Fuhui[\s\S]*constant/iu,
+  );
+  assert.match(
+    joined,
+    /PROGRAM_FUHUI_MATCH[\s\S]*only as an optional relation label[\s\S]*Never[\s\S]*replace `FUHUI_VISA_PRODUCT`/iu,
+  );
+  assert.match(
+    joined,
+    /VISA_PROGRAM_ONLY[\s\S]*no verified\s+orderable Fuhui product relationship/iu,
+  );
 });
 
 test('Case 2 uses the Visa plus Fuhui route for category coupon shopping', () => {
@@ -177,11 +196,11 @@ test('Case 2 uses the Visa plus Fuhui route for category coupon shopping', () =>
   );
   assert.match(
     joined,
-    /EXACT_MATCH[\s\S]*same merchant[\s\S]*orderable product[\s\S]*hard terms[\s\S]*price[\s\S]*currency/iu,
+    /PROGRAM_FUHUI_MATCH[\s\S]*optional relation label[\s\S]*same merchant[\s\S]*benefit\/product[\s\S]*hard terms/iu,
   );
   assert.match(
     joined,
-    /Similar[\s\S]*category[\s\S]*alone is insufficient/iu,
+    /voucher denomination and purchase price as separate facts[\s\S]*HKD 100[\s\S]*structured\s+Catalog[\s\S]*actual purchase price/iu,
   );
 });
 
@@ -201,11 +220,11 @@ test('Case 3 uses the joined route for merchant-specific coupons without false m
   );
   assert.match(
     joined,
-    /entry Offer[\s\S]*campaign URL[\s\S]*similar title[\s\S]*never proves `EXACT_MATCH`/iu,
+    /entry Offer[\s\S]*campaign URL[\s\S]*similar title[\s\S]*never proves `PROGRAM_FUHUI_MATCH`/iu,
   );
   assert.match(
     joined,
-    /When uncertain[\s\S]*`BENEFIT_ONLY` and `CATALOG_ONLY`/iu,
+    /does not[\s\S]*remove[\s\S]*constant `FUHUI_VISA_PRODUCT` product type/iu,
   );
   assert.match(
     joined,
@@ -254,7 +273,7 @@ test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () 
   assert.match(catalogPurchase, /bounded and non-exhaustive/iu);
   assert.match(
     catalogPurchase,
-    /selected `CATALOG_ONLY` product[\s\S]*not being purchased as a Visa Benefit/iu,
+    /selected `FUHUI_VISA_PRODUCT`[\s\S]*Fuhui purchase is a Visa Benefit product/iu,
   );
   assert.match(
     catalogPurchase,
@@ -262,11 +281,36 @@ test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () 
   );
   assert.match(
     catalogPurchase,
-    /exactly one authoritative four-digit MCC[\s\S]*missing[\s\S]*stop[\s\S]*Never guess an MCC/iu,
+    /four-digit MCC classified from the exact frozen[\s\S]*ask when confidence is low/iu,
   );
   assert.match(
     catalogPurchase,
-    /tool parse-item[\s\S]*manual_item_facts[\s\S]*is not product evidence/iu,
+    /Eats365[\s\S]*manual_item_facts[\s\S]*expected success result[\s\S]*broad Catalog candidate/iu,
+  );
+  for (const field of [
+    'channelType',
+    'storeId',
+    'catalogQuery',
+    'catalogEnvironment',
+    'catalogLanguage',
+  ]) {
+    assert.match(catalogPurchase, new RegExp(`"${field}"`, 'u'));
+  }
+  assert.match(
+    catalogPurchase,
+    /merchantUrl[\s\S]*same product ID[\s\S]*selection\.productId[\s\S]*title[\s\S]*structured price[\s\S]*currency[\s\S]*availability[\s\S]*channel[\s\S]*store[\s\S]*query[\s\S]*environment[\s\S]*language[\s\S]*URL[\s\S]*one broad Catalog snapshot/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /coffee or quick-service food[\s\S]*MCC `5814`[\s\S]*NO_SHIPPING_REQUIRED[\s\S]*digitalDeliveryExpected=false/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /Fuhui coupons\/vouchers[\s\S]*NO_SHIPPING_REQUIRED[\s\S]*digitalDeliveryExpected=true/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /"amountLimit": "<structured-catalog-purchase-price>"[\s\S]*"currencyCode": "<structured-catalog-purchase-currency>"/iu,
   );
   assert.match(
     catalogPurchase,
@@ -274,7 +318,7 @@ test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () 
   );
   assert.match(
     catalogPurchase,
-    /"fulfillmentType": "NO_SHIPPING_REQUIRED"[\s\S]*identical object[\s\S]*instructionContext\.shippingAddress[\s\S]*Missing or inferred fulfillment stops/iu,
+    /"digitalDeliveryExpected": true[\s\S]*"digitalDeliveryExpected": false[\s\S]*identical object[\s\S]*instructionContext\.shippingAddress[\s\S]*high-confidence Agent classification[\s\S]*low confidence requires one question/iu,
   );
   assert.match(catalogPurchase, /"mode": "catalog_purchase"/u);
   assert.doesNotMatch(catalogPurchase, /"program"\s*:/u);
@@ -289,6 +333,50 @@ test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () 
   assert.match(
     catalogPurchase,
     /Never\s+fall back to Program `mode=purchase`[\s\S]*`ucp-checkout run`/iu,
+  );
+});
+
+test('new commerce-run contexts omit program.code in both purchase modes', () => {
+  const programPurchase = skill.slice(
+    skill.indexOf('Build one frozen purchase context from the same Program'),
+    skill.indexOf('Run exactly once in the foreground'),
+  );
+  const catalogPurchase = skill.slice(
+    skill.indexOf('Build one frozen Catalog purchase context without a Program'),
+    skill.indexOf('Run exactly once:', skill.indexOf('Build one frozen Catalog')),
+  );
+  for (const purchaseContext of [programPurchase, catalogPurchase]) {
+    assert.doesNotMatch(purchaseContext, /"program"\s*:/u);
+    assert.doesNotMatch(purchaseContext, /"programCode"\s*:/u);
+  }
+  assert.match(
+    programPurchase,
+    /Do not include a top-level `program` object or `metadata\.programCode`[\s\S]*compatibility/iu,
+  );
+  assert.match(
+    skill,
+    /New `mode=purchase` and `mode=catalog_purchase` contexts[\s\S]*omit[\s\S]*top-level `program`[\s\S]*`metadata\.programCode`/iu,
+  );
+});
+
+test('Fuhui voucher face value is never treated as the structured purchase price', () => {
+  const joined = skill.slice(
+    skill.indexOf('### Product Type, Relation Label, And Presentation'),
+    skill.indexOf('### Selected Program Resolution'),
+  );
+  const safety = skill.slice(skill.indexOf('## Safety Summary'));
+
+  assert.match(
+    joined,
+    /HKD 100[\s\S]*voucher face value[\s\S]*structured\s+Catalog `price\.amount` and `price\.currency`[\s\S]*actual purchase price and\s+payment currency/iu,
+  );
+  assert.match(
+    safety,
+    /For Fuhui[\s\S]*Instruction and Checkout use only the structured Catalog purchase\s+price\/currency[\s\S]*voucher face value[\s\S]*never compared as the purchase price/iu,
+  );
+  assert.doesNotMatch(
+    safety,
+    /^-\s+Program and Catalog product, amount, and currency must agree\.$/mu,
   );
 });
 

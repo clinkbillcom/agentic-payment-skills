@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.27. Use for Visa card benefits, Fuhui coupon matching, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.28. Use for Visa card benefits, Fuhui coupon matching, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.27"
+  version: "0.1.28"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -146,14 +146,15 @@ Classify the request before the first command:
   requests such as "Buy me an XX coffee" use Broad Catalog Shopping. Do not
   call `visa recommend` merely because this Skill can access Visa Benefits.
 
-Use Visa aggregation only when the selected item is an `EXACT_MATCH` that
-originates from a Visa Program:
+Use Program aggregation only for a selected non-Fuhui Visa Program purchase
+that has an authoritative Program commerce route:
 
 ```text
 visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
 ```
 
-Use Catalog Purchase aggregation for a selected `CATALOG_ONLY` product or a
+Use Catalog Purchase aggregation for every selected Fuhui product, including a
+product carrying the optional `PROGRAM_FUHUI_MATCH` relation label, and for a
 Case 4 product:
 
 ```text
@@ -161,10 +162,16 @@ catalog search or ucp-catalog search -> commerce-login ->
 visa commerce-run mode=catalog_purchase
 ```
 
-Never attach Visa Benefit language, Program eligibility, or Program terms to a
-Catalog-only product. Do not route a Visa Program purchase through generic
-Catalog purchase, `pay`, atomic Instruction, events, or UCP commands. Do not
-route a Catalog-only product through Program `mode=purchase`.
+Fuhui is an internal Visa Offer merchant, so a relevant Fuhui Catalog product
+is itself an orderable Visa Benefit product even when no separate VSRA Program
+row matches it. Program eligibility or Program terms may be attached only when
+an authoritative Program relationship is also proven. Do not route a
+non-Fuhui broad-Catalog product through Program `mode=purchase`.
+
+New `mode=purchase` and `mode=catalog_purchase` contexts must omit both the
+top-level `program` object and `metadata.programCode`. Older callers may still
+provide `program.code` as compatibility metadata, but this Skill never authors
+or requires it.
 
 Use a Base Capability Contract only for a non-Program request whose exact
 inputs and authorization satisfy that contract.
@@ -273,35 +280,40 @@ list, changed environment, or changed geography invalidates old Numbers,
 selection, and purchase authorization. A purchase reply must resolve one
 stable ID from the latest snapshot; title-only fuzzy matching is insufficient.
 
-### Match Classification And Presentation
+### Product Type, Relation Label, And Presentation
 
-Evaluate all returned Visa Programs and all paginated Fuhui products. Classify
-the combined rows without inventing a relationship:
+Evaluate all returned Visa Programs and all paginated Fuhui products:
 
-- `EXACT_MATCH`: one Program and one Catalog product identify the same merchant
-  and orderable product in the same geography, with compatible brand, product
-  type, title or variant, channel, and hard terms, with equal authorized price
-  and currency. Similar
-  category, region, wording, or merchant ownership alone is insufficient.
-- `BENEFIT_ONLY`: the Program is relevant to the request, but no Catalog
-  product is an exact identity match.
-- `CATALOG_ONLY`: the Catalog product is relevant to the request, but no Visa
-  Program is an exact identity match.
+- Set `productType=FUHUI_VISA_PRODUCT` on every relevant, available Fuhui
+  Catalog product. This product type is constant because Fuhui is the
+  authoritative Visa Offer merchant; a Program match is not required.
+- Add `PROGRAM_FUHUI_MATCH` only as an optional relation label when one Program
+  and one Fuhui product independently identify the same merchant,
+  benefit/product, geography, denomination or variant, and hard terms. Never
+  replace `FUHUI_VISA_PRODUCT` with this relation label.
+- Report a relevant Program as `VISA_PROGRAM_ONLY` when it has no verified
+  orderable Fuhui product relationship.
 
-Present all three groups explicitly. Preserve authoritative Program and
-Catalog titles. Do not describe `CATALOG_ONLY` as a Visa Benefit, Visa coupon,
-eligible Offer, or Benefit redemption. Do not hide a relevant unmatched
-Program merely because it cannot be purchased, and do not hide a relevant
-Fuhui product merely because it lacks a Visa match.
+Present the Program and Fuhui sections explicitly. Preserve authoritative
+titles and stable IDs. Do not hide a relevant Program merely because it cannot
+be ordered, and do not hide an orderable Fuhui product merely because it lacks
+a Program row.
 
 An entry Offer, campaign URL, similar title, shared category, or merchant-level
-association never proves `EXACT_MATCH`. When uncertain, classify the two rows
-separately as `BENEFIT_ONLY` and `CATALOG_ONLY`.
+association never proves `PROGRAM_FUHUI_MATCH`. It does not, however, remove
+the constant `FUHUI_VISA_PRODUCT` product type of a relevant Fuhui item.
+
+Treat voucher denomination and purchase price as separate facts. Text such as
+`HKD 100` in a title or description is the voucher face value. The structured
+Catalog `price.amount` and `price.currency` are the actual purchase price and
+payment currency. Do not reject a Fuhui product merely because its HKD face
+value is purchased using USD. Convert the structured minor-unit amount once to
+the major-unit decimal used by Instruction and Checkout.
 
 ### Selected Program Resolution
 
-Before purchasing one selected `EXACT_MATCH`, bind it through the existing
-token-free Program product resolver before any browser login:
+Before purchasing one selected non-Fuhui Program route, bind it through the
+existing token-free Program product resolver before any browser login:
 
 ```text
 <Skill Path>/bin/visa-cli visa product-search \
@@ -326,8 +338,8 @@ token-free Program product resolver before any browser login:
   question.
 - On `PRODUCT_UNAVAILABLE`, report a Program-Catalog mismatch and stop that
   candidate. Do not substitute another product or a campaign link.
-- The verified product must be the same product already classified as
-  `EXACT_MATCH`. A different closest product does not inherit the Program.
+- The verified product must be the same product associated with the selected
+  Program. A different closest product does not inherit the Program.
 - For a query-only request, present the classified joined results and stop even
   when one result could continue to login.
 
@@ -400,9 +412,6 @@ Build one frozen purchase context from the same Program and verified product:
   "mode": "purchase",
   "environment": "uat",
   "requestText": "<original purchase request>",
-  "program": {
-    "code": "<program-code>"
-  },
   "selection": {
     "merchantUrl": "<authoritative-program-commerce-url>",
     "merchantId": "<verified-merchant-id>",
@@ -442,6 +451,10 @@ Build one frozen purchase context from the same Program and verified product:
 }
 ```
 
+Do not include a top-level `program` object or `metadata.programCode`.
+`commerce-run` may accept legacy Program metadata for compatibility, but this
+Skill never sends it and never treats it as a purchase prerequisite.
+
 Use native JSON types: `quantity` is a positive integer and
 `digitalDeliveryExpected` is a boolean. Use `true` only for a verified digital
 artifact. Keep Program, Catalog, expected, and Instruction facts unchanged.
@@ -469,9 +482,10 @@ reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 
 ## Catalog Purchase Fast Path
 
-Use this path only for a selected `CATALOG_ONLY` product from Cases 1-3 or a
-selected Case 4 broad-Catalog result. Tell the user plainly that this is a
-Catalog purchase and is not being purchased as a Visa Benefit.
+Use this path for a selected `FUHUI_VISA_PRODUCT` from Cases 1-3 or a selected
+Case 4 broad-Catalog result. A Fuhui purchase is a Visa Benefit product
+purchase. A non-Fuhui Case 4 product is ordinary Catalog shopping and must not
+inherit unrelated Program eligibility or terms.
 
 Case 4 discovery is anonymous and must not call `visa recommend`:
 
@@ -496,27 +510,49 @@ For an internal merchant, use the selected `merchant_id` and
 the exact product detail has not been resolved.
 
 For an external/platform result, use its exact returned product URL with
-`tool parse-item`. Continue only when the command returns actual product and
-merchant facts. A `manual_item_facts` result that merely names required fields
-is not product evidence; collect those authoritative facts from the merchant
-or stop.
+`tool parse-item`. For an Eats365 platform-store candidate,
+`manual_item_facts` with an empty items array is the expected success result:
+use the broad Catalog candidate's frozen product ID, title, structured price,
+currency, availability, channel, store ID, original Catalog query, Catalog
+environment, Catalog language, and returned product/store URL. Do not browse
+for a nonexistent detail page or ask for a replacement URL.
 
 Freeze all of these authoritative facts:
 
-- `merchantUrl`: returned merchant URL, never a constructed, campaign, Visa,
-  or VSRP URL
+- `merchantUrl`: returned internal merchant URL, or for a platform-store item
+  its returned product/store ordering URL carrying the same `product_id`;
+  never a constructed, campaign, Visa, or VSRP URL
 - `productId`: exact orderable Catalog product or variant ID
 - `title`: provider-authoritative product title
 - `price`: exact major-unit unit price and exact total for the quantity
 - `currency`: authoritative three-letter currency
 - `availability`: currently orderable status
-- `merchantCategoryCode`: exactly one authoritative four-digit MCC
+- `merchantCategoryCode`: one four-digit MCC classified from the exact frozen
+  merchant/product context; ask when confidence is low
+- for Eats365, `channelType`, `storeId`, `catalogQuery`,
+  `catalogEnvironment`, and `catalogLanguage`: exact values from the same broad
+  Catalog snapshot
 
-Also freeze merchant identity, quantity, fulfillment, endpoint when returned,
-and whether digital delivery is actually expected. If any required fact is
-missing, conflicting, ambiguous, stale, or inferred, stop. Never guess an MCC,
-derive one from product category, reuse a Program MCC, add a price buffer, or
+Also freeze merchant/store identity, channel, quantity, fulfillment, endpoint
+when returned, and whether digital delivery is actually expected. The Agent
+classifies MCC and fulfillment from the exact product context, matching the
+existing Agentic payment capability. Ask when either classification is
+uncertain. Never reuse an unrelated Program MCC, add a price buffer, or
 substitute a similar product.
+
+Use these high-confidence fulfillment rules:
+
+- Fuhui coupons/vouchers: `NO_SHIPPING_REQUIRED`,
+  `digitalDeliveryExpected=true`.
+- Eats365 coffee or quick-service food is high-confidence MCC `5814`,
+  `NO_SHIPPING_REQUIRED`, and
+  `digitalDeliveryExpected=false`; the meal itself is not a digital artifact.
+- Shipped physical goods: `PHYSICAL_GOODS_REQUIRES_SHIPPING` with the complete
+  address contract below.
+
+For any other merchant or product, use a high-confidence MCC and fulfillment
+classification or ask once. Stop when either remains uncertain after that
+clarification.
 
 An explicit request to buy the unambiguous displayed product is one purchase
 authorization. Build the same minimal login shape, using only the Catalog
@@ -532,9 +568,9 @@ product facts:
       {
         "title": "<authoritative-catalog-title>",
         "description": "Purchase the selected Catalog product",
-        "amountLimit": "<exact-authorized-total>",
-        "currencyCode": "<authoritative-currency>",
-        "merchantCategoryCode": "<authoritative-four-digit-mcc>"
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "<classified-four-digit-mcc>"
       }
     ]
   }
@@ -548,7 +584,8 @@ Apply the Restricted Instruction Gate, then run `visa commerce-login` once with
 `--confirm-purchase --open --format json`. Continue only when it returns
 `ok=true` and `ready=true`.
 
-Build one frozen Catalog purchase context without a Program:
+Build one frozen Catalog purchase context without a Program. Start with these
+shared fields:
 
 ```json
 {
@@ -566,8 +603,8 @@ Build one frozen Catalog purchase context without a Program:
   "expected": {
     "merchantName": "<authoritative-merchant-name>",
     "itemTitle": "<authoritative-product-title>",
-    "amount": "<exact-authorized-total>",
-    "currency": "<authoritative-currency>",
+    "amount": "<structured-catalog-purchase-price>",
+    "currency": "<structured-catalog-purchase-currency>",
     "availability": "<authoritative-orderable-status>"
   },
   "instructionContext": {
@@ -576,23 +613,74 @@ Build one frozen Catalog purchase context without a Program:
       {
         "title": "<authoritative-catalog-title>",
         "description": "Purchase the selected Catalog product",
-        "amountLimit": "<exact-authorized-total>",
-        "currencyCode": "<authoritative-currency>",
-        "merchantCategoryCode": "<authoritative-four-digit-mcc>"
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "<classified-four-digit-mcc>"
       }
     ]
-  },
+  }
+}
+```
+
+Before writing the context file, add exactly one route-specific top-level
+fulfillment contract. For a Fuhui digital coupon:
+
+```json
+{
   "fulfillmentType": "NO_SHIPPING_REQUIRED",
   "digitalDeliveryExpected": true
 }
 ```
 
+For an Eats365 coffee or quick-service food result, keep the same shared
+context and use this complete route-specific selection and fulfillment
+contract:
+
+```json
+{
+  "selection": {
+    "merchantUrl": "<exact-returned-eats365-product-or-store-url>",
+    "channelType": "eats365",
+    "storeId": "<frozen-store-id>",
+    "catalogQuery": "<original-current-user-query>",
+    "catalogEnvironment": "<locked-catalog-environment>",
+    "catalogLanguage": "<locked-language-tag>",
+    "productId": "<frozen-product-id>",
+    "productQuery": "<frozen-provider-title>",
+    "quantity": 1
+  },
+  "instructionContext": {
+    "title": "<frozen-provider-title>",
+    "mandates": [
+      {
+        "title": "<frozen-provider-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "5814"
+      }
+    ]
+  },
+  "fulfillmentType": "NO_SHIPPING_REQUIRED",
+  "digitalDeliveryExpected": false
+}
+```
+
+Merge the route-specific fields into the shared object; do not send either
+fragment separately. The Eats365 `merchantUrl` must carry the same product ID
+as `selection.productId`, and the frozen title, structured price, currency,
+availability, channel, store, query, environment, language, and URL must all
+come from one broad Catalog snapshot. Any mismatch, missing provenance field,
+or changed snapshot stops before login.
+
 Use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only with an authoritative complete
 shipping address. Put that identical object both at final-context top level as
 `shippingAddress` and inside final `instructionContext.shippingAddress`; the
 CLI rejects a missing or different Quick/Checkout address.
-`digitalDeliveryExpected=true` is valid only with `NO_SHIPPING_REQUIRED`.
-Missing or inferred fulfillment stops the purchase.
+`digitalDeliveryExpected=true` is valid only with `NO_SHIPPING_REQUIRED` and
+an explicit artifact-delivery contract. A high-confidence Agent classification
+is valid; low confidence requires one question, and no answer stops the
+purchase.
 
 Run exactly once:
 
@@ -787,9 +875,12 @@ general workflow engine.
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
 - For Cases 1-3, report every relevant returned Visa Program and paginated
-  Fuhui Catalog product under `EXACT_MATCH`, `BENEFIT_ONLY`, or
-  `CATALOG_ONLY`.
-- Never imply that `CATALOG_ONLY` receives Visa eligibility or terms.
+  Fuhui Catalog product. Every Fuhui row keeps
+  `productType=FUHUI_VISA_PRODUCT`; add `PROGRAM_FUHUI_MATCH` only as a proven
+  optional relation label, and use `VISA_PROGRAM_ONLY` for an unmatched
+  relevant Program.
+- Fuhui products are Visa Benefit products. Program-specific eligibility and
+  terms require a proven Program relationship.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
 - Report digital delivery only when nonempty authoritative artifacts exist.
@@ -801,12 +892,22 @@ general workflow engine.
 
 - Visa query does not log in.
 - Cases 1-3 join all relevant Visa results with the complete paginated Fuhui
-  query result and never fabricate a match.
+  query result; every relevant Fuhui item is an orderable Visa product, while
+  Program association is reported separately and never fabricated.
 - Case 4 skips Visa recommendation and starts with broad Catalog discovery.
-- Visa Program purchase always uses the three CLI aggregates in Program mode.
-- Catalog-only purchase uses login plus `mode=catalog_purchase`, never Program
-  mode or atomic UCP.
-- Program and Catalog product, amount, and currency must agree.
+- Non-Fuhui Visa Program purchase uses the three CLI aggregates in Program
+  mode.
+- Every Fuhui product, including a Program-associated one, uses Catalog mode
+  with the structured Catalog purchase price/currency.
+- Fuhui and non-Program Catalog purchase use login plus
+  `mode=catalog_purchase`, never atomic UCP.
+- For a non-Fuhui Program purchase, the Program and resolved Catalog product
+  identity plus recommendation-backed purchase amount/currency must agree.
+  For Fuhui, Instruction and Checkout use only the structured Catalog purchase
+  price/currency; a title or description's voucher face value may use another
+  currency and is never compared as the purchase price.
+- New `mode=purchase` and `mode=catalog_purchase` contexts never send
+  `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
 - Quick Instruction is owned by `visa commerce-login`.

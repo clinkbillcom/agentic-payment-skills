@@ -7,14 +7,18 @@ interface:
     Kong as --region hk unless the user explicitly says the card is HK-issued.
     For broad, category, or merchant-specific Visa Benefit shopping, run one
     recommend, locate Fuhui from the public internal merchant list, page its
-    Catalog with the current user query, and classify all relevant rows as
-    EXACT_MATCH, BENEFIT_ONLY, or CATALOG_ONLY without inventing a relationship.
-    A selected EXACT_MATCH uses product-search, commerce-login, and commerce-run
-    in Program mode. A selected CATALOG_ONLY product, or a direct shopping
-    request without Visa context, uses Catalog discovery then commerce-login
-    and commerce-run mode=catalog_purchase, and must never be described as a
-    Visa Benefit. Freeze authoritative merchant URL, product ID, title, price,
-    currency, availability, and one four-digit MCC; missing facts stop. Keep
-    Quick Instruction and all deterministic payment steps inside the CLI,
+    Catalog with the current user query. Every relevant Fuhui item always has
+    productType FUHUI_VISA_PRODUCT; PROGRAM_FUHUI_MATCH is only an optional
+    independently proven relation label. All Fuhui and direct Catalog shopping
+    use commerce-login then commerce-run mode=catalog_purchase. Separate voucher
+    face value from structured purchase price/currency. For Eats365,
+    manual_item_facts is a normal result: freeze channel, store, original query,
+    Catalog environment/language, product, title, price, currency, availability,
+    and URL from one broad-Catalog snapshot. Classify MCC and fulfillment from
+    the exact context; coffee and quick-service food use high-confidence MCC
+    5814, NO_SHIPPING_REQUIRED, and digitalDeliveryExpected=false. Fuhui digital
+    coupons use digitalDeliveryExpected=true. Ask when classification confidence
+    is low. Never send program.code in purchase or catalog_purchase contexts.
+    Keep Quick Instruction and all deterministic payment steps inside the CLI,
     never rerun commerce-run after possible Checkout creation, and do not read
     references or use runtime --help during ordinary execution.

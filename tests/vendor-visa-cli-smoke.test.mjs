@@ -2,29 +2,68 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'visa-cli');
 const windowsCli = join(root, 'bin', 'visa-cli.cmd');
+const vendorBundlePath = join(
+  root,
+  'vendor',
+  'visa-cli',
+  'visa-cli.bundle.mjs',
+);
 const vendorPackage = JSON.parse(
   await readFile(join(root, 'vendor', 'visa-cli', 'package.json'), 'utf8'),
 );
-const vendorBundle = await readFile(
-  join(root, 'vendor', 'visa-cli', 'visa-cli.bundle.mjs'),
-);
+const vendorBundle = await readFile(vendorBundlePath);
+const mockPreloadPath = await createMockPreload();
+const readyHome = await createReadyVisaHome();
 
-function run(args) {
+test.after(async () => {
+  await Promise.all([
+    rm(readyHome, { force: true, recursive: true }),
+    rm(dirname(mockPreloadPath), { force: true, recursive: true }),
+  ]);
+});
+
+function run(args, options = {}) {
   return spawnSync(cli, args, {
     cwd: root,
     encoding: 'utf8',
     env: {
       ...process.env,
-      HOME: join(root, '.test-home-does-not-exist'),
+      HOME: options.home ?? join(root, '.test-home-does-not-exist'),
+      ...options.env,
     },
   });
+}
+
+function runWithMock(args, scenario, options = {}) {
+  return spawnSync(
+    process.execPath,
+    ['--import', mockPreloadPath, vendorBundlePath, ...args],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: options.home ?? join(root, '.test-home-does-not-exist'),
+        VISA_SKILL_SMOKE_SCENARIO: scenario,
+        ...options.env,
+      },
+    },
+  );
 }
 
 test('launchers and Visa Edition provenance are exact', async () => {
@@ -35,11 +74,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.32');
+  assert.equal(vendorPackage.version, '0.2.33');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '625eb133f946ade532a10f282e5005f4a92f9c5f',
+    '55fd330ca8eb6f3cef4ca5b5721a71ca1f5fbabd',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -107,15 +146,19 @@ test('public Skill listing requires the real --all contract', () => {
   assert.match(missingAll.stderr, /skills list requires --all/u);
 });
 
-test('public Fuhui discovery supports authoritative merchant lookup and cursor pagination', () => {
-  const merchantList = run([
+test('public Fuhui discovery mocks the dynamic Merchant API and supports cursor pagination', () => {
+  const merchantList = runWithMock([
     'tool',
     'internal-ucp',
     'get-merchant-list',
-    '--sandbox',
     '--format',
     'json',
-  ]);
+  ], 'merchant-list', {
+    env: {
+      CLINK_UCP_MERCHANTS_URL:
+        'https://mock.clink.invalid/agent/ucp/merchants',
+    },
+  });
   assert.equal(merchantList.status, 0, merchantList.stderr);
   const merchantDocument = JSON.parse(merchantList.stdout);
   const fuhui = merchantDocument.merchants.filter((merchant) =>
@@ -246,6 +289,97 @@ test('Catalog purchase mode is executable with the complete frozen contract', ()
   assert.equal(plan.purchase.fulfillmentType, 'NO_SHIPPING_REQUIRED');
 });
 
+test('Program purchase mode accepts the frozen context without program.code', () => {
+  const result = run([
+    'visa',
+    'commerce-run',
+    '--context',
+    JSON.stringify(programPurchaseContext()),
+    '--confirm-purchase',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(result.stdout).data;
+  assert.equal(plan.mode, 'purchase');
+  assert.equal(plan.status, 'dry_run');
+  assert.equal(plan.sideEffects, false);
+  assert.equal(plan.purchase.productId, 'program-voucher-1');
+});
+
+test('Eats365 manual_item_facts revalidates complete frozen Catalog provenance', () => {
+  const result = runWithMock([
+    'visa',
+    'commerce-run',
+    '--context',
+    JSON.stringify(eats365CatalogPurchaseContext()),
+    '--confirm-purchase',
+    '--format',
+    'json',
+  ], 'eats365-success', { home: readyHome });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.ok, true);
+  assert.equal(output.data.stage, 'card_refresh');
+  assert.equal(output.data.status, 'failed');
+  assert.match(
+    output.data.error.message,
+    /intentional card refresh stop after product resolution/iu,
+  );
+});
+
+test('Eats365 URL binds both the frozen store and product IDs', () => {
+  for (const [label, merchantUrl, pattern] of [
+    [
+      'store',
+      'https://app.eats365pos.com/hk/en/other_store/menu?product_id=10210949',
+      /store does not match the frozen storeId/iu,
+    ],
+    [
+      'product',
+      `${EATS365_PRODUCT_URL}&product_id=other_product`,
+      /product URL must contain only the frozen product_id/iu,
+    ],
+  ]) {
+    const result = runWithMock([
+      'visa',
+      'commerce-run',
+      '--context',
+      JSON.stringify(eats365CatalogPurchaseContext({ merchantUrl })),
+      '--confirm-purchase',
+      '--format',
+      'json',
+    ], 'no-network', { home: readyHome });
+
+    assert.equal(result.status, 0, `${label}: ${result.stderr}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.data.stage, 'product_resolution');
+    assert.equal(output.data.status, 'failed');
+    assert.match(output.data.error.message, pattern);
+  }
+});
+
+test('mode=purchase never converts Eats365 manual_item_facts into Catalog fallback', () => {
+  const result = runWithMock([
+    'visa',
+    'commerce-run',
+    '--context',
+    JSON.stringify(eats365ProgramPurchaseContext()),
+    '--confirm-purchase',
+    '--format',
+    'json',
+  ], 'no-network', { home: readyHome });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.data.stage, 'product_resolution');
+  assert.equal(output.data.status, 'failed');
+  assert.match(output.data.error.message, /EATS365_MANUAL_ITEM_REQUIRED/u);
+});
+
 test('aggregate commands support side-effect-free planning', () => {
   const productSearch = run([
     'visa',
@@ -315,3 +449,229 @@ test('aggregate commands support side-effect-free planning', () => {
   assert.equal(commerceRun.status, 0, commerceRun.stderr);
   assert.equal(JSON.parse(commerceRun.stdout).data.dryRun, true);
 });
+
+function programPurchaseContext() {
+  return {
+    mode: 'purchase',
+    environment: 'uat',
+    requestText: 'Buy one selected Visa Program voucher',
+    selection: {
+      merchantUrl: 'https://merchant.example/products/program-voucher-1',
+      productId: 'program-voucher-1',
+      productQuery: 'Program voucher',
+      quantity: 1,
+    },
+    expected: {
+      merchantName: 'Example Merchant',
+      itemTitle: 'Program voucher',
+      amount: '1.00',
+      currency: 'USD',
+    },
+    instructionContext: {
+      title: 'Buy Program voucher',
+      mandates: [{
+        title: 'Program voucher',
+        description: 'Purchase the selected Visa Program',
+        amountLimit: '1.00',
+        currencyCode: 'USD',
+        merchantCategoryCode: '5999',
+      }],
+    },
+    digitalDeliveryExpected: true,
+  };
+}
+
+const EATS365_PRODUCT_URL =
+  'https://app.eats365pos.com/hk/en/chaptercoffee_kowloontong/menu'
+  + '?product_id=10210949';
+
+function eats365CatalogPurchaseContext(overrides = {}) {
+  return {
+    mode: 'catalog_purchase',
+    environment: 'uat',
+    requestText: 'Buy the selected Americano',
+    selection: {
+      merchantUrl: overrides.merchantUrl ?? EATS365_PRODUCT_URL,
+      channelType: 'eats365',
+      storeId: 'chaptercoffee_kowloontong',
+      catalogQuery: '咖啡',
+      catalogEnvironment: 'sandbox',
+      catalogLanguage: 'zh-Hans',
+      productId: '10210949',
+      productQuery: '美式咖啡 Americano',
+      quantity: 1,
+    },
+    expected: {
+      merchantName: 'Chapter Coffee',
+      itemTitle: '美式咖啡 Americano',
+      amount: '26.00',
+      currency: 'HKD',
+      availability: 'IN_STOCK',
+    },
+    instructionContext: {
+      title: '美式咖啡 Americano',
+      mandates: [{
+        title: '美式咖啡 Americano',
+        description: 'Purchase the selected Catalog product',
+        amountLimit: '26.00',
+        currencyCode: 'HKD',
+        merchantCategoryCode: '5814',
+      }],
+    },
+    fulfillmentType: 'NO_SHIPPING_REQUIRED',
+    digitalDeliveryExpected: false,
+  };
+}
+
+function eats365ProgramPurchaseContext() {
+  const context = eats365CatalogPurchaseContext();
+  context.mode = 'purchase';
+  delete context.expected.availability;
+  delete context.fulfillmentType;
+  for (const field of [
+    'channelType',
+    'storeId',
+    'catalogQuery',
+    'catalogEnvironment',
+    'catalogLanguage',
+  ]) {
+    delete context.selection[field];
+  }
+  return context;
+}
+
+async function createReadyVisaHome() {
+  const home = await mkdtemp(join(tmpdir(), 'visa-skill-smoke-home-'));
+  const configDirectory = join(home, '.clink-cli');
+  await mkdir(configDirectory, { recursive: true });
+  const now = Date.now();
+  const customerId = 'customer-smoke';
+  const issuerOrigin = 'https://uat-api.clinkbill.com';
+  await writeFile(
+    join(configDirectory, 'config.json'),
+    `${JSON.stringify({
+      baseUrl: issuerOrigin,
+      defaultOpenLinks: false,
+      customerId,
+      oauthRequired: true,
+      authorization: {
+        type: 'oauth',
+        customerId,
+        customerIdVerified: true,
+        sessionId: 'session-smoke',
+        deviceId: '550e8400-e29b-41d4-a716-446655440000',
+        issuerOrigin,
+        tokenType: 'Bearer',
+        accessToken: 'smoke-access-token',
+        accessTokenExpiresAt: now + 3_600_000,
+        refreshToken: 'smoke-refresh-token',
+        refreshTokenExpiresAt: now + 86_400_000,
+        agentClientId: 'acl_smoke',
+        visaRegistrationStatus: 'SUCCEEDED',
+        scope: 'benefit:read wallet:read payment:execute offline_access',
+      },
+      visa: {
+        fsmState: 'CLINK_READY',
+        activeMarket: 'hk',
+        vsraTokens: {},
+        benefitConnection: {
+          customerId,
+          issuerOrigin,
+          connectedAt: new Date(now).toISOString(),
+        },
+      },
+    }, null, 2)}\n`,
+    'utf8',
+  );
+  return home;
+}
+
+async function createMockPreload() {
+  const directory = await mkdtemp(join(tmpdir(), 'visa-skill-fetch-preload-'));
+  const preloadPath = join(directory, 'mock-fetch.mjs');
+  await writeFile(preloadPath, `
+const scenario = process.env.VISA_SKILL_SMOKE_SCENARIO;
+const productUrl =
+  'https://app.eats365pos.com/hk/en/chaptercoffee_kowloontong/menu'
+  + '?product_id=10210949';
+
+function jsonResponse(body) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+globalThis.fetch = async (input, init) => {
+  const url = new URL(String(input));
+  if (scenario === 'merchant-list') {
+    if (url.href !== 'https://mock.clink.invalid/agent/ucp/merchants') {
+      throw new Error('unexpected Merchant API URL: ' + url.href);
+    }
+    if ((init?.method ?? 'GET') !== 'GET') {
+      throw new Error('unexpected Merchant API method: ' + init?.method);
+    }
+    return jsonResponse({
+      merchants: [{
+        merchant_id: 'mcht_fuhuismoke',
+        domain_name: 'vtravel.link2shops.com',
+        merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
+        description: 'Fuhui Visa Offer merchant',
+        enabled: true,
+      }],
+    });
+  }
+
+  if (scenario === 'eats365-success') {
+    if (url.pathname === '/agent/ucp/extra/catalog/search') {
+      if (init?.method !== 'POST') {
+        throw new Error('unexpected broad Catalog method: ' + init?.method);
+      }
+      const body = JSON.parse(String(init.body));
+      if (
+        body.query !== '咖啡'
+        || body.channel_type !== 'eats365'
+        || body.context?.language !== 'zh-Hans'
+      ) {
+        throw new Error('unexpected broad Catalog request: ' + JSON.stringify(body));
+      }
+      return jsonResponse({
+        groups: [{
+          channel_type: 'eats365',
+          store_id: 'chaptercoffee_kowloontong',
+          name: 'Chapter Coffee',
+          products: [{
+            id: '10210949',
+            title: '美式咖啡 Americano',
+            url: productUrl,
+            variants: [{
+              id: '10210949',
+              title: '美式咖啡 Americano',
+              price: { amount: 2600, currency: 'HKD' },
+              availability: { available: true, status: 'in_stock' },
+              seller: { name: 'Chapter Coffee' },
+            }],
+            metadata: {
+              channel_type: 'eats365',
+              store_id: 'chaptercoffee_kowloontong',
+            },
+          }],
+        }],
+        total_products: 1,
+      });
+    }
+    if (url.pathname === '/agent/cwallet/card/bindingLink') {
+      throw new Error('intentional card refresh stop after product resolution');
+    }
+  }
+
+  throw new Error(
+    'unexpected network request for scenario '
+    + scenario
+    + ': '
+    + url.href,
+  );
+};
+`, 'utf8');
+  return preloadPath;
+}
