@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.29. Use for Visa card benefits, registered provider products, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.30. Use for Visa card benefits, registered provider products, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.29"
+  version: "0.1.30"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
