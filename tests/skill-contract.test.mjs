@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.36');
+  assert.equal(packageJson.version, '0.1.37');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.36/u);
-  assert.match(skill, /version: "0\.1\.36"/u);
+  assert.match(skill, /Visa Skill 0\.1\.37/u);
+  assert.match(skill, /version: "0\.1\.37"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -408,6 +408,14 @@ test('direct shopping skips Visa recommendation and uses aggregate Catalog purch
   assert.match(
     catalogPurchase,
     /coffee or quick-service food[\s\S]*MCC `5814`[\s\S]*NO_SHIPPING_REQUIRED[\s\S]*digitalDeliveryExpected=false/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /Before `visa commerce-login` for an Eats365 purchase[\s\S]*`first_name`[\s\S]*`last_name`[\s\S]*E\.164 `phone_number`[\s\S]*Do not create an[\s\S]*Instruction[\s\S]*wallet email automatically[\s\S]*never place it in metadata/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /"buyer"[\s\S]*"first_name"[\s\S]*"last_name"[\s\S]*"phone_number"/iu,
   );
   assert.match(
     catalogPurchase,

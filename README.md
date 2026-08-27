@@ -62,6 +62,8 @@ Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
 Only `channelType` and `storeId` are required platform route fields;
 query, duplicate environment, and language metadata are optional.
+Eats365 buyer name and E.164 phone are collected before login; the CLI injects
+the wallet email and forwards buyer data only to Checkout.
 
 Visa Program, provider, and other Catalog purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
@@ -69,8 +71,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.36` vendors Visa CLI `0.2.39` from upstream commit
-`7f2e67c238061ff0d7e7163ed25ba2687bd866fe`. It supports joined Visa Offer and
+Skill `0.1.37` vendors Visa CLI `0.2.40` from upstream commit
+`5c2f9cf6d458fdfd6414406a235c33c4e4f348a6`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -92,7 +94,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.36`
+Skill version: `0.1.37`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

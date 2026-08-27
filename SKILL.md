@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.36. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.37. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.36"
+  version: "0.1.37"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -627,6 +627,13 @@ For any other merchant or product, use a high-confidence MCC and fulfillment
 classification or ask once. Stop when either remains uncertain after that
 clarification.
 
+Before `visa commerce-login` for an Eats365 purchase, collect the buyer's
+`first_name`, `last_name`, and E.164 `phone_number`. Do not create an
+Instruction until these required Checkout facts are present. The CLI adds the
+current wallet email automatically; include `buyer.email` only when the user
+explicitly selected a different order-contact email. Treat buyer data as
+private: never place it in metadata or echo it in summaries.
+
 An explicit request to buy the unambiguous displayed product is one purchase
 authorization. Build the same minimal login shape, using only the Catalog
 product facts:
@@ -736,6 +743,11 @@ contract:
         "merchantCategoryCode": "5814"
       }
     ]
+  },
+  "buyer": {
+    "first_name": "<buyer-first-name>",
+    "last_name": "<buyer-last-name>",
+    "phone_number": "<e164-phone-number>"
   },
   "fulfillmentType": "NO_SHIPPING_REQUIRED",
   "digitalDeliveryExpected": false
