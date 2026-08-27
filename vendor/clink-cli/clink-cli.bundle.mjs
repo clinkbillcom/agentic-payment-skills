@@ -9412,7 +9412,6 @@ var OPTION_DEFINITIONS = [
   { name: "confirm-purchase", flags: "--confirm-purchase" },
   { name: "wait-delivery", flags: "--wait-delivery" },
   { name: "all", flags: "--all" },
-  { name: "internal", flags: "--internal" },
   { name: "tippable", flags: "--tippable" },
   { name: "check", flags: "--check" },
   { name: "force", flags: "--force" },
@@ -10033,7 +10032,7 @@ function isRecord(value) {
 
 // dist/command-branding.js
 var MAIN_EXECUTABLE_NAME = "clink";
-var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|ucp-merchant|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
 function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
   if (executableName === MAIN_EXECUTABLE_NAME) {
     return value;
@@ -12271,7 +12270,6 @@ Commands:
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
   ucp-catalog       Search merchant UCP catalogs
-  ucp-merchant      Discover enabled UCP merchants
   catalog           Search catalogs across merchants without naming one
   ucp-order         Query UCP orders and wait for digital delivery
   instruction       Manage purchase instruction mandates (agentic authorization)
@@ -12298,9 +12296,8 @@ Wallet Environment:
   process override for those authenticated commands.
 
 Public Discovery Environment:
-  ucp-catalog search/product, catalog search, ucp-merchant list, and the legacy
-  tool internal-ucp get-merchant-list command are public and config-independent. They default to
-  production and accept --sandbox or --test per call.
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
 
 Event Watching:
   Link commands normally print the browser handoff and then poll
@@ -12328,7 +12325,6 @@ Examples:
   clink skills tip --publisher clinkpay --name PollyReach --amount 2
   clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink ucp-merchant list --internal --format json
   clink catalog search --query "iced latte" --format json
   clink ucp-checkout get --checkout-id chk_xxx
   clink ucp-order get --order-id order_xxx
@@ -12344,7 +12340,6 @@ More Help:
   clink card --help
   clink skills --help
   clink ucp-catalog --help
-  clink ucp-merchant --help
   clink catalog --help
   clink ucp-checkout --help
   clink ucp-order --help
@@ -12771,7 +12766,7 @@ Options:
 ${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
-  Legacy alias for the public merchant-list API. Returns {"merchants":[...]} after validation.
+  Returns {"merchants":[...]} from the public merchant-list API after validation.
   The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
   It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
@@ -13361,49 +13356,6 @@ Behavior:
 Examples:
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en     --format json
-`;
-var UCP_MERCHANT_HELP = `clink ucp-merchant
-
-Usage:
-  clink ucp-merchant list --internal [options]
-
-Actions:
-  list       List enabled UCP merchants from Clink's public merchant API
-
-The --internal selector is required. It selects Clink's UCP merchant source; it does not require
-internal-network access or authentication.
-
-Examples:
-  clink ucp-merchant list --internal --format json
-  clink ucp-merchant list --internal --sandbox --format pretty
-`;
-var UCP_MERCHANT_LIST_HELP = `clink ucp-merchant list
-
-Usage:
-  clink ucp-merchant list --internal [options]
-
-Required Selector:
-  --internal                   Select the Clink UCP merchant source
-
-Options:
-${PUBLIC_CATALOG_LIST_OPTIONS}
-
-Behavior:
-  Sends an anonymous GET /agent/ucp/merchants with no query or body. It defaults to production;
-  --sandbox selects sandbox/UAT and --test selects test for this invocation.
-  It does not read ~/.clink-cli/config.json or inherit saved wallet state, CLINK_BASE_URL,
-  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, CSK, customer ID, or customer API key credentials.
-  The backend filters enabled merchants. Each validated result contains merchant_id, merchant_name,
-  description, domain, and optional ext metadata. ext is opaque JSON and never controls routing;
-  domain must be a safe HTTP(S) merchant route URL and may include a path. Valid rows survive
-  unrelated invalid rows; a non-empty wholly invalid array fails.
-  Validated successes use a short per-process cache and concurrent loads share one request. The
-  read-only GET retries transport, 408, 429, and 5xx once within the total timeout. Other HTTP
-  failures, including 401/403, are API errors (exit 5); exhausted transport/timeouts exit 6.
-
-Examples:
-  clink ucp-merchant list --internal --format json
-  clink ucp-merchant list --internal --test --format pretty
 `;
 var CATALOG_HELP = `clink catalog
 
@@ -14314,13 +14266,6 @@ function getRawHelpText(command, subcommand, nestedCommand) {
           return UCP_CATALOG_PRODUCT_HELP;
         default:
           return UCP_CATALOG_HELP;
-      }
-    case "ucp-merchant":
-      switch (subcommand) {
-        case "list":
-          return UCP_MERCHANT_LIST_HELP;
-        default:
-          return UCP_MERCHANT_HELP;
       }
     case "catalog":
       switch (subcommand) {
@@ -22260,14 +22205,6 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
 var DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-var UCP_MERCHANT_LIST_FLAGS = /* @__PURE__ */ new Set([
-  "internal",
-  "sandbox",
-  "test",
-  "timeout",
-  "format",
-  "help"
-]);
 var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "install",
   "update",
@@ -22279,7 +22216,6 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "refund",
   "ucp-checkout",
   "ucp-catalog",
-  "ucp-merchant",
   "catalog",
   "ucp-order",
   "instruction",
@@ -22294,7 +22230,6 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  validateUcpMerchantListSelector(command, subcommand, args.positionals, args.flags);
   const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
   validateCatalogLanguageFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
@@ -22355,8 +22290,6 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       return handleUcpCheckoutCommand(subcommand, context);
     case "ucp-catalog":
       return handleUcpCatalogCommand(subcommand, context);
-    case "ucp-merchant":
-      return handleUcpMerchantCommand(subcommand, context);
     case "catalog":
       return handleCatalogCommand(subcommand, context);
     case "ucp-order":
@@ -22414,25 +22347,6 @@ function writeMaintenanceLog(message) {
 `);
   }
 }
-function validateUcpMerchantListSelector(command, subcommand, positionals, flags) {
-  const isMerchantList = command === "ucp-merchant" && subcommand === "list";
-  if ("internal" in flags && !isMerchantList) {
-    throw validationError("--internal is only supported by ucp-merchant list");
-  }
-  if (!isMerchantList) {
-    return;
-  }
-  const unsupportedFlag = Object.keys(flags).find((name) => !UCP_MERCHANT_LIST_FLAGS.has(name));
-  if (unsupportedFlag) {
-    throw validationError(`--${unsupportedFlag} is not supported by ucp-merchant list`);
-  }
-  if (positionals.length !== 2) {
-    throw validationError("ucp-merchant list does not accept positional arguments");
-  }
-  if (!getBooleanFlag(flags, "help") && !getBooleanFlag(flags, "internal")) {
-    throw validationError("ucp-merchant list requires --internal");
-  }
-}
 function validateEventPollSelector(command, subcommand, flags) {
   if (command !== "events" || subcommand !== "poll") {
     return;
@@ -22479,7 +22393,6 @@ function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags,
     "ucp-catalog search",
     "ucp-catalog product",
     "catalog search",
-    "ucp-merchant list",
     "tool internal-ucp get-merchant-list"
   ];
   const supportedBy = environmentCommands.map(({ command: name, subcommand: action }) => `${name} ${action}`).concat(publicCatalogCommands).join(" or ");
@@ -22501,27 +22414,7 @@ function validateCatalogLanguageFlagScope(command, subcommand, flags) {
   }
 }
 function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
-  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "ucp-merchant" && subcommand === "list" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
-}
-async function handleUcpMerchantCommand(subcommand, context) {
-  if (!subcommand) {
-    printContextHelp(context, "ucp-merchant");
-    return EXIT_CODES.OK;
-  }
-  if (subcommand !== "list") {
-    throw validationError(`unsupported ucp-merchant command: ${subcommand}`);
-  }
-  rejectPublicCatalogAuthenticationFlags(context.args.flags);
-  const environment = clinkEnvironmentForApiBaseUrl(context.runtimeConfig.baseUrl);
-  if (!environment) {
-    throw configError("invalid UCP merchant API environment");
-  }
-  const result = await getInternalUcpMerchantList({
-    environment,
-    timeoutMs: context.globalOptions.timeoutMs
-  });
-  printSuccess(result, context.globalOptions.format);
-  return EXIT_CODES.OK;
+  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -24053,7 +23946,7 @@ function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   }
 }
 function rejectPublicCatalogAuthenticationFlags(flags) {
-  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
+  const unsupported = ["customer-api-key", "customer-id", "credential-token"].find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
@@ -25794,7 +25687,6 @@ var MAIN_HELP_COMMANDS = [
   "refund",
   "ucp-checkout",
   "ucp-catalog",
-  "ucp-merchant",
   "catalog",
   "ucp-order",
   "instruction",
