@@ -9385,7 +9385,7 @@ function installError(message) {
 // dist/command-branding.js
 var MAIN_EXECUTABLE_NAME = "clink";
 var VISA_EXECUTABLE_NAME = "visa-cli";
-var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|ucp-merchant|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
 function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
   if (executableName === MAIN_EXECUTABLE_NAME) {
     return value;
@@ -9452,7 +9452,6 @@ var MAIN_HELP_COMMANDS = [
   "refund",
   "ucp-checkout",
   "ucp-catalog",
-  "ucp-merchant",
   "catalog",
   "ucp-order",
   "instruction",
@@ -9539,7 +9538,6 @@ var OPTION_DEFINITIONS = [
   { name: "confirm-purchase", flags: "--confirm-purchase" },
   { name: "wait-delivery", flags: "--wait-delivery" },
   { name: "all", flags: "--all" },
-  { name: "internal", flags: "--internal" },
   { name: "tippable", flags: "--tippable" },
   { name: "check", flags: "--check" },
   { name: "force", flags: "--force" },
@@ -10268,6 +10266,9 @@ var DASHBOARD_BASE_URLS = {
   test: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
+var MERCHANT_LIST_URLS = {
+  production: "https://www.clinkbill.com/.well-known/ucp-merchants.json"
+};
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
@@ -10740,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.33";
+var CLI_VERSION = "0.2.34";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -12393,7 +12394,6 @@ Commands:
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
   ucp-catalog       Search merchant UCP catalogs
-  ucp-merchant      Discover enabled UCP merchants
   catalog           Search catalogs across merchants without naming one
   ucp-order         Query UCP orders and wait for digital delivery
   instruction       Manage purchase instruction mandates (agentic authorization)
@@ -12419,10 +12419,9 @@ Wallet Environment:
   later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
   process override for those authenticated commands.
 
-Public Discovery Environment:
-  ucp-catalog search/product, catalog search, ucp-merchant list, and the legacy
-  tool internal-ucp get-merchant-list command are public and config-independent. They default to
-  production and accept --sandbox or --test per call.
+Public Catalog Environment:
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
 
 Event Watching:
   Link commands normally print the browser handoff and then poll
@@ -12450,7 +12449,6 @@ Examples:
   clink skills tip --publisher clinkpay --name PollyReach --amount 2
   clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
   clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink ucp-merchant list --internal --format json
   clink catalog search --query "iced latte" --format json
   clink ucp-checkout get --checkout-id chk_xxx
   clink ucp-order get --order-id order_xxx
@@ -12466,7 +12464,6 @@ More Help:
   clink card --help
   clink skills --help
   clink ucp-catalog --help
-  clink ucp-merchant --help
   clink catalog --help
   clink ucp-checkout --help
   clink ucp-order --help
@@ -12846,9 +12843,8 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   get-endpoint uses the effective wallet API base and does not accept environment flags.
   get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
-  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
+  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
-  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12869,16 +12865,14 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
   using the environment saved by wallet init. Re-run wallet init to switch environments.
-  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
-  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
-  miss is refreshed before it can become an external-route decision; errors are never cached.
-  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
-  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
-  independently from the effective wallet API base and merchant_id.
+  Production fetches its merchant list from https://www.clinkbill.com/.well-known/ucp-merchants.json
+  on every call and never caches it, so upstream merchant changes apply without a new CLI release.
+  Sandbox/UAT and test use the lists bundled from public/uat and public/test with no request.
+  A merchant entry with "enabled": false is treated as absent.
   Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
-  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
-  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
-  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
+  A production merchant-list request that fails, times out, or does not return JSON is a network
+  error (exit 6) and is never reported as a missing merchant.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12893,14 +12887,16 @@ Options:
 ${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
-  Legacy alias for the public merchant-list API. Returns {"merchants":[...]} after validation.
+  Returns the complete merchant-list document after validating its merchant entries.
   The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
   It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
-  It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
-  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
-  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
-  that may include a path.
+  Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
+  Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
+  The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
+  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry with no
+  fragment whose hostname must exactly match domain_name; callers must not construct a replacement URL.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
   clink tool internal-ucp get-merchant-list --format json
@@ -12943,7 +12939,7 @@ Options:
   --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
   --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
   --description <text>         Optional Quick Instruction description
-  --is-recurring               Mark it recurring; mandates require recurringFrequency
+  --is-recurring               Mark the Quick Instruction as recurring
   --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
   --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
@@ -12967,13 +12963,13 @@ Quick Instruction:
   --extra are rejected because no card exists yet and the context is intentionally bounded.
   Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
   contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
-  requires description, a positive amountLimit with at most two decimals, and currencyCode.
+  requires a description of at most 150 characters, a positive amountLimit with at most two
+  decimals, and currencyCode.
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  After browser authorization, the server attempts to create a PENDING purchase instruction and
-  reports pendingInstructionId. A null value means no usable Quick ID was returned and does not
-  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
-  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
-  \`instruction list --valid-only\` until it is ACTIVE.
+  A successful token response reports pendingInstructionId; null means no usable Quick ID was
+  returned and does not prove whether creation was skipped or failed.
+  A PENDING instruction activates after VIC card binding completes and emits
+  purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -13483,49 +13479,6 @@ Behavior:
 Examples:
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
   clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en     --format json
-`;
-var UCP_MERCHANT_HELP = `clink ucp-merchant
-
-Usage:
-  clink ucp-merchant list --internal [options]
-
-Actions:
-  list       List enabled UCP merchants from Clink's public merchant API
-
-The --internal selector is required. It selects Clink's UCP merchant source; it does not require
-internal-network access or authentication.
-
-Examples:
-  clink ucp-merchant list --internal --format json
-  clink ucp-merchant list --internal --sandbox --format pretty
-`;
-var UCP_MERCHANT_LIST_HELP = `clink ucp-merchant list
-
-Usage:
-  clink ucp-merchant list --internal [options]
-
-Required Selector:
-  --internal                   Select the Clink UCP merchant source
-
-Options:
-${PUBLIC_CATALOG_LIST_OPTIONS}
-
-Behavior:
-  Sends an anonymous GET /agent/ucp/merchants with no query or body. It defaults to production;
-  --sandbox selects sandbox/UAT and --test selects test for this invocation.
-  It does not read ~/.clink-cli/config.json or inherit saved wallet state, CLINK_BASE_URL,
-  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, CSK, customer ID, or customer API key credentials.
-  The backend filters enabled merchants. Each validated result contains merchant_id, merchant_name,
-  description, domain, and optional ext metadata. ext is opaque JSON and never controls routing;
-  domain must be a safe HTTP(S) merchant route URL and may include a path. Valid rows survive
-  unrelated invalid rows; a non-empty wholly invalid array fails.
-  Validated successes use a short per-process cache and concurrent loads share one request. The
-  read-only GET retries transport, 408, 429, and 5xx once within the total timeout. Other HTTP
-  failures, including 401/403, are API errors (exit 5); exhausted transport/timeouts exit 6.
-
-Examples:
-  clink ucp-merchant list --internal --format json
-  clink ucp-merchant list --internal --test --format pretty
 `;
 var CATALOG_HELP = `clink catalog
 
@@ -14234,6 +14187,7 @@ Options:
   --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
                                --ucp-order-id is unavailable
   --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
+  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
   --event-only                 ACK and return the exact succeeded event without UCP order lookup
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -14437,13 +14391,6 @@ function getRawHelpText(command, subcommand, nestedCommand) {
         default:
           return UCP_CATALOG_HELP;
       }
-    case "ucp-merchant":
-      switch (subcommand) {
-        case "list":
-          return UCP_MERCHANT_LIST_HELP;
-        default:
-          return UCP_MERCHANT_HELP;
-      }
     case "catalog":
       switch (subcommand) {
         case "search":
@@ -14478,52 +14425,125 @@ function getRawHelpText(command, subcommand, nestedCommand) {
   }
 }
 
+// public/uat/ucp-merchants.json
+var ucp_merchants_default = {
+  version: 1,
+  updated_at: "2026-08-10T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "uat-magento.clinkpay.team",
+      merchant_url: "https://uat-magento.clinkpay.team/",
+      merchant_id: "mcht_f5d0rys1hjxe",
+      enabled: true,
+      description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "vtravel.link2shops.com",
+      merchant_url: "https://vtravel.link2shops.com/yiyuan/",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
+    }
+  ]
+};
+
+// public/test/ucp-merchants.json
+var ucp_merchants_default2 = {
+  version: 1,
+  updated_at: "2026-08-14T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
+      merchant_id: "mcht_f5xuyduv1a0j",
+      enabled: true,
+      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    }
+  ]
+};
+
 // dist/internal-ucp.js
-var MERCHANT_LIST_PATH = "/agent/ucp/merchants";
 var MERCHANT_LIST_USER_AGENT = "clink-cli";
 var MERCHANT_LIST_TIMEOUT_MS = 15e3;
-var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
-var MERCHANT_LIST_MAX_ATTEMPTS = 2;
-var MERCHANT_LIST_RETRY_DELAY_MS = 50;
-var merchantListRequests = /* @__PURE__ */ new WeakMap();
-async function getInternalUcpMerchantList(options2 = {}) {
-  return (await loadInternalUcpMerchantList(options2)).merchants;
-}
-function validateInternalUcpMerchantList(value, source) {
-  if (!Array.isArray(value)) {
-    throw invalidMerchantList(source, "expected an array");
-  }
-  const merchants = [];
-  for (const record of value) {
+var BUNDLED_MERCHANT_LISTS = {
+  sandbox: ucp_merchants_default,
+  test: ucp_merchants_default2
+};
+function validateInternalUcpMerchants(value, source) {
+  const records = merchantRecordsOf(value, source);
+  const merchants = /* @__PURE__ */ new Map();
+  const seenDomains = /* @__PURE__ */ new Set();
+  records.forEach((record, index) => {
     if (!record || typeof record !== "object" || Array.isArray(record)) {
-      continue;
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
     const fields = record;
-    const merchantId = nonBlankString(fields.merchant_id);
-    const merchantName = nonBlankString(fields.merchant_name);
-    const description = optionalDescription(fields.description);
-    const domain = merchantRouteUrl(fields.domain);
-    if (!merchantId || !merchantName || description === void 0 || !domain) {
-      continue;
+    const domainName = canonicalDomain(fields.domain_name);
+    const merchantId = stringValue(fields.merchant_id);
+    if (!domainName || !merchantId) {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
-    const merchant = {
-      merchant_id: merchantId,
-      merchant_name: merchantName,
-      description,
-      domain
-    };
-    if (Object.hasOwn(fields, "ext")) {
-      const ext = safeCloneJsonValue(fields.ext);
-      if (ext !== void 0) {
-        merchant.ext = ext;
-      }
+    if (fields.merchant_url !== void 0) {
+      validateMerchantUrl(fields.merchant_url, domainName, source, index);
     }
-    merchants.push(merchant);
-  }
-  if (value.length > 0 && merchants.length === 0) {
-    throw invalidMerchantList(source, "no valid merchant identities");
-  }
+    if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (seenDomains.has(domainName)) {
+      throw validationError(`duplicate internal UCP domain: ${domainName}`);
+    }
+    seenDomains.add(domainName);
+    if (fields.enabled !== false) {
+      merchants.set(domainName, merchantId);
+    }
+  });
   return merchants;
+}
+function merchantRecordsOf(value, source) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const envelope = value;
+    if (Array.isArray(envelope.merchants)) {
+      return envelope.merchants;
+    }
+  }
+  throw validationError(`invalid internal UCP config: ${source}`);
+}
+async function getInternalUcpMerchantList(options2 = {}) {
+  const environment = options2.environment ?? "production";
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  validateInternalUcpMerchants(loaded.document, loaded.source);
+  const merchants = merchantRecordsOf(loaded.document, loaded.source);
+  if (Array.isArray(loaded.document)) {
+    return { merchants: [...merchants] };
+  }
+  return {
+    ...loaded.document,
+    merchants: [...merchants]
+  };
 }
 async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl2;
@@ -14537,17 +14557,8 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  let merchantId;
-  if (options2.merchants) {
-    merchantId = options2.merchants.get(domainName);
-  } else {
-    let loaded = await loadInternalUcpMerchants(options2);
-    merchantId = loaded.merchants.get(domainName);
-    if (!merchantId && loaded.fromCache) {
-      loaded = await loadInternalUcpMerchants(options2, true);
-      merchantId = loaded.merchants.get(domainName);
-    }
-  }
+  const merchants = options2.merchants ?? await loadInternalUcpMerchants(environment, options2);
+  const merchantId = merchants.get(domainName);
   if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
@@ -14558,7 +14569,7 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   } catch {
     throw validationError("invalid internal UCP base URL");
   }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
     throw validationError("invalid internal UCP base URL");
   }
   return {
@@ -14568,305 +14579,92 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     endpoint: endpoint.toString()
   };
 }
-async function loadInternalUcpMerchants(options2, forceRefresh = false) {
-  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
-  const environment = options2.environment ?? "production";
-  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+async function loadInternalUcpMerchants(environment, options2) {
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  return validateInternalUcpMerchants(loaded.document, loaded.source);
+}
+async function loadInternalUcpMerchantListDocument(environment, options2) {
+  const explicitUrl = options2.merchantListUrl?.trim() || process.env.CLINK_UCP_MERCHANTS_URL?.trim() || void 0;
+  if (!explicitUrl) {
+    const bundled = BUNDLED_MERCHANT_LISTS[environment];
+    if (bundled !== void 0) {
+      return {
+        document: bundled,
+        source: `public/${bundledListName(environment)}/ucp-merchants.json`
+      };
+    }
+  }
+  const listUrl = explicitUrl ?? MERCHANT_LIST_URLS[environment];
+  if (!listUrl) {
+    throw configError(`no internal UCP merchant list for the ${environment} environment; set CLINK_UCP_MERCHANTS_URL`);
+  }
+  const fetchList = options2.fetchMerchantList ?? ((url) => fetchMerchantListDocument(url, options2.timeoutMs));
   return {
-    merchants: merchantMap(loaded.merchants, source),
-    fromCache: loaded.fromCache
+    document: await fetchList(listUrl),
+    source: listUrl
   };
 }
-async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
-  const environment = options2.environment ?? "production";
-  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
-  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
-  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
-  if (!requestsByUrl) {
-    requestsByUrl = /* @__PURE__ */ new Map();
-    merchantListRequests.set(fetchMerchantList, requestsByUrl);
-  }
-  let state = requestsByUrl.get(url);
-  if (!state) {
-    state = {};
-    requestsByUrl.set(url, state);
-  }
-  const now = Date.now();
-  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
-    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
-  }
-  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
-  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
-  if (inFlight) {
-    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
-  }
-  const requestState = state;
-  const request = (async () => {
-    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
-    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
-    const cached = Object.freeze(validated);
-    requestState.cached = {
-      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
-      merchants: cached
-    };
-    return cached;
-  })();
-  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
-  requestState.inFlightByTimeout.set(timeoutMs, request);
+function bundledListName(environment) {
+  return environment === "sandbox" ? "uat" : environment;
+}
+async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
   try {
-    return { merchants: cloneMerchantList(await request), fromCache: false };
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "en-US",
+        "User-Agent": MERCHANT_LIST_USER_AGENT
+      },
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+    }
+    throw networkError(`internal UCP merchant list request failed: ${error.message}`);
   } finally {
-    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
-      requestState.inFlightByTimeout.delete(timeoutMs);
-      if (requestState.inFlightByTimeout.size === 0) {
-        delete requestState.inFlightByTimeout;
-      }
-    }
+    clearTimeout(timeout);
   }
-}
-async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
-  const deadline = Date.now() + timeoutMs;
-  let lastFailure;
-  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
-      break;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), remainingMs);
-    let response;
-    try {
-      response = await fetchMerchantList(url, {
-        method: "GET",
-        credentials: "omit",
-        headers: {
-          Accept: "application/json",
-          "Accept-Language": "en-US",
-          "User-Agent": MERCHANT_LIST_USER_AGENT,
-          [CLI_VERSION_HEADER]: CLI_VERSION
-        },
-        signal: controller.signal
-      });
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    if (!response.ok) {
-      clearTimeout(timeout);
-      discardMerchantListResponse(response);
-      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
-      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    let rawText;
-    try {
-      rawText = await response.text();
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    } finally {
-      clearTimeout(timeout);
-    }
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      throw apiError("internal UCP merchant list response is not valid JSON", 502);
-    }
+  if (!response.ok) {
+    throw networkError(`internal UCP merchant list request failed with status ${response.status}`);
   }
-  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-}
-function merchantRouteUrl(value) {
-  const rawDomain = nonBlankString(value);
-  if (!rawDomain) {
-    return void 0;
-  }
-  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
-    return void 0;
-  }
-  let domain;
+  const rawText = await response.text();
   try {
-    domain = new URL(rawDomain);
+    return JSON.parse(rawText);
   } catch {
-    return void 0;
+    throw networkError(`internal UCP merchant list is not valid JSON: ${url}`);
   }
-  const domainName = canonicalDomain(domain.hostname);
-  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
-    return void 0;
-  }
-  domain.hostname = domainName;
-  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
-    domain.port = "";
-  }
-  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
-}
-function nonBlankString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function stringValue(value) {
-  return typeof value === "string" ? value.trim() : void 0;
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function optionalDescription(value) {
-  return value === null || value === void 0 ? "" : stringValue(value);
-}
-function safeCloneJsonValue(value) {
+function validateMerchantUrl(value, domainName, source, index) {
+  const rawUrl = stringValue(value);
+  let merchantUrl;
   try {
-    return cloneJsonValue(value, /* @__PURE__ */ new Set());
+    merchantUrl = new URL(rawUrl ?? "");
   } catch {
-    return void 0;
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
-}
-function cloneJsonValue(value, ancestors) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (!value || typeof value !== "object" || ancestors.has(value)) {
-    return void 0;
-  }
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const result = [];
-      for (const item of value) {
-        const cloned = cloneJsonValue(item, ancestors);
-        if (cloned === void 0) {
-          return void 0;
-        }
-        result.push(cloned);
-      }
-      return result;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      return void 0;
-    }
-    const entries = [];
-    for (const [key, item] of Object.entries(value)) {
-      const cloned = cloneJsonValue(item, ancestors);
-      if (cloned === void 0) {
-        return void 0;
-      }
-      entries.push([key, cloned]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password || merchantUrl.hash) {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
 }
 function canonicalDomain(value) {
-  return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
-}
-function merchantMap(merchants, source) {
-  const merchantIdsByDomain = /* @__PURE__ */ new Map();
-  for (const merchant of merchants) {
-    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
-    if (!domainName) {
-      continue;
-    }
-    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
-    merchantIds.add(merchant.merchant_id);
-    merchantIdsByDomain.set(domainName, merchantIds);
-  }
-  const mapped = new ConflictAwareMerchantMap(source);
-  for (const [domainName, merchantIds] of merchantIdsByDomain) {
-    if (merchantIds.size === 1) {
-      mapped.set(domainName, merchantIds.values().next().value);
-    } else {
-      mapped.addConflict(domainName);
-    }
-  }
-  return mapped;
-}
-var ConflictAwareMerchantMap = class extends Map {
-  source;
-  conflicts = /* @__PURE__ */ new Set();
-  constructor(source) {
-    super();
-    this.source = source;
-  }
-  addConflict(domainName) {
-    this.delete(domainName);
-    this.conflicts.add(domainName);
-  }
-  get(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.get(domainName);
-  }
-  has(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.has(domainName);
-  }
-  assertUnambiguous(domainName) {
-    if (this.conflicts.has(domainName)) {
-      throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
-    }
-  }
-};
-function cloneMerchantList(merchants) {
-  return merchants.map((merchant) => {
-    const cloned = {
-      merchant_id: merchant.merchant_id,
-      merchant_name: merchant.merchant_name,
-      description: merchant.description,
-      domain: merchant.domain
-    };
-    if (Object.hasOwn(merchant, "ext")) {
-      const ext = safeCloneJsonValue(merchant.ext);
-      if (ext !== void 0) {
-        cloned.ext = ext;
-      }
-    }
-    return cloned;
-  });
-}
-function retryableMerchantListStatus(status) {
-  return status === 408 || status === 429 || status >= 500 && status <= 599;
-}
-function discardMerchantListResponse(response) {
-  if (response.body) {
-    void response.body.cancel().catch(() => {
-    });
-  }
-}
-async function waitForMerchantListRetry(deadline) {
-  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
-    return false;
-  }
-  await new Promise((resolve6) => {
-    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
-  });
-  return Date.now() < deadline;
-}
-function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
-  if (error?.name === "AbortError") {
-    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-  }
-  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
-  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
-}
-function invalidMerchantList(source, reason) {
-  return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
+  return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
 // dist/instruction-context.js
 import { readFile as readFile3 } from "node:fs/promises";
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
-var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
   "title",
   "description",
@@ -22338,14 +22136,6 @@ var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
 var DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
 var DEFAULT_UCP_AGENT = "clink-cli";
 var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-var UCP_MERCHANT_LIST_FLAGS = /* @__PURE__ */ new Set([
-  "internal",
-  "sandbox",
-  "test",
-  "timeout",
-  "format",
-  "help"
-]);
 var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "install",
   "update",
@@ -22357,7 +22147,6 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "refund",
   "ucp-checkout",
   "ucp-catalog",
-  "ucp-merchant",
   "catalog",
   "ucp-order",
   "instruction",
@@ -22372,7 +22161,6 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
-  validateUcpMerchantListSelector(command, subcommand, args.positionals, args.flags);
   const selectedCommandEnvironment = validateEnvironmentFlagScope(command, subcommand, nestedCommand, args.flags, edition.environmentSelectingInitCommands ?? [], edition.environmentSelectingCommands ?? []);
   validateCatalogLanguageFlagScope(command, subcommand, args.flags);
   validateEventPollSelector(command, subcommand, args.flags);
@@ -22433,8 +22221,6 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       return handleUcpCheckoutCommand(subcommand, context);
     case "ucp-catalog":
       return handleUcpCatalogCommand(subcommand, context);
-    case "ucp-merchant":
-      return handleUcpMerchantCommand(subcommand, context);
     case "catalog":
       return handleCatalogCommand(subcommand, context);
     case "ucp-order":
@@ -22492,25 +22278,6 @@ function writeMaintenanceLog(message) {
 `);
   }
 }
-function validateUcpMerchantListSelector(command, subcommand, positionals, flags) {
-  const isMerchantList = command === "ucp-merchant" && subcommand === "list";
-  if ("internal" in flags && !isMerchantList) {
-    throw validationError("--internal is only supported by ucp-merchant list");
-  }
-  if (!isMerchantList) {
-    return;
-  }
-  const unsupportedFlag = Object.keys(flags).find((name) => !UCP_MERCHANT_LIST_FLAGS.has(name));
-  if (unsupportedFlag) {
-    throw validationError(`--${unsupportedFlag} is not supported by ucp-merchant list`);
-  }
-  if (positionals.length !== 2) {
-    throw validationError("ucp-merchant list does not accept positional arguments");
-  }
-  if (!getBooleanFlag(flags, "help") && !getBooleanFlag(flags, "internal")) {
-    throw validationError("ucp-merchant list requires --internal");
-  }
-}
 function validateEventPollSelector(command, subcommand, flags) {
   if (command !== "events" || subcommand !== "poll") {
     return;
@@ -22557,7 +22324,6 @@ function validateEnvironmentFlagScope(command, subcommand, nestedCommand, flags,
     "ucp-catalog search",
     "ucp-catalog product",
     "catalog search",
-    "ucp-merchant list",
     "tool internal-ucp get-merchant-list"
   ];
   const supportedBy = environmentCommands.map(({ command: name, subcommand: action }) => `${name} ${action}`).concat(publicCatalogCommands).join(" or ");
@@ -22579,27 +22345,7 @@ function validateCatalogLanguageFlagScope(command, subcommand, flags) {
   }
 }
 function isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand) {
-  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "ucp-merchant" && subcommand === "list" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
-}
-async function handleUcpMerchantCommand(subcommand, context) {
-  if (!subcommand) {
-    printContextHelp(context, "ucp-merchant");
-    return EXIT_CODES.OK;
-  }
-  if (subcommand !== "list") {
-    throw validationError(`unsupported ucp-merchant command: ${subcommand}`);
-  }
-  rejectPublicCatalogAuthenticationFlags(context.args.flags);
-  const environment = clinkEnvironmentForApiBaseUrl(context.runtimeConfig.baseUrl);
-  if (!environment) {
-    throw configError("invalid UCP merchant API environment");
-  }
-  const result = await getInternalUcpMerchantList({
-    environment,
-    timeoutMs: context.globalOptions.timeoutMs
-  });
-  printSuccess(result, context.globalOptions.format);
-  return EXIT_CODES.OK;
+  return command === "ucp-catalog" && (subcommand === "search" || subcommand === "product") || command === "catalog" && subcommand === "search" || command === "tool" && subcommand === "internal-ucp" && nestedCommand === "get-merchant-list";
 }
 async function handleSkillsCommand(subcommand, context) {
   if (!subcommand) {
@@ -22895,14 +22641,15 @@ async function toolInternalUcp(context) {
   switch (nestedCommand) {
     case "get-merchant-list": {
       rejectPublicCatalogAuthenticationFlags(context.args.flags);
-      if (!configuredEnvironment) {
+      const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
+      if (!configuredEnvironment && !hasMerchantListOverride) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
       }
       const result = await getInternalUcpMerchantList({
-        environment: configuredEnvironment,
+        environment: configuredEnvironment ?? "production",
         timeoutMs: context.globalOptions.timeoutMs
       });
-      printJson({ merchants: result }, context.globalOptions.format);
+      printJson(result, context.globalOptions.format);
       return EXIT_CODES.OK;
     }
     case "get-endpoint": {
@@ -24170,25 +23917,43 @@ async function getCommandUcpCatalogProduct(context, merchantId, productId2) {
   return unwrapApiData(result.body);
 }
 async function searchCommandUcpCatalog(context, merchantId, query, limit, language) {
+  const result = await searchCommandUcpCatalogPage(context, {
+    merchantId,
+    query,
+    ...limit !== void 0 ? { limit } : {},
+    ...language ? { language } : {},
+    dryRun: false
+  });
+  if (typeof result === "object" && result !== null && isDryRun3(result)) {
+    throw apiError("UCP Catalog search unexpectedly produced a dry-run response");
+  }
+  return result;
+}
+async function searchCommandUcpCatalogPage(context, input) {
   const requestId = randomUUID4();
+  const pagination = {
+    ...input.cursor ? { cursor: input.cursor } : {},
+    ...input.limit !== void 0 ? { limit: input.limit } : {}
+  };
   const result = await requestJson({
     baseUrl: context.runtimeConfig.baseUrl,
     method: "POST",
-    path: `/agent/ucp/${encodeURIComponent(merchantId)}/catalog/search`,
+    path: `/agent/ucp/${encodeURIComponent(input.merchantId)}/catalog/search`,
+    acceptLanguage: input.language ?? null,
     headers: {
       "Request-Id": requestId,
       "UCP-Agent": DEFAULT_UCP_AGENT
     },
     body: {
-      query,
-      ...language ? { context: { language } } : {},
-      ...limit !== void 0 ? { pagination: { limit } } : {}
+      query: input.query,
+      ...input.language ? { context: { language: input.language } } : {},
+      ...Object.keys(pagination).length > 0 ? { pagination } : {}
     },
     timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: false
+    dryRun: input.dryRun
   });
   if (isDryRun3(result)) {
-    throw apiError("UCP Catalog search unexpectedly produced a dry-run response");
+    return result;
   }
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
@@ -26011,6 +25776,367 @@ function extractMandateId(mandate) {
   return void 0;
 }
 
+// dist/visa/benefit-catalog-provider.js
+var VISA_BENEFIT_CATALOG_REGISTRY_VERSION = "2026-08-27.1";
+var VISA_BENEFIT_CATALOG_PROVIDERS = Object.freeze([
+  Object.freeze({
+    providerKey: "visa_benefit_catalog",
+    environments: Object.freeze({
+      sandbox: Object.freeze({
+        merchantId: "mcht_ftmse61a6az0",
+        merchantUrl: "https://vtravel.link2shops.com/yiyuan/",
+        merchantName: "vtravel.link2shops.com"
+      }),
+      test: Object.freeze({
+        merchantId: "mcht_f5xuyduv1a0j",
+        merchantUrl: "https://testa.link2shops.com/",
+        merchantName: "testa.link2shops.com"
+      })
+    })
+  })
+]);
+function resolveVisaBenefitCatalogProvider(input) {
+  if (input.mode !== "catalog_purchase") {
+    return void 0;
+  }
+  const routes = visaBenefitCatalogProviderRoutes(input.environment, input.baseUrl);
+  const merchantIdMatch = input.merchantId ? routes.find((route) => route.merchantId === input.merchantId) : void 0;
+  const merchantUrlMatch = routes.find((route) => route.merchantUrl === input.merchantUrl);
+  if (!merchantIdMatch && !merchantUrlMatch) {
+    if (registryContainsMerchantId(input.merchantId) || registryContainsMerchantUrl(input.merchantUrl)) {
+      throw validationError("Visa Benefit Catalog provider identity does not match the locked environment registry");
+    }
+    return void 0;
+  }
+  if (!merchantIdMatch || !merchantUrlMatch || merchantIdMatch.providerKey !== merchantUrlMatch.providerKey) {
+    throw validationError("Visa Benefit Catalog provider merchantId and merchantUrl must exactly match the registry");
+  }
+  if (input.endpoint && input.endpoint !== merchantIdMatch.endpoint) {
+    throw validationError("Visa Benefit Catalog provider endpoint must exactly match the locked environment");
+  }
+  return merchantIdMatch;
+}
+function registryContainsMerchantId(merchantId) {
+  return Boolean(merchantId && VISA_BENEFIT_CATALOG_PROVIDERS.some((provider) => Object.values(provider.environments).some((identity) => identity?.merchantId === merchantId)));
+}
+function registryContainsMerchantUrl(merchantUrl) {
+  return VISA_BENEFIT_CATALOG_PROVIDERS.some((provider) => Object.values(provider.environments).some((identity) => identity?.merchantUrl === merchantUrl));
+}
+function visaBenefitCatalogProviderRoutes(environment, baseUrl) {
+  return visaBenefitCatalogRegistrySnapshot(environment, baseUrl).providers;
+}
+function visaBenefitCatalogRegistrySnapshot(environment, baseUrl) {
+  const providers = [];
+  const unconfiguredProviderKeys = [];
+  for (const provider of VISA_BENEFIT_CATALOG_PROVIDERS) {
+    const identity = provider.environments[environment];
+    if (!identity) {
+      unconfiguredProviderKeys.push(provider.providerKey);
+      continue;
+    }
+    providers.push({
+      registryVersion: VISA_BENEFIT_CATALOG_REGISTRY_VERSION,
+      environment,
+      providerKey: provider.providerKey,
+      domainName: new URL(identity.merchantUrl).hostname.toLowerCase(),
+      merchantId: identity.merchantId,
+      merchantUrl: identity.merchantUrl,
+      merchantName: identity.merchantName,
+      provider: "clinkbill",
+      endpoint: providerEndpoint(baseUrl, identity.merchantId)
+    });
+  }
+  return {
+    registryVersion: VISA_BENEFIT_CATALOG_REGISTRY_VERSION,
+    environment,
+    providers,
+    unconfiguredProviderKeys
+  };
+}
+function providerEndpoint(baseUrl, merchantId) {
+  let endpoint;
+  try {
+    endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchantId)}`, baseUrl);
+  } catch {
+    throw validationError("invalid Visa Benefit Catalog API base URL");
+  }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    throw validationError("invalid Visa Benefit Catalog API base URL");
+  }
+  return endpoint.toString();
+}
+
+// dist/visa/benefit-catalog-discovery.js
+var PROVIDER_PAGE_LIMIT = 100;
+var PROVIDER_MAX_PAGES = 100;
+var CURRENCY_PATTERN = /^[A-Z]{3}$/u;
+var ORDERABLE_AVAILABILITY = /* @__PURE__ */ new Set([
+  "IN_STOCK",
+  "AVAILABLE",
+  "ACTIVE",
+  "ORDERABLE"
+]);
+async function discoverVisaBenefitCatalogProducts(rawInput, dependencies) {
+  const input = normalizeInput(rawInput);
+  const registry = visaBenefitCatalogRegistrySnapshot(input.environment, input.baseUrl);
+  const routes = registry.providers;
+  const results = await Promise.all(routes.map((route) => discoverProvider(route, input, dependencies)));
+  const providerProducts = results.flatMap((result) => result.products);
+  const failures = [
+    ...registry.unconfiguredProviderKeys.map((providerKey) => ({
+      providerKey,
+      reason: "provider_registry_unconfigured",
+      message: `provider registry ${registry.registryVersion} has no ${input.environment} identity`
+    })),
+    ...results.flatMap((result) => result.failures)
+  ];
+  const dryRunRequests = results.flatMap((result) => result.dryRunRequests);
+  const coverage = input.dryRun ? "dry_run" : failures.length > 0 ? "partial" : "complete";
+  return {
+    registryVersion: registry.registryVersion,
+    environment: registry.environment,
+    coverage,
+    query: input.query,
+    language: input.language,
+    directlyOrderableBenefits: true,
+    programMatching: "not_performed",
+    providerCount: routes.length + registry.unconfiguredProviderKeys.length,
+    successfulProviderCount: results.filter((result) => result.complete).length,
+    providerIdentities: routes.map(providerIdentity),
+    pagesFetched: results.reduce((total, result) => total + result.pagesFetched, 0),
+    returnedProductCount: providerProducts.length,
+    providerProducts,
+    failures,
+    ...dryRunRequests.length > 0 ? { dryRunRequests } : {}
+  };
+}
+function catalogLanguageForVisaLocale(locale) {
+  switch (locale) {
+    case "zh-HK":
+    case "zh-TW":
+      return "zh-Hant";
+    case "zh-CN":
+      return "zh-Hans";
+    default:
+      return "en";
+  }
+}
+async function discoverProvider(route, input, dependencies) {
+  if (input.dryRun) {
+    try {
+      const request = await dependencies.searchPage({
+        merchantId: route.merchantId,
+        query: input.query,
+        language: input.language,
+        limit: PROVIDER_PAGE_LIMIT,
+        dryRun: true
+      });
+      return {
+        complete: false,
+        pagesFetched: 0,
+        products: [],
+        failures: [],
+        dryRunRequests: [{
+          providerIdentity: providerIdentity(route),
+          request
+        }]
+      };
+    } catch (error) {
+      return providerFailure(route, error);
+    }
+  }
+  const products = [];
+  const seenProducts = /* @__PURE__ */ new Map();
+  const seenCursors = /* @__PURE__ */ new Set();
+  let cursor;
+  let pagesFetched = 0;
+  try {
+    while (pagesFetched < PROVIDER_MAX_PAGES) {
+      const payload = await dependencies.searchPage({
+        merchantId: route.merchantId,
+        query: input.query,
+        language: input.language,
+        limit: PROVIDER_PAGE_LIMIT,
+        ...cursor ? { cursor } : {},
+        dryRun: false
+      });
+      pagesFetched += 1;
+      const page = providerCatalogPage(payload);
+      for (const rawProduct of page.products) {
+        const product = orderableProviderProduct(rawProduct, route);
+        if (!product) {
+          continue;
+        }
+        const productId2 = requiredText(product.product.id ?? product.product.productId ?? product.product.product_id, "provider Catalog product is missing id");
+        const fingerprint = JSON.stringify(product.product);
+        const previous = seenProducts.get(productId2);
+        if (previous === fingerprint) {
+          continue;
+        }
+        if (previous !== void 0) {
+          throw validationError("provider Catalog product changed across cursor pages");
+        }
+        seenProducts.set(productId2, fingerprint);
+        products.push(product);
+      }
+      if (!page.nextCursor) {
+        return {
+          complete: true,
+          pagesFetched,
+          products,
+          failures: [],
+          dryRunRequests: []
+        };
+      }
+      if (seenCursors.has(page.nextCursor)) {
+        throw validationError("provider Catalog pagination repeated a cursor");
+      }
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+    throw validationError("provider Catalog pagination exceeded its safety limit");
+  } catch (error) {
+    const failed = providerFailure(route, error);
+    return {
+      ...failed,
+      pagesFetched,
+      products
+    };
+  }
+}
+function providerFailure(route, error) {
+  return {
+    complete: false,
+    pagesFetched: 0,
+    products: [],
+    failures: [{
+      providerKey: route.providerKey,
+      merchantId: route.merchantId,
+      reason: "provider_search_failed",
+      message: safeErrorMessage(error)
+    }],
+    dryRunRequests: []
+  };
+}
+function providerCatalogPage(payload) {
+  const root = requireRecord(payload, "invalid provider Catalog search response");
+  if (!Array.isArray(root.products)) {
+    throw validationError("provider Catalog search response is missing products");
+  }
+  const products = root.products.map((product) => requireRecord(product, "provider Catalog contains an invalid product"));
+  const pagination = root.pagination === void 0 ? {} : requireRecord(root.pagination, "provider Catalog pagination must be an object");
+  const nextCursor = optionalText(pagination.next_cursor ?? pagination.nextCursor ?? root.next_cursor ?? root.nextCursor);
+  const rawHasNext = pagination.has_next_page ?? pagination.hasNextPage ?? root.has_next_page ?? root.hasNextPage;
+  if (rawHasNext !== void 0 && typeof rawHasNext !== "boolean") {
+    throw validationError("provider Catalog has_next_page must be a boolean");
+  }
+  const hasNext = rawHasNext ?? Boolean(nextCursor);
+  if (hasNext && !nextCursor) {
+    throw validationError("provider Catalog pagination is missing next_cursor");
+  }
+  return {
+    products,
+    ...hasNext && nextCursor ? { nextCursor } : {}
+  };
+}
+function orderableProviderProduct(rawProduct, route) {
+  const product = structuredClone(rawProduct);
+  requiredText(product.id ?? product.productId ?? product.product_id, "provider Catalog product is missing id");
+  requiredText(product.title ?? product.name, "provider Catalog product is missing title");
+  let candidates;
+  if (product.variants === void 0 || product.variants === null) {
+    candidates = [product];
+  } else {
+    if (!Array.isArray(product.variants)) {
+      throw validationError("provider Catalog product variants must be an array");
+    }
+    const variants = product.variants.map((variant) => requireRecord(variant, "provider Catalog product contains an invalid variant"));
+    candidates = variants.length > 0 ? variants : [product];
+  }
+  const orderableVariantIds = [];
+  for (const candidate of candidates) {
+    const candidateId = requiredText(candidate.id ?? candidate.productId ?? candidate.product_id, "provider Catalog variant is missing id");
+    requiredText(candidate.title ?? candidate.name, "provider Catalog variant is missing title");
+    if (!isExplicitlyOrderable(candidate)) {
+      continue;
+    }
+    validateStructuredPrice(candidate.price);
+    orderableVariantIds.push(candidateId);
+  }
+  if (orderableVariantIds.length === 0) {
+    return void 0;
+  }
+  return {
+    providerIdentity: providerIdentity(route),
+    directlyOrderable: true,
+    orderableVariantIds,
+    product
+  };
+}
+function providerIdentity(route) {
+  return {
+    registryVersion: route.registryVersion,
+    environment: route.environment,
+    providerKey: route.providerKey,
+    merchantId: route.merchantId,
+    merchantUrl: route.merchantUrl,
+    merchantName: route.merchantName,
+    endpoint: route.endpoint
+  };
+}
+function isExplicitlyOrderable(value) {
+  const availability = requireRecord(value.availability, "provider Catalog variant is missing availability");
+  if (availability.available !== true) {
+    return false;
+  }
+  const status = requiredText(availability.status, "provider Catalog variant availability is missing status").toUpperCase();
+  return ORDERABLE_AVAILABILITY.has(status);
+}
+function validateStructuredPrice(value) {
+  const price = requireRecord(value, "orderable provider Catalog variant is missing structured price");
+  const amount = price.amount;
+  if (!(typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0) && !(typeof amount === "string" && /^\d+$/u.test(amount.trim()))) {
+    throw validationError("orderable provider Catalog price amount must be non-negative minor units");
+  }
+  const currency = requiredText(price.currency ?? price.currencyCode ?? price.currency_code, "orderable provider Catalog price is missing currency").toUpperCase();
+  if (!CURRENCY_PATTERN.test(currency)) {
+    throw validationError("orderable provider Catalog price currency must be a three-letter code");
+  }
+}
+function normalizeInput(input) {
+  if (!input.query.normalize("NFKC").trim()) {
+    throw validationError("--include-provider-products requires a non-blank recommendation query");
+  }
+  const language = input.language.normalize("NFKC").trim();
+  if (!language) {
+    throw validationError("provider Catalog language must not be blank");
+  }
+  return {
+    ...input,
+    language
+  };
+}
+function requiredText(value, message) {
+  const text = optionalText(value);
+  if (!text) {
+    throw validationError(message);
+  }
+  return text;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function requireRecord(value, message) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw validationError(message);
+  }
+  return value;
+}
+function safeErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "provider Catalog search failed";
+  return message.normalize("NFKC").replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 300) || "provider Catalog search failed";
+}
+
 // dist/visa/context-input.js
 import { readFile as readFile5 } from "node:fs/promises";
 async function readVisaContextInput(flags, commandLabel) {
@@ -26051,11 +26177,11 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
   if (options2.expectedAmount === void 0 !== (options2.expectedCurrency === void 0)) {
     throw new Error("expectedAmount and expectedCurrency must be provided together");
   }
-  const title = requiredText(raw.title, "instructionContext.title");
+  const title = requiredText2(raw.title, "instructionContext.title");
   if (title.length > 256) {
     throw validationError("instructionContext.title must be at most 256 characters");
   }
-  const description = optionalText(raw.description, "instructionContext.description");
+  const description = optionalText2(raw.description, "instructionContext.description");
   if (description && description.length > 1024) {
     throw validationError("instructionContext.description must be at most 1024 characters");
   }
@@ -26101,26 +26227,26 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
 }
 function normalizeVisaMandate(mandate, index, isRecurring) {
   const field = `instructionContext.mandates[${index}]`;
-  const title = requiredText(mandate.title, `${field}.title`);
-  const description = requiredText(mandate.description, `${field}.description`);
+  const title = requiredText2(mandate.title, `${field}.title`);
+  const description = requiredText2(mandate.description, `${field}.description`);
   const amountLimit = normalizeAmountLimit(mandate.amountLimit, `${field}.amountLimit`);
-  const currencyCode = requiredText(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
+  const currencyCode = requiredText2(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
   if (!CURRENCY_FORMAT.test(currencyCode)) {
     throw validationError(`${field}.currencyCode must be a three-letter currency code`);
   }
-  const merchantCategoryCode2 = requiredText(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
+  const merchantCategoryCode2 = requiredText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
   if (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000") {
     throw validationError(`${field}.merchantCategoryCode must be a nonzero four-digit MCC`);
   }
-  const preferredMerchantName = optionalText(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
-  const merchantCategory = optionalText(mandate.merchantCategory, `${field}.merchantCategory`);
+  const preferredMerchantName = optionalText2(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
+  const merchantCategory = optionalText2(mandate.merchantCategory, `${field}.merchantCategory`);
   if (preferredMerchantName && merchantCategory) {
     throw validationError(`${field} cannot contain both preferredMerchantName and merchantCategory`);
   }
   if (!isRecurring && mandate.recurringFrequency !== void 0) {
     throw validationError(`${field}.recurringFrequency requires instructionContext.isRecurring=true`);
   }
-  const recurringFrequency = isRecurring ? requiredText(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
+  const recurringFrequency = isRecurring ? requiredText2(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
   const effectiveUntilTime = optionalUtcDateTime(mandate.effectiveUntilTime, `${field}.effectiveUntilTime`);
   const normalized = {
     ...structuredClone(mandate),
@@ -26152,20 +26278,20 @@ function comparableAmount(value) {
   return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
 }
 function optionalUtcDateTime(value, field) {
-  const text = optionalText(value, field);
+  const text = optionalText2(value, field);
   if (text && !UTC_DATETIME_FORMAT2.test(text)) {
     throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
   }
   return text;
 }
-function requiredText(value, field) {
-  const text = optionalText(value, field);
+function requiredText2(value, field) {
+  const text = optionalText2(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText(value, field) {
+function optionalText2(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26293,7 +26419,7 @@ function normalizeVisaCommerceContext(raw) {
   if (!isRecord20(raw)) {
     throw validationError("commerce context must be a JSON object");
   }
-  const mode = requiredText2(raw.mode, "mode").toLowerCase();
+  const mode = requiredText3(raw.mode, "mode").toLowerCase();
   const context = mode === "prepare" ? normalizePrepareContext(raw) : mode === "purchase" ? normalizePurchaseRunContext(raw, "purchase") : mode === "catalog_purchase" ? normalizePurchaseRunContext(raw, "catalog_purchase") : (() => {
     throw validationError('mode must be "prepare", "purchase", or "catalog_purchase"');
   })();
@@ -26339,11 +26465,11 @@ function normalizePrepareContext(raw) {
   if (raw.instructionContext !== void 0) {
     throw validationError("prepare mode does not accept instructionContext because it cannot create an Instruction");
   }
-  const target = requiredText2(raw.target, "target").toLowerCase();
+  const target = requiredText3(raw.target, "target").toLowerCase();
   if (target !== "login" && target !== "visa_card_ready") {
     throw validationError('prepare mode target must be "login" or "visa_card_ready"');
   }
-  const requestText = optionalText2(raw.requestText, "requestText");
+  const requestText = optionalText3(raw.requestText, "requestText");
   return {
     mode: "prepare",
     target,
@@ -26357,7 +26483,7 @@ function normalizePurchaseRunContext(raw, mode) {
   }
   assertOnlyFields(raw, PURCHASE_FIELDS, "purchase context");
   const environment = normalizeVisaCommerceEnvironment(raw.environment);
-  const requestText = requiredText2(raw.requestText, "requestText");
+  const requestText = requiredText3(raw.requestText, "requestText");
   const programCode = optionalProgramCode(raw.program);
   const selection = requireObject(raw.selection, "selection");
   const expected = requireObject(raw.expected, "expected");
@@ -26368,14 +26494,14 @@ function normalizePurchaseRunContext(raw, mode) {
   if (isVisaProgramUrl(merchantUrl)) {
     throw validationError("selection.merchantUrl must be the actual merchant URL, not a Visa/VSRP URL");
   }
-  const productId2 = requiredText2(selection.productId, "selection.productId");
-  const productQuery = optionalText2(selection.productQuery, "selection.productQuery");
+  const productId2 = requiredText3(selection.productId, "selection.productId");
+  const productQuery = optionalText3(selection.productQuery, "selection.productQuery");
   const quantity = requiredPositiveInteger(selection.quantity, "selection.quantity");
-  const merchantId = optionalText2(selection.merchantId, "selection.merchantId");
+  const merchantId = optionalText3(selection.merchantId, "selection.merchantId");
   const endpoint = optionalHttpUrl(selection.endpoint, "selection.endpoint");
-  const channelType = optionalText2(selection.channelType, "selection.channelType")?.toLowerCase();
-  const storeId = optionalText2(selection.storeId, "selection.storeId");
-  const catalogQuery = optionalText2(selection.catalogQuery, "selection.catalogQuery");
+  const channelType = optionalText3(selection.channelType, "selection.channelType")?.toLowerCase();
+  const storeId = optionalText3(selection.storeId, "selection.storeId");
+  const catalogQuery = optionalText3(selection.catalogQuery, "selection.catalogQuery");
   const catalogEnvironment = optionalCatalogEnvironment(selection.catalogEnvironment);
   const catalogLanguage = optionalCatalogLanguage(selection.catalogLanguage);
   const platformCatalogFields = [
@@ -26400,14 +26526,14 @@ function normalizePurchaseRunContext(raw, mode) {
       throw validationError("selection.catalogEnvironment does not match the commerce environment");
     }
   }
-  const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
-  const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
+  const merchantName = requiredText3(expected.merchantName, "expected.merchantName");
+  const itemTitle = requiredText3(expected.itemTitle, "expected.itemTitle");
   const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
-  const currency = requiredText2(expected.currency, "expected.currency").toUpperCase();
+  const currency = requiredText3(expected.currency, "expected.currency").toUpperCase();
   if (!CURRENCY_FORMAT2.test(currency)) {
     throw validationError("expected.currency must be a three-letter currency code");
   }
-  const availabilityText = mode === "catalog_purchase" ? requiredText2(expected.availability, "expected.availability") : optionalText2(expected.availability, "expected.availability");
+  const availabilityText = mode === "catalog_purchase" ? requiredText3(expected.availability, "expected.availability") : optionalText3(expected.availability, "expected.availability");
   const authorizedAvailability = availabilityText ? normalizeCatalogAvailability(availabilityText) : void 0;
   const fulfillmentType = mode === "catalog_purchase" ? normalizeFulfillmentType(raw.fulfillmentType) : optionalFulfillmentType(raw.fulfillmentType);
   if (typeof raw.digitalDeliveryExpected !== "boolean") {
@@ -26422,7 +26548,7 @@ function normalizePurchaseRunContext(raw, mode) {
   const instructionContext = normalizedInstruction.context;
   const merchantCategoryCode2 = normalizedInstruction.merchantCategoryCodes[0];
   const price = divideMajorAmount(totalPrice, quantity, currency);
-  const assertedCategory = optionalText2(raw.assertedCategory, "assertedCategory");
+  const assertedCategory = optionalText3(raw.assertedCategory, "assertedCategory");
   const shippingAddress = optionalObject2(raw.shippingAddress, "shippingAddress");
   if (fulfillmentType === "PHYSICAL_GOODS_REQUIRES_SHIPPING" && !shippingAddress) {
     throw validationError("shippingAddress is required when fulfillmentType is PHYSICAL_GOODS_REQUIRES_SHIPPING");
@@ -26506,10 +26632,10 @@ function optionalProgramCode(value) {
   }
   const program2 = requireObject(value, "program");
   assertOnlyFields(program2, /* @__PURE__ */ new Set(["code"]), "program");
-  return requiredText2(program2.code, "program.code");
+  return requiredText3(program2.code, "program.code");
 }
 function normalizeFulfillmentType(value) {
-  const fulfillmentType = requiredText2(value, "fulfillmentType").toUpperCase();
+  const fulfillmentType = requiredText3(value, "fulfillmentType").toUpperCase();
   if (fulfillmentType !== "NO_SHIPPING_REQUIRED" && fulfillmentType !== "PHYSICAL_GOODS_REQUIRES_SHIPPING") {
     throw validationError("fulfillmentType must be NO_SHIPPING_REQUIRED or PHYSICAL_GOODS_REQUIRES_SHIPPING");
   }
@@ -26537,7 +26663,7 @@ function normalizeCatalogAvailability(value) {
   return normalized;
 }
 function optionalCatalogEnvironment(value) {
-  const environment = optionalText2(value, "selection.catalogEnvironment")?.toLowerCase();
+  const environment = optionalText3(value, "selection.catalogEnvironment")?.toLowerCase();
   if (!environment) {
     return void 0;
   }
@@ -26547,7 +26673,7 @@ function optionalCatalogEnvironment(value) {
   return environment === "uat" ? "sandbox" : environment;
 }
 function optionalCatalogLanguage(value) {
-  const language = optionalText2(value, "selection.catalogLanguage");
+  const language = optionalText3(value, "selection.catalogLanguage");
   if (!language) {
     return void 0;
   }
@@ -26636,7 +26762,7 @@ function normalizeJsonValue(value) {
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalizeJsonValue(value[key])]));
 }
 function normalizeVisaCommerceEnvironment(value) {
-  const environment = requiredText2(value, "environment").toLowerCase();
+  const environment = requiredText3(value, "environment").toLowerCase();
   if (environment !== "uat" && environment !== "sandbox" && environment !== "test" && environment !== "production") {
     throw validationError("environment must be uat, sandbox, test, or production");
   }
@@ -26702,14 +26828,14 @@ function requiredPositiveInteger(value, field) {
   }
   return value;
 }
-function requiredText2(value, field) {
-  const text = optionalText2(value, field);
+function requiredText3(value, field) {
+  const text = optionalText3(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText2(value, field) {
+function optionalText3(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26726,7 +26852,7 @@ function requiredHttpUrl(value, field) {
   return url;
 }
 function optionalHttpUrl(value, field) {
-  const text = optionalText2(value, field);
+  const text = optionalText3(value, field);
   if (!text) {
     return void 0;
   }
@@ -27324,7 +27450,7 @@ var LEGAL_TRANSITIONS = {
 function defaultVisaState() {
   return {
     fsmState: "IDLE",
-    activeMarket: "hk",
+    activeMarket: "cn",
     vsraTokens: {}
   };
 }
@@ -28580,7 +28706,7 @@ async function getVisaProgramDetail(options2) {
   return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa Program detail");
 }
 function parseVisaMarket(value, storedConfig) {
-  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "hk");
+  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "cn");
 }
 function normalizeVisaLocale(value) {
   const locale = String(value ?? "zh-CN").trim().replaceAll("_", "-").toLowerCase();
@@ -29246,7 +29372,7 @@ ${url}
         ...instructionContext.isRecurring ? { isRecurring: true } : {},
         ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
       });
-      const instructionId2 = optionalText3(detail.instructionId ?? detail.purchaseInstructionId);
+      const instructionId2 = optionalText4(detail.instructionId ?? detail.purchaseInstructionId);
       if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -29298,10 +29424,10 @@ ${event.url}
       });
       applyStoredConfig(context, storedConfig);
       const detail = isRecord25(result) ? result : { status: "unknown" };
-      const pendingInstructionId = optionalText3(detail.pendingInstructionId);
-      const oauthMode = optionalText3(detail.oauthMode);
+      const pendingInstructionId = optionalText4(detail.pendingInstructionId);
+      const oauthMode = optionalText4(detail.oauthMode);
       const customerCreated = optionalBoolean2(detail.customerCreated);
-      const activationDriver = optionalText3(detail.activationDriver);
+      const activationDriver = optionalText4(detail.activationDriver);
       return {
         ready: detail.status === "ready",
         ...pendingInstructionId ? { pendingInstructionId } : {},
@@ -29334,30 +29460,24 @@ ${event.url}
 async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
   const expectedBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
   const environment = commerceContext.environment === "uat" ? "sandbox" : commerceContext.environment;
+  const registeredProvider = resolveVisaBenefitCatalogProvider({
+    mode: commerceContext.mode,
+    environment,
+    ...purchase.merchantId ? { merchantId: purchase.merchantId } : {},
+    merchantUrl: purchase.merchantUrl,
+    ...purchase.endpoint ? { endpoint: purchase.endpoint } : {},
+    baseUrl: expectedBaseUrl
+  });
+  if (registeredProvider) {
+    return resolveInternalCatalogPurchase(context, commerceContext, purchase, registeredProvider);
+  }
   try {
     const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, {
       baseUrl: expectedBaseUrl,
       environment,
       timeoutMs: context.globalOptions.timeoutMs
     });
-    assertFrozenRoute(purchase, internal.merchantId, internal.endpoint);
-    const catalog = await getCommandUcpCatalogProduct(context, internal.merchantId, purchase.productId);
-    const product = verifyInternalProduct(catalog, purchase, internal.merchantId, commerceContext.mode === "catalog_purchase");
-    return {
-      purchaseContext: {
-        ...purchase,
-        merchantId: internal.merchantId,
-        endpoint: internal.endpoint
-      },
-      route: {
-        type: "internal",
-        provider: internal.provider,
-        domainName: internal.domainName,
-        merchantId: internal.merchantId,
-        endpoint: internal.endpoint
-      },
-      product
-    };
+    return resolveInternalCatalogPurchase(context, commerceContext, purchase, internal);
   } catch (error) {
     if (!(error instanceof CliError) || error.message !== "NOT_IN_INTERNAL_UCP_LIST") {
       throw error;
@@ -29398,6 +29518,26 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
       currency: parsed.currency,
       availability: variant.inventoryStatus
     }
+  };
+}
+async function resolveInternalCatalogPurchase(context, commerceContext, purchase, internal) {
+  assertFrozenRoute(purchase, internal.merchantId, internal.endpoint);
+  const catalog = await getCommandUcpCatalogProduct(context, internal.merchantId, purchase.productId);
+  const product = verifyInternalProduct(catalog, purchase, internal.merchantId, commerceContext.mode === "catalog_purchase");
+  return {
+    purchaseContext: {
+      ...purchase,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    },
+    route: {
+      type: "internal",
+      provider: internal.provider,
+      domainName: internal.domainName,
+      merchantId: internal.merchantId,
+      endpoint: internal.endpoint
+    },
+    product
   };
 }
 async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase) {
@@ -29449,11 +29589,11 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
   };
 }
 function resolveUniquePlatformCatalogCandidate(payload, purchase) {
-  const root = requireRecord(payload, "invalid broad Catalog search response");
+  const root = requireRecord2(payload, "invalid broad Catalog search response");
   if (!Array.isArray(root.groups)) {
     throw validationError("broad Catalog search response is missing groups");
   }
-  const groups = root.groups.map((value) => requireRecord(value, "invalid broad Catalog group")).filter((group2) => normalizedText2(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText2(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
+  const groups = root.groups.map((value) => requireRecord2(value, "invalid broad Catalog group")).filter((group2) => normalizedText2(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText2(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
   if (groups.length === 0) {
     throw validationError("frozen Eats365 store is no longer present in broad Catalog results");
   }
@@ -29468,7 +29608,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (!Array.isArray(group.products)) {
     throw validationError("broad Catalog group is missing products");
   }
-  const products = group.products.map((value) => requireRecord(value, "invalid broad Catalog product")).filter((product2) => requiredProductText(product2.id ?? product2.productId ?? product2.product_id, "broad Catalog product is missing id") === purchase.productId);
+  const products = group.products.map((value) => requireRecord2(value, "invalid broad Catalog product")).filter((product2) => requiredProductText(product2.id ?? product2.productId ?? product2.product_id, "broad Catalog product is missing id") === purchase.productId);
   if (products.length === 0) {
     throw validationError("selected product is no longer present in the frozen Eats365 store");
   }
@@ -29487,7 +29627,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (!Array.isArray(product.variants)) {
     throw validationError("broad Catalog product is missing variants");
   }
-  const variants = product.variants.map((value) => requireRecord(value, "invalid broad Catalog variant")).filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "broad Catalog variant is missing id") === purchase.productId);
+  const variants = product.variants.map((value) => requireRecord2(value, "invalid broad Catalog variant")).filter((variant2) => requiredProductText(variant2.id ?? variant2.productId ?? variant2.product_id, "broad Catalog variant is missing id") === purchase.productId);
   if (variants.length !== 1) {
     throw validationError(variants.length === 0 ? "broad Catalog product is missing the selected variant" : "broad Catalog returned multiple matching Eats365 variants");
   }
@@ -29497,13 +29637,13 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
     throw validationError("current broad Catalog variant title differs from the frozen purchase context");
   }
   if (variant.seller !== void 0) {
-    const seller = requireRecord(variant.seller, "broad Catalog variant seller must be an object");
+    const seller = requireRecord2(variant.seller, "broad Catalog variant seller must be an object");
     const sellerName2 = requiredProductText(seller.name, "broad Catalog variant seller is missing name");
     if (normalizedText2(sellerName2) !== normalizedText2(purchase.merchantName)) {
       throw validationError("current broad Catalog seller differs from the frozen purchase context");
     }
   }
-  const price = requireRecord(variant.price, "broad Catalog variant is missing structured price");
+  const price = requireRecord2(variant.price, "broad Catalog variant is missing structured price");
   const currency = requiredProductText(price.currency ?? price.currencyCode ?? price.currency_code, "broad Catalog variant price is missing currency").toUpperCase();
   const unitPrice = minorUnitsMajorAmount(parseMinorUnits2(price.amount, "broad Catalog variant price amount must be non-negative minor units"), currency);
   if (currency !== purchase.currency) {
@@ -29512,7 +29652,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (majorAmountMinorUnits(unitPrice, currency) !== majorAmountMinorUnits(purchase.price, purchase.currency)) {
     throw validationError("current broad Catalog price differs from the frozen purchase context");
   }
-  const availability = requireRecord(variant.availability, "broad Catalog variant is missing availability");
+  const availability = requireRecord2(variant.availability, "broad Catalog variant is missing availability");
   if (availability.available !== true) {
     throw validationError("current broad Catalog product is not explicitly available");
   }
@@ -29525,7 +29665,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   }
   const metadata = product.metadata;
   if (metadata !== void 0) {
-    const facts = requireRecord(metadata, "broad Catalog product metadata must be an object");
+    const facts = requireRecord2(metadata, "broad Catalog product metadata must be an object");
     if (requiredProductText(facts.channel_type ?? facts.channelType, "broad Catalog product metadata is missing channel_type").toLowerCase() !== purchase.channelType || requiredProductText(facts.store_id ?? facts.storeId, "broad Catalog product metadata is missing store_id") !== purchase.storeId) {
       throw validationError("broad Catalog product metadata differs from the frozen platform identity");
     }
@@ -29554,8 +29694,8 @@ function assertFrozenRoute(purchase, merchantId, endpoint) {
   }
 }
 function verifyInternalProduct(payload, purchase, internalMerchantId, requireMerchantNameMatch) {
-  const root = requireRecord(payload, "invalid UCP Catalog product response");
-  const product = requireRecord(root.product ?? root.data ?? root, "UCP Catalog response is missing product");
+  const root = requireRecord2(payload, "invalid UCP Catalog product response");
+  const product = requireRecord2(root.product ?? root.data ?? root, "UCP Catalog response is missing product");
   const productId2 = requiredProductText(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
   const title = requiredProductText(product.title ?? product.name, "UCP Catalog product is missing title");
   const variants = internalProductVariants(product);
@@ -29587,10 +29727,10 @@ function verifyInternalProduct(payload, purchase, internalMerchantId, requireMer
 }
 function assertInternalCatalogMerchant(product, variant, internalMerchantId, frozenMerchantName) {
   const merchantIds = [
-    optionalText3(variant?.merchantId),
-    optionalText3(variant?.merchant_id),
-    optionalText3(product.merchantId),
-    optionalText3(product.merchant_id)
+    optionalText4(variant?.merchantId),
+    optionalText4(variant?.merchant_id),
+    optionalText4(product.merchantId),
+    optionalText4(product.merchant_id)
   ].filter((value) => value !== void 0);
   if (merchantIds.some((merchantId) => merchantId !== internalMerchantId)) {
     throw validationError("current Catalog merchant ID differs from the resolved internal merchant");
@@ -29609,7 +29749,7 @@ function internalCatalogMerchantName(value) {
   }
   const merchant = isRecord25(value.merchant) ? value.merchant : void 0;
   const seller = isRecord25(value.seller) ? value.seller : void 0;
-  return optionalText3(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
+  return optionalText4(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
 }
 function internalProductVariants(product) {
   if (product.variants === void 0 || product.variants === null) {
@@ -29618,7 +29758,7 @@ function internalProductVariants(product) {
   if (!Array.isArray(product.variants)) {
     throw validationError("UCP Catalog product variants must be an array");
   }
-  return product.variants.map((variant) => requireRecord(variant, "UCP Catalog product contains an invalid variant"));
+  return product.variants.map((variant) => requireRecord2(variant, "UCP Catalog product contains an invalid variant"));
 }
 function resolveInternalProductPrice(product, variant, frozenIdMatchesProduct) {
   const fallbackCurrency = typeof product.currency === "string" ? product.currency : void 0;
@@ -29652,7 +29792,7 @@ function optionalInternalCatalogPrice(value, source, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const price = requireRecord(value, `${source} must be an object`);
+  const price = requireRecord2(value, `${source} must be an object`);
   const amountMinor = parseMinorUnits2(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
   const currency = requiredProductText(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
   return { amountMinor, currency };
@@ -29661,7 +29801,7 @@ function optionalInternalCatalogPriceRange(value, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const range = requireRecord(value, "UCP Catalog product price_range must be an object");
+  const range = requireRecord2(value, "UCP Catalog product price_range must be an object");
   const minimum = optionalInternalCatalogPrice(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
   const maximum = optionalInternalCatalogPrice(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
   if (!minimum || !maximum) {
@@ -29760,7 +29900,7 @@ function requiredProductText(value, message) {
   }
   return value.normalize("NFKC").trim();
 }
-function requireRecord(value, message) {
+function requireRecord2(value, message) {
   if (!isRecord25(value)) {
     throw validationError(message);
   }
@@ -29851,7 +29991,7 @@ function normalizeCards(value) {
   }
   return value.map((card) => ({ ...card }));
 }
-function optionalText3(value) {
+function optionalText4(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function optionalBoolean2(value) {
@@ -30027,15 +30167,15 @@ function assertExactInstruction(instruction, expectedInstructionId) {
   if (!instruction) {
     throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
   }
-  const observedInstructionId = optionalText4(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  const observedInstructionId = optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
   if (observedInstructionId !== expectedInstructionId) {
     throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
   }
 }
 function instructionStatus(instruction) {
-  return optionalText4(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
+  return optionalText5(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
 }
-function optionalText4(value) {
+function optionalText5(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 
@@ -30988,7 +31128,7 @@ function activeInstructionCandidate(instruction, paymentInstrumentId, context, n
   const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
   const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
     const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText5(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+    if (!optionalText6(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
       return [];
     }
     return [{
@@ -31048,19 +31188,19 @@ function mandateArray(instruction) {
   return [];
 }
 function instructionId(instruction) {
-  return optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+  return optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
 }
 function instructionPaymentInstrumentId(instruction) {
-  return optionalText5(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+  return optionalText6(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
 }
 function instructionStatus2(instruction) {
   return normalizedText3(instruction.status ?? instruction.state);
 }
 function eventPaymentInstrumentId(event) {
-  return optionalText5(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
+  return optionalText6(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
 }
 function cardIsVisa(card) {
-  const brand = optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? optionalText5(card.brand) ?? optionalText5(card.network) ?? "";
+  const brand = optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? optionalText6(card.brand) ?? optionalText6(card.network) ?? "";
   return brand.toUpperCase() === "VISA";
 }
 function cardVicReady(card) {
@@ -31075,8 +31215,8 @@ function cardDefault(card) {
 function safeCard(card) {
   return {
     paymentInstrumentId: card.paymentInstrumentId,
-    cardScheme: optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? null,
-    cardLastFour: optionalText5(card.cardLastFour) ?? optionalText5(card.card_last_four) ?? null,
+    cardScheme: optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? null,
+    cardLastFour: optionalText6(card.cardLastFour) ?? optionalText6(card.card_last_four) ?? null,
     isDefault: cardDefault(card),
     visaRegistrationSucceeded: cardVicReady(card)
   };
@@ -31132,8 +31272,8 @@ function minorUnitsAmountText(value, currency) {
 }
 function instructionCreatedAtMs(instruction) {
   const values = [
-    optionalText5(instruction.createdAt),
-    optionalText5(instruction.createTime)
+    optionalText6(instruction.createdAt),
+    optionalText6(instruction.createTime)
   ].filter((value) => value !== void 0);
   if (values.length === 0) {
     return void 0;
@@ -31145,16 +31285,16 @@ function instructionCreatedAtMs(instruction) {
   return timestamps[0];
 }
 function optionalNormalized(value) {
-  return optionalText5(value)?.normalize("NFKC").toUpperCase();
+  return optionalText6(value)?.normalize("NFKC").toUpperCase();
 }
 function normalizedText3(value) {
   return optionalNormalized(value) ?? "";
 }
-function optionalText5(value) {
+function optionalText6(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function isFutureTimestamp(value, nowMs) {
-  const text = optionalText5(value);
+  const text = optionalText6(value);
   if (!text) {
     return false;
   }
@@ -31162,7 +31302,7 @@ function isFutureTimestamp(value, nowMs) {
   return parsed !== void 0 && parsed > nowMs;
 }
 function mandateIsUnexpired(mandate, instruction, nowMs) {
-  const mandateExpiry = optionalText5(mandate.effectiveUntilTime);
+  const mandateExpiry = optionalText6(mandate.effectiveUntilTime);
   return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
 }
 function parseTimestamp(value) {
@@ -31358,7 +31498,11 @@ Context:
   are rejected rather than silently ignored in both modes. Platform Catalog provenance is accepted
   only by catalog_purchase and freezes selection.channelType/storeId/catalogQuery/
   catalogEnvironment/catalogLanguage as one complete set. The Catalog environment must match the
-  commerce environment. An Eats365 candidate may use its frozen item ID, title, structured purchase
+  commerce environment. A registered Visa Benefit Catalog provider must freeze the exact registered
+  selection.merchantId and merchantUrl; selection.endpoint, when supplied, must exactly match the
+  endpoint derived from the locked commerce environment. This allows direct anonymous product
+  revalidation without a merchant-list request and does not accept caller-defined internal routes.
+  An Eats365 candidate may use its frozen item ID, title, structured purchase
   price/currency, availability, store ID, channel, query, environment, language, and product URL
   after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL host, store path, and product_id
   must match those frozen facts. Before Instruction or Checkout work, commerce-run repeats that
@@ -31393,11 +31537,13 @@ Behavior:
   authorizes only that new ID. Restricted categories are refused deterministically before any
   Instruction selection or creation.
 
-  Before card or Instruction work, both purchase modes resolve the merchant internally first,
-  exact-GET the current UCP Catalog product, and reject ID, title, price, currency, availability,
-  merchant, or endpoint drift. Only an explicit internal-list miss may use external product
-  parsing. Eats365 is the platform-store exception described above. Checkout metadata includes
-  programCode only when the frozen context contains one.
+  Before card or Instruction work, both purchase modes use internal-first merchant routing by
+  default, exact-GET the current UCP Catalog product, and reject ID, title, price, currency,
+  availability, merchant, or endpoint drift. Only catalog_purchase may use the exact registered
+  Visa Benefit Catalog provider route described above without loading the merchant list. Program
+  purchase and unregistered merchants keep the default internal-first lookup. Only an explicit
+  internal-list miss may use external product parsing. Eats365 is the platform-store exception
+  described above. Checkout metadata includes programCode only when the frozen context contains one.
 
   Checkout uses the shared ucp-checkout run implementation: create and complete are each attempted
   once, payment is never retried, and non-terminal payment states return a read-only resumeCommand.
@@ -31507,6 +31653,7 @@ Filters:
 
 Options:
   --all                        Fetch all matching pages; cannot be combined with --limit/--page
+  --include-provider-products  Also search registered directly-orderable benefit Catalogs
   --personalized               Require VSRA Device Flow before recommending
   --anonymous                  Ignore any saved VSRA token
   --market <cn|hk|tw>          Issuing market
@@ -31521,14 +31668,29 @@ Behavior:
   as "Visa\u6743\u76CA\u6709\u54EA\u4E9B" fetch pageSize 50 repeatedly, de-duplicate Programs, and stop at total, a
   short page, a repeated page, or the safety limit. Explicit --limit/--page keeps ordinary paging.
 
+  Without --include-provider-products, output is unchanged. With the flag, the command concurrently
+  searches the existing Visa recommendation service and every provider identity configured for the
+  locked Clink environment in the versioned Visa Benefit Catalog registry. Each provider uses the
+  same original query and maps --lang to Catalog context.language. Provider cursor pages are fetched
+  until completion or a safety stop without loading the merchant list.
+
+  Existing Visa Offers remain in response.data.items. providerProducts is a separate dynamic
+  collection of registry identity plus the provider-owned product and variant structures, exact
+  structured price/currency, availability, and directlyOrderable=true. The CLI does not assign
+  display numbers, impose a presentation count, rank the two collections together, or claim a Visa
+  Offer-to-product match. resultSections identifies the two independent collections. providerProductSearch
+  returns the registry version, environment, identities, page counts, and coverage. A provider or
+  registry failure preserves the Visa result, sets aggregateCoverage and provider coverage to
+  partial, and reports the failed scope; callers must not describe that joined result as complete.
+
   Output recommendationMode is matching_offers when returned Programs still satisfy the requested
-  relevance filters. When many matching offers are returned, callers should rank all returned
-  matches against the request and display only the best ten. If the server relaxes natural-language
-  filters after finding no relevant offers, recommendationMode is fallback_all_offers and
-  relaxedAxes names the relaxed filters. Those fallback Programs are not relevant matches and must
-  not be ranked or displayed as if they matched. Broad user requests use all_offers_requested;
-  an empty non-broad result uses no_matching_offers. returnedOfferCount is the number of rows
-  actually present in response.data.items.
+  relevance filters. Callers may rank the complete dynamic result against the request and choose
+  presentation details without relying on CLI-assigned numbering or a fixed display count. If the
+  server relaxes natural-language filters after finding no relevant offers, recommendationMode is
+  fallback_all_offers and relaxedAxes names the relaxed filters. Those fallback Programs are not
+  relevant matches and must not be ranked or displayed as if they matched. Broad user requests use
+  all_offers_requested; an empty non-broad result uses no_matching_offers. returnedOfferCount is the
+  number of rows actually present in response.data.items.
 
   MCC means Merchant Category Code, the four-digit merchant classification code used by card
   networks. A Visa Program category is an offer taxonomy value, not an MCC.
@@ -31616,7 +31778,7 @@ function addVisaRootHelp(rootHelp) {
 // dist/visa/product-search.js
 var INTERNAL_LIST_MISS = "NOT_IN_INTERNAL_UCP_LIST";
 async function runVisaProductSearch(rawInput, dependencies) {
-  const input = normalizeInput(rawInput);
+  const input = normalizeInput2(rawInput);
   let internal;
   try {
     internal = await dependencies.resolveInternal(input.merchantUrl);
@@ -31672,7 +31834,7 @@ async function runVisaProductSearch(rawInput, dependencies) {
   }
   return resolveInternalProductDetail({ product: selected.product }, input.selectedProductId ?? selected.candidate.productId, input, internal);
 }
-function normalizeInput(input) {
+function normalizeInput2(input) {
   let merchantUrl;
   try {
     merchantUrl = new URL(input.merchantUrl);
@@ -31750,13 +31912,13 @@ async function resolveExternalProduct(input, dependencies) {
     currency: parsed.currency,
     amountMinor: BigInt(item.unitPriceMinor),
     quantity: input.quantity,
-    merchantName: requiredText3(parsed.merchantName, "parsed merchant is missing name")
+    merchantName: requiredText4(parsed.merchantName, "parsed merchant is missing name")
   });
 }
 function resolveInternalProductDetail(payload, selectedProductId, input, internal) {
   const product = catalogProduct(payload);
-  const parentId = requiredText3(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
-  const parentTitle = requiredText3(product.title ?? product.name, "UCP Catalog product is missing title");
+  const parentId = requiredText4(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
+  const parentTitle = requiredText4(product.title ?? product.name, "UCP Catalog product is missing title");
   const variants = productVariants(product);
   let selected;
   if (variants.length === 0) {
@@ -31893,7 +32055,7 @@ function selectCatalogSearchProduct(products, input) {
   return selected ? products.find(({ candidate }) => candidate.productId === selected.productId) : void 0;
 }
 function catalogProducts(payload) {
-  const root = requireRecord2(payload, "invalid UCP Catalog search response");
+  const root = requireRecord3(payload, "invalid UCP Catalog search response");
   const data = isRecord28(root.data) ? root.data : root;
   const response = isRecord28(data.response) ? data.response : data;
   const responseData = isRecord28(response.data) ? response.data : response;
@@ -31908,12 +32070,12 @@ function catalogProducts(payload) {
   if (!products) {
     return [];
   }
-  return products.map((product) => requireRecord2(product, "UCP Catalog search contains an invalid product"));
+  return products.map((product) => requireRecord3(product, "UCP Catalog search contains an invalid product"));
 }
 function catalogProduct(payload) {
-  const root = requireRecord2(payload, "invalid UCP Catalog product response");
+  const root = requireRecord3(payload, "invalid UCP Catalog product response");
   const data = isRecord28(root.data) ? root.data : root;
-  return requireRecord2(data.product ?? data, "UCP Catalog response is missing product");
+  return requireRecord3(data.product ?? data, "UCP Catalog response is missing product");
 }
 function productVariants(product) {
   const variants = [
@@ -31924,12 +32086,12 @@ function productVariants(product) {
   if (!variants) {
     return [];
   }
-  return variants.map((variant) => requireRecord2(variant, "UCP Catalog product contains an invalid variant"));
+  return variants.map((variant) => requireRecord3(variant, "UCP Catalog product contains an invalid variant"));
 }
 function normalizeCandidate(product) {
   return {
-    productId: requiredText3(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
-    title: requiredText3(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
+    productId: requiredText4(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
+    title: requiredText4(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
     available: productAvailable(product)
   };
 }
@@ -32027,16 +32189,16 @@ function optionalMoney(value, source, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const price = requireRecord2(value, `${source} must be an object`);
+  const price = requireRecord3(value, `${source} must be an object`);
   const amountMinor = minorUnits(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
-  const currency = requiredText3(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
+  const currency = requiredText4(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
   return { amountMinor, currency };
 }
 function optionalMoneyRange(value, fallbackCurrency) {
   if (value === void 0 || value === null) {
     return void 0;
   }
-  const range = requireRecord2(value, "UCP Catalog product price_range must be an object");
+  const range = requireRecord3(value, "UCP Catalog product price_range must be an object");
   const minimum = optionalMoney(range.min ?? range.minimum, "UCP Catalog product price_range.min", fallbackCurrency);
   const maximum = optionalMoney(range.max ?? range.maximum, "UCP Catalog product price_range.max", fallbackCurrency);
   if (!minimum || !maximum) {
@@ -32068,7 +32230,7 @@ function safeMinorUnits(value) {
   }
   return Number(value);
 }
-function requiredText3(value, message) {
+function requiredText4(value, message) {
   const text = normalizedText4(value);
   if (!text) {
     throw validationError(message);
@@ -32081,7 +32243,7 @@ function normalizedText4(value) {
 function comparableText(value) {
   return value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
 }
-function requireRecord2(value, message) {
+function requireRecord3(value, message) {
   if (!isRecord28(value)) {
     throw validationError(message);
   }
@@ -32098,6 +32260,10 @@ var VISA_OPTION_DEFINITIONS = [
   { name: "lang", flags: "--lang <locale>" },
   { name: "personalized", flags: "--personalized" },
   { name: "anonymous", flags: "--anonymous" },
+  {
+    name: "include-provider-products",
+    flags: "--include-provider-products"
+  },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
   { name: "context-file", flags: "--context-file <path>" },
@@ -32120,6 +32286,7 @@ var VISA_FLAG_NAMES = [
   "lang",
   "personalized",
   "anonymous",
+  "include-provider-products",
   "start",
   "resume",
   "region",
@@ -32477,7 +32644,12 @@ async function visaRecommend(context) {
   if (all && (limit !== void 0 || page !== void 0)) {
     throw validationError("--all cannot be combined with --limit or --page");
   }
-  const { result, storedConfig } = await recommendVisaOffers({
+  const includeProviderProducts = getBooleanFlag(context.args.flags, "include-provider-products");
+  if (includeProviderProducts && !query.normalize("NFKC").trim()) {
+    throw validationError("--include-provider-products requires a non-blank recommendation query");
+  }
+  const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
+  const recommendation = recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
     locale,
@@ -32489,8 +32661,12 @@ async function visaRecommend(context) {
     dryRun: context.globalOptions.dryRun,
     onAuthorization: createVisaAuthorizationReporter(context)
   });
+  const [{ result, storedConfig }, providerResult] = await Promise.all([
+    recommendation,
+    providerDiscovery ?? Promise.resolve(void 0)
+  ]);
   applyVisaStoredConfig(context, storedConfig);
-  printSuccess(result, context.globalOptions.format);
+  printSuccess(providerResult ? joinVisaRecommendationWithProviderProducts(result, providerResult) : result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function visaDetail(context) {
@@ -32521,6 +32697,7 @@ function validateVisaFlagScope(command, subcommand, flags) {
     const commerceRun = subcommand === "commerce-run";
     const commerceLogin = subcommand === "commerce-login";
     const productSearch = subcommand === "product-search";
+    const recommend = subcommand === "recommend";
     const commerceContextCommand = commerceRun || commerceLogin;
     for (const name of ["context-file", "confirm-purchase"]) {
       if (!commerceContextCommand && flags[name] !== void 0) {
@@ -32538,6 +32715,9 @@ function validateVisaFlagScope(command, subcommand, flags) {
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
     }
+    if (!recommend && flags["include-provider-products"] !== void 0) {
+      throw validationError("--include-provider-products is only supported by visa recommend");
+    }
     return;
   }
   for (const name of VISA_FLAG_NAMES) {
@@ -32545,6 +32725,62 @@ function validateVisaFlagScope(command, subcommand, flags) {
       throw validationError(`--${name} is only supported by visa commands`);
     }
   }
+}
+async function discoverProviderProducts(context, query, locale) {
+  const environment = visaBenefitCatalogEnvironment(context);
+  const baseUrl = API_BASE_URLS[environment];
+  const catalogContext = {
+    ...context,
+    runtimeConfig: {
+      baseUrl,
+      defaultOpenLinks: false
+    },
+    authorizationIdentity: runtimeAuthorizationIdentity({
+      baseUrl,
+      defaultOpenLinks: false
+    })
+  };
+  return discoverVisaBenefitCatalogProducts({
+    environment,
+    baseUrl,
+    query,
+    language: catalogLanguageForVisaLocale(locale),
+    dryRun: context.globalOptions.dryRun
+  }, {
+    searchPage: ({ merchantId, query: providerQuery, language, limit, cursor, dryRun }) => searchCommandUcpCatalogPage(catalogContext, {
+      merchantId,
+      query: providerQuery,
+      language,
+      limit,
+      ...cursor ? { cursor } : {},
+      dryRun
+    })
+  });
+}
+function visaBenefitCatalogEnvironment(context) {
+  const distributionEnvironment = resolveSelectedEnvironment({});
+  if (distributionEnvironment) {
+    return distributionEnvironment;
+  }
+  const runtimeEnvironment = clinkEnvironmentForApiBaseUrl(context.runtimeConfig.baseUrl);
+  if (!runtimeEnvironment) {
+    throw validationError("provider product aggregation requires an official Clink API environment");
+  }
+  return runtimeEnvironment;
+}
+function joinVisaRecommendationWithProviderProducts(visaRecommendation, providerResult) {
+  const { providerProducts, ...providerProductSearch } = providerResult;
+  return {
+    ...visaRecommendation,
+    aggregateCoverage: providerResult.coverage,
+    resultSections: {
+      visaOffers: "response.data.items",
+      providerProducts: "providerProducts",
+      relationship: "independent_dynamic_sets"
+    },
+    providerProducts,
+    providerProductSearch
+  };
 }
 function optionalNonBlankFlag(flags, name) {
   const value = getStringFlag(flags, name);

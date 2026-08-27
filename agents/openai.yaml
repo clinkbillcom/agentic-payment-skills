@@ -1,24 +1,33 @@
 interface:
   display_name: "Visa Skill"
-  short_description: "Visa Benefits, Fuhui coupon matching, and fast aggregate Catalog shopping."
+  short_description: "Visa Benefits, registered provider products, and fast aggregate Catalog shopping."
   default_prompt: >-
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Treat Hong
     Kong as --region hk unless the user explicitly says the card is HK-issued.
     For broad, category, or merchant-specific Visa Benefit shopping, run one
-    recommend, locate Fuhui from the public internal merchant list, page its
-    Catalog with the current user query. Every relevant Fuhui item always has
-    productType FUHUI_VISA_PRODUCT; PROGRAM_FUHUI_MATCH is only an optional
-    independently proven relation label. All Fuhui and direct Catalog shopping
-    use commerce-login then commerce-run mode=catalog_purchase. Separate voucher
-    face value from structured purchase price/currency. For Eats365,
+    visa recommend with --include-provider-products. The CLI is the sole
+    authority for the provider registry, provider identity, route, and cursor
+    pagination. Never issue a second initial Catalog or merchant-list command.
+    Read the Visa Offer and providerProducts/directlyOrderable collections as
+    authoritative candidate groups. Independently filter both by the original
+    query's brand, category, geography, product, merchant, and other hard
+    constraints. Do not display unrelated provider products, but never change
+    their CLI-returned directlyOrderable fact. Organize relevant results without
+    a fixed display template or count. Every provider item has productType
+    VISA_PROVIDER_PRODUCT; preserve PROGRAM_PROVIDER_MATCH only when the CLI
+    proves it and never force it. Missing or ambiguous CLI provider identity
+    fails closed. All provider and direct Catalog shopping use commerce-login
+    then commerce-run
+    mode=catalog_purchase. Separate voucher face value from structured purchase
+    price/currency. For Eats365,
     manual_item_facts is a normal result: freeze channel, store, original query,
     Catalog environment/language, product, title, price, currency, availability,
     and URL from one broad-Catalog snapshot. Classify MCC and fulfillment from
     the exact context; coffee and quick-service food use high-confidence MCC
-    5814, NO_SHIPPING_REQUIRED, and digitalDeliveryExpected=false. Fuhui digital
-    coupons use digitalDeliveryExpected=true. Ask when classification confidence
-    is low. Never send program.code in purchase or catalog_purchase contexts.
-    Keep Quick Instruction and all deterministic payment steps inside the CLI,
-    never rerun commerce-run after possible Checkout creation, and do not read
-    references or use runtime --help during ordinary execution.
+    5814, NO_SHIPPING_REQUIRED, and digitalDeliveryExpected=false. Registered
+    digital coupons use digitalDeliveryExpected=true. Ask when classification
+    confidence is low. Never send program.code in purchase or catalog_purchase
+    contexts. Keep Quick Instruction and all deterministic payment steps inside
+    the CLI, never rerun commerce-run after possible Checkout creation, and do
+    not read references or use runtime --help during ordinary execution.

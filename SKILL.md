@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.28. Use for Visa card benefits, Fuhui coupon matching, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.29. Use for Visa card benefits, registered provider products, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.28"
+  version: "0.1.29"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -134,8 +134,9 @@ rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 Classify the request before the first command:
 
 - **Case 1, broad Visa availability:** requests such as "What Visa Benefits can
-  I use in Hong Kong?" use Visa and Fuhui Joined Discovery. Present every
-  returned relevant Visa Program plus matching Fuhui Catalog products.
+  I use in Hong Kong?" use Visa And Provider Catalog Joined Discovery. Present
+  every returned relevant Visa Program plus matching registered provider
+  products.
 - **Case 2, Visa category shopping:** requests such as "Are there Visa
   household-goods coupons in Hong Kong?" use the same joined discovery with
   the current category wording.
@@ -146,27 +147,29 @@ Classify the request before the first command:
   requests such as "Buy me an XX coffee" use Broad Catalog Shopping. Do not
   call `visa recommend` merely because this Skill can access Visa Benefits.
 
-Use Program aggregation only for a selected non-Fuhui Visa Program purchase
+Use Program aggregation only for a selected non-provider Visa Program purchase
 that has an authoritative Program commerce route:
 
 ```text
 visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
 ```
 
-Use Catalog Purchase aggregation for every selected Fuhui product, including a
-product carrying the optional `PROGRAM_FUHUI_MATCH` relation label, and for a
-Case 4 product:
+Use Catalog Purchase aggregation for every selected registered provider
+product, including a product carrying the optional `PROGRAM_PROVIDER_MATCH`
+relation label, and for a Case 4 product:
 
 ```text
-catalog search or ucp-catalog search -> commerce-login ->
+Cases 1-3: visa recommend --include-provider-products ->
+commerce-login -> visa commerce-run mode=catalog_purchase
+Case 4: catalog search -> commerce-login ->
 visa commerce-run mode=catalog_purchase
 ```
 
-Fuhui is an internal Visa Offer merchant, so a relevant Fuhui Catalog product
-is itself an orderable Visa Benefit product even when no separate VSRA Program
+A relevant product returned by a registered Visa Benefit Catalog provider is
+itself an orderable Visa Benefit product even when no separate VSRA Program
 row matches it. Program eligibility or Program terms may be attached only when
-an authoritative Program relationship is also proven. Do not route a
-non-Fuhui broad-Catalog product through Program `mode=purchase`.
+an authoritative Program relationship is also proven. Do not route an
+unregistered broad-Catalog product through Program `mode=purchase`.
 
 New `mode=purchase` and `mode=catalog_purchase` contexts must omit both the
 top-level `program` object and `metadata.programCode`. Older callers may still
@@ -176,19 +179,21 @@ or requires it.
 Use a Base Capability Contract only for a non-Program request whose exact
 inputs and authorization satisfy that contract.
 
-## Visa And Fuhui Joined Discovery
+## Visa And Provider Catalog Joined Discovery
 
-Queries never proactively log in, bind a card, create an Instruction, or
-prepare payment:
+Cases 1-3 must make exactly one initial discovery call. That joined aggregate
+returns both Visa Programs and directly orderable registered-provider products:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
-  --lang <language-tag> --format json
-<Skill Path>/bin/visa-cli visa detail <program-code> \
-  --lang <language-tag> --format json
-<Skill Path>/bin/visa-cli visa taxonomy \
-  --lang <language-tag> --format json
+  --include-provider-products \
+  --lang <language-tag> \
+  --format json
 ```
+
+Do not issue a separate initial `ucp-catalog search`, merchant-list request, or
+second `visa recommend` to assemble the joined result. The joined command never
+logs in, binds a card, creates an Instruction, or prepares payment.
 
 For Case 1 broad availability wording such as "What Visa Benefits can I use in
 Hong Kong?", always add `--all` because the required result is the complete
@@ -197,6 +202,7 @@ not rely on natural language alone to widen the request:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --include-provider-products \
   --all \
   --region hk \
   --lang <language-tag> \
@@ -206,18 +212,20 @@ not rely on natural language alone to widen the request:
 Use `--region hk` when Hong Kong is the requested place of use. Do not add
 `--market hk` unless Hong Kong card issuance is explicit.
 
-For Case 2 or Case 3, run `visa recommend` once with the current user request
-and add `--all` when the user asks for every matching Benefit.
+For Case 2 or Case 3, run the same joined command once with the current user
+request and add `--all` when the user asks for every matching Benefit.
 
-Treat returned Programs as authoritative candidates, then retain only rows
-that satisfy the original request's explicit brand, merchant, product, and
-category constraints. A generic coupon or lifestyle Program is not relevant
-to "household goods" or "Watsons" merely because it shares the coupon reward
-type. Present every semantically relevant returned Program without adding a
-second Skill-side display cap; preserve their relative Program order while
-clearly marking Programs that do not have a purchasable Catalog match. If no
-Program survives this semantic filter, say that no matching Visa Program was
-found and still present relevant Fuhui products.
+Treat both returned collections as authoritative candidate sets, not as
+already-filtered display results. Independently retain only Visa Offers and
+provider products that satisfy the original request's explicit brand,
+category, geography, product, merchant, and other hard constraints. A generic
+coupon or lifestyle Offer is not relevant to a brand-specific or
+product-specific query merely because it shares the coupon reward type.
+Present every semantically relevant returned Visa Offer without adding a
+second Skill-side display cap; preserve their relative order while clearly
+marking Offers that do not have a purchasable Catalog match. If no Visa Offer
+survives this semantic filter, say that no matching Visa Offer was found and
+still present relevant provider products.
 
 For `fallback_all_offers` or `no_matching_offers`, report that no relevant
 Offer was found. Do not rank, display, recommend, or purchase fallback rows,
@@ -228,100 +236,96 @@ For explicit food delivery use `--category dining_delivery_food` and exclude
 `instore_only` or dine-in-only Programs. For explicit dine-in use
 `dining_restaurant`. Ask one question when the intent is genuinely ambiguous.
 
-Then locate Fuhui from the complete public internal-merchant list:
+### Joined Provider Contract
 
-```text
-<Skill Path>/bin/visa-cli tool internal-ucp get-merchant-list \
-  <environment-flag> \
-  --format json
-```
+The CLI is the only authority for the Visa Benefit Catalog provider registry,
+provider identity, merchant route, traversal, and pagination. The Skill must
+not copy or maintain provider entries.
 
-- Identify Fuhui only from enabled authoritative merchant-list entries and
-  their returned `description`, `merchant_id`, `domain_name`, and
-  `merchant_url`. Never hardcode a Fuhui merchant ID or construct a merchant
-  URL.
-- Multiple Fuhui domains may share one `merchant_id`. Deduplicate by the
-  returned merchant ID for Catalog search. For purchase, freeze a merchant URL
-  only when exactly one returned route description explicitly establishes the
-  Visa benefit redemption/internal Catalog and checkout route for the selected
-  Fuhui product. Copy that route's returned URL unchanged. A generic UAT
-  storefront route does not win merely because it has the same merchant ID.
-  If multiple or no routes establish that authority, stop before login.
-- If Fuhui is absent, disabled, or not uniquely identifiable, report that
-  Fuhui Catalog coverage is unavailable. Continue to present the Visa results,
-  but do not guess a merchant.
+Read only the two dynamic structured collections returned by the joined
+command:
 
-Search the Fuhui Catalog with the original current user query, not generated
-Program titles:
+- Visa Offer results
+- `providerProducts` or `directlyOrderable` results
 
-```text
-<Skill Path>/bin/visa-cli ucp-catalog search \
-  --merchant-id "<authoritative-fuhui-merchant-id>" \
-  --query "<original-current-user-query>" \
-  --language <language-tag> \
-  --limit 100 \
-  <environment-flag> \
-  --format json
-```
+Both collections are authoritative for the identities and facts they carry,
+but neither collection is automatically relevant to the user's query. Apply
+the original query's brand, category, geography, product, merchant, and other
+hard constraints independently to both collections before presentation,
+ranking, selection, or relation labeling.
 
-If `pagination.has_next_page=true`, require a nonempty opaque next cursor and
-repeat the same command with the same merchant, query, language, environment,
-and limit plus `--cursor "<returned-cursor>"`. Continue until
-`has_next_page=false`. If a cursor repeats, a page adds no new product
-identity, `has_next_page=true` has no cursor, a page fails, or the environment
-changes, stop pagination and report partial Catalog coverage; never silently
-call it complete. Deduplicate only by stable merchant, product, and variant
-identifiers, never by title.
+Do not display, number, rank, select, or count an unrelated provider product as
+a matching result. Filtering it from the current presentation does not alter
+its authoritative `directlyOrderable` fact: query relevance controls display,
+while `directlyOrderable` describes whether that product can be purchased.
 
-For a follow-up such as "What supermarket coupons are there?" reuse the Visa
-Programs and Fuhui merchant identity from the immediately preceding joined
-discovery when language, geography, and environment are unchanged. Filter the
-existing Visa Programs against the new wording and rerun the complete Fuhui
-Catalog search with the follow-up as the current query. Do not repeat
-`visa recommend` merely to answer that refinement. If the prior context is
-missing or its locks changed, start a new joined discovery.
+The CLI-owned joined aggregate must query providers with the original current
+user query and locked language/environment, follow each opaque provider
+cursor until complete, deduplicate by stable merchant, product, and variant
+identities, and attach authoritative provider identity to every provider
+product. The Skill must not perform that traversal itself.
+
+Do not call `tool internal-ucp get-merchant-list` or a separate
+`ucp-catalog search` for Cases 1-3. Do not infer, discover, replace, or
+construct a provider merchant ID or route at runtime. If the aggregate reports
+a repeated/missing cursor, failed provider page, changed environment, or
+partial coverage, preserve that status and never call the result complete.
+
+If a returned or selected provider product lacks one unambiguous
+CLI-authoritative provider identity, merchant ID, or HTTPS purchase route, stop
+before login with `unknown_provider`; do not fall back to a merchant-list
+lookup or another storefront.
+
+For a follow-up such as "What supermarket coupons are there?", run one new
+joined command with the follow-up as the original current query. Do not reuse
+old provider rows or issue separate Program/provider discovery commands. The
+new joined snapshot replaces the old one.
 
 Every displayed joined result belongs to one current snapshot containing the
-environment, language, geography, Fuhui merchant identity, query, Program code,
-Catalog product/variant ID, price, currency, availability, and classification.
-Number labels are valid only for that latest snapshot. A new query, refreshed
-list, changed environment, or changed geography invalidates old Numbers,
-selection, and purchase authorization. A purchase reply must resolve one
-stable ID from the latest snapshot; title-only fuzzy matching is insufficient.
+environment, language, geography, CLI-returned provider identity, authoritative
+purchase route, query, Program code, Catalog product/variant ID, price,
+currency, availability, and classification. A new query, refreshed list,
+changed environment, or changed geography invalidates the old ordering,
+selection, and purchase authorization. A purchase reply must resolve one stable
+ID from the latest snapshot; title-only fuzzy matching is insufficient.
 
 ### Product Type, Relation Label, And Presentation
 
-Evaluate all returned Visa Programs and all paginated Fuhui products:
+Evaluate all returned Visa Programs and all registered-provider products from
+the same joined response:
 
-- Set `productType=FUHUI_VISA_PRODUCT` on every relevant, available Fuhui
-  Catalog product. This product type is constant because Fuhui is the
-  authoritative Visa Offer merchant; a Program match is not required.
-- Add `PROGRAM_FUHUI_MATCH` only as an optional relation label when one Program
-  and one Fuhui product independently identify the same merchant,
-  benefit/product, geography, denomination or variant, and hard terms. Never
-  replace `FUHUI_VISA_PRODUCT` with this relation label.
+- Preserve `productType=VISA_PROVIDER_PRODUCT` on every relevant, available
+  product in the provider-product collection. A Program match is not required.
+- Preserve `PROGRAM_PROVIDER_MATCH` only when the joined CLI result proves that
+  optional relation. Never synthesize or force it from titles, categories, or
+  presentation needs, and never replace `VISA_PROVIDER_PRODUCT` with it.
 - Report a relevant Program as `VISA_PROGRAM_ONLY` when it has no verified
-  orderable Fuhui product relationship.
+  orderable provider-product relationship.
 
-Present the Program and Fuhui sections explicitly. Preserve authoritative
+Keep the Visa Offer collection and directly orderable provider-product
+collection visibly distinct. The Agent may organize, sort, number, and phrase
+the two groups from the actual returned results. Do not impose fixed headings,
+letters, numbering, counts, or a fixed display template. Preserve authoritative
 titles and stable IDs. Do not hide a relevant Program merely because it cannot
-be ordered, and do not hide an orderable Fuhui product merely because it lacks
-a Program row.
+be ordered, and do not hide an orderable provider product merely because it
+lacks a Program row.
 
 An entry Offer, campaign URL, similar title, shared category, or merchant-level
-association never proves `PROGRAM_FUHUI_MATCH`. It does not, however, remove
-the constant `FUHUI_VISA_PRODUCT` product type of a relevant Fuhui item.
+association never proves `PROGRAM_PROVIDER_MATCH`. It does not, however,
+remove the constant `VISA_PROVIDER_PRODUCT` product type of a relevant
+registered item. Never force a Program/provider match merely to combine the two
+display groups.
 
 Treat voucher denomination and purchase price as separate facts. Text such as
 `HKD 100` in a title or description is the voucher face value. The structured
 Catalog `price.amount` and `price.currency` are the actual purchase price and
-payment currency. Do not reject a Fuhui product merely because its HKD face
-value is purchased using USD. Convert the structured minor-unit amount once to
-the major-unit decimal used by Instruction and Checkout.
+payment currency. Do not reject a provider product merely because its HKD face
+value is purchased using USD. Convert the structured minor-unit amount once
+to the major-unit decimal used by Instruction and Checkout.
 
 ### Selected Program Resolution
 
-Before purchasing one selected non-Fuhui Program route, bind it through the
+Before purchasing one selected non-provider Program route, bind it through the
 existing token-free Program product resolver before any browser login:
 
 ```text
@@ -491,12 +495,13 @@ reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 
 ## Catalog Purchase Fast Path
 
-Use this path for a selected `FUHUI_VISA_PRODUCT` from Cases 1-3 or a selected
-Case 4 broad-Catalog result. A Fuhui purchase is a Visa Benefit product
-purchase. A non-Fuhui Case 4 product is ordinary Catalog shopping and must not
-inherit unrelated Program eligibility or terms.
+Use this path for a selected `VISA_PROVIDER_PRODUCT` from Cases 1-3 or a
+selected Case 4 broad-Catalog result. A registered provider purchase is a Visa
+Benefit product purchase. An unregistered Case 4 product is ordinary Catalog
+shopping and must not inherit unrelated Program eligibility or terms.
 
-Case 4 discovery is anonymous and must not call `visa recommend`:
+Case 4 discovery is anonymous and must not call `visa recommend` or pass
+`--include-provider-products`:
 
 ```text
 <Skill Path>/bin/visa-cli catalog search \
@@ -513,12 +518,15 @@ Agent-rank only products that satisfy the user's actual product, brand,
 geography, channel, and other hard constraints.
 
 Before login, resolve the selected item to one authoritative orderable product.
-For an internal merchant, use the selected `merchant_id` and
-`ucp-catalog product`; use the public merchant list for its authoritative
-`merchant_url`. When duplicate routes share the merchant ID, apply the same
-unique Visa-redemption/internal-Catalog route rule from joined discovery; never
-choose a route by list order, hostname familiarity, or a hardcoded domain. Do
-not purchase directly from a broad-search display row when the exact product
+For a Cases 1-3 provider product, use `ucp-catalog product` with the exact
+CLI-returned provider merchant ID and freeze the exact authoritative purchase
+route from that same joined result. Never query the merchant list or accept a
+route from the product title, Program, broad-search row, hostname familiarity,
+or caller input. Missing or ambiguous CLI provider identity is
+`unknown_provider` and must stop.
+For a Case 4 internal merchant, use the selected `merchant_id`,
+`ucp-catalog product`, and the normal authoritative merchant-route resolution.
+Do not purchase directly from a broad-search display row when the exact product
 detail has not been resolved.
 
 For an external/platform result, use its exact returned product URL with
@@ -544,6 +552,9 @@ Freeze all of these authoritative facts:
 - for Eats365, `channelType`, `storeId`, `catalogQuery`,
   `catalogEnvironment`, and `catalogLanguage`: exact values from the same broad
   Catalog snapshot
+- for a registered provider product, `merchantId` and `merchantUrl`: the exact
+  CLI-returned provider identity from the same joined snapshot, never
+  caller-supplied
 
 Also freeze merchant/store identity, channel, quantity, fulfillment, endpoint
 when returned, and whether digital delivery is actually expected. The Agent
@@ -554,7 +565,7 @@ substitute a similar product.
 
 Use these high-confidence fulfillment rules:
 
-- Fuhui coupons/vouchers: `NO_SHIPPING_REQUIRED`,
+- Registered provider coupons/vouchers: `NO_SHIPPING_REQUIRED`,
   `digitalDeliveryExpected=true`.
 - Eats365 coffee or quick-service food is high-confidence MCC `5814`,
   `NO_SHIPPING_REQUIRED`, and
@@ -634,8 +645,14 @@ shared fields:
 }
 ```
 
+For a registered provider product, replace the shared `merchantId` and
+`merchantUrl` placeholders with the exact values carried by the selected
+product's CLI-returned provider identity. The selected product, provider
+identity, merchant route, and Catalog detail must all belong to the same joined
+snapshot. Unknown or mismatched provider identity stops before login.
+
 Before writing the context file, add exactly one route-specific top-level
-fulfillment contract. For a Fuhui digital coupon:
+fulfillment contract. For a registered provider digital coupon:
 
 ```json
 {
@@ -781,8 +798,8 @@ general workflow engine.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. A later purchase must freeze one exact
   selected product.
-- Cases 1-3 use Visa And Fuhui Joined Discovery. Case 4 uses Broad Catalog
-  Shopping and, after an exact selection, Catalog Purchase Fast Path.
+- Cases 1-3 use Visa And Provider Catalog Joined Discovery. Case 4 uses Broad
+  Catalog Shopping and, after an exact selection, Catalog Purchase Fast Path.
 
 ### CAP-PAY: Direct Or Session Pay
 
@@ -886,13 +903,16 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Cases 1-3, report every relevant returned Visa Program and paginated
-  Fuhui Catalog product. Every Fuhui row keeps
-  `productType=FUHUI_VISA_PRODUCT`; add `PROGRAM_FUHUI_MATCH` only as a proven
-  optional relation label, and use `VISA_PROGRAM_ONLY` for an unmatched
-  relevant Program.
-- Fuhui products are Visa Benefit products. Program-specific eligibility and
-  terms require a proven Program relationship.
+- For Cases 1-3, independently filter both authoritative candidate collections
+  by the original query's hard constraints, then report every relevant returned
+  Visa Offer and provider product. Every displayed provider row keeps
+  `productType=VISA_PROVIDER_PRODUCT`; add `PROGRAM_PROVIDER_MATCH` only as a
+  proven optional relation label, and use `VISA_PROGRAM_ONLY` for an unmatched
+  relevant Offer.
+- Excluding an unrelated provider product from the current result does not
+  negate or modify its CLI-returned `directlyOrderable` fact.
+- Registered provider products are Visa Benefit products. Program-specific
+  eligibility and terms require a proven Program relationship.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
 - Report digital delivery only when nonempty authoritative artifacts exist.
@@ -903,21 +923,24 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Cases 1-3 join all relevant Visa results with the complete paginated Fuhui
-  query result; every relevant Fuhui item is an orderable Visa product, while
-  Program association is reported separately and never fabricated.
+- Cases 1-3 receive authoritative Visa Offer and provider-product candidate
+  collections, then independently filter both by the original query's brand,
+  category, geography, product, merchant, and other hard constraints.
+- Unrelated provider products are not displayed or counted as matches, but
+  filtering never changes their CLI-returned `directlyOrderable` fact.
 - Case 4 skips Visa recommendation and starts with broad Catalog discovery.
-- Non-Fuhui Visa Program purchase uses the three CLI aggregates in Program
+- Non-provider Visa Program purchase uses the three CLI aggregates in Program
   mode.
-- Every Fuhui product, including a Program-associated one, uses Catalog mode
-  with the structured Catalog purchase price/currency.
-- Fuhui and non-Program Catalog purchase use login plus
+- Every registered provider product, including a Program-associated one, uses
+  Catalog mode with the structured Catalog purchase price/currency.
+- Provider and non-Program Catalog purchase use login plus
   `mode=catalog_purchase`, never atomic UCP.
-- For a non-Fuhui Program purchase, the Program and resolved Catalog product
+- For a non-provider Program purchase, the Program and resolved Catalog product
   identity plus recommendation-backed purchase amount/currency must agree.
-  For Fuhui, Instruction and Checkout use only the structured Catalog purchase
-  price/currency; a title or description's voucher face value may use another
-  currency and is never compared as the purchase price.
+  For registered provider products, Instruction and Checkout use only the
+  structured Catalog purchase price/currency; a title or description's voucher
+  face value may use another currency and is never compared as the purchase
+  price.
 - New `mode=purchase` and `mode=catalog_purchase` contexts never send
   `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new

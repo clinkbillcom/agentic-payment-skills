@@ -74,11 +74,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.33');
+  assert.equal(vendorPackage.version, '0.2.34');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'beea77a565f08b6e2763b85d9a9a622f3f8aeb18',
+    '42af4fadc12413623a4a64fee108a26d9342174a',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -146,63 +146,41 @@ test('public Skill listing requires the real --all contract', () => {
   assert.match(missingAll.stderr, /skills list requires --all/u);
 });
 
-test('public Fuhui discovery mocks the dynamic Merchant API and supports cursor pagination', () => {
-  const merchantList = runWithMock([
-    'tool',
-    'internal-ucp',
-    'get-merchant-list',
+test('joined Visa recommendation returns both candidate collections without merchant-list discovery', () => {
+  const result = runWithMock([
+    'visa',
+    'recommend',
+    '香港有没有屈臣氏券',
+    '--lang',
+    'zh-HK',
+    '--anonymous',
+    '--include-provider-products',
     '--format',
     'json',
-  ], 'merchant-list', {
+  ], 'joined-provider', {
     env: {
-      CLINK_UCP_MERCHANTS_URL:
-        'https://mock.clink.invalid/agent/ucp/merchants',
+      VSRA_BASE_URL: 'https://vsra.example.test',
+      CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
     },
   });
-  assert.equal(merchantList.status, 0, merchantList.stderr);
-  const merchantDocument = JSON.parse(merchantList.stdout);
-  const fuhui = merchantDocument.merchants.filter((merchant) =>
-    merchant.enabled !== false
-    && /Fuhui/iu.test(
-      `${merchant.merchant_name ?? ''} ${merchant.description ?? ''}`,
-    )
-  );
-  assert.ok(fuhui.length >= 1);
-  for (const merchant of fuhui) {
-    const merchantUrl = merchant.merchant_url ?? merchant.domain;
-    const domainName = merchant.domain_name
-      ?? new URL(merchantUrl).hostname;
-    assert.match(merchant.merchant_id, /^mcht_[a-z0-9]+$/u);
-    assert.match(domainName, /^[a-z0-9.-]+$/u);
-    assert.match(merchantUrl, /^https:\/\//u);
-  }
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
 
-  const catalogPage = run([
-    'ucp-catalog',
-    'search',
-    '--merchant-id',
-    fuhui[0].merchant_id,
-    '--query',
-    'supermarket voucher',
-    '--language',
-    'zh-HK',
-    '--limit',
-    '100',
-    '--cursor',
-    'cursor_example',
-    '--sandbox',
-    '--dry-run',
-    '--format',
-    'json',
-  ]);
-  assert.equal(catalogPage.status, 0, catalogPage.stderr);
-  const request = JSON.parse(catalogPage.stdout).data.request;
-  assert.equal(request.body.query, 'supermarket voucher');
-  assert.equal(request.body.context.language, 'zh-Hant');
-  assert.deepEqual(request.body.pagination, {
-    cursor: 'cursor_example',
-    limit: 100,
+  assert.deepEqual(output.resultSections, {
+    visaOffers: 'response.data.items',
+    providerProducts: 'providerProducts',
+    relationship: 'independent_dynamic_sets',
   });
+  assert.deepEqual(output.response.data.items, [{ code: 'P_DYNAMIC' }]);
+  assert.equal(output.providerProducts.length, 2);
+  assert.equal(output.providerProducts[0].directlyOrderable, true);
+  assert.equal(
+    output.providerProducts[0].providerIdentity.merchantId,
+    'mcht_ftmse61a6az0',
+  );
+  assert.equal(output.providerProductSearch.pagesFetched, 2);
+  assert.equal(output.providerProductSearch.programMatching, 'not_performed');
+  assert.equal(output.aggregateCoverage, 'complete');
 });
 
 test('broad Visa availability explicitly requests every Program page', () => {
@@ -225,24 +203,24 @@ test('broad Visa availability explicitly requests every Program page', () => {
   assert.equal(request.headers['X-Locale'], 'zh-HK');
 });
 
-test('broad Catalog search is anonymous and carries the locked query and language', () => {
-  const result = run([
+test('Coffee broad discovery stays outside joined Visa recommendation', () => {
+  const result = runWithMock([
     'catalog',
     'search',
     '--query',
     'XX coffee',
     '--language',
     'zh-HK',
+    '--channel-type',
+    'eats365',
     '--sandbox',
-    '--dry-run',
     '--format',
     'json',
-  ]);
+  ], 'coffee-broad-only');
   assert.equal(result.status, 0, result.stderr);
-  const request = JSON.parse(result.stdout).data.request;
-  assert.match(request.url, /\/agent\/ucp\/extra\/catalog\/search$/u);
-  assert.equal(request.body.query, 'XX coffee');
-  assert.equal(request.body.context.language, 'zh-Hant');
+  const output = JSON.parse(result.stdout);
+  assert.match(JSON.stringify(output), /10210949/u);
+  assert.match(JSON.stringify(output), /Americano/u);
 });
 
 test('Catalog purchase mode is executable with the complete frozen contract', () => {
@@ -291,6 +269,35 @@ test('Catalog purchase mode is executable with the complete frozen contract', ()
   assert.equal(plan.mode, 'catalog_purchase');
   assert.equal(plan.status, 'dry_run');
   assert.equal(plan.sideEffects, false);
+  assert.equal(plan.purchase.authorizedAvailability, 'IN_STOCK');
+  assert.equal(plan.purchase.fulfillmentType, 'NO_SHIPPING_REQUIRED');
+});
+
+test('joined provider product enters aggregate catalog_purchase without Program metadata', () => {
+  const result = run([
+    'visa',
+    'commerce-run',
+    '--context',
+    JSON.stringify(providerCatalogPurchaseContext()),
+    '--confirm-purchase',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(result.stdout).data;
+  assert.equal(plan.mode, 'catalog_purchase');
+  assert.equal(plan.status, 'dry_run');
+  assert.equal(plan.sideEffects, false);
+  assert.equal(plan.purchase.productId, 'provider_product_1');
+  assert.equal(
+    plan.purchase.merchantUrl,
+    'https://vtravel.link2shops.com/yiyuan/',
+  );
+  assert.match(plan.purchase.endpoint, /mcht_ftmse61a6az0/u);
+  assert.equal(plan.purchase.totalPrice, '1');
+  assert.equal(plan.purchase.currency, 'USD');
   assert.equal(plan.purchase.authorizedAvailability, 'IN_STOCK');
   assert.equal(plan.purchase.fulfillmentType, 'NO_SHIPPING_REQUIRED');
 });
@@ -487,6 +494,42 @@ function programPurchaseContext() {
   };
 }
 
+function providerCatalogPurchaseContext() {
+  return {
+    mode: 'catalog_purchase',
+    environment: 'uat',
+    requestText: 'Buy the selected provider voucher',
+    selection: {
+      merchantUrl: 'https://vtravel.link2shops.com/yiyuan/',
+      merchantId: 'mcht_ftmse61a6az0',
+      endpoint:
+        'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+      productId: 'provider_product_1',
+      productQuery: 'Watsons HKD 100 voucher',
+      quantity: 1,
+    },
+    expected: {
+      merchantName: 'vtravel.link2shops.com',
+      itemTitle: 'Watsons HKD 100 voucher',
+      amount: '1.00',
+      currency: 'USD',
+      availability: 'IN_STOCK',
+    },
+    instructionContext: {
+      title: 'Watsons HKD 100 voucher',
+      mandates: [{
+        title: 'Watsons HKD 100 voucher',
+        description: 'Purchase the selected Catalog product',
+        amountLimit: '1.00',
+        currencyCode: 'USD',
+        merchantCategoryCode: '5999',
+      }],
+    },
+    fulfillmentType: 'NO_SHIPPING_REQUIRED',
+    digitalDeliveryExpected: true,
+  };
+}
+
 const EATS365_PRODUCT_URL =
   'https://app.eats365pos.com/hk/en/chaptercoffee_kowloontong/menu'
   + '?product_id=10210949';
@@ -608,33 +651,122 @@ function jsonResponse(body) {
   });
 }
 
+function providerPage(productId, hasNextPage, nextCursor) {
+  return {
+    products: [{
+      id: productId,
+      title: 'Provider product ' + productId,
+      variants: [{
+        id: productId,
+        title: 'Provider product ' + productId,
+        price: { amount: 100, currency: 'USD' },
+        availability: { available: true, status: 'in_stock' },
+      }],
+    }],
+    pagination: {
+      has_next_page: hasNextPage,
+      ...(nextCursor ? { next_cursor: nextCursor } : {}),
+    },
+  };
+}
+
+function coffeeCatalogResponse() {
+  return {
+    groups: [{
+      channel_type: 'eats365',
+      store_id: 'chaptercoffee_kowloontong',
+      name: 'Chapter Coffee',
+      products: [{
+        id: '10210949',
+        title: 'Americano',
+        url: productUrl,
+        variants: [{
+          id: '10210949',
+          title: 'Americano',
+          price: { amount: 2600, currency: 'HKD' },
+          availability: { available: true, status: 'in_stock' },
+          seller: { name: 'Chapter Coffee' },
+        }],
+        metadata: {
+          channel_type: 'eats365',
+          store_id: 'chaptercoffee_kowloontong',
+        },
+      }],
+    }],
+    total_products: 1,
+  };
+}
+
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
+  if (scenario === 'joined-provider') {
+    if (url.pathname.endsWith('/agent/ucp/merchants')) {
+      throw new Error('joined recommendation must not request merchant-list');
+    }
+    if (url.pathname.endsWith('/taxonomy')) {
+      return jsonResponse({ success: true, data: {} });
+    }
+    if (url.pathname.endsWith('/programs/recommend')) {
+      return jsonResponse({
+        success: true,
+        data: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          count: 1,
+          items: [{ code: 'P_DYNAMIC' }],
+        },
+      });
+    }
+    if (url.pathname.endsWith('/catalog/search')) {
+      const body = JSON.parse(String(init?.body));
+      if (
+        body.query !== '香港有没有屈臣氏券'
+        || body.context?.language !== 'zh-Hant'
+        || body.pagination?.limit !== 100
+      ) {
+        throw new Error(
+          'unexpected joined provider request: ' + JSON.stringify(body),
+        );
+      }
+      return body.pagination.cursor
+        ? jsonResponse(providerPage('provider_product_2', false))
+        : jsonResponse(
+          providerPage('provider_product_1', true, 'provider_cursor_2'),
+        );
+    }
+    throw new Error('unexpected joined request: ' + url.href);
+  }
+
+  if (scenario === 'coffee-broad-only') {
+    if (url.pathname === '/agent/ucp/extra/catalog/search') {
+      const body = JSON.parse(String(init?.body));
+      if (
+        body.query !== 'XX coffee'
+        || body.channel_type !== 'eats365'
+        || body.context?.language !== 'zh-Hant'
+      ) {
+        throw new Error(
+          'unexpected Coffee broad request: ' + JSON.stringify(body),
+        );
+      }
+      return jsonResponse(coffeeCatalogResponse());
+    }
+    throw new Error(
+      'Coffee broad discovery must not enter joined Visa routes: ' + url.href,
+    );
+  }
+
   if (url.pathname.endsWith('/agent/ucp/merchants')) {
     if ((init?.method ?? 'GET') !== 'GET') {
       throw new Error('unexpected Merchant API method: ' + init?.method);
     }
-    if (url.hostname === 'mock.clink.invalid') {
-      return jsonResponse({
-        merchants: [{
-          merchant_id: 'mcht_fuhuismoke',
-          domain_name: 'vtravel.link2shops.com',
-          merchant_url: 'https://vtravel.link2shops.com/yiyuan/',
-          description: 'Fuhui Visa Offer merchant',
-          enabled: true,
-        }],
-      });
-    }
     return jsonResponse([{
-      merchant_id: 'mcht_fuhuismoke',
-      merchant_name: 'Fuhui UAT',
-      description: 'Fuhui Visa benefit redemption and internal Catalog checkout',
-      domain: 'https://vtravel.link2shops.com/yiyuan/',
+      merchant_id: 'mcht_provider123',
+      merchant_name: 'Visa Benefit Catalog Provider',
+      description: 'Visa benefit redemption and internal Catalog checkout',
+      domain: 'https://provider.example/benefits/',
     }]);
-  }
-
-  if (scenario === 'merchant-list') {
-    throw new Error('unexpected non-Merchant API URL: ' + url.href);
   }
 
   if (scenario === 'eats365-success') {
@@ -650,30 +782,11 @@ globalThis.fetch = async (input, init) => {
       ) {
         throw new Error('unexpected broad Catalog request: ' + JSON.stringify(body));
       }
-      return jsonResponse({
-        groups: [{
-          channel_type: 'eats365',
-          store_id: 'chaptercoffee_kowloontong',
-          name: 'Chapter Coffee',
-          products: [{
-            id: '10210949',
-            title: '美式咖啡 Americano',
-            url: productUrl,
-            variants: [{
-              id: '10210949',
-              title: '美式咖啡 Americano',
-              price: { amount: 2600, currency: 'HKD' },
-              availability: { available: true, status: 'in_stock' },
-              seller: { name: 'Chapter Coffee' },
-            }],
-            metadata: {
-              channel_type: 'eats365',
-              store_id: 'chaptercoffee_kowloontong',
-            },
-          }],
-        }],
-        total_products: 1,
-      });
+      const response = coffeeCatalogResponse();
+      response.groups[0].products[0].title = '美式咖啡 Americano';
+      response.groups[0].products[0].variants[0].title =
+        '美式咖啡 Americano';
+      return jsonResponse(response);
     }
     if (url.pathname === '/agent/cwallet/card/bindingLink') {
       throw new Error('intentional card refresh stop after product resolution');
