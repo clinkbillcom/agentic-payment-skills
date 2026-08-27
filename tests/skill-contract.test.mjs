@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.33');
+  assert.equal(packageJson.version, '0.1.34');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.33/u);
-  assert.match(skill, /version: "0\.1\.33"/u);
+  assert.match(skill, /Visa Skill 0\.1\.34/u);
+  assert.match(skill, /version: "0\.1\.34"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -144,7 +144,7 @@ test('Visa discovery remains query-only with language and environment locks', ()
   );
   assert.match(
     skill,
-    /fallback_all_offers[\s\S]*Do not rank, display, recommend, or purchase fallback rows/iu,
+    /fallback_all_offers[\s\S]*never rank, display,[\s\S]*recommend, or purchase fallback rows/iu,
   );
   assert.match(
     skill,
@@ -156,7 +156,7 @@ test('Visa discovery remains query-only with language and environment locks', ()
   );
 });
 
-test('broad Visa availability lists every returned Benefit and joins provider Catalog results', () => {
+test('broad Visa availability fetches every Benefit and applies orderable-first presentation', () => {
   const routing = skill.slice(
     skill.indexOf('## Intent Routing'),
     skill.indexOf('## Visa And Provider Catalog Joined Discovery'),
@@ -168,11 +168,11 @@ test('broad Visa availability lists every returned Benefit and joins provider Ca
 
   assert.match(
     routing,
-    /What Visa Benefits can I use in Hong Kong[\s\S]*every[\s\S]*Visa Program[\s\S]*registered provider/iu,
+    /What Visa Benefits can I use in Hong Kong[\s\S]*orderable-first[\s\S]*presentation rule/iu,
   );
   assert.match(
     joined,
-    /broad availability wording[\s\S]*always add `--all`[\s\S]*complete regional\s+set[\s\S]*Present every semantically relevant returned Visa Offer/iu,
+    /broad availability wording[\s\S]*always add `--all`[\s\S]*complete regional\s+set/iu,
   );
   assert.match(
     joined,
@@ -206,6 +206,14 @@ test('broad Visa availability lists every returned Benefit and joins provider Ca
   );
   assert.match(
     joined,
+    /`orderableItems` is the only authoritative[\s\S]*`title`[\s\S]*`metadata\.displayTitle`[\s\S]*`sourceTitle`[\s\S]*`expected\.itemTitle`[\s\S]*`unitPriceMinor`[\s\S]*audit fact only[\s\S]*`unitPriceMajor`[\s\S]*major-unit unit price/iu,
+  );
+  assert.match(
+    joined,
+    /Never derive a purchase title or authorized amount from the raw[\s\S]*`product\.title`[\s\S]*`variant\.title`[\s\S]*`product\.price\.amount`[\s\S]*`variant\.price\.amount`[\s\S]*`price_range`/iu,
+  );
+  assert.match(
+    joined,
     /CLI-owned joined aggregate[\s\S]*opaque provider\s+cursor[\s\S]*The Skill must not perform that traversal itself/iu,
   );
   assert.doesNotMatch(
@@ -226,11 +234,19 @@ test('broad Visa availability lists every returned Benefit and joins provider Ca
   );
   assert.match(
     joined,
-    /VISA_PROGRAM_ONLY[\s\S]*no verified\s+orderable provider-product relationship/iu,
+    /VISA_PROGRAM_ONLY[\s\S]*no[\s\S]*verified orderable provider-product relationship/iu,
   );
   assert.match(
     joined,
-    /Agent may organize, sort, number, and phrase[\s\S]*Do not impose fixed headings,[\s\S]*numbering, counts, or a fixed display template/iu,
+    /relevant directly orderable product remains[\s\S]*display only[\s\S]*natural next[\s\S]*continue ordering[\s\S]*no relevant directly orderable product remains[\s\S]*display every relevant\s+Visa Offer/iu,
+  );
+  assert.match(
+    joined,
+    /internal only[\s\S]*Never expose labels such as Visa Offer[\s\S]*provider Catalog[\s\S]*Visa Program[\s\S]*explain the source[\s\S]*one natural answer/iu,
+  );
+  assert.doesNotMatch(
+    joined,
+    /Keep the Visa Offer collection and directly orderable provider-product\s+collection visibly distinct/iu,
   );
 });
 
@@ -262,7 +278,7 @@ test('Visa category shopping uses the joined Visa plus provider route', () => {
   );
   assert.match(
     joined,
-    /no\s+Visa Offer\s+survives[\s\S]*no matching Visa Offer[\s\S]*still present relevant provider products/iu,
+    /fallback_all_offers[\s\S]*relevant orderable product exists[\s\S]*without narrating the Offer miss/iu,
   );
   assert.match(
     joined,
@@ -312,6 +328,14 @@ test('Visa merchant shopping uses joined discovery without false matching', () =
     joined,
     /new query[\s\S]*invalidates the old ordering[\s\S]*stable\s+ID[\s\S]*title-only fuzzy matching is insufficient/iu,
   );
+  assert.match(
+    joined,
+    /If at least one relevant directly orderable product remains[\s\S]*display only[\s\S]*those products[\s\S]*Do not mention missing or available Visa Offers[\s\S]*provider collection[\s\S]*Catalog sourcing/iu,
+  );
+  assert.match(
+    joined,
+    /If no relevant directly orderable product remains[\s\S]*display every relevant[\s\S]*Visa Offer[\s\S]*offer to show[\s\S]*details/iu,
+  );
 });
 
 test('direct shopping skips Visa recommendation and uses aggregate Catalog purchase', () => {
@@ -352,7 +376,7 @@ test('direct shopping skips Visa recommendation and uses aggregate Catalog purch
   );
   assert.match(
     catalogPurchase,
-    /joined provider product[\s\S]*exact\s+CLI-returned provider merchant ID[\s\S]*authoritative purchase[\s\S]*route[\s\S]*Never query the merchant list/iu,
+    /joined provider product[\s\S]*exact selected `orderableItems` entry[\s\S]*CLI-returned provider identity[\s\S]*Do not[\s\S]*rediscover or reinterpret title and price[\s\S]*Never query the merchant list/iu,
   );
   assert.match(
     catalogPurchase,
@@ -420,6 +444,10 @@ test('direct shopping skips Visa recommendation and uses aggregate Catalog purch
   assert.match(
     catalogPurchase,
     /Never\s+fall back to Program `mode=purchase`[\s\S]*`ucp-checkout run`/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /product-resolution title or price mismatch is not a discovery mechanism[\s\S]*Do not edit the title or amount by trial and error[\s\S]*obtain new purchase authorization/iu,
   );
 });
 
