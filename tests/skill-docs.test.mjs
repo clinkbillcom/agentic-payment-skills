@@ -649,8 +649,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.0');
-  assert.equal(packageJson.version, '1.14.0');
+  assert.equal(skillVersion, '1.14.1');
+  assert.equal(packageJson.version, '1.14.1');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -918,6 +918,43 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
   assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
   assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
+  assert.match(catalogDiscovery, /active, non-shadow internal merchant routes/u);
+  assert.match(catalogDiscovery, /support internal endpoint resolution/u);
+  assert.match(catalogDiscovery, /null or missing upstream description/u);
+  assert.match(catalogDiscovery, /`ext` is an opaque complete JSON value/u);
+  assert.match(catalogDiscovery, /object, array, scalar, or null/u);
+  assert.match(catalogDiscovery, /does not inspect, validate, retain, or copy `ext`/u);
+  assert.match(catalogDiscovery, /can never influence merchant identity or intent matching/u);
+  assert.match(catalogDiscovery, /skips isolated malformed rows[\s\S]*do not invalidate other trustworthy rows/u);
+  assert.match(catalogDiscovery, /non-empty merchant array contains no trustworthy merchant identity[\s\S]*fails closed/u);
+  assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
+  assert.match(catalogDiscovery, /preserves a non-root path such as `\/yiyuan\/`/u);
+  assert.match(catalogDiscovery, /never reads a static well-known document or a local bundled merchant list/u);
+  assert.match(catalogDiscovery, /command returns `\{ merchants: \[\.\.\.\] \}`[\s\S]*compatibility adapter[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
+  assert.match(catalogDiscovery, /merchant_match_invalid_discriminator[\s\S]*never discarded[\s\S]*absent discriminator/u);
+  assert.match(catalogDiscovery, /broad Catalog group contract[\s\S]*does not carry a merchant route hostname or URL/u);
+  assert.match(catalogDiscovery, /multiple validated merchant-list routes[\s\S]*leaves the broad group and its products unenriched/u);
+
+  assert.match(skill, /active non-shadow internal merchant routes needed for endpoint resolution/u);
+  assert.match(skill, /Catalog-disabled rows have `description:""`/u);
+  assert.match(skill, /Each current row may carry `ext`, an opaque complete JSON value/u);
+  assert.match(skill, /never inspect, retain, validate, or copy it into a candidate/u);
+  assert.match(skill, /Skip isolated malformed rows[\s\S]*without rejecting other trustworthy rows/u);
+  assert.match(skill, /hostname bucket assigned to different merchant IDs[\s\S]*preserving unrelated hostnames/u);
+  assert.match(skill, /any present invalid `merchantUrl` discriminator[\s\S]*rejected rather than treated as absent/u);
+  assert.match(skill, /broad internal Catalog group currently carries `merchant_id` but no merchant route discriminator/u);
+  assert.match(skill, /List active internal UCP merchant routes/u);
+
+  assert.match(readme, /active non-shadow internal routes/u);
+  assert.match(readme, /One merchant ID may have multiple routes/u);
+  assert.match(readme, /isolated malformed\/unmatchable rows are skipped individually/u);
+  assert.match(readme, /hostname assigned to different merchant IDs is removed without hiding unrelated routes/u);
+  assert.match(readme, /no environment reads a static or bundled merchant list/u);
+  assert.match(readmeZh, /active 非影子内部 route/u);
+  assert.match(readmeZh, /同一 merchant ID 可有多条 route/u);
+  assert.match(readmeZh, /单条脏数据或不可匹配记录会被逐条跳过/u);
+  assert.match(readmeZh, /同一 hostname 若指向不同 merchant ID，只剔除该冲突 hostname/u);
+  assert.match(readmeZh, /任何环境都不再读取静态或内置商户列表/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
@@ -941,9 +978,9 @@ test('public Catalog is config-free, UAT-pinned, language-aware, and checkout-sa
   assert.match(cliInvocation, /explicit `--test` conflicts and exits 2/u);
   assert.match(cliInvocation, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(cliInvocation, /send no `Authorization`/u);
-  assert.match(cliInvocation, /three Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
-  assert.match(cliInvocation, /bundled sandbox merchant-list document/u);
-  assert.match(cliInvocation, /preflight only `https:\/\/uat-api\.clinkbill\.com`/u);
+  assert.match(cliInvocation, /four Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
+  assert.match(cliInvocation, /anonymous `GET \/agent\/ucp\/merchants`/u);
+  assert.match(cliInvocation, /Preflight `https:\/\/uat-api\.clinkbill\.com` before the merchant-list command/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
   assert.match(catalogDiscovery, /fixes `catalogEnvironment=sandbox`/u);
@@ -966,7 +1003,7 @@ test('public Catalog is config-free, UAT-pinned, language-aware, and checkout-sa
   assert.match(catalogDiscovery, /pending selection is authoritative/u);
   assert.match(catalogDiscovery, /current `wallet status`/u);
   assert.match(catalogDiscovery, /test or sandbox candidate must never flow silently into production checkout/u);
-  assert.match(catalogDiscovery, /production merchant-list non-2xx[\s\S]*network error exit 6/u);
+  assert.match(catalogDiscovery, /merchant-list or Catalog search `401`\/`403`[\s\S]*exit 5/u);
   assert.match(ucpCheckout, /anonymous `POST \/agent\/ucp/u);
   assert.match(ucpCheckout, /require a successful current `wallet status`[\s\S]*verify that its API origin matches[\s\S]*Stop if/u);
   assert.match(ucpCheckout, /selected product without that frozen environment is invalid/u);

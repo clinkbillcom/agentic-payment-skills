@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   PageHandoffAction,
@@ -120,6 +120,29 @@ function runBundleRaw(args, env = {}) {
 
 function runBundleJson(args) {
   return JSON.parse(runBundle(args));
+}
+
+async function createMerchantFetchPreload(responseBody) {
+  const directory = await mkdtemp(join(tmpdir(), 'clink-merchant-fetch-preload-'));
+  const preloadPath = join(directory, 'preload.mjs');
+  await writeFile(
+    preloadPath,
+    `const responseBody = ${JSON.stringify(responseBody)};
+
+globalThis.fetch = async () => new Response(JSON.stringify(responseBody), {
+  status: 200,
+  headers: { 'content-type': 'application/json' },
+});
+`,
+    'utf8',
+  );
+  const importOption = `--import=${pathToFileURL(preloadPath).href}`;
+  return {
+    directory,
+    env: {
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, importOption].filter(Boolean).join(' '),
+    },
+  };
 }
 
 function runBundleAsync(args, env = {}) {
@@ -1504,6 +1527,12 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
 
 test('vendored public Catalog commands ignore wallet config and wallet-init defaults', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-vendored-public-catalog-'));
+  const merchantFetchPreload = await createMerchantFetchPreload([{
+    merchant_id: 'mcht_mocked_test',
+    merchant_name: 'Mocked Test Merchant',
+    description: 'Controlled test merchant',
+    domain: 'https://merchant.example',
+  }]);
   const configDirectory = join(home, '.clink-cli');
   await mkdir(configDirectory, { recursive: true });
   await writeFile(join(configDirectory, 'config.json'), '{ malformed config', 'utf8');
@@ -1554,7 +1583,10 @@ test('vendored public Catalog commands ignore wallet config and wallet-init defa
 
     const merchantList = runBundleRaw([
       'tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json',
-    ], publicEnv);
+    ], {
+      ...publicEnv,
+      ...merchantFetchPreload.env,
+    });
     assert.equal(merchantList.status, 0, merchantList.stderr);
     assert.ok(JSON.parse(merchantList.stdout).merchants.length > 0);
 
@@ -1564,6 +1596,7 @@ test('vendored public Catalog commands ignore wallet config and wallet-init defa
     assert.equal(credentials.status, 2);
     assert.match(credentials.stderr, /--customer-api-key is not supported by public Catalog commands/u);
   } finally {
+    await rm(merchantFetchPreload.directory, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });
   }
 });
