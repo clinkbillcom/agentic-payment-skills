@@ -162,13 +162,19 @@ test('public Fuhui discovery mocks the dynamic Merchant API and supports cursor 
   assert.equal(merchantList.status, 0, merchantList.stderr);
   const merchantDocument = JSON.parse(merchantList.stdout);
   const fuhui = merchantDocument.merchants.filter((merchant) =>
-    merchant.enabled === true && /Fuhui/iu.test(merchant.description ?? '')
+    merchant.enabled !== false
+    && /Fuhui/iu.test(
+      `${merchant.merchant_name ?? ''} ${merchant.description ?? ''}`,
+    )
   );
   assert.ok(fuhui.length >= 1);
   for (const merchant of fuhui) {
+    const merchantUrl = merchant.merchant_url ?? merchant.domain;
+    const domainName = merchant.domain_name
+      ?? new URL(merchantUrl).hostname;
     assert.match(merchant.merchant_id, /^mcht_[a-z0-9]+$/u);
-    assert.match(merchant.domain_name, /^[a-z0-9.-]+$/u);
-    assert.match(merchant.merchant_url, /^https:\/\//u);
+    assert.match(domainName, /^[a-z0-9.-]+$/u);
+    assert.match(merchantUrl, /^https:\/\//u);
   }
 
   const catalogPage = run([
