@@ -1542,13 +1542,13 @@ test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', (
 
 test('vendored CLI help exposes the internal UCP merchant-list contract', () => {
   const rootHelp = runBundle(['--help']);
-  const merchantHelp = runBundle(['ucp-merchant', '--help']);
-  const listHelp = runBundle(['ucp-merchant', 'list', '--help']);
+  const toolHelp = runBundle(['tool', 'internal-ucp', '--help']);
+  const listHelp = runBundle(['tool', 'internal-ucp', 'get-merchant-list', '--help']);
 
-  assert.match(rootHelp, /^\s*ucp-merchant\s+Discover enabled UCP merchants$/mu);
-  assert.match(merchantHelp, /ucp-merchant list --internal/u);
-  assert.match(merchantHelp, /List enabled UCP merchants from Clink's public merchant API/u);
-  assert.match(listHelp, /--internal\s+Select the Clink UCP merchant source/u);
+  assert.doesNotMatch(rootHelp, /ucp-merchant/u);
+  assert.match(toolHelp, /get-merchant-list\s+Return the supported merchant-list document/u);
+  assert.match(listHelp, /tool internal-ucp get-merchant-list/u);
+  assert.match(listHelp, /Returns \{"merchants":\[\.\.\.\]\} from the public merchant-list API/u);
   assert.match(listHelp, /anonymous GET \/agent\/ucp\/merchants/u);
   assert.match(listHelp, /does not read ~\/\.clink-cli\/config\.json/u);
   assert.match(
@@ -1649,17 +1649,17 @@ test('vendored UCP merchant list selects its public API environment and sends an
   const cases = [
     {
       name: 'production',
-      args: ['ucp-merchant', 'list', '--internal', '--format', 'json'],
+      args: ['tool', 'internal-ucp', 'get-merchant-list', '--format', 'json'],
       expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchants',
     },
     {
       name: 'sandbox',
-      args: ['ucp-merchant', 'list', '--internal', '--sandbox', '--format', 'json'],
+      args: ['tool', 'internal-ucp', 'get-merchant-list', '--sandbox', '--format', 'json'],
       expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchants',
     },
     {
       name: 'test',
-      args: ['ucp-merchant', 'list', '--internal', '--test', '--format', 'json'],
+      args: ['tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json'],
       expectedUrl: 'https://api.clinkbill.dev/agent/ucp/merchants',
     },
   ];
@@ -1678,8 +1678,7 @@ test('vendored UCP merchant list selects its public API environment and sends an
       });
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), {
-        ok: true,
-        data: [expectedMerchant],
+        merchants: [expectedMerchant],
       });
 
       const request = JSON.parse(await readFile(recordPath, 'utf8'));
@@ -1721,7 +1720,7 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
 
   try {
     const result = runBundleRaw([
-      'ucp-merchant', 'list', '--internal', '--format', 'json',
+      'tool', 'internal-ucp', 'get-merchant-list', '--format', 'json',
     ], {
       ...fetchPreload.env,
       CLINK_TEST_FETCH_RECORD_PATH: requestPath,
@@ -1729,8 +1728,7 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
 
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), {
-      ok: true,
-      data: [
+      merchants: [
         {
           merchant_id: 'mcht_null_description',
           merchant_name: 'Null Description Merchant',
@@ -1751,33 +1749,37 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
   }
 });
 
-test('vendored UCP merchant list rejects credentials, dry-run, and extra arguments before fetching', async () => {
+test('vendored UCP merchant list rejects credentials and conflicting environments before fetching', async () => {
   const fetchPreload = await createMerchantFetchPreload([]);
   const unexpectedRequestPath = join(fetchPreload.directory, 'unexpected-request.json');
   const cases = [
     {
-      args: ['ucp-merchant', 'list', '--format', 'json'],
-      message: /requires --internal/u,
+      args: [
+        'tool', 'internal-ucp', 'get-merchant-list',
+        '--customer-id', 'customer_1', '--format', 'json',
+      ],
+      message: /--customer-id is not supported by public Catalog commands/u,
     },
     {
-      args: ['ucp-merchant', 'list', '--internal', '--dry-run', '--format', 'json'],
-      message: /--dry-run is not supported by ucp-merchant list/u,
+      args: [
+        'tool', 'internal-ucp', 'get-merchant-list',
+        '--customer-api-key', 'secret', '--format', 'json',
+      ],
+      message: /--customer-api-key is not supported by public Catalog commands/u,
     },
     {
-      args: ['ucp-merchant', 'list', '--internal', '--customer-id', 'customer_1', '--format', 'json'],
-      message: /--customer-id is not supported by ucp-merchant list/u,
+      args: [
+        'tool', 'internal-ucp', 'get-merchant-list',
+        '--credential-token', 'secret', '--format', 'json',
+      ],
+      message: /--credential-token is not supported by public Catalog commands/u,
     },
     {
-      args: ['ucp-merchant', 'list', '--internal', '--customer-api-key', 'secret', '--format', 'json'],
-      message: /--customer-api-key is not supported by ucp-merchant list/u,
-    },
-    {
-      args: ['ucp-merchant', 'list', 'extra', '--internal', '--format', 'json'],
-      message: /does not accept positional arguments/u,
-    },
-    {
-      args: ['ucp-merchant', 'list', '--internal', '--query', 'watch', '--format', 'json'],
-      message: /--query is not supported by ucp-merchant list/u,
+      args: [
+        'tool', 'internal-ucp', 'get-merchant-list',
+        '--sandbox', '--test', '--format', 'json',
+      ],
+      message: /--sandbox and --test cannot be used together/u,
     },
   ];
 
@@ -2399,7 +2401,7 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '2e0dfe11856f51e1fb9c5fc2f651340d7809dcdd',
+    '4b46850ce67e46150d4415019d0ed1ade57b4852',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

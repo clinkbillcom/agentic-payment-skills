@@ -908,9 +908,9 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink ucp-merchant list --internal[^\n]*--test/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
 
-  assert.match(catalogDiscovery, /clink ucp-merchant list --internal \[--test\|--sandbox\] --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
@@ -924,11 +924,11 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /does not inspect, validate, retain, or copy `ext`/u);
   assert.match(catalogDiscovery, /can never influence merchant identity or intent matching/u);
   assert.match(catalogDiscovery, /skips isolated malformed rows[\s\S]*do not invalidate other trustworthy rows/u);
-  assert.match(catalogDiscovery, /non-empty array contains no trustworthy merchant identity[\s\S]*fails closed/u);
+  assert.match(catalogDiscovery, /non-empty merchant array contains no trustworthy merchant identity[\s\S]*fails closed/u);
   assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
   assert.match(catalogDiscovery, /preserves a non-root path such as `\/yiyuan\/`/u);
   assert.match(catalogDiscovery, /never reads a production static well-known document or a test\/UAT local bundle/u);
-  assert.match(catalogDiscovery, /compatibility adapter only[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
+  assert.match(catalogDiscovery, /command returns `\{ merchants: \[\.\.\.\] \}`[\s\S]*compatibility adapter[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
   assert.match(catalogDiscovery, /merchant_match_invalid_discriminator[\s\S]*never discarded[\s\S]*absent discriminator/u);
   assert.match(catalogDiscovery, /broad Catalog group contract[\s\S]*does not carry a merchant route hostname or URL/u);
   assert.match(catalogDiscovery, /multiple validated merchant-list routes[\s\S]*leaves the broad group and its products unenriched/u);

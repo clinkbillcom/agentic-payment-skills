@@ -1518,7 +1518,7 @@ test('initial catalog purchase routing canonicalizes and preserves test environm
   });
   assert.equal(
     discovery.command,
-    'clink ucp-merchant list --internal --test --format json',
+    'clink tool internal-ucp get-merchant-list --test --format json',
   );
   assert.equal(discovery.catalogLanguage, 'zh-Hant');
 });
@@ -3215,7 +3215,7 @@ test('candidate-level catalog context conflict invalidates the pending selection
   });
   assert.equal(
     merchantListRestart.command,
-    'clink ucp-merchant list --internal --sandbox --format json',
+    'clink tool internal-ucp get-merchant-list --sandbox --format json',
   );
 
   const scopedSearchRestart = classifyCatalogDiscovery({
@@ -3266,7 +3266,7 @@ test('a damaged candidate preserves a trusted test discovery environment instead
   });
   assert.equal(
     restarted.command,
-    'clink ucp-merchant list --internal --test --format json',
+    'clink tool internal-ucp get-merchant-list --test --format json',
   );
 });
 

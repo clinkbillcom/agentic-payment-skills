@@ -45,7 +45,7 @@ const shopifyMerchant = {
 };
 
 const merchantListData = [bruceLeeMerchant, shopifyMerchant];
-const merchantListOutput = { ok: true, data: merchantListData };
+const merchantListOutput = { merchants: merchantListData };
 
 function classifyCatalogDiscovery(input = {}) {
   const hasLanguage = ['catalogLanguage', 'catalog_language', 'language']
@@ -72,7 +72,7 @@ test('loads the supported merchant list before any catalog search', () => {
   assert.equal(result.action, CatalogDiscoveryAction.GET_MERCHANT_LIST);
   assert.equal(result.reason, 'merchant_list_required');
   assert.equal(result.catalogEnvironment, CatalogEnvironment.PRODUCTION);
-  assert.equal(result.command, 'clink ucp-merchant list --internal --format json');
+  assert.equal(result.command, 'clink tool internal-ucp get-merchant-list --format json');
 });
 
 test('uses one explicit catalog environment across merchant-list, scoped, and broad commands', () => {
@@ -87,7 +87,7 @@ test('uses one explicit catalog environment across merchant-list, scoped, and br
     assert.equal(merchantList.catalogEnvironment, catalogEnvironment);
     assert.equal(
       merchantList.command,
-      `clink ucp-merchant list --internal ${flag} --format json`,
+      `clink tool internal-ucp get-merchant-list ${flag} --format json`,
     );
 
     const scoped = classifyCatalogDiscovery({
@@ -654,7 +654,7 @@ test('legacy disabled rows do not create hostname conflicts for enabled rows', (
   ]);
 });
 
-test('keeps new API route fields when a compatibility caller wraps them in merchants', () => {
+test('reads current API route fields from the merchant-list command envelope', () => {
   const result = classifyCatalogDiscovery({
     query: 'vtravel voucher',
     merchantListOutput: {
