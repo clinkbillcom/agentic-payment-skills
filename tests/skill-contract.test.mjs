@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.35');
+  assert.equal(packageJson.version, '0.1.36');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.35/u);
-  assert.match(skill, /version: "0\.1\.35"/u);
+  assert.match(skill, /Visa Skill 0\.1\.36/u);
+  assert.match(skill, /version: "0\.1\.36"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -390,18 +390,20 @@ test('direct shopping skips Visa recommendation and uses aggregate Catalog purch
     catalogPurchase,
     /mode=catalog_purchase[\s\S]*Eats365[\s\S]*without requesting the internal merchant list[\s\S]*manual-item signal[\s\S]*extra Catalog product endpoint[\s\S]*exact frozen[\s\S]*store[\s\S]*product ID[\s\S]*must not depend on broad[\s\S]*Catalog discovery[\s\S]*mode=purchase[\s\S]*ordinary internal[\s\S]*merchants/iu,
   );
-  for (const field of [
-    'channelType',
-    'storeId',
-    'catalogQuery',
-    'catalogEnvironment',
-    'catalogLanguage',
-  ]) {
+  for (const field of ['channelType', 'storeId']) {
     assert.match(catalogPurchase, new RegExp(`"${field}"`, 'u'));
   }
   assert.match(
     catalogPurchase,
-    /merchantUrl[\s\S]*same product ID[\s\S]*selection\.productId[\s\S]*title[\s\S]*structured price[\s\S]*currency[\s\S]*availability[\s\S]*channel[\s\S]*store[\s\S]*query[\s\S]*environment[\s\S]*language[\s\S]*URL[\s\S]*one broad Catalog snapshot/iu,
+    /only `channelType` and `storeId` are required route fields[\s\S]*`catalogQuery`[\s\S]*`catalogEnvironment`[\s\S]*`catalogLanguage`[\s\S]*optional[\s\S]*compatibility metadata[\s\S]*must not block purchase/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /frozen selection URL may carry `product_id`[\s\S]*exact[\s\S]*response returns the same menu URL without that query/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /valid when host,[\s\S]*region, store path,[\s\S]*separately verified product ID match/iu,
   );
   assert.match(
     catalogPurchase,

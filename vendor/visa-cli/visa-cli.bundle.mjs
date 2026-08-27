@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.38";
+var CLI_VERSION = "0.2.39";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -23964,7 +23964,7 @@ async function getCommandCatalogProduct(context, input) {
     baseUrl: input.baseUrl,
     method: "POST",
     path: EXTRA_CATALOG_PRODUCT_PATH,
-    acceptLanguage: input.language,
+    acceptLanguage: input.language ?? null,
     headers: {
       "Request-Id": randomUUID4(),
       "UCP-Agent": DEFAULT_UCP_AGENT
@@ -23974,7 +23974,7 @@ async function getCommandCatalogProduct(context, input) {
       channel_type: input.channelType,
       store_id: input.storeId,
       region: input.region,
-      context: { language: input.language }
+      ...input.language ? { context: { language: input.language } } : {}
     },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false
@@ -26236,25 +26236,21 @@ function normalizePurchaseRunContext(raw, mode) {
   const catalogQuery = optionalText2(selection.catalogQuery, "selection.catalogQuery");
   const catalogEnvironment = optionalCatalogEnvironment(selection.catalogEnvironment);
   const catalogLanguage = optionalCatalogLanguage(selection.catalogLanguage);
-  const platformCatalogFields = [
-    channelType,
-    storeId,
-    catalogQuery,
-    catalogEnvironment,
-    catalogLanguage
-  ];
-  const providedPlatformCatalogFields = platformCatalogFields.filter((value) => value !== void 0).length;
-  if (providedPlatformCatalogFields !== 0 && providedPlatformCatalogFields !== platformCatalogFields.length) {
-    throw validationError("selection.channelType, storeId, catalogQuery, catalogEnvironment, and catalogLanguage must be provided together");
+  if (Boolean(channelType) !== Boolean(storeId)) {
+    throw validationError("selection.channelType and storeId must be provided together");
   }
-  if (providedPlatformCatalogFields > 0) {
+  const hasPlatformIdentity = Boolean(channelType && storeId);
+  if (!hasPlatformIdentity && (catalogQuery || catalogEnvironment || catalogLanguage)) {
+    throw validationError("selection Catalog metadata requires channelType and storeId");
+  }
+  if (hasPlatformIdentity) {
     if (!channelType || !/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(channelType)) {
       throw validationError("selection.channelType must be a Catalog channel identifier");
     }
     if (merchantId || endpoint) {
       throw validationError("platform Catalog selection does not accept merchantId or endpoint");
     }
-    if (!sameCommerceEnvironment(environment, catalogEnvironment)) {
+    if (catalogEnvironment && !sameCommerceEnvironment(environment, catalogEnvironment)) {
       throw validationError("selection.catalogEnvironment does not match the commerce environment");
     }
   }
@@ -30063,8 +30059,8 @@ async function resolveInternalCatalogPurchase(context, commerceContext, purchase
   };
 }
 async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase) {
-  if (purchase.channelType !== "eats365" || !purchase.storeId || !purchase.catalogQuery || !purchase.catalogEnvironment || !purchase.catalogLanguage) {
-    throw validationError("manual platform Catalog purchase requires the complete frozen Eats365 Catalog provenance");
+  if (purchase.channelType !== "eats365" || !purchase.storeId) {
+    throw validationError("manual platform Catalog purchase requires the frozen Eats365 channel and store identity");
   }
   const productUrl2 = requireEats365CatalogProductUrl(purchase.merchantUrl);
   const pathSegments = productUrl2.pathname.split("/").filter(Boolean).map((value) => decodeUrlPathSegment(value));
@@ -30083,7 +30079,7 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
     channelType: purchase.channelType,
     storeId: purchase.storeId,
     region,
-    language: purchase.catalogLanguage
+    ...purchase.catalogLanguage ? { language: purchase.catalogLanguage } : {}
   });
   const candidate = resolveExactPlatformCatalogCandidate(catalog, purchase);
   return {
@@ -30093,9 +30089,9 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
       provider: "eats365",
       channelType: purchase.channelType,
       storeId: purchase.storeId,
-      catalogQuery: purchase.catalogQuery,
-      catalogEnvironment: purchase.catalogEnvironment,
-      catalogLanguage: purchase.catalogLanguage,
+      ...purchase.catalogQuery ? { catalogQuery: purchase.catalogQuery } : {},
+      ...purchase.catalogEnvironment ? { catalogEnvironment: purchase.catalogEnvironment } : {},
+      ...purchase.catalogLanguage ? { catalogLanguage: purchase.catalogLanguage } : {},
       merchantOrigin: productUrl2.origin,
       merchantDomain: productUrl2.hostname
     },
@@ -30158,8 +30154,8 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   }
   const product = products[0];
   const productUrl2 = requiredProductText(product.url ?? product.item_url ?? product.product_url, "broad Catalog product is missing URL");
-  if (normalizedUrl(productUrl2) !== normalizedUrl(purchase.merchantUrl)) {
-    throw validationError("current broad Catalog product URL differs from the frozen purchase context");
+  if (!sameEats365MenuRoute(productUrl2, purchase.merchantUrl, purchase.productId)) {
+    throw validationError("current Eats365 menu route differs from the frozen purchase context");
   }
   const productTitle2 = requiredProductText(product.title ?? product.name, "broad Catalog product is missing title");
   if (normalizedText3(productTitle2) !== normalizedText3(purchase.title)) {
@@ -30176,13 +30172,6 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   const variantTitle = requiredProductText(variant.title ?? variant.name, "broad Catalog variant is missing title");
   if (normalizedText3(variantTitle) !== normalizedText3(purchase.title)) {
     throw validationError("current broad Catalog variant title differs from the frozen purchase context");
-  }
-  if (variant.seller !== void 0) {
-    const seller = requireRecord3(variant.seller, "broad Catalog variant seller must be an object");
-    const sellerName2 = requiredProductText(seller.name, "broad Catalog variant seller is missing name");
-    if (normalizedText3(sellerName2) !== normalizedText3(purchase.merchantName)) {
-      throw validationError("current broad Catalog seller differs from the frozen purchase context");
-    }
   }
   const price = requireRecord3(variant.price, "broad Catalog variant is missing structured price");
   const currency = requiredProductText(price.currency ?? price.currencyCode ?? price.currency_code, "broad Catalog variant price is missing currency").toUpperCase();
@@ -30225,6 +30214,16 @@ function decodeUrlPathSegment(value) {
   } catch {
     throw validationError("Eats365 Catalog product URL has invalid path encoding");
   }
+}
+function sameEats365MenuRoute(currentValue, frozenValue, productId2) {
+  const current = requireEats365CatalogProductUrl(currentValue);
+  const frozen = requireEats365CatalogProductUrl(frozenValue);
+  const normalizedPath = (value) => value.pathname.replace(/\/+$/u, "");
+  if (current.origin.toLowerCase() !== frozen.origin.toLowerCase() || normalizedPath(current) !== normalizedPath(frozen)) {
+    return false;
+  }
+  const currentProductIds = current.searchParams.getAll("product_id").map((value) => value.trim()).filter(Boolean);
+  return currentProductIds.every((value) => value === productId2);
 }
 function assertFrozenRoute(purchase, merchantId, endpoint) {
   if (purchase.merchantId && purchase.merchantId !== merchantId) {
@@ -32037,9 +32036,10 @@ Context:
   goods require identical top-level and instructionContext shippingAddress values, and
   digitalDeliveryExpected cannot be true for physical goods. Unknown purchase authority fields
   are rejected rather than silently ignored in both modes. Platform Catalog provenance is accepted
-  only by catalog_purchase and freezes selection.channelType/storeId/catalogQuery/
-  catalogEnvironment/catalogLanguage as one complete set. The Catalog environment must match the
-  commerce environment. A registered Visa Benefit Catalog provider must freeze the exact registered
+  only by catalog_purchase. selection.channelType and storeId are the required route identity;
+  catalogQuery, catalogEnvironment, and catalogLanguage are optional compatibility metadata.
+  When catalogEnvironment is supplied it must match the commerce environment. A registered Visa
+  Benefit Catalog provider must freeze the exact registered
   selection.merchantId and merchantUrl; selection.endpoint, when supplied, must exactly match the
   endpoint derived from the locked commerce environment. This allows direct anonymous product
   revalidation without a merchant-list request and does not accept caller-defined internal routes.
