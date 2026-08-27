@@ -3458,6 +3458,1349 @@ var require_commander = __commonJS({
   }
 });
 
+// node_modules/pend/index.js
+var require_pend = __commonJS({
+  "node_modules/pend/index.js"(exports, module) {
+    module.exports = Pend;
+    function Pend() {
+      this.pending = 0;
+      this.max = Infinity;
+      this.listeners = [];
+      this.waiting = [];
+      this.error = null;
+    }
+    Pend.prototype.go = function(fn) {
+      if (this.pending < this.max) {
+        pendGo(this, fn);
+      } else {
+        this.waiting.push(fn);
+      }
+    };
+    Pend.prototype.wait = function(cb) {
+      if (this.pending === 0) {
+        cb(this.error);
+      } else {
+        this.listeners.push(cb);
+      }
+    };
+    Pend.prototype.hold = function() {
+      return pendHold(this);
+    };
+    function pendHold(self) {
+      self.pending += 1;
+      var called = false;
+      return onCb;
+      function onCb(err) {
+        if (called) throw new Error("callback called twice");
+        called = true;
+        self.error = self.error || err;
+        self.pending -= 1;
+        if (self.waiting.length > 0 && self.pending < self.max) {
+          pendGo(self, self.waiting.shift());
+        } else if (self.pending === 0) {
+          var listeners = self.listeners;
+          self.listeners = [];
+          listeners.forEach(cbListener);
+        }
+      }
+      function cbListener(listener) {
+        listener(self.error);
+      }
+    }
+    function pendGo(self, fn) {
+      fn(pendHold(self));
+    }
+  }
+});
+
+// node_modules/yauzl/fd-slicer.js
+var require_fd_slicer = __commonJS({
+  "node_modules/yauzl/fd-slicer.js"(exports) {
+    var fs = __require("fs");
+    var util = __require("util");
+    var stream = __require("stream");
+    var Readable2 = stream.Readable;
+    var PassThrough = stream.PassThrough;
+    var Pend = require_pend();
+    var EventEmitter = __require("events").EventEmitter;
+    exports.BufferSlicer = BufferSlicer;
+    exports.FdSlicer = FdSlicer;
+    util.inherits(FdSlicer, EventEmitter);
+    function FdSlicer(fd) {
+      EventEmitter.call(this);
+      this.fd = fd;
+      this.pend = new Pend();
+      this.pend.max = 1;
+      this.refCount = 0;
+    }
+    FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
+      var self = this;
+      self.pend.go(function(cb) {
+        fs.read(self.fd, buffer, offset, length, position, function(err, bytesRead, buffer2) {
+          cb();
+          callback(err, bytesRead, buffer2);
+        });
+      });
+    };
+    FdSlicer.prototype.createReadStream = function(options2) {
+      return new ReadStream(this, options2);
+    };
+    FdSlicer.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    FdSlicer.prototype.unref = function() {
+      var self = this;
+      self.refCount -= 1;
+      if (self.refCount < 0) throw new Error("invalid unref");
+      if (self.refCount > 0) return;
+      fs.close(self.fd, onCloseDone);
+      function onCloseDone(err) {
+        if (err) {
+          self.emit("error", err);
+        } else {
+          self.emit("close");
+        }
+      }
+    };
+    util.inherits(ReadStream, Readable2);
+    function ReadStream(context, options2) {
+      options2 = options2 || {};
+      Readable2.call(this, options2);
+      this.context = context;
+      this.context.ref();
+      this.start = options2.start || 0;
+      this.endOffset = options2.end;
+      this.pos = this.start;
+    }
+    ReadStream.prototype._read = function(n) {
+      var self = this;
+      var toRead = Math.min(self._readableState.highWaterMark, n);
+      if (self.endOffset != null) {
+        toRead = Math.min(toRead, self.endOffset - self.pos);
+      }
+      if (toRead <= 0) {
+        self.push(null);
+        this._cleanup();
+        return;
+      }
+      self.context.pend.go(function(cb) {
+        var buffer = Buffer.allocUnsafe(toRead);
+        fs.read(self.context.fd, buffer, 0, toRead, self.pos, function(err, bytesRead) {
+          if (err) {
+            self.destroy(err);
+          } else if (bytesRead === 0) {
+            self.push(null);
+            self._cleanup();
+          } else {
+            self.pos += bytesRead;
+            self.push(buffer.slice(0, bytesRead));
+          }
+          cb();
+        });
+      });
+    };
+    ReadStream.prototype._destroy = function(err, cb) {
+      this._cleanup();
+      cb(err);
+    };
+    ReadStream.prototype._cleanup = function() {
+      if (this.context != null) {
+        this.context.unref();
+        this.context = null;
+      }
+    };
+    util.inherits(BufferSlicer, EventEmitter);
+    function BufferSlicer(buffer) {
+      EventEmitter.call(this);
+      this.refCount = 0;
+      this.buffer = buffer;
+    }
+    BufferSlicer.prototype.read = function(buffer, offset, length, position, callback) {
+      if (!(0 <= offset && offset <= buffer.length)) throw new RangeError("offset outside buffer: 0 <= " + offset + " <= " + buffer.length);
+      if (position < 0) throw new RangeError("position is negative: " + position);
+      if (offset + length > buffer.length) {
+        length = buffer.length - offset;
+      }
+      if (position + length > this.buffer.length) {
+        length = this.buffer.length - position;
+      }
+      if (length <= 0) {
+        setImmediate(function() {
+          callback(null, 0);
+        });
+        return;
+      }
+      this.buffer.copy(buffer, offset, position, position + length);
+      setImmediate(function() {
+        callback(null, length);
+      });
+    };
+    BufferSlicer.prototype.createReadStream = function(options2) {
+      options2 = options2 || {};
+      var readStream = new PassThrough(options2);
+      readStream.start = options2.start || 0;
+      readStream.endOffset = options2.end;
+      readStream.pos = readStream.endOffset || this.buffer.length;
+      var entireSlice = this.buffer.slice(readStream.start, readStream.pos);
+      var maxChunkSize = 65536;
+      var offset = 0;
+      while (true) {
+        var nextOffset = offset + maxChunkSize;
+        if (nextOffset >= entireSlice.length) {
+          if (offset < entireSlice.length) {
+            readStream.write(entireSlice.slice(offset, entireSlice.length));
+          }
+          break;
+        }
+        readStream.write(entireSlice.slice(offset, nextOffset));
+        offset = nextOffset;
+      }
+      readStream.end();
+      return readStream;
+    };
+    BufferSlicer.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    BufferSlicer.prototype.unref = function() {
+      this.refCount -= 1;
+      if (this.refCount < 0) {
+        throw new Error("invalid unref");
+      }
+    };
+  }
+});
+
+// node_modules/yauzl/crc32.js
+var require_crc32 = __commonJS({
+  "node_modules/yauzl/crc32.js"(exports, module) {
+    var CRC_TABLE = new Int32Array([
+      0,
+      1996959894,
+      3993919788,
+      2567524794,
+      124634137,
+      1886057615,
+      3915621685,
+      2657392035,
+      249268274,
+      2044508324,
+      3772115230,
+      2547177864,
+      162941995,
+      2125561021,
+      3887607047,
+      2428444049,
+      498536548,
+      1789927666,
+      4089016648,
+      2227061214,
+      450548861,
+      1843258603,
+      4107580753,
+      2211677639,
+      325883990,
+      1684777152,
+      4251122042,
+      2321926636,
+      335633487,
+      1661365465,
+      4195302755,
+      2366115317,
+      997073096,
+      1281953886,
+      3579855332,
+      2724688242,
+      1006888145,
+      1258607687,
+      3524101629,
+      2768942443,
+      901097722,
+      1119000684,
+      3686517206,
+      2898065728,
+      853044451,
+      1172266101,
+      3705015759,
+      2882616665,
+      651767980,
+      1373503546,
+      3369554304,
+      3218104598,
+      565507253,
+      1454621731,
+      3485111705,
+      3099436303,
+      671266974,
+      1594198024,
+      3322730930,
+      2970347812,
+      795835527,
+      1483230225,
+      3244367275,
+      3060149565,
+      1994146192,
+      31158534,
+      2563907772,
+      4023717930,
+      1907459465,
+      112637215,
+      2680153253,
+      3904427059,
+      2013776290,
+      251722036,
+      2517215374,
+      3775830040,
+      2137656763,
+      141376813,
+      2439277719,
+      3865271297,
+      1802195444,
+      476864866,
+      2238001368,
+      4066508878,
+      1812370925,
+      453092731,
+      2181625025,
+      4111451223,
+      1706088902,
+      314042704,
+      2344532202,
+      4240017532,
+      1658658271,
+      366619977,
+      2362670323,
+      4224994405,
+      1303535960,
+      984961486,
+      2747007092,
+      3569037538,
+      1256170817,
+      1037604311,
+      2765210733,
+      3554079995,
+      1131014506,
+      879679996,
+      2909243462,
+      3663771856,
+      1141124467,
+      855842277,
+      2852801631,
+      3708648649,
+      1342533948,
+      654459306,
+      3188396048,
+      3373015174,
+      1466479909,
+      544179635,
+      3110523913,
+      3462522015,
+      1591671054,
+      702138776,
+      2966460450,
+      3352799412,
+      1504918807,
+      783551873,
+      3082640443,
+      3233442989,
+      3988292384,
+      2596254646,
+      62317068,
+      1957810842,
+      3939845945,
+      2647816111,
+      81470997,
+      1943803523,
+      3814918930,
+      2489596804,
+      225274430,
+      2053790376,
+      3826175755,
+      2466906013,
+      167816743,
+      2097651377,
+      4027552580,
+      2265490386,
+      503444072,
+      1762050814,
+      4150417245,
+      2154129355,
+      426522225,
+      1852507879,
+      4275313526,
+      2312317920,
+      282753626,
+      1742555852,
+      4189708143,
+      2394877945,
+      397917763,
+      1622183637,
+      3604390888,
+      2714866558,
+      953729732,
+      1340076626,
+      3518719985,
+      2797360999,
+      1068828381,
+      1219638859,
+      3624741850,
+      2936675148,
+      906185462,
+      1090812512,
+      3747672003,
+      2825379669,
+      829329135,
+      1181335161,
+      3412177804,
+      3160834842,
+      628085408,
+      1382605366,
+      3423369109,
+      3138078467,
+      570562233,
+      1426400815,
+      3317316542,
+      2998733608,
+      733239954,
+      1555261956,
+      3268935591,
+      3050360625,
+      752459403,
+      1541320221,
+      2607071920,
+      3965973030,
+      1969922972,
+      40735498,
+      2617837225,
+      3943577151,
+      1913087877,
+      83908371,
+      2512341634,
+      3803740692,
+      2075208622,
+      213261112,
+      2463272603,
+      3855990285,
+      2094854071,
+      198958881,
+      2262029012,
+      4057260610,
+      1759359992,
+      534414190,
+      2176718541,
+      4139329115,
+      1873836001,
+      414664567,
+      2282248934,
+      4279200368,
+      1711684554,
+      285281116,
+      2405801727,
+      4167216745,
+      1634467795,
+      376229701,
+      2685067896,
+      3608007406,
+      1308918612,
+      956543938,
+      2808555105,
+      3495958263,
+      1231636301,
+      1047427035,
+      2932959818,
+      3654703836,
+      1088359270,
+      936918e3,
+      2847714899,
+      3736837829,
+      1202900863,
+      817233897,
+      3183342108,
+      3401237130,
+      1404277552,
+      615818150,
+      3134207493,
+      3453421203,
+      1423857449,
+      601450431,
+      3009837614,
+      3294710456,
+      1567103746,
+      711928724,
+      3020668471,
+      3272380065,
+      1510334235,
+      755167117
+    ]);
+    function crc32(buf) {
+      let crc = -1;
+      for (let x of buf) {
+        crc = CRC_TABLE[(crc ^ x) & 255] ^ crc >>> 8;
+      }
+      return (crc ^ -1) >>> 0;
+    }
+    module.exports = crc32;
+  }
+});
+
+// node_modules/yauzl/index.js
+var require_yauzl = __commonJS({
+  "node_modules/yauzl/index.js"(exports) {
+    var fs = __require("fs");
+    var zlib = __require("zlib");
+    var fd_slicer = require_fd_slicer();
+    var util = __require("util");
+    var EventEmitter = __require("events").EventEmitter;
+    var Transform3 = __require("stream").Transform;
+    var PassThrough = __require("stream").PassThrough;
+    var Writable = __require("stream").Writable;
+    var crc32 = typeof zlib.crc32 === "function" ? zlib.crc32 : require_crc32();
+    exports.open = open9;
+    exports.fromFd = fromFd;
+    exports.fromBuffer = fromBuffer;
+    exports.fromRandomAccessReader = fromRandomAccessReader;
+    exports.openPromise = openPromise2;
+    exports.fromFdPromise = fromFdPromise;
+    exports.fromBufferPromise = fromBufferPromise;
+    exports.fromRandomAccessReaderPromise = fromRandomAccessReaderPromise;
+    exports.dosDateTimeToDate = dosDateTimeToDate;
+    exports.getFileNameLowLevel = getFileNameLowLevel;
+    exports.validateFileName = validateFileName;
+    exports.parseExtraFields = parseExtraFields;
+    exports.ZipFile = ZipFile;
+    exports.Entry = Entry;
+    exports.LocalFileHeader = LocalFileHeader;
+    exports.RandomAccessReader = RandomAccessReader;
+    function openPromise2(path4, options2) {
+      return new Promise((resolve6, reject) => {
+        open9(path4, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve6(zipfile);
+        });
+      });
+    }
+    function fromFdPromise(fd, options2) {
+      return new Promise((resolve6, reject) => {
+        fromFd(fd, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve6(zipfile);
+        });
+      });
+    }
+    function fromBufferPromise(buffer, options2) {
+      return new Promise((resolve6, reject) => {
+        fromBuffer(buffer, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve6(zipfile);
+        });
+      });
+    }
+    function fromRandomAccessReaderPromise(reader, totalSize, options2) {
+      return new Promise((resolve6, reject) => {
+        fromRandomAccessReader(reader, totalSize, { ...options2, lazyEntries: true }, function(err, zipfile) {
+          if (err) return reject(err);
+          resolve6(zipfile);
+        });
+      });
+    }
+    function open9(path4, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = true;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      fs.open(path4, "r", function(err, fd) {
+        if (err) return callback(err);
+        fromFd(fd, options2, function(err2, zipfile) {
+          if (err2) fs.close(fd, defaultCallback);
+          callback(err2, zipfile);
+        });
+      });
+    }
+    function fromFd(fd, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = false;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      fs.fstat(fd, function(err, stats) {
+        if (err) return callback(err);
+        var reader = new fd_slicer.FdSlicer(fd);
+        fromRandomAccessReader(reader, stats.size, options2, callback);
+      });
+    }
+    function fromBuffer(buffer, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      options2.autoClose = false;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      var reader = new fd_slicer.BufferSlicer(buffer);
+      fromRandomAccessReader(reader, buffer.length, options2, callback);
+    }
+    function fromRandomAccessReader(reader, totalSize, options2, callback) {
+      if (typeof options2 === "function") {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      if (options2.autoClose == null) options2.autoClose = true;
+      if (options2.lazyEntries == null) options2.lazyEntries = false;
+      if (options2.decodeStrings == null) options2.decodeStrings = true;
+      var decodeStrings = !!options2.decodeStrings;
+      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
+      if (options2.strictFileNames == null) options2.strictFileNames = false;
+      if (callback == null) callback = defaultCallback;
+      if (typeof totalSize !== "number") throw new Error("expected totalSize parameter to be a number");
+      if (totalSize > Number.MAX_SAFE_INTEGER) {
+        throw new Error("zip file too large. only file sizes up to 2^52 are supported due to JavaScript's Number type being an IEEE 754 double.");
+      }
+      reader.ref();
+      var eocdrWithoutCommentSize = 22;
+      var zip64EocdlSize = 20;
+      var maxCommentSize = 65535;
+      var bufferSize = Math.min(zip64EocdlSize + eocdrWithoutCommentSize + maxCommentSize, totalSize);
+      var buffer = newBuffer(bufferSize);
+      var bufferReadStart = totalSize - buffer.length;
+      readAndAssertNoEof(reader, buffer, 0, bufferSize, bufferReadStart, function(err) {
+        if (err) return callback(err);
+        for (var i = bufferSize - eocdrWithoutCommentSize; i >= 0; i -= 1) {
+          if (buffer.readUInt32LE(i) !== 101010256) continue;
+          var eocdrBuffer = buffer.subarray(i);
+          var diskNumber = eocdrBuffer.readUInt16LE(4);
+          var entryCount = eocdrBuffer.readUInt16LE(10);
+          var centralDirectoryOffset = eocdrBuffer.readUInt32LE(16);
+          var commentLength = eocdrBuffer.readUInt16LE(20);
+          var expectedCommentLength = eocdrBuffer.length - eocdrWithoutCommentSize;
+          if (commentLength !== expectedCommentLength) {
+            return callback(new Error("Invalid comment length. Expected: " + expectedCommentLength + ". Found: " + commentLength + ". Are there extra bytes at the end of the file? Or is the end of central dir signature `PK\u263A\u263B` in the comment?"));
+          }
+          var comment = decodeStrings ? decodeBuffer(eocdrBuffer.subarray(22), false) : eocdrBuffer.subarray(22);
+          if (i - zip64EocdlSize >= 0 && buffer.readUInt32LE(i - zip64EocdlSize) === 117853008) {
+            var zip64EocdlBuffer = buffer.subarray(i - zip64EocdlSize, i - zip64EocdlSize + zip64EocdlSize);
+            var zip64EocdrOffset = readUInt64LE(zip64EocdlBuffer, 8);
+            var zip64EocdrBuffer = newBuffer(56);
+            return readAndAssertNoEof(reader, zip64EocdrBuffer, 0, zip64EocdrBuffer.length, zip64EocdrOffset, function(err2) {
+              if (err2) return callback(err2);
+              if (zip64EocdrBuffer.readUInt32LE(0) !== 101075792) {
+                return callback(new Error("invalid zip64 end of central directory record signature"));
+              }
+              diskNumber = zip64EocdrBuffer.readUInt32LE(16);
+              if (diskNumber !== 0) {
+                return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
+              }
+              entryCount = readUInt64LE(zip64EocdrBuffer, 32);
+              centralDirectoryOffset = readUInt64LE(zip64EocdrBuffer, 48);
+              return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
+            });
+          }
+          if (diskNumber !== 0) {
+            return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
+          }
+          return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
+        }
+        callback(new Error("End of central directory record signature not found. Either not a zip file, or file is truncated."));
+      });
+    }
+    util.inherits(ZipFile, EventEmitter);
+    function ZipFile(reader, centralDirectoryOffset, fileSize, entryCount, comment, autoClose, lazyEntries, decodeStrings, validateEntrySizes, strictFileNames) {
+      var self = this;
+      EventEmitter.call(self);
+      self.reader = reader;
+      self.reader.on("error", function(err) {
+        emitError(self, err);
+      });
+      self.reader.once("close", function() {
+        self.emit("close");
+      });
+      self.readEntryCursor = centralDirectoryOffset;
+      self.fileSize = fileSize;
+      self.entryCount = entryCount;
+      self.comment = comment;
+      self.entriesRead = 0;
+      self.autoClose = !!autoClose;
+      self.lazyEntries = !!lazyEntries;
+      self.decodeStrings = !!decodeStrings;
+      self.validateEntrySizes = !!validateEntrySizes;
+      self.strictFileNames = !!strictFileNames;
+      self.isOpen = true;
+      self.emittedError = false;
+      self.hasEachEntryBeenCalled = false;
+      if (!self.lazyEntries) self._readEntry();
+    }
+    ZipFile.prototype.close = function() {
+      if (!this.isOpen) return;
+      this.isOpen = false;
+      this.reader.unref();
+    };
+    function emitErrorAndAutoClose(self, err) {
+      if (self.autoClose) self.close();
+      emitError(self, err);
+    }
+    function emitError(self, err) {
+      if (self.emittedError) return;
+      self.emittedError = true;
+      self.emit("error", err);
+    }
+    ZipFile.prototype.readEntry = function() {
+      if (!this.lazyEntries) throw new Error("readEntry() called without lazyEntries:true");
+      this._readEntry();
+    };
+    ZipFile.prototype._readEntry = function() {
+      var self = this;
+      if (self.entryCount === self.entriesRead) {
+        setImmediate(function() {
+          if (self.autoClose) self.close();
+          if (self.emittedError) return;
+          self.emit("end");
+        });
+        return;
+      }
+      if (self.emittedError) return;
+      var buffer = newBuffer(46);
+      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err) {
+        if (err) return emitErrorAndAutoClose(self, err);
+        if (self.emittedError) return;
+        var entry = new Entry();
+        var signature = buffer.readUInt32LE(0);
+        if (signature !== 33639248) return emitErrorAndAutoClose(self, new Error("invalid central directory file header signature: 0x" + signature.toString(16)));
+        entry.versionMadeBy = buffer.readUInt16LE(4);
+        entry.versionNeededToExtract = buffer.readUInt16LE(6);
+        entry.generalPurposeBitFlag = buffer.readUInt16LE(8);
+        entry.compressionMethod = buffer.readUInt16LE(10);
+        entry.lastModFileTime = buffer.readUInt16LE(12);
+        entry.lastModFileDate = buffer.readUInt16LE(14);
+        entry.crc32 = buffer.readUInt32LE(16);
+        entry.compressedSize = buffer.readUInt32LE(20);
+        entry.uncompressedSize = buffer.readUInt32LE(24);
+        entry.fileNameLength = buffer.readUInt16LE(28);
+        entry.extraFieldLength = buffer.readUInt16LE(30);
+        entry.fileCommentLength = buffer.readUInt16LE(32);
+        entry.internalFileAttributes = buffer.readUInt16LE(36);
+        entry.externalFileAttributes = buffer.readUInt32LE(38);
+        entry.relativeOffsetOfLocalHeader = buffer.readUInt32LE(42);
+        if (entry.generalPurposeBitFlag & 64) return emitErrorAndAutoClose(self, new Error("strong encryption is not supported"));
+        self.readEntryCursor += 46;
+        buffer = newBuffer(entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
+        readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err2) {
+          if (err2) return emitErrorAndAutoClose(self, err2);
+          if (self.emittedError) return;
+          entry.fileNameRaw = buffer.subarray(0, entry.fileNameLength);
+          var fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
+          entry.extraFieldRaw = buffer.subarray(entry.fileNameLength, fileCommentStart);
+          entry.fileCommentRaw = buffer.subarray(fileCommentStart, fileCommentStart + entry.fileCommentLength);
+          try {
+            entry.extraFields = parseExtraFields(entry.extraFieldRaw);
+          } catch (err3) {
+            return emitErrorAndAutoClose(self, err3);
+          }
+          if (self.decodeStrings) {
+            var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
+            entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
+            entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
+            var errorMessage2 = validateFileName(entry.fileName);
+            if (errorMessage2 != null) return emitErrorAndAutoClose(self, new Error(errorMessage2));
+          } else {
+            entry.fileComment = entry.fileCommentRaw;
+            entry.fileName = entry.fileNameRaw;
+          }
+          entry.comment = entry.fileComment;
+          self.readEntryCursor += buffer.length;
+          self.entriesRead += 1;
+          for (var i = 0; i < entry.extraFields.length; i++) {
+            var extraField = entry.extraFields[i];
+            if (extraField.id !== 1) continue;
+            var zip64EiefBuffer = extraField.data;
+            var index = 0;
+            if (entry.uncompressedSize === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include uncompressed size"));
+              }
+              entry.uncompressedSize = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            if (entry.compressedSize === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include compressed size"));
+              }
+              entry.compressedSize = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            if (entry.relativeOffsetOfLocalHeader === 4294967295) {
+              if (index + 8 > zip64EiefBuffer.length) {
+                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include relative header offset"));
+              }
+              entry.relativeOffsetOfLocalHeader = readUInt64LE(zip64EiefBuffer, index);
+              index += 8;
+            }
+            break;
+          }
+          if (self.validateEntrySizes && entry.compressionMethod === 0) {
+            var expectedCompressedSize = entry.uncompressedSize;
+            if (entry.isEncrypted()) {
+              expectedCompressedSize += 12;
+            }
+            if (entry.compressedSize !== expectedCompressedSize) {
+              var msg = "compressed/uncompressed size mismatch for stored file: " + entry.compressedSize + " != " + entry.uncompressedSize;
+              return emitErrorAndAutoClose(self, new Error(msg));
+            }
+          }
+          self.emit("entry", entry);
+          if (!self.lazyEntries) self._readEntry();
+        });
+      });
+    };
+    ZipFile.prototype.eachEntry = function() {
+      const self = this;
+      if (!self.lazyEntries) throw new Error("eachEntry() requires lazyEntries: true");
+      if (self.hasEachEntryBeenCalled) throw new Error("eachEntry() must only be called once per ZipFile");
+      self.hasEachEntryBeenCalled = true;
+      let pendingResolveReject = null;
+      self.on("entry", onEntry);
+      self.on("end", onEnd);
+      self.on("error", onError);
+      function cleanup() {
+        self.removeListener("entry", onEntry);
+        self.removeListener("end", onEnd);
+        self.removeListener("error", onError);
+        if (self.autoClose) self.close();
+      }
+      function onEntry(entry) {
+        let { resolve: resolve6 } = pendingResolveReject;
+        pendingResolveReject = null;
+        resolve6({ value: entry });
+      }
+      function onEnd() {
+        let { resolve: resolve6 } = pendingResolveReject;
+        pendingResolveReject = null;
+        cleanup();
+        resolve6({ done: true });
+      }
+      function onError(err) {
+        let { reject } = pendingResolveReject;
+        pendingResolveReject = null;
+        cleanup();
+        reject(err);
+      }
+      return {
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+        next() {
+          const promise = new Promise((resolve6, reject) => {
+            if (pendingResolveReject != null) throw new Error("next() called before previous Promise was resolved.");
+            pendingResolveReject = { resolve: resolve6, reject };
+          });
+          self.readEntry();
+          return promise;
+        },
+        return(value) {
+          cleanup();
+          return Promise.resolve({ done: true, value });
+        },
+        throw(value) {
+          cleanup();
+          return Promise.reject(value);
+        }
+      };
+    };
+    ZipFile.prototype.openReadStream = function(entry, options2, callback) {
+      var self = this;
+      var relativeStart = 0;
+      var relativeEnd = entry.compressedSize;
+      if (callback == null) {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) {
+        options2 = {};
+      } else {
+        if (options2.decodeFileData === false) {
+          if (options2.decrypt != null) {
+            throw new Error("cannot use options.decrypt when options.decodeFileData === false");
+          }
+          if (options2.decompress != null) {
+            throw new Error("cannot use options.decompress when options.decodeFileData === false");
+          }
+        } else {
+          if (options2.decrypt != null) {
+            if (!entry.isEncrypted()) {
+              throw new Error("options.decrypt can only be specified for encrypted entries. See also option decodeFileData.");
+            }
+            if (options2.decrypt !== false) throw new Error("invalid options.decrypt value: " + options2.decrypt);
+            if (entry.isCompressed()) {
+              if (options2.decompress !== false) throw new Error("entry is encrypted and compressed, and options.decompress !== false. See also option decodeFileData.");
+            }
+          }
+          if (options2.decompress != null) {
+            if (!entry.isCompressed()) {
+              throw new Error("options.decompress can only be specified for compressed entries. See also option decodeFileData.");
+            }
+            if (!(options2.decompress === false || options2.decompress === true)) {
+              throw new Error("invalid options.decompress value: " + options2.decompress);
+            }
+            decompress = options2.decompress;
+          }
+        }
+        if (options2.start != null) {
+          relativeStart = options2.start;
+          if (relativeStart < 0) throw new Error("options.start < 0");
+          if (relativeStart > entry.compressedSize) throw new Error("options.start > entry.compressedSize");
+        }
+        if (options2.end != null) {
+          relativeEnd = options2.end;
+          if (relativeEnd < 0) throw new Error("options.end < 0");
+          if (relativeEnd > entry.compressedSize) throw new Error("options.end > entry.compressedSize");
+          if (relativeEnd < relativeStart) throw new Error("options.end < options.start");
+        }
+      }
+      var rawMode = options2.decodeFileData === false || // Explicitly requested raw.
+      (entry.compressionMethod === 0 || // Naturally without compression.
+      entry.compressionMethod === 8 && options2.decompress === false) && (!entry.isEncrypted() || // Naturally without encryption.
+      options2.decrypt === false);
+      if (options2.start != null || options2.end != null) {
+        if (!rawMode) throw new Error("start/end range require options.decodeFileData === false for non-trivial encoded entries.");
+      }
+      if (!self.isOpen) return callback(new Error("closed"));
+      if (entry.isEncrypted() && !rawMode) {
+        if (options2.decrypt !== false) return callback(new Error("entry is encrypted, and options.decodeFileData !== false"));
+      }
+      var decompress;
+      if (rawMode) {
+        decompress = false;
+      } else if (entry.compressionMethod === 8) {
+        decompress = options2.decodeFileData !== true;
+      } else {
+        return callback(new Error("unsupported compression method: " + entry.compressionMethod));
+      }
+      self.readLocalFileHeader(entry, { minimal: true }, function(err, localFileHeader) {
+        if (err) return callback(err);
+        self.openReadStreamLowLevel(
+          localFileHeader.fileDataStart,
+          entry.compressedSize,
+          relativeStart,
+          relativeEnd,
+          decompress,
+          entry.uncompressedSize,
+          callback
+        );
+      });
+    };
+    ZipFile.prototype.openReadStreamLowLevel = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, callback) {
+      var self = this;
+      var fileDataEnd = fileDataStart + compressedSize;
+      var readStream = self.reader.createReadStream({
+        start: fileDataStart + relativeStart,
+        end: fileDataStart + relativeEnd
+      });
+      var endpointStream = readStream;
+      if (decompress) {
+        var destroyed = false;
+        var inflateFilter = zlib.createInflateRaw();
+        readStream.on("error", function(err) {
+          setImmediate(function() {
+            if (!destroyed) inflateFilter.emit("error", err);
+          });
+        });
+        readStream.pipe(inflateFilter);
+        if (self.validateEntrySizes) {
+          endpointStream = new AssertByteCountStream(uncompressedSize);
+          inflateFilter.on("error", function(err) {
+            setImmediate(function() {
+              if (!destroyed) endpointStream.emit("error", err);
+            });
+          });
+          inflateFilter.pipe(endpointStream);
+        } else {
+          endpointStream = inflateFilter;
+        }
+        installDestroyFn(endpointStream, function() {
+          destroyed = true;
+          if (inflateFilter !== endpointStream) inflateFilter.unpipe(endpointStream);
+          readStream.unpipe(inflateFilter);
+          readStream.destroy();
+        });
+      }
+      callback(null, endpointStream);
+    };
+    ZipFile.prototype.readLocalFileHeader = function(entry, options2, callback) {
+      var self = this;
+      if (callback == null) {
+        callback = options2;
+        options2 = null;
+      }
+      if (options2 == null) options2 = {};
+      self.reader.ref();
+      var buffer = newBuffer(30);
+      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader, function(err) {
+        try {
+          if (err) return callback(err);
+          var signature = buffer.readUInt32LE(0);
+          if (signature !== 67324752) {
+            return callback(new Error("invalid local file header signature: 0x" + signature.toString(16)));
+          }
+          var fileNameLength = buffer.readUInt16LE(26);
+          var extraFieldLength = buffer.readUInt16LE(28);
+          var fileDataStart = entry.relativeOffsetOfLocalHeader + 30 + fileNameLength + extraFieldLength;
+          if (fileDataStart + entry.compressedSize > self.fileSize) {
+            return callback(new Error("file data overflows file bounds: " + fileDataStart + " + " + entry.compressedSize + " > " + self.fileSize));
+          }
+          if (options2.minimal) {
+            return callback(null, { fileDataStart });
+          }
+          var localFileHeader = new LocalFileHeader();
+          localFileHeader.fileDataStart = fileDataStart;
+          localFileHeader.versionNeededToExtract = buffer.readUInt16LE(4);
+          localFileHeader.generalPurposeBitFlag = buffer.readUInt16LE(6);
+          localFileHeader.compressionMethod = buffer.readUInt16LE(8);
+          localFileHeader.lastModFileTime = buffer.readUInt16LE(10);
+          localFileHeader.lastModFileDate = buffer.readUInt16LE(12);
+          localFileHeader.crc32 = buffer.readUInt32LE(14);
+          localFileHeader.compressedSize = buffer.readUInt32LE(18);
+          localFileHeader.uncompressedSize = buffer.readUInt32LE(22);
+          localFileHeader.fileNameLength = fileNameLength;
+          localFileHeader.extraFieldLength = extraFieldLength;
+          buffer = newBuffer(fileNameLength + extraFieldLength);
+          self.reader.ref();
+          readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader + 30, function(err2) {
+            try {
+              if (err2) return callback(err2);
+              localFileHeader.fileName = buffer.subarray(0, fileNameLength);
+              localFileHeader.extraField = buffer.subarray(fileNameLength);
+              return callback(null, localFileHeader);
+            } finally {
+              self.reader.unref();
+            }
+          });
+        } finally {
+          self.reader.unref();
+        }
+      });
+    };
+    ZipFile.prototype.openReadStreamPromise = function(entry, options2) {
+      return new Promise((resolve6, reject) => {
+        this.openReadStream(entry, options2, function(err, readStream) {
+          if (err) return reject(err);
+          resolve6(readStream);
+        });
+      });
+    };
+    ZipFile.prototype.openReadStreamLowLevelPromise = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize) {
+      return new Promise((resolve6, reject) => {
+        this.openReadStream(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, function(err, readStream) {
+          if (err) return reject(err);
+          resolve6(readStream);
+        });
+      });
+    };
+    ZipFile.prototype.readLocalFileHeaderPromise = function(entry, options2) {
+      return new Promise((resolve6, reject) => {
+        this.readLocalFileHeader(entry, options2, function(err, localFileHeader) {
+          if (err) return reject(err);
+          resolve6(localFileHeader);
+        });
+      });
+    };
+    function Entry() {
+    }
+    Entry.prototype.getLastModDate = function(options2) {
+      if (options2 == null) options2 = {};
+      if (!options2.forceDosFormat) {
+        for (var i = 0; i < this.extraFields.length; i++) {
+          var extraField = this.extraFields[i];
+          if (extraField.id === 21589) {
+            var data = extraField.data;
+            if (data.length < 5) continue;
+            var flags = data[0];
+            var HAS_MTIME = 1;
+            if (!(flags & HAS_MTIME)) continue;
+            var posixTimestamp = data.readInt32LE(1);
+            return new Date(posixTimestamp * 1e3);
+          } else if (extraField.id === 10) {
+            var data = extraField.data;
+            if (data.length !== 32) continue;
+            if (data.readUInt16LE(4) !== 1) continue;
+            if (data.readUInt16LE(6) !== 24) continue;
+            var hundredNanoSecondsSince1601 = data.readUInt32LE(8) + 4294967296 * data.readInt32LE(12);
+            var millisecondsSince1970 = hundredNanoSecondsSince1601 / 1e4 - 116444736e5;
+            return new Date(millisecondsSince1970);
+          }
+        }
+      }
+      return dosDateTimeToDate(this.lastModFileDate, this.lastModFileTime, options2.timezone);
+    };
+    Entry.prototype.canDecodeFileData = function() {
+      return !this.isEncrypted() && (this.compressionMethod === 0 || this.compressionMethod === 8);
+    };
+    Entry.prototype.isEncrypted = function() {
+      return (this.generalPurposeBitFlag & 1) !== 0;
+    };
+    Entry.prototype.isCompressed = function() {
+      return this.compressionMethod === 8;
+    };
+    function LocalFileHeader() {
+    }
+    function dosDateTimeToDate(date, time, timezone) {
+      var day = date & 31;
+      var month = (date >> 5 & 15) - 1;
+      var year = (date >> 9 & 127) + 1980;
+      var millisecond = 0;
+      var second = (time & 31) * 2;
+      var minute = time >> 5 & 63;
+      var hour = time >> 11 & 31;
+      if (timezone == null || timezone === "local") {
+        return new Date(year, month, day, hour, minute, second, millisecond);
+      } else if (timezone === "UTC") {
+        return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond));
+      } else {
+        throw new Error("unrecognized options.timezone: " + options.timezone);
+      }
+    }
+    function getFileNameLowLevel(generalPurposeBitFlag, fileNameBuffer, extraFields, strictFileNames) {
+      var fileName = null;
+      for (var i = 0; i < extraFields.length; i++) {
+        var extraField = extraFields[i];
+        if (extraField.id === 28789) {
+          if (extraField.data.length < 6) {
+            continue;
+          }
+          if (extraField.data.readUInt8(0) !== 1) {
+            continue;
+          }
+          var oldNameCrc32 = extraField.data.readUInt32LE(1);
+          if (crc32(fileNameBuffer) !== oldNameCrc32) {
+            continue;
+          }
+          fileName = decodeBuffer(extraField.data.subarray(5), true);
+          break;
+        }
+      }
+      if (fileName == null) {
+        var isUtf8 = (generalPurposeBitFlag & 2048) !== 0;
+        fileName = decodeBuffer(fileNameBuffer, isUtf8);
+      }
+      if (!strictFileNames) {
+        fileName = fileName.replace(/\\/g, "/");
+      }
+      return fileName;
+    }
+    function validateFileName(fileName) {
+      if (fileName.indexOf("\\") !== -1) {
+        return "invalid characters in fileName: " + fileName;
+      }
+      if (/^[a-zA-Z]:/.test(fileName) || /^\//.test(fileName)) {
+        return "absolute path: " + fileName;
+      }
+      if (fileName.split("/").indexOf("..") !== -1) {
+        return "invalid relative path: " + fileName;
+      }
+      return null;
+    }
+    function parseExtraFields(extraFieldBuffer) {
+      var extraFields = [];
+      var i = 0;
+      while (i < extraFieldBuffer.length - 3) {
+        var headerId = extraFieldBuffer.readUInt16LE(i + 0);
+        var dataSize = extraFieldBuffer.readUInt16LE(i + 2);
+        var dataStart = i + 4;
+        var dataEnd = dataStart + dataSize;
+        if (dataEnd > extraFieldBuffer.length) throw new Error("extra field length exceeds extra field buffer size");
+        var dataBuffer = extraFieldBuffer.subarray(dataStart, dataEnd);
+        extraFields.push({
+          id: headerId,
+          data: dataBuffer
+        });
+        i = dataEnd;
+      }
+      return extraFields;
+    }
+    function readAndAssertNoEof(reader, buffer, offset, length, position, callback) {
+      if (length === 0) {
+        return setImmediate(function() {
+          callback(null, newBuffer(0));
+        });
+      }
+      reader.read(buffer, offset, length, position, function(err, bytesRead) {
+        if (err) return callback(err);
+        if (bytesRead < length) {
+          return callback(new Error("unexpected EOF"));
+        }
+        callback();
+      });
+    }
+    util.inherits(AssertByteCountStream, Transform3);
+    function AssertByteCountStream(byteCount) {
+      Transform3.call(this);
+      this.actualByteCount = 0;
+      this.expectedByteCount = byteCount;
+    }
+    AssertByteCountStream.prototype._transform = function(chunk, encoding, cb) {
+      this.actualByteCount += chunk.length;
+      if (this.actualByteCount > this.expectedByteCount) {
+        var msg = "too many bytes in the stream. expected " + this.expectedByteCount + ". got at least " + this.actualByteCount;
+        return cb(new Error(msg));
+      }
+      cb(null, chunk);
+    };
+    AssertByteCountStream.prototype._flush = function(cb) {
+      if (this.actualByteCount < this.expectedByteCount) {
+        var msg = "not enough bytes in the stream. expected " + this.expectedByteCount + ". got only " + this.actualByteCount;
+        return cb(new Error(msg));
+      }
+      cb();
+    };
+    util.inherits(RandomAccessReader, EventEmitter);
+    function RandomAccessReader() {
+      EventEmitter.call(this);
+      this.refCount = 0;
+    }
+    RandomAccessReader.prototype.ref = function() {
+      this.refCount += 1;
+    };
+    RandomAccessReader.prototype.unref = function() {
+      var self = this;
+      self.refCount -= 1;
+      if (self.refCount > 0) return;
+      if (self.refCount < 0) throw new Error("invalid unref");
+      self.close(onCloseDone);
+      function onCloseDone(err) {
+        if (err) return self.emit("error", err);
+        self.emit("close");
+      }
+    };
+    RandomAccessReader.prototype.createReadStream = function(options2) {
+      if (options2 == null) options2 = {};
+      var start = options2.start;
+      var end = options2.end;
+      if (start === end) {
+        var emptyStream = new PassThrough();
+        setImmediate(function() {
+          emptyStream.end();
+        });
+        return emptyStream;
+      }
+      var stream = this._readStreamForRange(start, end);
+      var destroyed = false;
+      var refUnrefFilter = new RefUnrefFilter(this);
+      stream.on("error", function(err) {
+        setImmediate(function() {
+          if (!destroyed) refUnrefFilter.emit("error", err);
+        });
+      });
+      installDestroyFn(refUnrefFilter, function() {
+        stream.unpipe(refUnrefFilter);
+        refUnrefFilter.unref();
+        stream.destroy();
+      });
+      var byteCounter = new AssertByteCountStream(end - start);
+      refUnrefFilter.on("error", function(err) {
+        setImmediate(function() {
+          if (!destroyed) byteCounter.emit("error", err);
+        });
+      });
+      installDestroyFn(byteCounter, function() {
+        destroyed = true;
+        refUnrefFilter.unpipe(byteCounter);
+        refUnrefFilter.destroy();
+      });
+      return stream.pipe(refUnrefFilter).pipe(byteCounter);
+    };
+    RandomAccessReader.prototype._readStreamForRange = function(start, end) {
+      throw new Error("not implemented");
+    };
+    RandomAccessReader.prototype.read = function(buffer, offset, length, position, callback) {
+      var readStream = this.createReadStream({ start: position, end: position + length });
+      var writeStream = new Writable();
+      var written = 0;
+      writeStream._write = function(chunk, encoding, cb) {
+        chunk.copy(buffer, offset + written, 0, chunk.length);
+        written += chunk.length;
+        cb();
+      };
+      writeStream.on("finish", callback);
+      readStream.on("error", function(error) {
+        callback(error);
+      });
+      readStream.pipe(writeStream);
+    };
+    RandomAccessReader.prototype.close = function(callback) {
+      setImmediate(callback);
+    };
+    util.inherits(RefUnrefFilter, PassThrough);
+    function RefUnrefFilter(context) {
+      PassThrough.call(this);
+      this.context = context;
+      this.context.ref();
+      this.unreffedYet = false;
+    }
+    RefUnrefFilter.prototype._flush = function(cb) {
+      this.unref();
+      cb();
+    };
+    RefUnrefFilter.prototype.unref = function(cb) {
+      if (this.unreffedYet) return;
+      this.unreffedYet = true;
+      this.context.unref();
+    };
+    var cp437 = "\0\u263A\u263B\u2665\u2666\u2663\u2660\u2022\u25D8\u25CB\u25D9\u2642\u2640\u266A\u266B\u263C\u25BA\u25C4\u2195\u203C\xB6\xA7\u25AC\u21A8\u2191\u2193\u2192\u2190\u221F\u2194\u25B2\u25BC !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2302\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0";
+    function decodeBuffer(buffer, isUtf8) {
+      if (isUtf8) {
+        return buffer.toString("utf8");
+      } else {
+        var result = "";
+        for (var i = 0; i < buffer.length; i++) {
+          result += cp437[buffer[i]];
+        }
+        return result;
+      }
+    }
+    function readUInt64LE(buffer, offset) {
+      var lower32 = buffer.readUInt32LE(offset);
+      var upper32 = buffer.readUInt32LE(offset + 4);
+      return upper32 * 4294967296 + lower32;
+    }
+    var newBuffer;
+    if (typeof Buffer.allocUnsafe === "function") {
+      newBuffer = function(len) {
+        return Buffer.allocUnsafe(len);
+      };
+    } else {
+      newBuffer = function(len) {
+        return new Buffer(len);
+      };
+    }
+    function installDestroyFn(stream, fn) {
+      if (typeof stream.destroy === "function") {
+        stream._destroy = function(err, cb) {
+          fn();
+          if (cb != null) cb(err);
+        };
+      } else {
+        stream.destroy = fn;
+      }
+    }
+    function defaultCallback(err) {
+      if (err) throw err;
+    }
+  }
+});
+
 // node_modules/qrcode/lib/can-promise.js
 var require_can_promise = __commonJS({
   "node_modules/qrcode/lib/can-promise.js"(exports, module) {
@@ -4736,11 +6079,11 @@ var require_dijkstra = __commonJS({
         var predecessors = {};
         var costs = {};
         costs[s] = 0;
-        var open5 = dijkstra.PriorityQueue.make();
-        open5.push(s, 0);
+        var open9 = dijkstra.PriorityQueue.make();
+        open9.push(s, 0);
         var closest, u, v, cost_of_s_to_u, adjacent_nodes, cost_of_e, cost_of_s_to_u_plus_cost_of_e, cost_of_s_to_v, first_visit;
-        while (!open5.empty()) {
-          closest = open5.pop();
+        while (!open9.empty()) {
+          closest = open9.pop();
           u = closest.value;
           cost_of_s_to_u = closest.cost;
           adjacent_nodes = graph[u] || {};
@@ -4752,7 +6095,7 @@ var require_dijkstra = __commonJS({
               first_visit = typeof costs[v] === "undefined";
               if (first_visit || cost_of_s_to_v > cost_of_s_to_u_plus_cost_of_e) {
                 costs[v] = cost_of_s_to_u_plus_cost_of_e;
-                open5.push(v, cost_of_s_to_u_plus_cost_of_e);
+                open9.push(v, cost_of_s_to_u_plus_cost_of_e);
                 predecessors[v] = u;
               }
             }
@@ -5762,7 +7105,7 @@ var require_crc = __commonJS({
 var require_parser = __commonJS({
   "node_modules/pngjs/lib/parser.js"(exports, module) {
     "use strict";
-    var constants3 = require_constants();
+    var constants7 = require_constants();
     var CrcCalculator = require_crc();
     var Parser = module.exports = function(options2, dependencies) {
       this._options = options2;
@@ -5773,12 +7116,12 @@ var require_parser = __commonJS({
       this._palette = [];
       this._colorType = 0;
       this._chunks = {};
-      this._chunks[constants3.TYPE_IHDR] = this._handleIHDR.bind(this);
-      this._chunks[constants3.TYPE_IEND] = this._handleIEND.bind(this);
-      this._chunks[constants3.TYPE_IDAT] = this._handleIDAT.bind(this);
-      this._chunks[constants3.TYPE_PLTE] = this._handlePLTE.bind(this);
-      this._chunks[constants3.TYPE_tRNS] = this._handleTRNS.bind(this);
-      this._chunks[constants3.TYPE_gAMA] = this._handleGAMA.bind(this);
+      this._chunks[constants7.TYPE_IHDR] = this._handleIHDR.bind(this);
+      this._chunks[constants7.TYPE_IEND] = this._handleIEND.bind(this);
+      this._chunks[constants7.TYPE_IDAT] = this._handleIDAT.bind(this);
+      this._chunks[constants7.TYPE_PLTE] = this._handlePLTE.bind(this);
+      this._chunks[constants7.TYPE_tRNS] = this._handleTRNS.bind(this);
+      this._chunks[constants7.TYPE_gAMA] = this._handleGAMA.bind(this);
       this.read = dependencies.read;
       this.error = dependencies.error;
       this.metadata = dependencies.metadata;
@@ -5793,10 +7136,10 @@ var require_parser = __commonJS({
       };
     };
     Parser.prototype.start = function() {
-      this.read(constants3.PNG_SIGNATURE.length, this._parseSignature.bind(this));
+      this.read(constants7.PNG_SIGNATURE.length, this._parseSignature.bind(this));
     };
     Parser.prototype._parseSignature = function(data) {
-      let signature = constants3.PNG_SIGNATURE;
+      let signature = constants7.PNG_SIGNATURE;
       for (let i = 0; i < signature.length; i++) {
         if (data[i] !== signature[i]) {
           this.error(new Error("Invalid file signature"));
@@ -5813,7 +7156,7 @@ var require_parser = __commonJS({
         name += String.fromCharCode(data[i]);
       }
       let ancillary = Boolean(data[4] & 32);
-      if (!this._hasIHDR && type !== constants3.TYPE_IHDR) {
+      if (!this._hasIHDR && type !== constants7.TYPE_IHDR) {
         this.error(new Error("Expected IHDR on beggining"));
         return;
       }
@@ -5861,7 +7204,7 @@ var require_parser = __commonJS({
         this.error(new Error("Unsupported bit depth " + depth));
         return;
       }
-      if (!(colorType in constants3.COLORTYPE_TO_BPP_MAP)) {
+      if (!(colorType in constants7.COLORTYPE_TO_BPP_MAP)) {
         this.error(new Error("Unsupported color type"));
         return;
       }
@@ -5878,16 +7221,16 @@ var require_parser = __commonJS({
         return;
       }
       this._colorType = colorType;
-      let bpp = constants3.COLORTYPE_TO_BPP_MAP[this._colorType];
+      let bpp = constants7.COLORTYPE_TO_BPP_MAP[this._colorType];
       this._hasIHDR = true;
       this.metadata({
         width,
         height,
         depth,
         interlace: Boolean(interlace),
-        palette: Boolean(colorType & constants3.COLORTYPE_PALETTE),
-        color: Boolean(colorType & constants3.COLORTYPE_COLOR),
-        alpha: Boolean(colorType & constants3.COLORTYPE_ALPHA),
+        palette: Boolean(colorType & constants7.COLORTYPE_PALETTE),
+        color: Boolean(colorType & constants7.COLORTYPE_COLOR),
+        alpha: Boolean(colorType & constants7.COLORTYPE_ALPHA),
         bpp,
         colorType
       });
@@ -5911,7 +7254,7 @@ var require_parser = __commonJS({
     };
     Parser.prototype._parseTRNS = function(data) {
       this._crc.write(data);
-      if (this._colorType === constants3.COLORTYPE_PALETTE_COLOR) {
+      if (this._colorType === constants7.COLORTYPE_PALETTE_COLOR) {
         if (this._palette.length === 0) {
           this.error(new Error("Transparency chunk must be after palette"));
           return;
@@ -5925,10 +7268,10 @@ var require_parser = __commonJS({
         }
         this.palette(this._palette);
       }
-      if (this._colorType === constants3.COLORTYPE_GRAYSCALE) {
+      if (this._colorType === constants7.COLORTYPE_GRAYSCALE) {
         this.transColor([data.readUInt16BE(0)]);
       }
-      if (this._colorType === constants3.COLORTYPE_COLOR) {
+      if (this._colorType === constants7.COLORTYPE_COLOR) {
         this.transColor([
           data.readUInt16BE(0),
           data.readUInt16BE(2),
@@ -5942,7 +7285,7 @@ var require_parser = __commonJS({
     };
     Parser.prototype._parseGAMA = function(data) {
       this._crc.write(data);
-      this.gamma(data.readUInt32BE(0) / constants3.GAMMA_DIVISION);
+      this.gamma(data.readUInt32BE(0) / constants7.GAMMA_DIVISION);
       this._handleChunkEnd();
     };
     Parser.prototype._handleIDAT = function(length) {
@@ -5954,7 +7297,7 @@ var require_parser = __commonJS({
     };
     Parser.prototype._parseIDAT = function(length, data) {
       this._crc.write(data);
-      if (this._colorType === constants3.COLORTYPE_PALETTE_COLOR && this._palette.length === 0) {
+      if (this._colorType === constants7.COLORTYPE_PALETTE_COLOR && this._palette.length === 0) {
         throw new Error("Expected palette not found");
       }
       this.inflateData(data);
@@ -6438,9 +7781,9 @@ var require_parser_async = __commonJS({
 var require_bitpacker = __commonJS({
   "node_modules/pngjs/lib/bitpacker.js"(exports, module) {
     "use strict";
-    var constants3 = require_constants();
+    var constants7 = require_constants();
     module.exports = function(dataIn, width, height, options2) {
-      let outHasAlpha = [constants3.COLORTYPE_COLOR_ALPHA, constants3.COLORTYPE_ALPHA].indexOf(
+      let outHasAlpha = [constants7.COLORTYPE_COLOR_ALPHA, constants7.COLORTYPE_ALPHA].indexOf(
         options2.colorType
       ) !== -1;
       if (options2.colorType === options2.inputColorType) {
@@ -6460,11 +7803,11 @@ var require_bitpacker = __commonJS({
       }
       let data = options2.bitDepth !== 16 ? dataIn : new Uint16Array(dataIn.buffer);
       let maxValue = 255;
-      let inBpp = constants3.COLORTYPE_TO_BPP_MAP[options2.inputColorType];
+      let inBpp = constants7.COLORTYPE_TO_BPP_MAP[options2.inputColorType];
       if (inBpp === 4 && !options2.inputHasAlpha) {
         inBpp = 3;
       }
-      let outBpp = constants3.COLORTYPE_TO_BPP_MAP[options2.colorType];
+      let outBpp = constants7.COLORTYPE_TO_BPP_MAP[options2.colorType];
       if (options2.bitDepth === 16) {
         maxValue = 65535;
         outBpp *= 2;
@@ -6488,24 +7831,24 @@ var require_bitpacker = __commonJS({
         let blue;
         let alpha = maxValue;
         switch (options2.inputColorType) {
-          case constants3.COLORTYPE_COLOR_ALPHA:
+          case constants7.COLORTYPE_COLOR_ALPHA:
             alpha = data[inIndex + 3];
             red = data[inIndex];
             green = data[inIndex + 1];
             blue = data[inIndex + 2];
             break;
-          case constants3.COLORTYPE_COLOR:
+          case constants7.COLORTYPE_COLOR:
             red = data[inIndex];
             green = data[inIndex + 1];
             blue = data[inIndex + 2];
             break;
-          case constants3.COLORTYPE_ALPHA:
+          case constants7.COLORTYPE_ALPHA:
             alpha = data[inIndex + 1];
             red = data[inIndex];
             green = red;
             blue = red;
             break;
-          case constants3.COLORTYPE_GRAYSCALE:
+          case constants7.COLORTYPE_GRAYSCALE:
             red = data[inIndex];
             green = red;
             blue = red;
@@ -6538,8 +7881,8 @@ var require_bitpacker = __commonJS({
         for (let x = 0; x < width; x++) {
           let rgba = getRGBA(data, inIndex);
           switch (options2.colorType) {
-            case constants3.COLORTYPE_COLOR_ALPHA:
-            case constants3.COLORTYPE_COLOR:
+            case constants7.COLORTYPE_COLOR_ALPHA:
+            case constants7.COLORTYPE_COLOR:
               if (options2.bitDepth === 8) {
                 outData[outIndex] = rgba.red;
                 outData[outIndex + 1] = rgba.green;
@@ -6556,8 +7899,8 @@ var require_bitpacker = __commonJS({
                 }
               }
               break;
-            case constants3.COLORTYPE_ALPHA:
-            case constants3.COLORTYPE_GRAYSCALE: {
+            case constants7.COLORTYPE_ALPHA:
+            case constants7.COLORTYPE_GRAYSCALE: {
               let grayscale = (rgba.red + rgba.green + rgba.blue) / 3;
               if (options2.bitDepth === 8) {
                 outData[outIndex] = grayscale;
@@ -6730,7 +8073,7 @@ var require_filter_pack = __commonJS({
 var require_packer = __commonJS({
   "node_modules/pngjs/lib/packer.js"(exports, module) {
     "use strict";
-    var constants3 = require_constants();
+    var constants7 = require_constants();
     var CrcStream = require_crc();
     var bitPacker = require_bitpacker();
     var filter = require_filter_pack();
@@ -6743,23 +8086,23 @@ var require_packer = __commonJS({
       options2.inputHasAlpha = options2.inputHasAlpha != null ? options2.inputHasAlpha : true;
       options2.deflateFactory = options2.deflateFactory || zlib.createDeflate;
       options2.bitDepth = options2.bitDepth || 8;
-      options2.colorType = typeof options2.colorType === "number" ? options2.colorType : constants3.COLORTYPE_COLOR_ALPHA;
-      options2.inputColorType = typeof options2.inputColorType === "number" ? options2.inputColorType : constants3.COLORTYPE_COLOR_ALPHA;
+      options2.colorType = typeof options2.colorType === "number" ? options2.colorType : constants7.COLORTYPE_COLOR_ALPHA;
+      options2.inputColorType = typeof options2.inputColorType === "number" ? options2.inputColorType : constants7.COLORTYPE_COLOR_ALPHA;
       if ([
-        constants3.COLORTYPE_GRAYSCALE,
-        constants3.COLORTYPE_COLOR,
-        constants3.COLORTYPE_COLOR_ALPHA,
-        constants3.COLORTYPE_ALPHA
+        constants7.COLORTYPE_GRAYSCALE,
+        constants7.COLORTYPE_COLOR,
+        constants7.COLORTYPE_COLOR_ALPHA,
+        constants7.COLORTYPE_ALPHA
       ].indexOf(options2.colorType) === -1) {
         throw new Error(
           "option color type:" + options2.colorType + " is not supported at present"
         );
       }
       if ([
-        constants3.COLORTYPE_GRAYSCALE,
-        constants3.COLORTYPE_COLOR,
-        constants3.COLORTYPE_COLOR_ALPHA,
-        constants3.COLORTYPE_ALPHA
+        constants7.COLORTYPE_GRAYSCALE,
+        constants7.COLORTYPE_COLOR,
+        constants7.COLORTYPE_COLOR_ALPHA,
+        constants7.COLORTYPE_ALPHA
       ].indexOf(options2.inputColorType) === -1) {
         throw new Error(
           "option input color type:" + options2.inputColorType + " is not supported at present"
@@ -6783,7 +8126,7 @@ var require_packer = __commonJS({
     };
     Packer.prototype.filterData = function(data, width, height) {
       let packedData = bitPacker(data, width, height, this._options);
-      let bpp = constants3.COLORTYPE_TO_BPP_MAP[this._options.colorType];
+      let bpp = constants7.COLORTYPE_TO_BPP_MAP[this._options.colorType];
       let filteredData = filter(packedData, width, height, this._options, bpp);
       return filteredData;
     };
@@ -6803,8 +8146,8 @@ var require_packer = __commonJS({
     };
     Packer.prototype.packGAMA = function(gamma) {
       let buf = Buffer.alloc(4);
-      buf.writeUInt32BE(Math.floor(gamma * constants3.GAMMA_DIVISION), 0);
-      return this._packChunk(constants3.TYPE_gAMA, buf);
+      buf.writeUInt32BE(Math.floor(gamma * constants7.GAMMA_DIVISION), 0);
+      return this._packChunk(constants7.TYPE_gAMA, buf);
     };
     Packer.prototype.packIHDR = function(width, height) {
       let buf = Buffer.alloc(13);
@@ -6815,13 +8158,13 @@ var require_packer = __commonJS({
       buf[10] = 0;
       buf[11] = 0;
       buf[12] = 0;
-      return this._packChunk(constants3.TYPE_IHDR, buf);
+      return this._packChunk(constants7.TYPE_IHDR, buf);
     };
     Packer.prototype.packIDAT = function(data) {
-      return this._packChunk(constants3.TYPE_IDAT, data);
+      return this._packChunk(constants7.TYPE_IDAT, data);
     };
     Packer.prototype.packIEND = function() {
-      return this._packChunk(constants3.TYPE_IEND, null);
+      return this._packChunk(constants7.TYPE_IEND, null);
     };
   }
 });
@@ -6832,7 +8175,7 @@ var require_packer_async = __commonJS({
     "use strict";
     var util = __require("util");
     var Stream = __require("stream");
-    var constants3 = require_constants();
+    var constants7 = require_constants();
     var Packer = require_packer();
     var PackerAsync = module.exports = function(opt) {
       Stream.call(this);
@@ -6843,7 +8186,7 @@ var require_packer_async = __commonJS({
     };
     util.inherits(PackerAsync, Stream);
     PackerAsync.prototype.pack = function(data, width, height, gamma) {
-      this.emit("data", Buffer.from(constants3.PNG_SIGNATURE));
+      this.emit("data", Buffer.from(constants7.PNG_SIGNATURE));
       this.emit("data", this._packer.packIHDR(width, height));
       if (gamma) {
         this.emit("data", this._packer.packGAMA(gamma));
@@ -7167,7 +8510,7 @@ var require_packer_sync = __commonJS({
     if (!zlib.deflateSync) {
       hasSyncZlib = false;
     }
-    var constants3 = require_constants();
+    var constants7 = require_constants();
     var Packer = require_packer();
     module.exports = function(metaData, opt) {
       if (!hasSyncZlib) {
@@ -7178,7 +8521,7 @@ var require_packer_sync = __commonJS({
       let options2 = opt || {};
       let packer = new Packer(options2);
       let chunks = [];
-      chunks.push(Buffer.from(constants3.PNG_SIGNATURE));
+      chunks.push(Buffer.from(constants7.PNG_SIGNATURE));
       chunks.push(packer.packIHDR(metaData.width, metaData.height));
       if (metaData.gamma) {
         chunks.push(packer.packGAMA(metaData.gamma));
@@ -7207,10 +8550,10 @@ var require_packer_sync = __commonJS({
 var require_png_sync = __commonJS({
   "node_modules/pngjs/lib/png-sync.js"(exports) {
     "use strict";
-    var parse = require_parser_sync();
+    var parse2 = require_parser_sync();
     var pack = require_packer_sync();
     exports.read = function(buffer, options2) {
-      return parse(buffer, options2 || {});
+      return parse2(buffer, options2 || {});
     };
     exports.write = function(png, options2) {
       return pack(png, options2);
@@ -7839,10 +9182,10 @@ var require_browser = __commonJS({
           text = canvas;
           canvas = void 0;
         }
-        return new Promise(function(resolve4, reject) {
+        return new Promise(function(resolve6, reject) {
           try {
             const data = QRCode2.create(text, opts);
-            resolve4(renderFunc(data, canvas, opts));
+            resolve6(renderFunc(data, canvas, opts));
           } catch (e) {
             reject(e);
           }
@@ -7923,11 +9266,11 @@ var require_server = __commonJS({
     }
     function render(renderFunc, text, params) {
       if (!params.cb) {
-        return new Promise(function(resolve4, reject) {
+        return new Promise(function(resolve6, reject) {
           try {
             const data = QRCode2.create(text, params.opts);
             return renderFunc(data, params.opts, function(err, data2) {
-              return err ? reject(err) : resolve4(data2);
+              return err ? reject(err) : resolve6(data2);
             });
           } catch (e) {
             reject(e);
@@ -7988,1349 +9331,6 @@ var require_server = __commonJS({
 var require_lib = __commonJS({
   "node_modules/qrcode/lib/index.js"(exports, module) {
     module.exports = require_server();
-  }
-});
-
-// node_modules/pend/index.js
-var require_pend = __commonJS({
-  "node_modules/pend/index.js"(exports, module) {
-    module.exports = Pend;
-    function Pend() {
-      this.pending = 0;
-      this.max = Infinity;
-      this.listeners = [];
-      this.waiting = [];
-      this.error = null;
-    }
-    Pend.prototype.go = function(fn) {
-      if (this.pending < this.max) {
-        pendGo(this, fn);
-      } else {
-        this.waiting.push(fn);
-      }
-    };
-    Pend.prototype.wait = function(cb) {
-      if (this.pending === 0) {
-        cb(this.error);
-      } else {
-        this.listeners.push(cb);
-      }
-    };
-    Pend.prototype.hold = function() {
-      return pendHold(this);
-    };
-    function pendHold(self) {
-      self.pending += 1;
-      var called = false;
-      return onCb;
-      function onCb(err) {
-        if (called) throw new Error("callback called twice");
-        called = true;
-        self.error = self.error || err;
-        self.pending -= 1;
-        if (self.waiting.length > 0 && self.pending < self.max) {
-          pendGo(self, self.waiting.shift());
-        } else if (self.pending === 0) {
-          var listeners = self.listeners;
-          self.listeners = [];
-          listeners.forEach(cbListener);
-        }
-      }
-      function cbListener(listener) {
-        listener(self.error);
-      }
-    }
-    function pendGo(self, fn) {
-      fn(pendHold(self));
-    }
-  }
-});
-
-// node_modules/yauzl/fd-slicer.js
-var require_fd_slicer = __commonJS({
-  "node_modules/yauzl/fd-slicer.js"(exports) {
-    var fs = __require("fs");
-    var util = __require("util");
-    var stream = __require("stream");
-    var Readable2 = stream.Readable;
-    var PassThrough = stream.PassThrough;
-    var Pend = require_pend();
-    var EventEmitter = __require("events").EventEmitter;
-    exports.BufferSlicer = BufferSlicer;
-    exports.FdSlicer = FdSlicer;
-    util.inherits(FdSlicer, EventEmitter);
-    function FdSlicer(fd) {
-      EventEmitter.call(this);
-      this.fd = fd;
-      this.pend = new Pend();
-      this.pend.max = 1;
-      this.refCount = 0;
-    }
-    FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
-      var self = this;
-      self.pend.go(function(cb) {
-        fs.read(self.fd, buffer, offset, length, position, function(err, bytesRead, buffer2) {
-          cb();
-          callback(err, bytesRead, buffer2);
-        });
-      });
-    };
-    FdSlicer.prototype.createReadStream = function(options2) {
-      return new ReadStream(this, options2);
-    };
-    FdSlicer.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    FdSlicer.prototype.unref = function() {
-      var self = this;
-      self.refCount -= 1;
-      if (self.refCount < 0) throw new Error("invalid unref");
-      if (self.refCount > 0) return;
-      fs.close(self.fd, onCloseDone);
-      function onCloseDone(err) {
-        if (err) {
-          self.emit("error", err);
-        } else {
-          self.emit("close");
-        }
-      }
-    };
-    util.inherits(ReadStream, Readable2);
-    function ReadStream(context, options2) {
-      options2 = options2 || {};
-      Readable2.call(this, options2);
-      this.context = context;
-      this.context.ref();
-      this.start = options2.start || 0;
-      this.endOffset = options2.end;
-      this.pos = this.start;
-    }
-    ReadStream.prototype._read = function(n) {
-      var self = this;
-      var toRead = Math.min(self._readableState.highWaterMark, n);
-      if (self.endOffset != null) {
-        toRead = Math.min(toRead, self.endOffset - self.pos);
-      }
-      if (toRead <= 0) {
-        self.push(null);
-        this._cleanup();
-        return;
-      }
-      self.context.pend.go(function(cb) {
-        var buffer = Buffer.allocUnsafe(toRead);
-        fs.read(self.context.fd, buffer, 0, toRead, self.pos, function(err, bytesRead) {
-          if (err) {
-            self.destroy(err);
-          } else if (bytesRead === 0) {
-            self.push(null);
-            self._cleanup();
-          } else {
-            self.pos += bytesRead;
-            self.push(buffer.slice(0, bytesRead));
-          }
-          cb();
-        });
-      });
-    };
-    ReadStream.prototype._destroy = function(err, cb) {
-      this._cleanup();
-      cb(err);
-    };
-    ReadStream.prototype._cleanup = function() {
-      if (this.context != null) {
-        this.context.unref();
-        this.context = null;
-      }
-    };
-    util.inherits(BufferSlicer, EventEmitter);
-    function BufferSlicer(buffer) {
-      EventEmitter.call(this);
-      this.refCount = 0;
-      this.buffer = buffer;
-    }
-    BufferSlicer.prototype.read = function(buffer, offset, length, position, callback) {
-      if (!(0 <= offset && offset <= buffer.length)) throw new RangeError("offset outside buffer: 0 <= " + offset + " <= " + buffer.length);
-      if (position < 0) throw new RangeError("position is negative: " + position);
-      if (offset + length > buffer.length) {
-        length = buffer.length - offset;
-      }
-      if (position + length > this.buffer.length) {
-        length = this.buffer.length - position;
-      }
-      if (length <= 0) {
-        setImmediate(function() {
-          callback(null, 0);
-        });
-        return;
-      }
-      this.buffer.copy(buffer, offset, position, position + length);
-      setImmediate(function() {
-        callback(null, length);
-      });
-    };
-    BufferSlicer.prototype.createReadStream = function(options2) {
-      options2 = options2 || {};
-      var readStream = new PassThrough(options2);
-      readStream.start = options2.start || 0;
-      readStream.endOffset = options2.end;
-      readStream.pos = readStream.endOffset || this.buffer.length;
-      var entireSlice = this.buffer.slice(readStream.start, readStream.pos);
-      var maxChunkSize = 65536;
-      var offset = 0;
-      while (true) {
-        var nextOffset = offset + maxChunkSize;
-        if (nextOffset >= entireSlice.length) {
-          if (offset < entireSlice.length) {
-            readStream.write(entireSlice.slice(offset, entireSlice.length));
-          }
-          break;
-        }
-        readStream.write(entireSlice.slice(offset, nextOffset));
-        offset = nextOffset;
-      }
-      readStream.end();
-      return readStream;
-    };
-    BufferSlicer.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    BufferSlicer.prototype.unref = function() {
-      this.refCount -= 1;
-      if (this.refCount < 0) {
-        throw new Error("invalid unref");
-      }
-    };
-  }
-});
-
-// node_modules/yauzl/crc32.js
-var require_crc32 = __commonJS({
-  "node_modules/yauzl/crc32.js"(exports, module) {
-    var CRC_TABLE = new Int32Array([
-      0,
-      1996959894,
-      3993919788,
-      2567524794,
-      124634137,
-      1886057615,
-      3915621685,
-      2657392035,
-      249268274,
-      2044508324,
-      3772115230,
-      2547177864,
-      162941995,
-      2125561021,
-      3887607047,
-      2428444049,
-      498536548,
-      1789927666,
-      4089016648,
-      2227061214,
-      450548861,
-      1843258603,
-      4107580753,
-      2211677639,
-      325883990,
-      1684777152,
-      4251122042,
-      2321926636,
-      335633487,
-      1661365465,
-      4195302755,
-      2366115317,
-      997073096,
-      1281953886,
-      3579855332,
-      2724688242,
-      1006888145,
-      1258607687,
-      3524101629,
-      2768942443,
-      901097722,
-      1119000684,
-      3686517206,
-      2898065728,
-      853044451,
-      1172266101,
-      3705015759,
-      2882616665,
-      651767980,
-      1373503546,
-      3369554304,
-      3218104598,
-      565507253,
-      1454621731,
-      3485111705,
-      3099436303,
-      671266974,
-      1594198024,
-      3322730930,
-      2970347812,
-      795835527,
-      1483230225,
-      3244367275,
-      3060149565,
-      1994146192,
-      31158534,
-      2563907772,
-      4023717930,
-      1907459465,
-      112637215,
-      2680153253,
-      3904427059,
-      2013776290,
-      251722036,
-      2517215374,
-      3775830040,
-      2137656763,
-      141376813,
-      2439277719,
-      3865271297,
-      1802195444,
-      476864866,
-      2238001368,
-      4066508878,
-      1812370925,
-      453092731,
-      2181625025,
-      4111451223,
-      1706088902,
-      314042704,
-      2344532202,
-      4240017532,
-      1658658271,
-      366619977,
-      2362670323,
-      4224994405,
-      1303535960,
-      984961486,
-      2747007092,
-      3569037538,
-      1256170817,
-      1037604311,
-      2765210733,
-      3554079995,
-      1131014506,
-      879679996,
-      2909243462,
-      3663771856,
-      1141124467,
-      855842277,
-      2852801631,
-      3708648649,
-      1342533948,
-      654459306,
-      3188396048,
-      3373015174,
-      1466479909,
-      544179635,
-      3110523913,
-      3462522015,
-      1591671054,
-      702138776,
-      2966460450,
-      3352799412,
-      1504918807,
-      783551873,
-      3082640443,
-      3233442989,
-      3988292384,
-      2596254646,
-      62317068,
-      1957810842,
-      3939845945,
-      2647816111,
-      81470997,
-      1943803523,
-      3814918930,
-      2489596804,
-      225274430,
-      2053790376,
-      3826175755,
-      2466906013,
-      167816743,
-      2097651377,
-      4027552580,
-      2265490386,
-      503444072,
-      1762050814,
-      4150417245,
-      2154129355,
-      426522225,
-      1852507879,
-      4275313526,
-      2312317920,
-      282753626,
-      1742555852,
-      4189708143,
-      2394877945,
-      397917763,
-      1622183637,
-      3604390888,
-      2714866558,
-      953729732,
-      1340076626,
-      3518719985,
-      2797360999,
-      1068828381,
-      1219638859,
-      3624741850,
-      2936675148,
-      906185462,
-      1090812512,
-      3747672003,
-      2825379669,
-      829329135,
-      1181335161,
-      3412177804,
-      3160834842,
-      628085408,
-      1382605366,
-      3423369109,
-      3138078467,
-      570562233,
-      1426400815,
-      3317316542,
-      2998733608,
-      733239954,
-      1555261956,
-      3268935591,
-      3050360625,
-      752459403,
-      1541320221,
-      2607071920,
-      3965973030,
-      1969922972,
-      40735498,
-      2617837225,
-      3943577151,
-      1913087877,
-      83908371,
-      2512341634,
-      3803740692,
-      2075208622,
-      213261112,
-      2463272603,
-      3855990285,
-      2094854071,
-      198958881,
-      2262029012,
-      4057260610,
-      1759359992,
-      534414190,
-      2176718541,
-      4139329115,
-      1873836001,
-      414664567,
-      2282248934,
-      4279200368,
-      1711684554,
-      285281116,
-      2405801727,
-      4167216745,
-      1634467795,
-      376229701,
-      2685067896,
-      3608007406,
-      1308918612,
-      956543938,
-      2808555105,
-      3495958263,
-      1231636301,
-      1047427035,
-      2932959818,
-      3654703836,
-      1088359270,
-      936918e3,
-      2847714899,
-      3736837829,
-      1202900863,
-      817233897,
-      3183342108,
-      3401237130,
-      1404277552,
-      615818150,
-      3134207493,
-      3453421203,
-      1423857449,
-      601450431,
-      3009837614,
-      3294710456,
-      1567103746,
-      711928724,
-      3020668471,
-      3272380065,
-      1510334235,
-      755167117
-    ]);
-    function crc32(buf) {
-      let crc = -1;
-      for (let x of buf) {
-        crc = CRC_TABLE[(crc ^ x) & 255] ^ crc >>> 8;
-      }
-      return (crc ^ -1) >>> 0;
-    }
-    module.exports = crc32;
-  }
-});
-
-// node_modules/yauzl/index.js
-var require_yauzl = __commonJS({
-  "node_modules/yauzl/index.js"(exports) {
-    var fs = __require("fs");
-    var zlib = __require("zlib");
-    var fd_slicer = require_fd_slicer();
-    var util = __require("util");
-    var EventEmitter = __require("events").EventEmitter;
-    var Transform3 = __require("stream").Transform;
-    var PassThrough = __require("stream").PassThrough;
-    var Writable = __require("stream").Writable;
-    var crc32 = typeof zlib.crc32 === "function" ? zlib.crc32 : require_crc32();
-    exports.open = open5;
-    exports.fromFd = fromFd;
-    exports.fromBuffer = fromBuffer;
-    exports.fromRandomAccessReader = fromRandomAccessReader;
-    exports.openPromise = openPromise2;
-    exports.fromFdPromise = fromFdPromise;
-    exports.fromBufferPromise = fromBufferPromise;
-    exports.fromRandomAccessReaderPromise = fromRandomAccessReaderPromise;
-    exports.dosDateTimeToDate = dosDateTimeToDate;
-    exports.getFileNameLowLevel = getFileNameLowLevel;
-    exports.validateFileName = validateFileName;
-    exports.parseExtraFields = parseExtraFields;
-    exports.ZipFile = ZipFile;
-    exports.Entry = Entry;
-    exports.LocalFileHeader = LocalFileHeader;
-    exports.RandomAccessReader = RandomAccessReader;
-    function openPromise2(path4, options2) {
-      return new Promise((resolve4, reject) => {
-        open5(path4, { ...options2, lazyEntries: true }, function(err, zipfile) {
-          if (err) return reject(err);
-          resolve4(zipfile);
-        });
-      });
-    }
-    function fromFdPromise(fd, options2) {
-      return new Promise((resolve4, reject) => {
-        fromFd(fd, { ...options2, lazyEntries: true }, function(err, zipfile) {
-          if (err) return reject(err);
-          resolve4(zipfile);
-        });
-      });
-    }
-    function fromBufferPromise(buffer, options2) {
-      return new Promise((resolve4, reject) => {
-        fromBuffer(buffer, { ...options2, lazyEntries: true }, function(err, zipfile) {
-          if (err) return reject(err);
-          resolve4(zipfile);
-        });
-      });
-    }
-    function fromRandomAccessReaderPromise(reader, totalSize, options2) {
-      return new Promise((resolve4, reject) => {
-        fromRandomAccessReader(reader, totalSize, { ...options2, lazyEntries: true }, function(err, zipfile) {
-          if (err) return reject(err);
-          resolve4(zipfile);
-        });
-      });
-    }
-    function open5(path4, options2, callback) {
-      if (typeof options2 === "function") {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) options2 = {};
-      if (options2.autoClose == null) options2.autoClose = true;
-      if (options2.lazyEntries == null) options2.lazyEntries = false;
-      if (options2.decodeStrings == null) options2.decodeStrings = true;
-      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
-      if (options2.strictFileNames == null) options2.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      fs.open(path4, "r", function(err, fd) {
-        if (err) return callback(err);
-        fromFd(fd, options2, function(err2, zipfile) {
-          if (err2) fs.close(fd, defaultCallback);
-          callback(err2, zipfile);
-        });
-      });
-    }
-    function fromFd(fd, options2, callback) {
-      if (typeof options2 === "function") {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) options2 = {};
-      if (options2.autoClose == null) options2.autoClose = false;
-      if (options2.lazyEntries == null) options2.lazyEntries = false;
-      if (options2.decodeStrings == null) options2.decodeStrings = true;
-      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
-      if (options2.strictFileNames == null) options2.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      fs.fstat(fd, function(err, stats) {
-        if (err) return callback(err);
-        var reader = new fd_slicer.FdSlicer(fd);
-        fromRandomAccessReader(reader, stats.size, options2, callback);
-      });
-    }
-    function fromBuffer(buffer, options2, callback) {
-      if (typeof options2 === "function") {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) options2 = {};
-      options2.autoClose = false;
-      if (options2.lazyEntries == null) options2.lazyEntries = false;
-      if (options2.decodeStrings == null) options2.decodeStrings = true;
-      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
-      if (options2.strictFileNames == null) options2.strictFileNames = false;
-      var reader = new fd_slicer.BufferSlicer(buffer);
-      fromRandomAccessReader(reader, buffer.length, options2, callback);
-    }
-    function fromRandomAccessReader(reader, totalSize, options2, callback) {
-      if (typeof options2 === "function") {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) options2 = {};
-      if (options2.autoClose == null) options2.autoClose = true;
-      if (options2.lazyEntries == null) options2.lazyEntries = false;
-      if (options2.decodeStrings == null) options2.decodeStrings = true;
-      var decodeStrings = !!options2.decodeStrings;
-      if (options2.validateEntrySizes == null) options2.validateEntrySizes = true;
-      if (options2.strictFileNames == null) options2.strictFileNames = false;
-      if (callback == null) callback = defaultCallback;
-      if (typeof totalSize !== "number") throw new Error("expected totalSize parameter to be a number");
-      if (totalSize > Number.MAX_SAFE_INTEGER) {
-        throw new Error("zip file too large. only file sizes up to 2^52 are supported due to JavaScript's Number type being an IEEE 754 double.");
-      }
-      reader.ref();
-      var eocdrWithoutCommentSize = 22;
-      var zip64EocdlSize = 20;
-      var maxCommentSize = 65535;
-      var bufferSize = Math.min(zip64EocdlSize + eocdrWithoutCommentSize + maxCommentSize, totalSize);
-      var buffer = newBuffer(bufferSize);
-      var bufferReadStart = totalSize - buffer.length;
-      readAndAssertNoEof(reader, buffer, 0, bufferSize, bufferReadStart, function(err) {
-        if (err) return callback(err);
-        for (var i = bufferSize - eocdrWithoutCommentSize; i >= 0; i -= 1) {
-          if (buffer.readUInt32LE(i) !== 101010256) continue;
-          var eocdrBuffer = buffer.subarray(i);
-          var diskNumber = eocdrBuffer.readUInt16LE(4);
-          var entryCount = eocdrBuffer.readUInt16LE(10);
-          var centralDirectoryOffset = eocdrBuffer.readUInt32LE(16);
-          var commentLength = eocdrBuffer.readUInt16LE(20);
-          var expectedCommentLength = eocdrBuffer.length - eocdrWithoutCommentSize;
-          if (commentLength !== expectedCommentLength) {
-            return callback(new Error("Invalid comment length. Expected: " + expectedCommentLength + ". Found: " + commentLength + ". Are there extra bytes at the end of the file? Or is the end of central dir signature `PK\u263A\u263B` in the comment?"));
-          }
-          var comment = decodeStrings ? decodeBuffer(eocdrBuffer.subarray(22), false) : eocdrBuffer.subarray(22);
-          if (i - zip64EocdlSize >= 0 && buffer.readUInt32LE(i - zip64EocdlSize) === 117853008) {
-            var zip64EocdlBuffer = buffer.subarray(i - zip64EocdlSize, i - zip64EocdlSize + zip64EocdlSize);
-            var zip64EocdrOffset = readUInt64LE(zip64EocdlBuffer, 8);
-            var zip64EocdrBuffer = newBuffer(56);
-            return readAndAssertNoEof(reader, zip64EocdrBuffer, 0, zip64EocdrBuffer.length, zip64EocdrOffset, function(err2) {
-              if (err2) return callback(err2);
-              if (zip64EocdrBuffer.readUInt32LE(0) !== 101075792) {
-                return callback(new Error("invalid zip64 end of central directory record signature"));
-              }
-              diskNumber = zip64EocdrBuffer.readUInt32LE(16);
-              if (diskNumber !== 0) {
-                return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
-              }
-              entryCount = readUInt64LE(zip64EocdrBuffer, 32);
-              centralDirectoryOffset = readUInt64LE(zip64EocdrBuffer, 48);
-              return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
-            });
-          }
-          if (diskNumber !== 0) {
-            return callback(new Error("multi-disk zip files are not supported: found disk number: " + diskNumber));
-          }
-          return callback(null, new ZipFile(reader, centralDirectoryOffset, totalSize, entryCount, comment, options2.autoClose, options2.lazyEntries, decodeStrings, options2.validateEntrySizes, options2.strictFileNames));
-        }
-        callback(new Error("End of central directory record signature not found. Either not a zip file, or file is truncated."));
-      });
-    }
-    util.inherits(ZipFile, EventEmitter);
-    function ZipFile(reader, centralDirectoryOffset, fileSize, entryCount, comment, autoClose, lazyEntries, decodeStrings, validateEntrySizes, strictFileNames) {
-      var self = this;
-      EventEmitter.call(self);
-      self.reader = reader;
-      self.reader.on("error", function(err) {
-        emitError(self, err);
-      });
-      self.reader.once("close", function() {
-        self.emit("close");
-      });
-      self.readEntryCursor = centralDirectoryOffset;
-      self.fileSize = fileSize;
-      self.entryCount = entryCount;
-      self.comment = comment;
-      self.entriesRead = 0;
-      self.autoClose = !!autoClose;
-      self.lazyEntries = !!lazyEntries;
-      self.decodeStrings = !!decodeStrings;
-      self.validateEntrySizes = !!validateEntrySizes;
-      self.strictFileNames = !!strictFileNames;
-      self.isOpen = true;
-      self.emittedError = false;
-      self.hasEachEntryBeenCalled = false;
-      if (!self.lazyEntries) self._readEntry();
-    }
-    ZipFile.prototype.close = function() {
-      if (!this.isOpen) return;
-      this.isOpen = false;
-      this.reader.unref();
-    };
-    function emitErrorAndAutoClose(self, err) {
-      if (self.autoClose) self.close();
-      emitError(self, err);
-    }
-    function emitError(self, err) {
-      if (self.emittedError) return;
-      self.emittedError = true;
-      self.emit("error", err);
-    }
-    ZipFile.prototype.readEntry = function() {
-      if (!this.lazyEntries) throw new Error("readEntry() called without lazyEntries:true");
-      this._readEntry();
-    };
-    ZipFile.prototype._readEntry = function() {
-      var self = this;
-      if (self.entryCount === self.entriesRead) {
-        setImmediate(function() {
-          if (self.autoClose) self.close();
-          if (self.emittedError) return;
-          self.emit("end");
-        });
-        return;
-      }
-      if (self.emittedError) return;
-      var buffer = newBuffer(46);
-      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err) {
-        if (err) return emitErrorAndAutoClose(self, err);
-        if (self.emittedError) return;
-        var entry = new Entry();
-        var signature = buffer.readUInt32LE(0);
-        if (signature !== 33639248) return emitErrorAndAutoClose(self, new Error("invalid central directory file header signature: 0x" + signature.toString(16)));
-        entry.versionMadeBy = buffer.readUInt16LE(4);
-        entry.versionNeededToExtract = buffer.readUInt16LE(6);
-        entry.generalPurposeBitFlag = buffer.readUInt16LE(8);
-        entry.compressionMethod = buffer.readUInt16LE(10);
-        entry.lastModFileTime = buffer.readUInt16LE(12);
-        entry.lastModFileDate = buffer.readUInt16LE(14);
-        entry.crc32 = buffer.readUInt32LE(16);
-        entry.compressedSize = buffer.readUInt32LE(20);
-        entry.uncompressedSize = buffer.readUInt32LE(24);
-        entry.fileNameLength = buffer.readUInt16LE(28);
-        entry.extraFieldLength = buffer.readUInt16LE(30);
-        entry.fileCommentLength = buffer.readUInt16LE(32);
-        entry.internalFileAttributes = buffer.readUInt16LE(36);
-        entry.externalFileAttributes = buffer.readUInt32LE(38);
-        entry.relativeOffsetOfLocalHeader = buffer.readUInt32LE(42);
-        if (entry.generalPurposeBitFlag & 64) return emitErrorAndAutoClose(self, new Error("strong encryption is not supported"));
-        self.readEntryCursor += 46;
-        buffer = newBuffer(entry.fileNameLength + entry.extraFieldLength + entry.fileCommentLength);
-        readAndAssertNoEof(self.reader, buffer, 0, buffer.length, self.readEntryCursor, function(err2) {
-          if (err2) return emitErrorAndAutoClose(self, err2);
-          if (self.emittedError) return;
-          entry.fileNameRaw = buffer.subarray(0, entry.fileNameLength);
-          var fileCommentStart = entry.fileNameLength + entry.extraFieldLength;
-          entry.extraFieldRaw = buffer.subarray(entry.fileNameLength, fileCommentStart);
-          entry.fileCommentRaw = buffer.subarray(fileCommentStart, fileCommentStart + entry.fileCommentLength);
-          try {
-            entry.extraFields = parseExtraFields(entry.extraFieldRaw);
-          } catch (err3) {
-            return emitErrorAndAutoClose(self, err3);
-          }
-          if (self.decodeStrings) {
-            var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
-            entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
-            entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
-            var errorMessage2 = validateFileName(entry.fileName);
-            if (errorMessage2 != null) return emitErrorAndAutoClose(self, new Error(errorMessage2));
-          } else {
-            entry.fileComment = entry.fileCommentRaw;
-            entry.fileName = entry.fileNameRaw;
-          }
-          entry.comment = entry.fileComment;
-          self.readEntryCursor += buffer.length;
-          self.entriesRead += 1;
-          for (var i = 0; i < entry.extraFields.length; i++) {
-            var extraField = entry.extraFields[i];
-            if (extraField.id !== 1) continue;
-            var zip64EiefBuffer = extraField.data;
-            var index = 0;
-            if (entry.uncompressedSize === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include uncompressed size"));
-              }
-              entry.uncompressedSize = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-            if (entry.compressedSize === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include compressed size"));
-              }
-              entry.compressedSize = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-            if (entry.relativeOffsetOfLocalHeader === 4294967295) {
-              if (index + 8 > zip64EiefBuffer.length) {
-                return emitErrorAndAutoClose(self, new Error("zip64 extended information extra field does not include relative header offset"));
-              }
-              entry.relativeOffsetOfLocalHeader = readUInt64LE(zip64EiefBuffer, index);
-              index += 8;
-            }
-            break;
-          }
-          if (self.validateEntrySizes && entry.compressionMethod === 0) {
-            var expectedCompressedSize = entry.uncompressedSize;
-            if (entry.isEncrypted()) {
-              expectedCompressedSize += 12;
-            }
-            if (entry.compressedSize !== expectedCompressedSize) {
-              var msg = "compressed/uncompressed size mismatch for stored file: " + entry.compressedSize + " != " + entry.uncompressedSize;
-              return emitErrorAndAutoClose(self, new Error(msg));
-            }
-          }
-          self.emit("entry", entry);
-          if (!self.lazyEntries) self._readEntry();
-        });
-      });
-    };
-    ZipFile.prototype.eachEntry = function() {
-      const self = this;
-      if (!self.lazyEntries) throw new Error("eachEntry() requires lazyEntries: true");
-      if (self.hasEachEntryBeenCalled) throw new Error("eachEntry() must only be called once per ZipFile");
-      self.hasEachEntryBeenCalled = true;
-      let pendingResolveReject = null;
-      self.on("entry", onEntry);
-      self.on("end", onEnd);
-      self.on("error", onError);
-      function cleanup() {
-        self.removeListener("entry", onEntry);
-        self.removeListener("end", onEnd);
-        self.removeListener("error", onError);
-        if (self.autoClose) self.close();
-      }
-      function onEntry(entry) {
-        let { resolve: resolve4 } = pendingResolveReject;
-        pendingResolveReject = null;
-        resolve4({ value: entry });
-      }
-      function onEnd() {
-        let { resolve: resolve4 } = pendingResolveReject;
-        pendingResolveReject = null;
-        cleanup();
-        resolve4({ done: true });
-      }
-      function onError(err) {
-        let { reject } = pendingResolveReject;
-        pendingResolveReject = null;
-        cleanup();
-        reject(err);
-      }
-      return {
-        [Symbol.asyncIterator]() {
-          return this;
-        },
-        next() {
-          const promise = new Promise((resolve4, reject) => {
-            if (pendingResolveReject != null) throw new Error("next() called before previous Promise was resolved.");
-            pendingResolveReject = { resolve: resolve4, reject };
-          });
-          self.readEntry();
-          return promise;
-        },
-        return(value) {
-          cleanup();
-          return Promise.resolve({ done: true, value });
-        },
-        throw(value) {
-          cleanup();
-          return Promise.reject(value);
-        }
-      };
-    };
-    ZipFile.prototype.openReadStream = function(entry, options2, callback) {
-      var self = this;
-      var relativeStart = 0;
-      var relativeEnd = entry.compressedSize;
-      if (callback == null) {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) {
-        options2 = {};
-      } else {
-        if (options2.decodeFileData === false) {
-          if (options2.decrypt != null) {
-            throw new Error("cannot use options.decrypt when options.decodeFileData === false");
-          }
-          if (options2.decompress != null) {
-            throw new Error("cannot use options.decompress when options.decodeFileData === false");
-          }
-        } else {
-          if (options2.decrypt != null) {
-            if (!entry.isEncrypted()) {
-              throw new Error("options.decrypt can only be specified for encrypted entries. See also option decodeFileData.");
-            }
-            if (options2.decrypt !== false) throw new Error("invalid options.decrypt value: " + options2.decrypt);
-            if (entry.isCompressed()) {
-              if (options2.decompress !== false) throw new Error("entry is encrypted and compressed, and options.decompress !== false. See also option decodeFileData.");
-            }
-          }
-          if (options2.decompress != null) {
-            if (!entry.isCompressed()) {
-              throw new Error("options.decompress can only be specified for compressed entries. See also option decodeFileData.");
-            }
-            if (!(options2.decompress === false || options2.decompress === true)) {
-              throw new Error("invalid options.decompress value: " + options2.decompress);
-            }
-            decompress = options2.decompress;
-          }
-        }
-        if (options2.start != null) {
-          relativeStart = options2.start;
-          if (relativeStart < 0) throw new Error("options.start < 0");
-          if (relativeStart > entry.compressedSize) throw new Error("options.start > entry.compressedSize");
-        }
-        if (options2.end != null) {
-          relativeEnd = options2.end;
-          if (relativeEnd < 0) throw new Error("options.end < 0");
-          if (relativeEnd > entry.compressedSize) throw new Error("options.end > entry.compressedSize");
-          if (relativeEnd < relativeStart) throw new Error("options.end < options.start");
-        }
-      }
-      var rawMode = options2.decodeFileData === false || // Explicitly requested raw.
-      (entry.compressionMethod === 0 || // Naturally without compression.
-      entry.compressionMethod === 8 && options2.decompress === false) && (!entry.isEncrypted() || // Naturally without encryption.
-      options2.decrypt === false);
-      if (options2.start != null || options2.end != null) {
-        if (!rawMode) throw new Error("start/end range require options.decodeFileData === false for non-trivial encoded entries.");
-      }
-      if (!self.isOpen) return callback(new Error("closed"));
-      if (entry.isEncrypted() && !rawMode) {
-        if (options2.decrypt !== false) return callback(new Error("entry is encrypted, and options.decodeFileData !== false"));
-      }
-      var decompress;
-      if (rawMode) {
-        decompress = false;
-      } else if (entry.compressionMethod === 8) {
-        decompress = options2.decodeFileData !== true;
-      } else {
-        return callback(new Error("unsupported compression method: " + entry.compressionMethod));
-      }
-      self.readLocalFileHeader(entry, { minimal: true }, function(err, localFileHeader) {
-        if (err) return callback(err);
-        self.openReadStreamLowLevel(
-          localFileHeader.fileDataStart,
-          entry.compressedSize,
-          relativeStart,
-          relativeEnd,
-          decompress,
-          entry.uncompressedSize,
-          callback
-        );
-      });
-    };
-    ZipFile.prototype.openReadStreamLowLevel = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, callback) {
-      var self = this;
-      var fileDataEnd = fileDataStart + compressedSize;
-      var readStream = self.reader.createReadStream({
-        start: fileDataStart + relativeStart,
-        end: fileDataStart + relativeEnd
-      });
-      var endpointStream = readStream;
-      if (decompress) {
-        var destroyed = false;
-        var inflateFilter = zlib.createInflateRaw();
-        readStream.on("error", function(err) {
-          setImmediate(function() {
-            if (!destroyed) inflateFilter.emit("error", err);
-          });
-        });
-        readStream.pipe(inflateFilter);
-        if (self.validateEntrySizes) {
-          endpointStream = new AssertByteCountStream(uncompressedSize);
-          inflateFilter.on("error", function(err) {
-            setImmediate(function() {
-              if (!destroyed) endpointStream.emit("error", err);
-            });
-          });
-          inflateFilter.pipe(endpointStream);
-        } else {
-          endpointStream = inflateFilter;
-        }
-        installDestroyFn(endpointStream, function() {
-          destroyed = true;
-          if (inflateFilter !== endpointStream) inflateFilter.unpipe(endpointStream);
-          readStream.unpipe(inflateFilter);
-          readStream.destroy();
-        });
-      }
-      callback(null, endpointStream);
-    };
-    ZipFile.prototype.readLocalFileHeader = function(entry, options2, callback) {
-      var self = this;
-      if (callback == null) {
-        callback = options2;
-        options2 = null;
-      }
-      if (options2 == null) options2 = {};
-      self.reader.ref();
-      var buffer = newBuffer(30);
-      readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader, function(err) {
-        try {
-          if (err) return callback(err);
-          var signature = buffer.readUInt32LE(0);
-          if (signature !== 67324752) {
-            return callback(new Error("invalid local file header signature: 0x" + signature.toString(16)));
-          }
-          var fileNameLength = buffer.readUInt16LE(26);
-          var extraFieldLength = buffer.readUInt16LE(28);
-          var fileDataStart = entry.relativeOffsetOfLocalHeader + 30 + fileNameLength + extraFieldLength;
-          if (fileDataStart + entry.compressedSize > self.fileSize) {
-            return callback(new Error("file data overflows file bounds: " + fileDataStart + " + " + entry.compressedSize + " > " + self.fileSize));
-          }
-          if (options2.minimal) {
-            return callback(null, { fileDataStart });
-          }
-          var localFileHeader = new LocalFileHeader();
-          localFileHeader.fileDataStart = fileDataStart;
-          localFileHeader.versionNeededToExtract = buffer.readUInt16LE(4);
-          localFileHeader.generalPurposeBitFlag = buffer.readUInt16LE(6);
-          localFileHeader.compressionMethod = buffer.readUInt16LE(8);
-          localFileHeader.lastModFileTime = buffer.readUInt16LE(10);
-          localFileHeader.lastModFileDate = buffer.readUInt16LE(12);
-          localFileHeader.crc32 = buffer.readUInt32LE(14);
-          localFileHeader.compressedSize = buffer.readUInt32LE(18);
-          localFileHeader.uncompressedSize = buffer.readUInt32LE(22);
-          localFileHeader.fileNameLength = fileNameLength;
-          localFileHeader.extraFieldLength = extraFieldLength;
-          buffer = newBuffer(fileNameLength + extraFieldLength);
-          self.reader.ref();
-          readAndAssertNoEof(self.reader, buffer, 0, buffer.length, entry.relativeOffsetOfLocalHeader + 30, function(err2) {
-            try {
-              if (err2) return callback(err2);
-              localFileHeader.fileName = buffer.subarray(0, fileNameLength);
-              localFileHeader.extraField = buffer.subarray(fileNameLength);
-              return callback(null, localFileHeader);
-            } finally {
-              self.reader.unref();
-            }
-          });
-        } finally {
-          self.reader.unref();
-        }
-      });
-    };
-    ZipFile.prototype.openReadStreamPromise = function(entry, options2) {
-      return new Promise((resolve4, reject) => {
-        this.openReadStream(entry, options2, function(err, readStream) {
-          if (err) return reject(err);
-          resolve4(readStream);
-        });
-      });
-    };
-    ZipFile.prototype.openReadStreamLowLevelPromise = function(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize) {
-      return new Promise((resolve4, reject) => {
-        this.openReadStream(fileDataStart, compressedSize, relativeStart, relativeEnd, decompress, uncompressedSize, function(err, readStream) {
-          if (err) return reject(err);
-          resolve4(readStream);
-        });
-      });
-    };
-    ZipFile.prototype.readLocalFileHeaderPromise = function(entry, options2) {
-      return new Promise((resolve4, reject) => {
-        this.readLocalFileHeader(entry, options2, function(err, localFileHeader) {
-          if (err) return reject(err);
-          resolve4(localFileHeader);
-        });
-      });
-    };
-    function Entry() {
-    }
-    Entry.prototype.getLastModDate = function(options2) {
-      if (options2 == null) options2 = {};
-      if (!options2.forceDosFormat) {
-        for (var i = 0; i < this.extraFields.length; i++) {
-          var extraField = this.extraFields[i];
-          if (extraField.id === 21589) {
-            var data = extraField.data;
-            if (data.length < 5) continue;
-            var flags = data[0];
-            var HAS_MTIME = 1;
-            if (!(flags & HAS_MTIME)) continue;
-            var posixTimestamp = data.readInt32LE(1);
-            return new Date(posixTimestamp * 1e3);
-          } else if (extraField.id === 10) {
-            var data = extraField.data;
-            if (data.length !== 32) continue;
-            if (data.readUInt16LE(4) !== 1) continue;
-            if (data.readUInt16LE(6) !== 24) continue;
-            var hundredNanoSecondsSince1601 = data.readUInt32LE(8) + 4294967296 * data.readInt32LE(12);
-            var millisecondsSince1970 = hundredNanoSecondsSince1601 / 1e4 - 116444736e5;
-            return new Date(millisecondsSince1970);
-          }
-        }
-      }
-      return dosDateTimeToDate(this.lastModFileDate, this.lastModFileTime, options2.timezone);
-    };
-    Entry.prototype.canDecodeFileData = function() {
-      return !this.isEncrypted() && (this.compressionMethod === 0 || this.compressionMethod === 8);
-    };
-    Entry.prototype.isEncrypted = function() {
-      return (this.generalPurposeBitFlag & 1) !== 0;
-    };
-    Entry.prototype.isCompressed = function() {
-      return this.compressionMethod === 8;
-    };
-    function LocalFileHeader() {
-    }
-    function dosDateTimeToDate(date, time, timezone) {
-      var day = date & 31;
-      var month = (date >> 5 & 15) - 1;
-      var year = (date >> 9 & 127) + 1980;
-      var millisecond = 0;
-      var second = (time & 31) * 2;
-      var minute = time >> 5 & 63;
-      var hour = time >> 11 & 31;
-      if (timezone == null || timezone === "local") {
-        return new Date(year, month, day, hour, minute, second, millisecond);
-      } else if (timezone === "UTC") {
-        return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond));
-      } else {
-        throw new Error("unrecognized options.timezone: " + options.timezone);
-      }
-    }
-    function getFileNameLowLevel(generalPurposeBitFlag, fileNameBuffer, extraFields, strictFileNames) {
-      var fileName = null;
-      for (var i = 0; i < extraFields.length; i++) {
-        var extraField = extraFields[i];
-        if (extraField.id === 28789) {
-          if (extraField.data.length < 6) {
-            continue;
-          }
-          if (extraField.data.readUInt8(0) !== 1) {
-            continue;
-          }
-          var oldNameCrc32 = extraField.data.readUInt32LE(1);
-          if (crc32(fileNameBuffer) !== oldNameCrc32) {
-            continue;
-          }
-          fileName = decodeBuffer(extraField.data.subarray(5), true);
-          break;
-        }
-      }
-      if (fileName == null) {
-        var isUtf8 = (generalPurposeBitFlag & 2048) !== 0;
-        fileName = decodeBuffer(fileNameBuffer, isUtf8);
-      }
-      if (!strictFileNames) {
-        fileName = fileName.replace(/\\/g, "/");
-      }
-      return fileName;
-    }
-    function validateFileName(fileName) {
-      if (fileName.indexOf("\\") !== -1) {
-        return "invalid characters in fileName: " + fileName;
-      }
-      if (/^[a-zA-Z]:/.test(fileName) || /^\//.test(fileName)) {
-        return "absolute path: " + fileName;
-      }
-      if (fileName.split("/").indexOf("..") !== -1) {
-        return "invalid relative path: " + fileName;
-      }
-      return null;
-    }
-    function parseExtraFields(extraFieldBuffer) {
-      var extraFields = [];
-      var i = 0;
-      while (i < extraFieldBuffer.length - 3) {
-        var headerId = extraFieldBuffer.readUInt16LE(i + 0);
-        var dataSize = extraFieldBuffer.readUInt16LE(i + 2);
-        var dataStart = i + 4;
-        var dataEnd = dataStart + dataSize;
-        if (dataEnd > extraFieldBuffer.length) throw new Error("extra field length exceeds extra field buffer size");
-        var dataBuffer = extraFieldBuffer.subarray(dataStart, dataEnd);
-        extraFields.push({
-          id: headerId,
-          data: dataBuffer
-        });
-        i = dataEnd;
-      }
-      return extraFields;
-    }
-    function readAndAssertNoEof(reader, buffer, offset, length, position, callback) {
-      if (length === 0) {
-        return setImmediate(function() {
-          callback(null, newBuffer(0));
-        });
-      }
-      reader.read(buffer, offset, length, position, function(err, bytesRead) {
-        if (err) return callback(err);
-        if (bytesRead < length) {
-          return callback(new Error("unexpected EOF"));
-        }
-        callback();
-      });
-    }
-    util.inherits(AssertByteCountStream, Transform3);
-    function AssertByteCountStream(byteCount) {
-      Transform3.call(this);
-      this.actualByteCount = 0;
-      this.expectedByteCount = byteCount;
-    }
-    AssertByteCountStream.prototype._transform = function(chunk, encoding, cb) {
-      this.actualByteCount += chunk.length;
-      if (this.actualByteCount > this.expectedByteCount) {
-        var msg = "too many bytes in the stream. expected " + this.expectedByteCount + ". got at least " + this.actualByteCount;
-        return cb(new Error(msg));
-      }
-      cb(null, chunk);
-    };
-    AssertByteCountStream.prototype._flush = function(cb) {
-      if (this.actualByteCount < this.expectedByteCount) {
-        var msg = "not enough bytes in the stream. expected " + this.expectedByteCount + ". got only " + this.actualByteCount;
-        return cb(new Error(msg));
-      }
-      cb();
-    };
-    util.inherits(RandomAccessReader, EventEmitter);
-    function RandomAccessReader() {
-      EventEmitter.call(this);
-      this.refCount = 0;
-    }
-    RandomAccessReader.prototype.ref = function() {
-      this.refCount += 1;
-    };
-    RandomAccessReader.prototype.unref = function() {
-      var self = this;
-      self.refCount -= 1;
-      if (self.refCount > 0) return;
-      if (self.refCount < 0) throw new Error("invalid unref");
-      self.close(onCloseDone);
-      function onCloseDone(err) {
-        if (err) return self.emit("error", err);
-        self.emit("close");
-      }
-    };
-    RandomAccessReader.prototype.createReadStream = function(options2) {
-      if (options2 == null) options2 = {};
-      var start = options2.start;
-      var end = options2.end;
-      if (start === end) {
-        var emptyStream = new PassThrough();
-        setImmediate(function() {
-          emptyStream.end();
-        });
-        return emptyStream;
-      }
-      var stream = this._readStreamForRange(start, end);
-      var destroyed = false;
-      var refUnrefFilter = new RefUnrefFilter(this);
-      stream.on("error", function(err) {
-        setImmediate(function() {
-          if (!destroyed) refUnrefFilter.emit("error", err);
-        });
-      });
-      installDestroyFn(refUnrefFilter, function() {
-        stream.unpipe(refUnrefFilter);
-        refUnrefFilter.unref();
-        stream.destroy();
-      });
-      var byteCounter = new AssertByteCountStream(end - start);
-      refUnrefFilter.on("error", function(err) {
-        setImmediate(function() {
-          if (!destroyed) byteCounter.emit("error", err);
-        });
-      });
-      installDestroyFn(byteCounter, function() {
-        destroyed = true;
-        refUnrefFilter.unpipe(byteCounter);
-        refUnrefFilter.destroy();
-      });
-      return stream.pipe(refUnrefFilter).pipe(byteCounter);
-    };
-    RandomAccessReader.prototype._readStreamForRange = function(start, end) {
-      throw new Error("not implemented");
-    };
-    RandomAccessReader.prototype.read = function(buffer, offset, length, position, callback) {
-      var readStream = this.createReadStream({ start: position, end: position + length });
-      var writeStream = new Writable();
-      var written = 0;
-      writeStream._write = function(chunk, encoding, cb) {
-        chunk.copy(buffer, offset + written, 0, chunk.length);
-        written += chunk.length;
-        cb();
-      };
-      writeStream.on("finish", callback);
-      readStream.on("error", function(error) {
-        callback(error);
-      });
-      readStream.pipe(writeStream);
-    };
-    RandomAccessReader.prototype.close = function(callback) {
-      setImmediate(callback);
-    };
-    util.inherits(RefUnrefFilter, PassThrough);
-    function RefUnrefFilter(context) {
-      PassThrough.call(this);
-      this.context = context;
-      this.context.ref();
-      this.unreffedYet = false;
-    }
-    RefUnrefFilter.prototype._flush = function(cb) {
-      this.unref();
-      cb();
-    };
-    RefUnrefFilter.prototype.unref = function(cb) {
-      if (this.unreffedYet) return;
-      this.unreffedYet = true;
-      this.context.unref();
-    };
-    var cp437 = "\0\u263A\u263B\u2665\u2666\u2663\u2660\u2022\u25D8\u25CB\u25D9\u2642\u2640\u266A\u266B\u263C\u25BA\u25C4\u2195\u203C\xB6\xA7\u25AC\u21A8\u2191\u2193\u2192\u2190\u221F\u2194\u25B2\u25BC !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2302\xC7\xFC\xE9\xE2\xE4\xE0\xE5\xE7\xEA\xEB\xE8\xEF\xEE\xEC\xC4\xC5\xC9\xE6\xC6\xF4\xF6\xF2\xFB\xF9\xFF\xD6\xDC\xA2\xA3\xA5\u20A7\u0192\xE1\xED\xF3\xFA\xF1\xD1\xAA\xBA\xBF\u2310\xAC\xBD\xBC\xA1\xAB\xBB\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255D\u255C\u255B\u2510\u2514\u2534\u252C\u251C\u2500\u253C\u255E\u255F\u255A\u2554\u2569\u2566\u2560\u2550\u256C\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256B\u256A\u2518\u250C\u2588\u2584\u258C\u2590\u2580\u03B1\xDF\u0393\u03C0\u03A3\u03C3\xB5\u03C4\u03A6\u0398\u03A9\u03B4\u221E\u03C6\u03B5\u2229\u2261\xB1\u2265\u2264\u2320\u2321\xF7\u2248\xB0\u2219\xB7\u221A\u207F\xB2\u25A0\xA0";
-    function decodeBuffer(buffer, isUtf8) {
-      if (isUtf8) {
-        return buffer.toString("utf8");
-      } else {
-        var result = "";
-        for (var i = 0; i < buffer.length; i++) {
-          result += cp437[buffer[i]];
-        }
-        return result;
-      }
-    }
-    function readUInt64LE(buffer, offset) {
-      var lower32 = buffer.readUInt32LE(offset);
-      var upper32 = buffer.readUInt32LE(offset + 4);
-      return upper32 * 4294967296 + lower32;
-    }
-    var newBuffer;
-    if (typeof Buffer.allocUnsafe === "function") {
-      newBuffer = function(len) {
-        return Buffer.allocUnsafe(len);
-      };
-    } else {
-      newBuffer = function(len) {
-        return new Buffer(len);
-      };
-    }
-    function installDestroyFn(stream, fn) {
-      if (typeof stream.destroy === "function") {
-        stream._destroy = function(err, cb) {
-          fn();
-          if (cb != null) cb(err);
-        };
-      } else {
-        stream.destroy = fn;
-      }
-    }
-    function defaultCallback(err) {
-      if (err) throw err;
-    }
   }
 });
 
@@ -9414,6 +9414,7 @@ var OPTION_DEFINITIONS = [
   { name: "all", flags: "--all" },
   { name: "internal", flags: "--internal" },
   { name: "tippable", flags: "--tippable" },
+  { name: "check", flags: "--check" },
   { name: "force", flags: "--force" },
   { name: "open", flags: "--open" },
   { name: "customer-id", flags: "--customer-id <id>" },
@@ -9647,8 +9648,8 @@ async function openBrowserHandoff(options2) {
   let completionSettled = false;
   let resolveCompletion = () => {
   };
-  const completion = new Promise((resolve4) => {
-    resolveCompletion = resolve4;
+  const completion = new Promise((resolve6) => {
+    resolveCompletion = resolve6;
   });
   const settle = async (status) => {
     if (completionSettled) {
@@ -9748,18 +9749,18 @@ async function openBrowserHandoff(options2) {
         return_path: target.returnPath
       }
     });
-    const createResult = parseCreateResponse(created, target.portalOrigin);
+    const createResult2 = parseCreateResponse(created, target.portalOrigin);
     pending = {
-      handoffId: createResult.handoffId,
+      handoffId: createResult2.handoffId,
       verifier,
       loopbackState,
       fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
-      completeUrl: createResult.completeUrl
+      completeUrl: createResult2.completeUrl
     };
     timeoutHandle = clock.setTimeout(() => {
       void settle("timeout");
-    }, createResult.expiresIn * 1e3);
-    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult.browserUrl);
+    }, createResult2.expiresIn * 1e3);
+    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult2.browserUrl);
     if (browserLaunch.status !== "launched") {
       await settle("direct_fallback");
       const fallbackLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
@@ -9777,14 +9778,14 @@ async function bindRandomLoopback(handler) {
   server.on("clientError", (_error, socket) => {
     socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
   });
-  await new Promise((resolve4, reject) => {
+  await new Promise((resolve6, reject) => {
     const onError = (error) => {
       server.off("listening", onListening);
       reject(error);
     };
     const onListening = () => {
       server.off("error", onError);
-      resolve4();
+      resolve6();
     };
     server.once("error", onError);
     server.once("listening", onListening);
@@ -9814,8 +9815,8 @@ async function bindRandomLoopback(handler) {
     if (!server.listening) {
       return;
     }
-    await new Promise((resolve4) => {
-      server.close(() => resolve4());
+    await new Promise((resolve6) => {
+      server.close(() => resolve6());
       server.closeIdleConnections();
       server.closeAllConnections();
     });
@@ -9963,8 +9964,8 @@ async function sendRedirect(response, location) {
   if (response.destroyed || response.writableEnded) {
     return;
   }
-  await new Promise((resolve4) => {
-    const complete = () => resolve4();
+  await new Promise((resolve6) => {
+    const complete = () => resolve6();
     response.once("finish", complete);
     response.once("close", complete);
     response.once("error", complete);
@@ -10032,7 +10033,7 @@ function isRecord(value) {
 
 // dist/command-branding.js
 var MAIN_EXECUTABLE_NAME = "clink";
-var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|ucp-merchant|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|ucp-merchant|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
 function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
   if (executableName === MAIN_EXECUTABLE_NAME) {
     return value;
@@ -10564,7 +10565,7 @@ async function removeStaleConfigLock() {
   }
 }
 function sleep(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
+  return new Promise((resolve6) => setTimeout(resolve6, ms));
 }
 function compactDefined(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
@@ -10617,7 +10618,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.31";
+var CLI_VERSION = "0.2.32";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -10725,13 +10726,13 @@ function optionalMetadata(read, maxLength) {
   }
 }
 function execute(filePath, args) {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve6, reject) => {
     execFile(filePath, args, { encoding: "utf8", windowsHide: true }, (error, stdout) => {
       if (error) {
         reject(error);
         return;
       }
-      resolve4(stdout);
+      resolve6(stdout);
     });
   });
 }
@@ -11062,9 +11063,9 @@ function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, 
   }
   return url.toString();
 }
-function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.write(`${message}
+function maybeOpenBrowser(open9, url, onFailure = (message) => process.stderr.write(`${message}
 `)) {
-  if (!open5) {
+  if (!open9) {
     return;
   }
   let failureReported = false;
@@ -11095,8 +11096,8 @@ function maybeOpenBrowser(open5, url, onFailure = (message) => process.stderr.wr
 function resolveBrowserOpenCommand(platform, url, env = process.env) {
   return resolveBrowserOpenCommands(platform, url, env)[0];
 }
-async function openBrowserWithResult(open5, url, options2 = {}) {
-  if (!open5) {
+async function openBrowserWithResult(open9, url, options2 = {}) {
+  if (!open9) {
     return {
       requested: false,
       status: "not_requested",
@@ -11158,14 +11159,14 @@ async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAN
     stdio: "ignore",
     windowsHide: true
   });
-  const outcome = new Promise((resolve4) => {
+  const outcome = new Promise((resolve6) => {
     let reported = false;
     const report = (result2) => {
       if (reported) {
         return;
       }
       reported = true;
-      resolve4(result2);
+      resolve6(result2);
     };
     child.once("error", (error) => report({ type: "error", error }));
     child.once("exit", (code, signal) => report({ type: "exit", code, signal }));
@@ -11175,8 +11176,8 @@ async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAN
     try {
       return await Promise.race([
         outcome,
-        new Promise((resolve4) => {
-          timeout = setTimeout(resolve4, waitMs, null);
+        new Promise((resolve6) => {
+          timeout = setTimeout(resolve6, waitMs, null);
         })
       ]);
     } finally {
@@ -11366,7 +11367,7 @@ function eventMatchesInstruction(event, instructionId) {
   ]);
   return event.eventType === "purchase_instruction.activated" && expectedInstructionId !== void 0 && candidate === expectedInstructionId;
 }
-var realSleep = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+var realSleep = (ms) => new Promise((resolve6) => setTimeout(resolve6, ms));
 var stderrLog = (message) => {
   process.stderr.write(`\u2022 ${message}
 `);
@@ -12260,10 +12261,12 @@ Usage:
   clink <command> [subcommand] [options]
 
 Commands:
+  install           Install the latest npm CLI, then synchronize the official payment Skill
+  update            Check or update the npm CLI, then synchronize the official payment Skill
   wallet            Initialize wallet and inspect local wallet status
   card              Generate card links and manage payment methods
   risk              Inspect or open risk rule settings
-  skills            Discover, install, and tip skills
+  skills            Discover, install, and tip skills; synchronize the official Skill
   pay               Charge a payment instrument
   refund            Create refund and query refund status
   ucp-checkout      Manage UCP checkout sessions for shadow merchants
@@ -12312,6 +12315,10 @@ Event Watching:
   (see 'clink events --help').
 
 Examples:
+  npx @clink-ai/clink-cli@latest install
+  clink update
+  clink update --check --format pretty
+  clink skills sync --force
   clink wallet init --email alice@example.com
   clink wallet init --sandbox --email alice@example.com
   clink wallet init --test --email alice@example.com
@@ -12331,6 +12338,8 @@ Examples:
   clink refund create --order-id order_xxx
 
 More Help:
+  clink install --help
+  clink update --help
   clink wallet --help
   clink card --help
   clink skills --help
@@ -12345,21 +12354,96 @@ More Help:
   clink tool --help
   clink config --help
 `;
+var INSTALL_HELP = `clink install
+
+Install the latest npm CLI globally, then synchronize the official agentic-payment-skills package.
+
+Usage:
+  npx @clink-ai/clink-cli@latest install [options]
+
+Options:
+  --force                     Replace a conflicting unmanaged official Skill installation
+  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Runs an argv-based npm global install without a command shell, then synchronizes the official
+  payment Skill at ~/.agents/skills/agentic-payment-skills. This is an explicit setup command.
+  npm postinstall does not download Skills, and ordinary wallet/payment commands never perform
+  Skill synchronization.
+  Self-install is supported only by the npm distribution. A vendored CLI reports a clear error.
+  If npm succeeds but Skill synchronization fails, the error reports a partial result and the
+  previously active Skill release remains in place.
+
+Example:
+  npx @clink-ai/clink-cli@latest install --format pretty
+`;
+var UPDATE_HELP = `clink update
+
+Check or update the npm CLI, then synchronize the official agentic-payment-skills package.
+
+Usage:
+  clink update [options]
+
+Options:
+  --check                     Check without modifying installed CLI or Skill state
+  --force                     Reinstall the latest CLI and replace a conflicting unmanaged Skill
+  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Queries the npm latest tag. A newer version is installed globally without a command shell; an
+  already-current CLI skips npm installation but still synchronizes the Skill. --check does not
+  modify installed CLI or Skill state and reports action=checked plus the Skill plannedAction.
+  Self-update is supported only by the npm distribution.
+
+Examples:
+  clink update
+  clink update --check --format pretty
+  clink update --force
+`;
 var SKILLS_HELP = `clink skills
 
 Usage:
-  clink skills <list|install|tip> [options]
+  clink skills <list|install|sync|tip> [options]
 
 Actions:
   list              List all public skills in reversed NEW order with one-based Number fields
   install           Download and install a skill package into local agent skill directories
+  sync              Synchronize the official agentic-payment-skills package without updating CLI
   tip               Tip a skill publisher using the refreshed default payment method
 
 Examples:
   clink skills list --all --format pretty
   clink skills install clinkpay/PollyReach@v1.0.0
   clink skills install clinkpay/PollyReach --force
+  clink skills sync --force
   clink skills tip --publisher clinkpay --name PollyReach --amount 2
+`;
+var SKILLS_SYNC_HELP = `clink skills sync
+
+Synchronize the official agentic-payment-skills package without updating the CLI.
+
+Usage:
+  clink skills sync [options]
+
+Options:
+  --check                     Check without modifying installed Skill state
+  --force                     Replace a conflicting unmanaged official Skill installation
+  --timeout <ms>              Source download timeout in milliseconds
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Uses GitHub as the primary source and the Clink-hosted ZIP as its availability fallback. The
+  validated package is published at ~/.agents/skills/agentic-payment-skills using the managed
+  release transaction.
+  This is the recovery entry point when CLI installation already succeeded but Skill sync did not.
+  --check reports action=checked and exposes the would-be install action as plannedAction.
+
+Examples:
+  clink skills sync
+  clink skills sync --check --format pretty
+  clink skills sync --force
 `;
 var SKILLS_LIST_HELP = `clink skills list
 
@@ -14091,12 +14175,18 @@ function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_E
 }
 function getRawHelpText(command, subcommand, nestedCommand) {
   switch (command) {
+    case "install":
+      return INSTALL_HELP;
+    case "update":
+      return UPDATE_HELP;
     case "skills":
       switch (subcommand) {
         case "list":
           return SKILLS_LIST_HELP;
         case "install":
           return SKILLS_INSTALL_HELP;
+        case "sync":
+          return SKILLS_SYNC_HELP;
         case "tip":
           return SKILLS_TIP_HELP;
         default:
@@ -14633,8 +14723,8 @@ async function waitForMerchantListRetry(deadline) {
   if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
     return false;
   }
-  await new Promise((resolve4) => {
-    setTimeout(resolve4, MERCHANT_LIST_RETRY_DELAY_MS);
+  await new Promise((resolve6) => {
+    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
   });
   return Date.now() < deadline;
 }
@@ -15246,7 +15336,7 @@ function isDryRun2(value) {
   return "dryRun" in value;
 }
 function sleep2(ms) {
-  return new Promise((resolve4) => setTimeout(resolve4, ms));
+  return new Promise((resolve6) => setTimeout(resolve6, ms));
 }
 function mergeOAuthLoginConfig(current, options2) {
   if (options2.authorization.customerId !== options2.customerId) {
@@ -15312,557 +15402,25 @@ function renderHumanError(message, helpHint) {
 `;
 }
 
-// dist/payment/amount.js
-function parseAmount(value) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw validationError("amount must be a positive number");
-  }
-  return amount;
-}
+// dist/self-update.js
+import { execFile as execFile2 } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp as mkdtemp2, readFile as readFile4, rm as rm8 } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname5, isAbsolute as isAbsolute4, join as join7, parse, resolve as resolve5, sep as sep5 } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// dist/payment/authorization-api.js
-var INSTRUCTION_PATH = "/agent/cwallet/instructions";
-function createTipAuthorizationApi(input, overrides = {}) {
-  const dependencies = {
-    requestJson: overrides.requestJson ?? requestJson,
-    updateStoredConfig: overrides.updateStoredConfig ?? updateStoredConfig,
-    collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
-    ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
-  };
-  const getRuntimeConfig = input.getRuntimeConfig ?? (() => input.runtimeConfig);
-  const resolveStoredRuntimeConfig = input.resolveStoredRuntimeConfig ?? storedRuntimeConfig;
-  const requestRuntime = {
-    getRuntimeConfig,
-    ...input.getRuntimeConfig ? { reloadRuntimeConfig: input.getRuntimeConfig } : {},
-    ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {}
-  };
-  const refreshPaymentMethods = async () => {
-    let requestedIdentity = { type: "none" };
-    const binding = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => {
-      requestedIdentity = runtimeAuthorizationIdentity(runtimeConfig);
-      return {
-        baseUrl: runtimeConfig.baseUrl,
-        method: "POST",
-        path: "/agent/cwallet/card/bindingLink",
-        headers: buildCustomerHeaders(runtimeConfig),
-        body: {
-          customerId: runtimeConfig.customerId,
-          hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
-        },
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      };
-    }, dependencies.requestJson);
-    const data = unwrapResponse(binding, "invalid card binding response");
-    const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
-    const storedPaymentMethods = paymentMethods.map((method) => ({ ...method }));
-    const nextConfig = await dependencies.updateStoredConfig((current) => {
-      const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
-      if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
-        throw authError("Authentication changed while payment methods were refreshing; retry the command.");
-      }
-      current.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
-      return current;
-    });
-    input.storedConfig.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
-    input.setStoredConfig?.(nextConfig);
-    return paymentMethods;
-  };
-  return {
-    refreshPaymentMethods,
-    refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
-    listInstructions: async (paymentInstrumentId) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
-        baseUrl: runtimeConfig.baseUrl,
-        method: "GET",
-        path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(runtimeConfig),
-        query: { status: "ACTIVE", paymentInstrumentId },
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      return unwrapResponse(result, "invalid instruction list response");
-    },
-    createInstruction: async (draft) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
-        baseUrl: runtimeConfig2.baseUrl,
-        method: "POST",
-        path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(runtimeConfig2),
-        body: draft,
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      const data = unwrapResponse(result, "invalid instruction create response");
-      const instructionId = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
-      if (!instructionId) {
-        throw apiError("missing instructionId in instruction create response", 502);
-      }
-      const runtimeConfig = await getRuntimeConfig();
-      return {
-        instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId, runtimeConfig.email)
-      };
-    },
-    waitForActivation: async (instructionId) => {
-      const collected = await dependencies.collectWebhookEvents({
-        runtimeConfig: await getRuntimeConfig(),
-        getRuntimeConfig,
-        resolveStoredRuntimeConfig,
-        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
-        timeoutMs: input.timeoutMs,
-        type: "purchase_instruction.activated",
-        ack: false
-      });
-      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
-      if (matches.length === 0) {
-        return { activated: false };
-      }
-      const eventIds = matches.map((event) => event.eventId).filter(Boolean);
-      const ackRuntimeConfig = await getRuntimeConfig();
-      await dependencies.ackWebhookEvents({
-        runtimeConfig: ackRuntimeConfig,
-        getRuntimeConfig,
-        expectedIdentity: runtimeAuthorizationIdentity(ackRuntimeConfig),
-        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
-        timeoutMs: input.timeoutMs
-      }, eventIds);
-      return { activated: true };
-    },
-    getInstruction: async (instructionId) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
-        baseUrl: runtimeConfig.baseUrl,
-        method: "GET",
-        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
-        headers: buildInstructionHeaders(runtimeConfig),
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      return unwrapResponse(result, "invalid instruction response");
-    },
-    now: input.now,
-    watch: input.watch,
-    onPasskeyUrl: input.onPasskeyUrl
-  };
-}
-function unwrapResponse(result, invalidMessage) {
-  if ("dryRun" in result) {
-    throw apiError(invalidMessage, 502);
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  if (!isRecord5(data)) {
-    throw apiError(invalidMessage, 502);
-  }
-  return data;
-}
-function normalizePaymentMethods(value) {
-  if (!Array.isArray(value)) {
-    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
-  }
-  if (!value.every((item) => isRecord5(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
-    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
-  }
-  return value.map((item) => ({ ...item }));
-}
-function optionalString2(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function isRecord5(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/payment/post-payment-refresh.js
-var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
-async function executePaymentRequestWithRefresh(input) {
-  if (input.dryRun) {
-    return { result: await input.request() };
-  }
-  let result;
-  try {
-    result = await input.request();
-  } catch (error) {
-    await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
-    throw error;
-  }
-  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
-  return {
-    result,
-    ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
-  };
-}
-function addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) {
-  return paymentMethodsRefreshWarning ? { ...data, paymentMethodsRefreshWarning } : data;
-}
-async function refreshPaymentMethodsBestEffort(refreshPaymentMethods) {
-  try {
-    await refreshPaymentMethods();
-    return void 0;
-  } catch (error) {
-    return `${PAYMENT_METHODS_REFRESH_WARNING_PREFIX}: ${errorMessage(error)}`;
-  }
-}
-function errorMessage(error) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-  return String(error);
-}
-
-// dist/payment/charge.js
-function buildChargeBody(input) {
-  const authorization = input.authorization;
-  const aiAgentInstructionBo = compact({
-    instructionId: authorization?.instructionId,
-    mandateId: authorization?.mandateId,
-    shippingAddressJson: input.shippingAddress === void 0 ? void 0 : JSON.stringify(input.shippingAddress),
-    merchantInfo: { merchantCategoryCode: "5999" },
-    products: input.products
-  });
-  const shared = compact({
-    paymentInstrumentId: input.paymentInstrumentId,
-    paymentMethodType: input.paymentMethodType,
-    instruction_id: authorization?.instructionId,
-    mandate_id: authorization?.mandateId,
-    shippingaddress: input.shippingAddress,
-    aiAgentInstructionBo,
-    purchaseInstructionId: authorization?.legacyInstructionId
-  });
-  return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
-    ...shared,
-    merchantId: input.merchantId,
-    ...input.customerPointsAmount === void 0 ? {} : { customerPointsAmount: input.customerPointsAmount },
-    customAmount: input.amount,
-    paymentCurrency: input.currency
-  };
-}
-function classifyChargeData(data) {
-  const channel = isRecord6(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord6(channel.action) ? channel.action : {};
-  const walletAction = isRecord6(action.walletHandleRedirectOrDisplayQrCode) ? action.walletHandleRedirectOrDisplayQrCode : {};
-  const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
-  const status = finiteNumber2(channel.status);
-  const imageUrlPng = typeof walletAction.imageUrlPng === "string" && walletAction.imageUrlPng.length > 0 ? walletAction.imageUrlPng : void 0;
-  const qrCodeContent = typeof walletAction.qrCodeContent === "string" && walletAction.qrCodeContent.trim().length > 0 ? walletAction.qrCodeContent : void 0;
-  const qrCode = status === 5 && imageUrlPng ? {
-    dataUrl: imageUrlPng,
-    ...qrCodeContent ? { content: qrCodeContent } : {},
-    orderId: nonEmptyString2(data.orderId),
-    paymentExecutionDetailId: nonEmptyString2(channel.paymentExecutionDetailId) ?? nonEmptyString2(isRecord6(channel.processingDetail) ? channel.processingDetail.paymentExecutionDetailId : void 0),
-    expiresAt: nonNegativeInteger(walletAction.expiresAt),
-    expiresSecond: nonNegativeInteger(walletAction.expiresSecond)
-  } : void 0;
-  return {
-    status,
-    requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
-    ...redirectUrl ? { redirectUrl } : {},
-    ...qrCode ? { qrCode } : {}
-  };
-}
-async function executeCharge(input, runtime) {
-  const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestJsonWithOAuthRetry({
-      getRuntimeConfig: runtime.getRuntimeConfig ?? (() => runtime.runtimeConfig),
-      ...runtime.getRuntimeConfig ? { reloadRuntimeConfig: runtime.getRuntimeConfig } : {},
-      ...runtime.refreshRuntimeConfig ? { refreshRuntimeConfig: runtime.refreshRuntimeConfig } : {}
-    }, (runtimeConfig) => ({
-      baseUrl: runtimeConfig.baseUrl,
-      method: "POST",
-      path: "/agent/order/charge",
-      headers: buildCustomerHeaders(runtimeConfig),
-      body: buildChargeBody(input),
-      timeoutMs: runtime.timeoutMs,
-      dryRun: runtime.dryRun
-    })),
-    refreshPaymentMethods: runtime.refreshPaymentMethods,
-    dryRun: runtime.dryRun
-  });
-  const result = refreshed.result;
-  if ("dryRun" in result) {
-    return { dryRun: true, request: result };
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  return {
-    dryRun: false,
-    data,
-    ...classifyChargeData(data),
-    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
-  };
-}
-function isRecord6(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function finiteNumber2(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return void 0;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function nonNegativeInteger(value) {
-  const parsed = finiteNumber2(value);
-  return parsed !== void 0 && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-function nonEmptyString2(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim();
-  return normalized || null;
-}
-function compact(value) {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
-}
-
-// dist/payment/method-selection.js
-var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
-var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
-function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
-  return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
-}
-function allowsMissingPaymentInstrument(paymentMethodType) {
-  return OPTIONAL_PAYMENT_INSTRUMENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
-}
-function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
-  const normalizedType = normalizePaymentMethodType(paymentMethodType);
-  const candidates = /* @__PURE__ */ new Map();
-  if (Array.isArray(paymentMethods)) {
-    for (const item of paymentMethods) {
-      if (!isRecord7(item) || paymentMethodTypeOf(item) !== normalizedType) {
-        continue;
-      }
-      const paymentInstrumentId = nonEmptyString3(item.paymentInstrumentId);
-      if (!paymentInstrumentId) {
-        continue;
-      }
-      const existing = candidates.get(paymentInstrumentId);
-      candidates.set(paymentInstrumentId, {
-        paymentInstrumentId,
-        isDefault: Boolean(existing?.isDefault || isDefaultPaymentMethod(item))
-      });
-    }
-  }
-  const matches = [...candidates.values()];
-  if (matches.length === 0) {
-    throw validationError(`no ${normalizedType} payment method is available; bind one and refresh payment methods`);
-  }
-  if (matches.length === 1) {
-    return matches[0].paymentInstrumentId;
-  }
-  const defaultMatches = matches.filter((candidate) => candidate.isDefault);
-  if (defaultMatches.length === 1) {
-    return defaultMatches[0].paymentInstrumentId;
-  }
-  throw validationError(`multiple ${normalizedType} payment methods are available without one unique default; pass --payment-instrument-id explicitly`);
-}
-function validatePaymentInstrumentType(paymentMethods, paymentInstrumentId, paymentMethodType) {
-  const normalizedId = nonEmptyString3(paymentInstrumentId);
-  const normalizedType = normalizePaymentMethodType(paymentMethodType);
-  if (!normalizedId) {
-    throw validationError("--payment-instrument-id must not be blank");
-  }
-  const matchingIdRecords = Array.isArray(paymentMethods) ? paymentMethods.filter((item) => isRecord7(item) && nonEmptyString3(item.paymentInstrumentId) === normalizedId) : [];
-  if (matchingIdRecords.length === 0) {
-    throw validationError(`payment instrument ${normalizedId} was not found after refreshing payment methods`);
-  }
-  if (matchingIdRecords.some((item) => paymentMethodTypeOf(item) === normalizedType)) {
-    return normalizedId;
-  }
-  const actualTypes = [...new Set(matchingIdRecords.map((item) => paymentMethodTypeOf(item) ?? "UNKNOWN"))].join(", ");
-  throw validationError(`payment instrument ${normalizedId} has type ${actualTypes}, not ${normalizedType}`);
-}
-function normalizePaymentMethodType(value) {
-  const normalized = value.trim().toUpperCase();
-  if (!normalized) {
-    throw validationError("--payment-method-type must not be blank");
-  }
-  return normalized;
-}
-function normalizeOptionalType(value) {
-  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : void 0;
-}
-function paymentMethodTypeOf(item) {
-  return normalizeOptionalType(item.paymentMethodType) ?? normalizeOptionalType(item.paymentInstrumentType);
-}
-function isDefaultPaymentMethod(item) {
-  return item.isDefault === true || item.default === true || item.defaultPaymentMethod === true;
-}
-function nonEmptyString3(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function isRecord7(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/payment/qr-code.js
-var import_qrcode = __toESM(require_lib(), 1);
-import { chmod as chmod2, mkdtemp, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-var PNG_DATA_URL_PREFIX = "data:image/png;base64,";
-var MAX_QR_PNG_BYTES = 1024 * 1024;
-var MAX_QR_PNG_DATA_URL_LENGTH = PNG_DATA_URL_PREFIX.length + Math.ceil(MAX_QR_PNG_BYTES / 3) * 4;
-var PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-var REDACTED_PNG_DATA_URL = "[redacted:png-data-url]";
-var REDACTED_QR_CODE_CONTENT = "[redacted:qr-code-content]";
-var TERMINAL_QR_WARNING = "Warning: terminal QR could not be displayed; use customerAction.imagePath instead.\n";
-async function materializeQrCodeCustomerAction(qrCode, options2 = {}) {
-  const png = decodePngDataUrl(qrCode.dataUrl);
-  let directoryPath;
-  try {
-    directoryPath = await mkdtemp(join(options2.temporaryDirectory ?? tmpdir(), "clink-cli-payment-qr-"));
-    if (process.platform !== "win32") {
-      await chmod2(directoryPath, 448);
-    }
-    const imagePath = join(directoryPath, "payment-qr.png");
-    await writeFile2(imagePath, png, { flag: "wx", mode: 384 });
-    if (process.platform !== "win32") {
-      await chmod2(imagePath, 384);
-    }
-    return {
-      type: "QR_CODE_REQUIRED",
-      mediaType: "image/png",
-      imagePath,
-      temporary: true,
-      cleanupRequired: true,
-      cleanupPath: directoryPath,
-      orderId: qrCode.orderId,
-      paymentExecutionDetailId: qrCode.paymentExecutionDetailId,
-      expiresAt: qrCode.expiresAt,
-      expiresSecond: qrCode.expiresSecond
-    };
-  } catch {
-    if (directoryPath) {
-      await rm2(directoryPath, { recursive: true, force: true }).catch(() => {
-      });
-    }
-    throw apiError("failed to store payment QR code", 500);
-  }
-}
-function buildQrCodePaymentOutput(data, customerAction) {
-  const redacted = redactPaymentQrSecrets(data);
-  if (!isRecord8(redacted)) {
-    throw apiError("invalid payment response", 502);
-  }
-  return {
-    ...redacted,
-    customerAction
-  };
-}
-async function writeTerminalQrCode(content) {
-  if (!content) {
-    process.stderr.write(TERMINAL_QR_WARNING);
-    return;
-  }
-  try {
-    const rendered = await import_qrcode.default.toString(content, {
-      type: "utf8",
-      small: true,
-      margin: 2
-    });
-    process.stderr.write(`
-${rendered}${rendered.endsWith("\n") ? "" : "\n"}`);
-  } catch {
-    process.stderr.write(TERMINAL_QR_WARNING);
-  }
-}
-function redactPaymentQrSecrets(value) {
-  if (typeof value === "string") {
-    return looksLikePngDataUrl(value) ? REDACTED_PNG_DATA_URL : value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactPaymentQrSecrets(item));
-  }
-  if (!isRecord8(value)) {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-    key,
-    key.toLowerCase() === "qrcodecontent" ? REDACTED_QR_CODE_CONTENT : redactPaymentQrSecrets(item)
-  ]));
-}
-function decodePngDataUrl(dataUrl) {
-  if (dataUrl.length > MAX_QR_PNG_DATA_URL_LENGTH || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
-    throw invalidQrCode();
-  }
-  const encoded = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
-  if (encoded.length === 0 || encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(encoded)) {
-    throw invalidQrCode();
-  }
-  const png = Buffer.from(encoded, "base64");
-  if (png.length === 0 || png.length > MAX_QR_PNG_BYTES || png.toString("base64") !== encoded) {
-    throw invalidQrCode();
-  }
-  validatePngStructure(png);
-  return png;
-}
-function validatePngStructure(png) {
-  if (png.length < 33 || !png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
-    throw invalidQrCode();
-  }
-  let offset = PNG_SIGNATURE.length;
-  let firstChunk = true;
-  let foundEnd = false;
-  while (offset + 12 <= png.length) {
-    const length = png.readUInt32BE(offset);
-    const typeOffset = offset + 4;
-    const dataOffset = typeOffset + 4;
-    const chunkEnd = dataOffset + length + 4;
-    if (length > MAX_QR_PNG_BYTES || chunkEnd > png.length) {
-      throw invalidQrCode();
-    }
-    const type = png.toString("ascii", typeOffset, dataOffset);
-    if (!/^[A-Za-z]{4}$/u.test(type)) {
-      throw invalidQrCode();
-    }
-    if (firstChunk) {
-      if (type !== "IHDR" || length !== 13) {
-        throw invalidQrCode();
-      }
-      const width = png.readUInt32BE(dataOffset);
-      const height = png.readUInt32BE(dataOffset + 4);
-      if (width === 0 || height === 0 || width > 4096 || height > 4096) {
-        throw invalidQrCode();
-      }
-      firstChunk = false;
-    }
-    if (type === "IEND") {
-      if (length !== 0 || chunkEnd !== png.length) {
-        throw invalidQrCode();
-      }
-      foundEnd = true;
-      break;
-    }
-    offset = chunkEnd;
-  }
-  if (!foundEnd) {
-    throw invalidQrCode();
-  }
-}
-function looksLikePngDataUrl(value) {
-  return value.trimStart().toLowerCase().startsWith("data:image/png");
-}
-function invalidQrCode() {
-  return apiError("payment response contained an invalid PNG QR code", 502);
-}
-function isRecord8(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/skills/install.js
+// dist/skills/agentic-payment-sync.js
 import { randomUUID as createRandomUUID } from "node:crypto";
-import { mkdir as mkdir5, rm as rm7 } from "node:fs/promises";
-import { join as join5 } from "node:path";
+import { constants as constants6 } from "node:fs";
+import { lstat as lstat6, mkdir as mkdir6, mkdtemp, open as open8, readlink as readlink3, rm as rm7 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname as dirname4, join as join6, relative as relative5, resolve as resolve4, sep as sep4 } from "node:path";
 
 // dist/skills/agents.js
 import { constants } from "node:fs";
-import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm3, rmdir, symlink } from "node:fs/promises";
-import { dirname, isAbsolute, join as join2, relative, resolve } from "node:path";
+import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 var MARKER_FILE_NAME = ".clink-install.json";
 var DETECTION_FAILURE = "failed to detect installed agents";
 var PREPARE_FAILURE = "failed to prepare agent installation";
@@ -15874,22 +15432,22 @@ var UNSUPPORTED_REASON = "no supported local skill directory";
 async function detectAgents(input) {
   const homeDir = resolve(input.homeDir);
   const skillsRoot = resolve(input.skillsRoot);
-  const sharedTarget = join2(skillsRoot, input.skillName);
+  const sharedTarget = join(skillsRoot, input.skillName);
   const detected = [];
   try {
-    await appendDetected(detected, "cursor", "link", join2(homeDir, ".cursor"), (rootPath) => join2(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "claude-code", "link", join2(homeDir, ".claude"), (rootPath) => join2(rootPath, "skills", input.skillName));
-    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join2(homeDir, ".codex"));
-    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join2(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "codebuddy", "link", join2(homeDir, ".codebuddy"), (rootPath) => join2(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "openclaw", "shared", join2(homeDir, ".openclaw"), () => sharedTarget);
-    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join2(homeDir, ".hermes"));
-    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join2(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "trae", "link", join2(homeDir, ".trae"), (rootPath) => join2(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
+    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
+    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
+    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
+    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
     const opencodeRoot = await firstExistingRoot(uniquePaths([
       resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
-      join2(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join2(homeDir, ".config")), "opencode"),
-      join2(homeDir, ".opencode")
+      join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
+      join(homeDir, ".opencode")
     ]));
     if (opencodeRoot !== null) {
       detected.push({
@@ -15899,10 +15457,10 @@ async function detectAgents(input) {
         targetPath: sharedTarget
       });
     }
-    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join2(homeDir, ".copilot"));
+    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
     const copilotRoot = await firstExistingRoot(uniquePaths([
       copilotCliRoot,
-      join2(homeDir, ".config", "github-copilot")
+      join(homeDir, ".config", "github-copilot")
     ]));
     if (copilotRoot !== null) {
       detected.push({
@@ -15913,18 +15471,18 @@ async function detectAgents(input) {
       });
     }
     const geminiHome = resolveEnvironmentRoot(input.env.GEMINI_CLI_HOME, homeDir);
-    const geminiRoot = join2(geminiHome, ".gemini");
+    const geminiRoot = join(geminiHome, ".gemini");
     if (await isExistingRoot(geminiRoot)) {
       const usesSharedHome = geminiHome === homeDir;
       detected.push({
         agent: "gemini-cli",
         mode: usesSharedHome ? "shared" : "link",
         rootPath: geminiRoot,
-        targetPath: usesSharedHome ? sharedTarget : join2(geminiRoot, "skills", input.skillName)
+        targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
       });
     }
-    await appendDetected(detected, "codework", "unsupported", join2(homeDir, ".codework"), () => null);
-    await appendDetected(detected, "chatgpt", "unsupported", join2(homeDir, ".chatgpt"), () => null);
+    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
+    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
   } catch (error) {
     if (error instanceof CliError) {
       throw error;
@@ -15955,7 +15513,7 @@ async function prepareAgentPlans(input) {
       if (copyTempPath !== null && await pathEntryExists(copyTempPath)) {
         throw installError(PREPARE_FAILURE);
       }
-      const backupPath = needsBackup ? join2(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
+      const backupPath = needsBackup ? join(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
       if (backupPath !== null && await pathEntryExists(backupPath)) {
         throw installError(PREPARE_FAILURE);
       }
@@ -16040,7 +15598,7 @@ function createNoWritePlan(detected, mode) {
 function createWritePlan(preflight, input) {
   const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
   const targetPath = detected.targetPath;
-  const backupObjectPath = backupPath === null ? null : join2(backupPath, "target");
+  const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
   let appliedResult = null;
   let backupMoved = false;
   let backupVerified = false;
@@ -16166,7 +15724,7 @@ function createWritePlan(preflight, input) {
         if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
           throw new Error("installed target changed before rollback");
         }
-        await rm3(targetPath, { recursive: true, force: true });
+        await rm2(targetPath, { recursive: true, force: true });
         removedPlacedTarget = true;
       }
       placedFingerprint = null;
@@ -16238,7 +15796,7 @@ function createWritePlan(preflight, input) {
           await assertPathNamesEntry(backupPath, backupContainerEntry);
           const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
           if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
-            await rm3(backupPath, { recursive: true, force: true });
+            await rm2(backupPath, { recursive: true, force: true });
             backupMoved = false;
             backupVerified = false;
             backupContainerEntry = null;
@@ -16337,7 +15895,7 @@ async function copyDirectoryContents(sourcePath, targetPath) {
   }
   const entries = await readdir(sourcePath, { withFileTypes: true });
   for (const entry of entries) {
-    await cp(join2(sourcePath, entry.name), join2(targetPath, entry.name), {
+    await cp(join(sourcePath, entry.name), join(targetPath, entry.name), {
       recursive: true,
       dereference: false,
       errorOnExist: true,
@@ -16388,12 +15946,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
   if (backupFingerprint.type === "symlink") {
     const linkText = await readlink(backupPath);
     await symlink(linkText, targetPath, "dir");
-    await rm3(backupPath, { force: true });
+    await rm2(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "file") {
     await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
-    await rm3(backupPath, { force: true });
+    await rm2(backupPath, { force: true });
     return;
   }
   if (backupFingerprint.type === "directory") {
@@ -16408,12 +15966,12 @@ async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, 
       if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
         throw new Error("restored directory verification failed");
       }
-      await rm3(backupPath, { recursive: true });
+      await rm2(backupPath, { recursive: true });
       return;
     } catch (error) {
       const currentTarget = await lstatIfExists(targetPath);
       if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
-        await rm3(targetPath, { recursive: true, force: true });
+        await rm2(targetPath, { recursive: true, force: true });
       }
       throw error;
     }
@@ -16474,7 +16032,7 @@ async function inspectTarget(detected, input) {
 }
 async function managedReleaseIdentity(currentPath, resolvedTarget) {
   try {
-    const releasesRoot = await realpath(join2(dirname(currentPath), ".clink", "releases"));
+    const releasesRoot = await realpath(join(dirname(currentPath), ".clink", "releases"));
     const releasesStat = await lstat(releasesRoot);
     const targetStat = await lstat(resolvedTarget);
     if (!releasesStat.isDirectory() || !targetStat.isDirectory()) {
@@ -16540,7 +16098,7 @@ async function removeOwnedPath(filePath, expected, mode) {
   if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
     return;
   }
-  await rm3(filePath, { recursive: true, force: true });
+  await rm2(filePath, { recursive: true, force: true });
 }
 function createEntryIdentity(stats) {
   return {
@@ -16579,7 +16137,7 @@ function createFingerprint(stats, linkText, markerRaw) {
   };
 }
 async function readMarkerRecord(rootPath) {
-  const markerPath = join2(rootPath, MARKER_FILE_NAME);
+  const markerPath = join(rootPath, MARKER_FILE_NAME);
   let markerStat;
   try {
     markerStat = await lstatIfExists(markerPath);
@@ -16631,10 +16189,19 @@ function isErrorCode(error, code) {
 // dist/skills/archive.js
 var import_yauzl = __toESM(require_yauzl(), 1);
 import { createWriteStream } from "node:fs";
-import { chmod as chmod3, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm4, writeFile as writeFile3 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+
+// dist/payment/amount.js
+function parseAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw validationError("amount must be a positive number");
+  }
+  return amount;
+}
 
 // dist/skills/spec.js
 var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
@@ -16788,7 +16355,7 @@ async function extractSkillPackage(packagePath, destination, overrides = {}) {
     return await materializeRawSkill(classified.bytes, destinationRoot);
   } catch {
     try {
-      await rm4(destinationRoot, { recursive: true, force: true });
+      await rm3(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
@@ -16821,15 +16388,15 @@ async function classifySkillPackage(packagePath, limits) {
 }
 async function materializeRawSkill(bytes, destinationRoot) {
   await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-  await chmod3(destinationRoot, 493);
+  await chmod2(destinationRoot, 493);
   const rawRoot = resolve2(destinationRoot, "raw");
   assertPathContained(destinationRoot, rawRoot);
   await mkdir3(rawRoot, { mode: 493 });
-  await chmod3(rawRoot, 493);
+  await chmod2(rawRoot, 493);
   const skillPath = resolve2(rawRoot, "SKILL.md");
   assertPathContained(rawRoot, skillPath);
-  await writeFile3(skillPath, bytes, { flag: "wx", mode: 420 });
-  await chmod3(skillPath, 420);
+  await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
+  await chmod2(skillPath, 420);
   return {
     layout: "single",
     skillRoot: rawRoot,
@@ -16853,11 +16420,11 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       throw new Error("archive entry limit exceeded");
     }
     await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-    await chmod3(destinationRoot, 493);
+    await chmod2(destinationRoot, 493);
     const rawRoot = resolve2(destinationRoot, "raw");
     assertPathContained(destinationRoot, rawRoot);
     await mkdir3(rawRoot, { mode: 493 });
-    await chmod3(rawRoot, 493);
+    await chmod2(rawRoot, 493);
     const registeredPaths = new ArchivePathRegistry();
     const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
     const byteCount = { total: 0 };
@@ -16891,7 +16458,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
       if (meter.fileBytes !== entry.uncompressedSize) {
         throw new Error("archive entry size mismatch");
       }
-      await chmod3(outputPath, mode);
+      await chmod2(outputPath, mode);
     }
     if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
       throw new Error("archive size metadata mismatch");
@@ -16906,7 +16473,7 @@ async function extractSkillArchive(zipPath, destination, overrides = {}) {
   } catch {
     closeZip(zipFile);
     try {
-      await rm4(destinationRoot, { recursive: true, force: true });
+      await rm3(destinationRoot, { recursive: true, force: true });
     } catch {
     }
     throw installError(INSTALL_ERROR_MESSAGE);
@@ -17075,7 +16642,7 @@ async function ensureDirectoryTree(root, target, knownDirectories) {
       }
       knownDirectories.add(current);
     }
-    await chmod3(current, 493);
+    await chmod2(current, 493);
   }
 }
 async function selectSkillLayout(rawRoot) {
@@ -17163,21 +16730,3122 @@ function closeZip(zipFile) {
   }
 }
 
-// dist/skills/download.js
+// dist/skills/content-tree.js
 import { createHash as createHash3 } from "node:crypto";
-import { createWriteStream as createFileWriteStream } from "node:fs";
-import { lstat as lstat3, rm as rm5 } from "node:fs/promises";
-import { Readable, Transform as Transform2 } from "node:stream";
-import { pipeline as pipeline2 } from "node:stream/promises";
+import { constants as constants2 } from "node:fs";
+import { lstat as lstat3, open as open4, readdir as readdir3, rm as rm4 } from "node:fs/promises";
+import { join as join2, relative as relative3, sep as sep2 } from "node:path";
+var CONTENT_TREE_DOMAIN = "clink-skill-tree-v1\0";
+var PROVENANCE_FILE_NAME = ".clink-provenance.json";
+var INSTALL_MARKER_FILE_NAME = ".clink-install.json";
+var CONTENT_ERROR = "invalid agentic payment skill content";
+var PRUNED_DIRECTORIES = ["docs", "tests"];
+async function pruneAgenticPaymentSkillRoot(skillRoot) {
+  try {
+    for (const name of PRUNED_DIRECTORIES) {
+      const target = join2(skillRoot, name);
+      let stats;
+      try {
+        stats = await lstat3(target);
+      } catch (error) {
+        if (isErrorCode2(error, "ENOENT")) {
+          continue;
+        }
+        throw error;
+      }
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error(`${name} is not a real directory`);
+      }
+      await rm4(target, { recursive: true, force: false });
+    }
+  } catch {
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function validateAgenticPaymentSkillRoot(skillRoot) {
+  try {
+    await assertRegularFile(join2(skillRoot, "SKILL.md"));
+    await assertRegularFile(join2(skillRoot, "package.json"));
+    await assertExecutableFile(join2(skillRoot, "bin", "clink"));
+    await assertRealDirectory(join2(skillRoot, "lib"));
+    await assertRealDirectory(join2(skillRoot, "references"));
+    await assertRealDirectory(join2(skillRoot, "scripts"));
+    await assertRegularFile(join2(skillRoot, "scripts", "network-preflight.mjs"));
+    await assertRealDirectory(join2(skillRoot, "vendor", "clink-cli"));
+    await assertExecutableFile(join2(skillRoot, "vendor", "clink-cli", "clink-cli.bundle.mjs"));
+    for (const name of PRUNED_DIRECTORIES) {
+      await assertAbsent(join2(skillRoot, name));
+    }
+    await assertAbsent(join2(skillRoot, INSTALL_MARKER_FILE_NAME));
+    await assertAbsent(join2(skillRoot, PROVENANCE_FILE_NAME));
+    const packageBytes = await readRegularFile(join2(skillRoot, "package.json"));
+    if (packageBytes.byteLength > 64 * 1024) {
+      throw new Error("package metadata is too large");
+    }
+    const packageJson = JSON.parse(packageBytes.toString("utf8"));
+    if (!isRecord5(packageJson)) {
+      throw new Error("package metadata is invalid");
+    }
+    if (packageJson.name !== "clink-payment-skill") {
+      throw new Error("package name is invalid");
+    }
+    if (typeof packageJson.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
+      throw new Error("package version is invalid");
+    }
+    const skillBytes = await readRegularFile(join2(skillRoot, "SKILL.md"));
+    if (skillBytes.byteLength > 2 * 1024 * 1024) {
+      throw new Error("skill metadata is too large");
+    }
+    const skillText = new TextDecoder("utf-8", { fatal: true }).decode(skillBytes);
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillText)?.[1];
+    if (frontmatter === void 0 || !/^name:\s*["']?clink-payment-skill["']?\s*$/m.test(frontmatter)) {
+      throw new Error("skill name is invalid");
+    }
+    const declaredVersion = /^\s*version:\s*["']?([^"'\s]+)["']?\s*$/m.exec(frontmatter)?.[1];
+    if (declaredVersion !== void 0 && declaredVersion !== packageJson.version) {
+      throw new Error("skill version metadata conflicts");
+    }
+    return { skillVersion: packageJson.version };
+  } catch {
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function hashAgenticPaymentSkillTree(skillRoot) {
+  try {
+    const files = await collectContentFiles(skillRoot, skillRoot);
+    files.sort((left, right) => Buffer.compare(Buffer.from(left.relativePath), Buffer.from(right.relativePath)));
+    const hash = createHash3("sha256");
+    hash.update(CONTENT_TREE_DOMAIN);
+    for (const file of files) {
+      const bytes = await readRegularFile(file.absolutePath, file.sizeBytes);
+      hash.update(file.relativePath);
+      hash.update("\0");
+      hash.update(file.executable ? "1" : "0");
+      hash.update("\0");
+      hash.update(String(file.sizeBytes));
+      hash.update("\0");
+      hash.update(bytes);
+      hash.update("\0");
+    }
+    return hash.digest("hex");
+  } catch (error) {
+    if (error instanceof Error && error.name === "CliError") {
+      throw error;
+    }
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function collectContentFiles(root, directory) {
+  const directoryStats = await lstat3(directory);
+  if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
+    throw new Error("content tree contains a non-directory boundary");
+  }
+  const names = await readdir3(directory);
+  const files = [];
+  for (const name of names) {
+    if (name.includes("\0")) {
+      throw new Error("content tree contains an invalid path");
+    }
+    const absolutePath = join2(directory, name);
+    const stats = await lstat3(absolutePath);
+    const relativePath = relative3(root, absolutePath).split(sep2).join("/");
+    if (relativePath === INSTALL_MARKER_FILE_NAME || relativePath === PROVENANCE_FILE_NAME) {
+      continue;
+    }
+    if (stats.isDirectory() && !stats.isSymbolicLink()) {
+      files.push(...await collectContentFiles(root, absolutePath));
+      continue;
+    }
+    if (!stats.isFile() || stats.isSymbolicLink() || !Number.isSafeInteger(stats.size)) {
+      throw new Error("content tree contains an unsupported entry");
+    }
+    files.push({
+      absolutePath,
+      relativePath,
+      executable: (stats.mode & 73) !== 0,
+      sizeBytes: stats.size
+    });
+  }
+  return files;
+}
+async function assertAbsent(path4) {
+  try {
+    await lstat3(path4);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error("reserved or pruned content is still present");
+}
+async function assertRegularFile(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error("required file is missing");
+  }
+}
+async function assertExecutableFile(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 73) === 0) {
+    throw new Error("required executable is missing");
+  }
+}
+async function assertRealDirectory(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("required directory is missing");
+  }
+}
+async function readRegularFile(path4, expectedSize) {
+  const handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || !Number.isSafeInteger(before.size)) {
+      throw new Error("content file is not regular");
+    }
+    if (expectedSize !== void 0 && before.size !== expectedSize) {
+      throw new Error("content file changed before reading");
+    }
+    const bytes = await handle.readFile();
+    const after = await handle.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || bytes.byteLength !== after.size) {
+      throw new Error("content file changed while reading");
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isErrorCode2(error, code) {
+  return error.code === code;
+}
+
+// dist/skills/install-lock.js
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { constants as constants3 } from "node:fs";
+import { lstat as lstat4, mkdir as mkdir4, open as open5, unlink } from "node:fs/promises";
+import { join as join3 } from "node:path";
+import { TextDecoder as TextDecoder2 } from "node:util";
+var LOCKED_MESSAGE = "agentic payment skill synchronization is already running";
+var LOCK_FAILURE_MESSAGE = "failed to manage agentic payment skill synchronization lock";
+var LOCK_SCHEMA_VERSION = 2;
+var LOCK_TOKEN_BYTES = 32;
+var MAX_LOCK_METADATA_BYTES = 1024;
+var MAX_ACQUIRE_ATTEMPTS = 4;
+var MAX_PID = 2147483647;
+var UTF8_DECODER = new TextDecoder2("utf-8", { fatal: true });
+var LockChangedError = class extends Error {
+  constructor() {
+    super("lock changed while it was being inspected");
+    this.name = "LockChangedError";
+  }
+};
+async function acquireAgenticPaymentInstallLock(input) {
+  const lockRoot = join3(input.homeDir, ".agents", "skills", ".clink", "locks");
+  const lockPath = join3(lockRoot, "agentic-payment-skills.lock");
+  try {
+    await mkdir4(lockRoot, { recursive: true, mode: 448 });
+    const rootStats = await lstat4(lockRoot);
+    if (!isRegularDirectory(rootStats)) {
+      throw new Error("lock root is not a real directory");
+    }
+    for (let attempt = 0; attempt < MAX_ACQUIRE_ATTEMPTS; attempt += 1) {
+      let handle;
+      try {
+        handle = await open5(lockPath, constants3.O_WRONLY | constants3.O_CREAT | constants3.O_EXCL | constants3.O_NOFOLLOW, 384);
+      } catch (error) {
+        if (!isErrorCode3(error, "EEXIST")) {
+          throw error;
+        }
+        const existing = await inspectExistingLock(lockPath);
+        if (existing === "locked") {
+          throw installError(LOCKED_MESSAGE);
+        }
+        continue;
+      }
+      let owned;
+      try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) {
+          throw new Error("new lock is not a regular file");
+        }
+        owned = fileIdentity(stats);
+        const token = randomBytes2(LOCK_TOKEN_BYTES).toString("hex");
+        const metadata = {
+          schemaVersion: LOCK_SCHEMA_VERSION,
+          pid: process.pid,
+          acquiredAt: input.now.toISOString(),
+          token
+        };
+        const encoded = Buffer.from(JSON.stringify(metadata), "utf8");
+        if (encoded.byteLength === 0 || encoded.byteLength > MAX_LOCK_METADATA_BYTES) {
+          throw new Error("generated lock metadata has an invalid size");
+        }
+        await writeAll(handle, encoded);
+        await handle.sync();
+        await assertPathIdentity(lockPath, owned);
+        return createInstallLock(lockPath, handle, { ...owned, metadata });
+      } catch (error) {
+        await closeQuietly(handle);
+        if (owned !== void 0) {
+          await removeIfOwned(lockPath, owned);
+        }
+        throw error;
+      }
+    }
+    throw installError(LOCKED_MESSAGE);
+  } catch (error) {
+    if (error instanceof Error && error.name === "CliError") {
+      throw error;
+    }
+    throw installError(LOCK_FAILURE_MESSAGE);
+  }
+}
+function createInstallLock(lockPath, initialHandle, owned) {
+  let handle = initialHandle;
+  let state = "active";
+  return {
+    path: lockPath,
+    async release() {
+      if (state === "released") {
+        return;
+      }
+      try {
+        if (handle !== void 0) {
+          await handle.close();
+          handle = void 0;
+        }
+        const current = await readLockSnapshot(lockPath);
+        if (!sameSnapshot2(current, owned)) {
+          throw new Error("lock ownership changed");
+        }
+        await assertPathIdentity(lockPath, owned);
+        await unlink(lockPath);
+        state = "released";
+      } catch {
+        throw installError(LOCK_FAILURE_MESSAGE);
+      }
+    }
+  };
+}
+async function inspectExistingLock(lockPath) {
+  let observed;
+  try {
+    observed = await readLockSnapshot(lockPath);
+  } catch (error) {
+    if (error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  if (isProcessAlive(observed.metadata.pid)) {
+    return "locked";
+  }
+  let confirmed;
+  try {
+    confirmed = await readLockSnapshot(lockPath);
+  } catch (error) {
+    if (error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  if (!sameSnapshot2(observed, confirmed)) {
+    return "retry";
+  }
+  try {
+    await assertPathIdentity(lockPath, observed);
+    await unlink(lockPath);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT") || error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  return "retry";
+}
+async function readLockSnapshot(lockPath) {
+  const before = await lstatOrChanged(lockPath);
+  assertReadableLockStats(before);
+  let handle;
+  try {
+    handle = await open5(lockPath, constants3.O_RDONLY | constants3.O_NOFOLLOW);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      throw new LockChangedError();
+    }
+    throw error;
+  }
+  try {
+    const opened = await handle.stat();
+    assertReadableLockStats(opened);
+    if (!sameFileIdentity(before, opened)) {
+      throw new LockChangedError();
+    }
+    const bytes = await readBounded(handle);
+    const afterRead = await handle.stat();
+    if (!sameFileIdentity(opened, afterRead) || afterRead.size !== bytes.byteLength) {
+      throw new LockChangedError();
+    }
+    const afterPath = await lstatOrChanged(lockPath);
+    assertReadableLockStats(afterPath);
+    if (!sameFileIdentity(opened, afterPath)) {
+      throw new LockChangedError();
+    }
+    return {
+      ...fileIdentity(opened),
+      metadata: parseLockMetadata(bytes)
+    };
+  } finally {
+    await handle.close();
+  }
+}
+async function readBounded(handle) {
+  const result = Buffer.alloc(MAX_LOCK_METADATA_BYTES + 1);
+  let offset = 0;
+  while (offset < result.byteLength) {
+    const { bytesRead } = await handle.read(result, offset, result.byteLength - offset, offset);
+    if (bytesRead === 0) {
+      break;
+    }
+    offset += bytesRead;
+  }
+  if (offset === 0 || offset > MAX_LOCK_METADATA_BYTES) {
+    throw new Error("lock metadata has an invalid size");
+  }
+  return result.subarray(0, offset);
+}
+function parseLockMetadata(bytes) {
+  let parsed;
+  try {
+    parsed = JSON.parse(UTF8_DECODER.decode(bytes));
+  } catch {
+    throw new Error("lock metadata is not valid UTF-8 JSON");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("lock metadata is not an object");
+  }
+  const record = parsed;
+  const keys = Object.keys(record).sort();
+  const isLegacy = keys.length === 3 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && record.schemaVersion === 1;
+  const isCurrent = keys.length === 4 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && keys[3] === "token" && record.schemaVersion === LOCK_SCHEMA_VERSION;
+  if (!isLegacy && !isCurrent) {
+    throw new Error("lock metadata fields are invalid");
+  }
+  if (typeof record.pid !== "number" || !Number.isSafeInteger(record.pid) || record.pid < 1 || record.pid > MAX_PID) {
+    throw new Error("lock metadata pid is invalid");
+  }
+  if (isCurrent && (typeof record.token !== "string" || !/^[a-f0-9]{64}$/.test(record.token))) {
+    throw new Error("lock metadata token is invalid");
+  }
+  if (typeof record.acquiredAt !== "string" || !isCanonicalTimestamp(record.acquiredAt)) {
+    throw new Error("lock metadata timestamp is invalid");
+  }
+  if (isCurrent) {
+    return {
+      schemaVersion: LOCK_SCHEMA_VERSION,
+      pid: record.pid,
+      acquiredAt: record.acquiredAt,
+      token: record.token
+    };
+  }
+  return {
+    schemaVersion: 1,
+    pid: record.pid,
+    acquiredAt: record.acquiredAt
+  };
+}
+function isCanonicalTimestamp(value) {
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
+}
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isErrorCode3(error, "ESRCH")) {
+      return false;
+    }
+    if (isErrorCode3(error, "EPERM")) {
+      return true;
+    }
+    throw error;
+  }
+}
+async function writeAll(handle, bytes) {
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
+    if (bytesWritten <= 0) {
+      throw new Error("lock metadata write made no progress");
+    }
+    offset += bytesWritten;
+  }
+}
+async function assertPathIdentity(lockPath, expected) {
+  const current = await lstatOrChanged(lockPath);
+  if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(current, expected)) {
+    throw new LockChangedError();
+  }
+}
+async function lstatOrChanged(lockPath) {
+  try {
+    return await lstat4(lockPath);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      throw new LockChangedError();
+    }
+    throw error;
+  }
+}
+function assertReadableLockStats(stats) {
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0 || stats.size > MAX_LOCK_METADATA_BYTES) {
+    throw new Error("lock file type or size is invalid");
+  }
+}
+function isRegularDirectory(stats) {
+  return stats.isDirectory() && !stats.isSymbolicLink();
+}
+function fileIdentity(stats) {
+  return { dev: stats.dev, ino: stats.ino };
+}
+function sameFileIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+function sameSnapshot2(left, right) {
+  if (!sameFileIdentity(left, right) || left.metadata.schemaVersion !== right.metadata.schemaVersion || left.metadata.pid !== right.metadata.pid || left.metadata.acquiredAt !== right.metadata.acquiredAt) {
+    return false;
+  }
+  return left.metadata.schemaVersion === 1 || right.metadata.schemaVersion === 2 && left.metadata.token === right.metadata.token;
+}
+async function closeQuietly(handle) {
+  try {
+    await handle.close();
+  } catch {
+  }
+}
+async function removeIfOwned(lockPath, expected) {
+  try {
+    const current = await lstat4(lockPath);
+    if (current.isFile() && !current.isSymbolicLink() && sameFileIdentity(current, expected)) {
+      await unlink(lockPath);
+    }
+  } catch {
+  }
+}
+function isErrorCode3(error, code) {
+  return error.code === code;
+}
+
+// dist/skills/source-download.js
+import { createHash as createHash4 } from "node:crypto";
+import { constants as constants4 } from "node:fs";
+import { open as open6, rm as rm5 } from "node:fs/promises";
+var AGENTIC_PAYMENT_REPOSITORY = "https://github.com/clinkbillcom/agentic-payment-skills";
+var AGENTIC_PAYMENT_FALLBACK_ARCHIVE = "https://www.clinkbill.com/public/skills/agentic-payment-skill.zip";
+var AGENTIC_PAYMENT_FALLBACK_MANIFEST = "https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json";
+var GITHUB_COMMIT_API = "https://api.github.com/repos/clinkbillcom/agentic-payment-skills/commits/main";
+var MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
+var MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS = 3e5;
+var MAX_JSON_BYTES = 64 * 1024;
+var MAX_REDIRECTS = 3;
+var SHA256_PATTERN = /^[a-f0-9]{64}$/;
+var COMMIT_PATTERN = /^[a-f0-9]{40}$/;
+var SOURCE_ERROR = "invalid official agentic payment skill source";
+var FALLBACK_NETWORK_ERROR = "failed to download fallback agentic payment skill";
+var SourceUnavailableError = class extends Error {
+  constructor(message = "primary agentic payment skill source is unavailable") {
+    super(message);
+    this.name = "SourceUnavailableError";
+  }
+};
+var ResponseBodyUnavailableError = class extends Error {
+  constructor() {
+    super("official source response body became unavailable");
+    this.name = "ResponseBodyUnavailableError";
+  }
+};
+async function downloadGithubAgenticPaymentSkill(input) {
+  const sourceCommit = await resolveGithubMainCommit(input.timeoutMs, input.dependencies);
+  const sourceUrl = `https://codeload.github.com/clinkbillcom/agentic-payment-skills/zip/${sourceCommit}`;
+  const downloaded = await downloadArchive({
+    url: new URL(sourceUrl),
+    destinationPath: input.destinationPath,
+    timeoutMs: input.timeoutMs,
+    allowedOrigins: /* @__PURE__ */ new Set(["https://codeload.github.com"]),
+    sourceKind: "github-primary",
+    dependencies: input.dependencies
+  });
+  return { downloaded, sourceCommit, sourceUrl };
+}
+async function fetchAgenticPaymentFallbackManifest(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: new URL(AGENTIC_PAYMENT_FALLBACK_MANIFEST),
+        allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Cache-Control": "no-cache"
+        },
+        dependencies: input.dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    try {
+      const value = await readLimitedJson(response, MAX_JSON_BYTES);
+      return parseFallbackManifest(value);
+    } catch (error) {
+      if (error instanceof ResponseBodyUnavailableError) {
+        throw networkError(FALLBACK_NETWORK_ERROR);
+      }
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function downloadFallbackAgenticPaymentSkill(input) {
+  try {
+    return await downloadArchive({
+      url: new URL(AGENTIC_PAYMENT_FALLBACK_ARCHIVE),
+      destinationPath: input.destinationPath,
+      timeoutMs: input.timeoutMs,
+      allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
+      expectedSha256: input.manifest.archiveSha256,
+      expectedSizeBytes: input.manifest.archiveSizeBytes,
+      sourceKind: "verified-fallback",
+      dependencies: input.dependencies
+    });
+  } catch (error) {
+    if (error instanceof SourceUnavailableError) {
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    throw error;
+  }
+}
+async function resolveGithubMainCommit(timeoutMs, dependencies) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: new URL(GITHUB_COMMIT_API),
+        allowedOrigins: /* @__PURE__ */ new Set(["https://api.github.com"]),
+        signal: controller.signal,
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "clink-cli-agentic-payment-skill-sync",
+          "X-GitHub-Api-Version": "2022-11-28"
+        },
+        dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw new SourceUnavailableError();
+    }
+    if (isGithubFallbackResponse(response)) {
+      await cancelBody(response);
+      throw new SourceUnavailableError();
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    let value;
+    try {
+      value = await readLimitedJson(response, MAX_JSON_BYTES);
+    } catch (error) {
+      if (error instanceof ResponseBodyUnavailableError) {
+        throw new SourceUnavailableError();
+      }
+      throw error;
+    }
+    if (!isRecord6(value) || typeof value.sha !== "string" || !COMMIT_PATTERN.test(value.sha)) {
+      throw installError(SOURCE_ERROR);
+    }
+    return value.sha;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function downloadArchive(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(input.timeoutMs, MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS));
+  let created = false;
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: input.url,
+        allowedOrigins: input.allowedOrigins,
+        signal: controller.signal,
+        headers: {
+          Accept: "application/zip, application/octet-stream",
+          ...input.url.origin === "https://www.clinkbill.com" ? { "Cache-Control": "no-cache" } : {}
+        },
+        dependencies: input.dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw new SourceUnavailableError();
+    }
+    if (input.sourceKind === "github-primary" && isGithubFallbackResponse(response)) {
+      await cancelBody(response);
+      throw new SourceUnavailableError();
+    }
+    if (input.sourceKind === "verified-fallback" && isFallbackArchiveUnavailableStatus(response.status)) {
+      await cancelBody(response);
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    if (response.body === null) {
+      if (input.sourceKind === "github-primary") {
+        throw new SourceUnavailableError();
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    const contentEncoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+    const declaredLengthHeader = contentEncoding === void 0 || contentEncoding === "identity" ? response.headers.get("content-length") : null;
+    let declaredLength = null;
+    if (declaredLengthHeader !== null) {
+      const parsedLength = Number(declaredLengthHeader);
+      if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > MAX_ARCHIVE_BYTES || input.expectedSizeBytes !== void 0 && parsedLength !== input.expectedSizeBytes) {
+        await cancelBody(response);
+        throw installError(SOURCE_ERROR);
+      }
+      declaredLength = parsedLength;
+    }
+    let handle;
+    try {
+      handle = await open6(input.destinationPath, constants4.O_WRONLY | constants4.O_CREAT | constants4.O_EXCL | constants4.O_NOFOLLOW, 384);
+    } catch {
+      throw installError("failed to stage official agentic payment skill");
+    }
+    created = true;
+    const hash = createHash4("sha256");
+    let sizeBytes = 0;
+    try {
+      const reader = response.body.getReader();
+      try {
+        for (; ; ) {
+          let item;
+          try {
+            item = await reader.read();
+          } catch {
+            if (input.sourceKind === "github-primary") {
+              throw new SourceUnavailableError();
+            }
+            throw networkError(FALLBACK_NETWORK_ERROR);
+          }
+          const { done, value } = item;
+          if (done) {
+            break;
+          }
+          sizeBytes += value.byteLength;
+          if (!Number.isSafeInteger(sizeBytes) || sizeBytes > MAX_ARCHIVE_BYTES) {
+            try {
+              await reader.cancel();
+            } catch {
+            }
+            throw installError(SOURCE_ERROR);
+          }
+          hash.update(value);
+          try {
+            await handle.writeFile(value);
+          } catch {
+            throw installError("failed to stage official agentic payment skill");
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      try {
+        await handle.sync();
+      } catch {
+        throw installError("failed to stage official agentic payment skill");
+      }
+    } finally {
+      await handle.close();
+    }
+    const sha256 = hash.digest("hex");
+    if (declaredLength !== null && sizeBytes !== declaredLength) {
+      if (input.expectedSizeBytes !== void 0) {
+        throw installError(SOURCE_ERROR);
+      }
+      if (input.sourceKind === "github-primary") {
+        throw new SourceUnavailableError();
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (input.expectedSizeBytes !== void 0 && sizeBytes !== input.expectedSizeBytes || input.expectedSha256 !== void 0 && sha256 !== input.expectedSha256) {
+      throw installError(SOURCE_ERROR);
+    }
+    return { path: input.destinationPath, sizeBytes, sha256 };
+  } catch (error) {
+    if (created) {
+      try {
+        await rm5(input.destinationPath, { force: true });
+      } catch {
+      }
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function fetchWithRedirects(input) {
+  let current = validateSourceUrl(input.url, input.allowedOrigins);
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+    const response = await input.dependencies.fetch(current, {
+      method: "GET",
+      redirect: "manual",
+      headers: input.headers,
+      signal: input.signal
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return response;
+    }
+    const location = response.headers.get("location");
+    await cancelBody(response);
+    if (location === null || redirects === MAX_REDIRECTS) {
+      throw installError(SOURCE_ERROR);
+    }
+    current = validateSourceUrl(new URL(location, current), input.allowedOrigins);
+  }
+  throw installError(SOURCE_ERROR);
+}
+function validateSourceUrl(url, allowedOrigins) {
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || !allowedOrigins.has(url.origin)) {
+    throw installError(SOURCE_ERROR);
+  }
+  return url;
+}
+async function readLimitedJson(response, maxBytes) {
+  if (response.body === null) {
+    throw new ResponseBodyUnavailableError();
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (; ; ) {
+      let item;
+      try {
+        item = await reader.read();
+      } catch {
+        throw new ResponseBodyUnavailableError();
+      }
+      const { done, value } = item;
+      if (done) {
+        break;
+      }
+      size += value.byteLength;
+      if (size > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+        }
+        throw installError(SOURCE_ERROR);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw installError(SOURCE_ERROR);
+  }
+}
+function parseFallbackManifest(value) {
+  if (!isRecord6(value)) {
+    throw installError(SOURCE_ERROR);
+  }
+  const expectedKeys = [
+    "archiveFile",
+    "archiveSha256",
+    "archiveSizeBytes",
+    "contentSha256",
+    "generatedAt",
+    "name",
+    "prunedDirectories",
+    "schemaVersion",
+    "skillVersion",
+    "sourceCommit",
+    "sourceRepository"
+  ];
+  const keys = Object.keys(value).sort();
+  const pruned = value.prunedDirectories;
+  if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index]) || value.schemaVersion !== 1 || value.name !== "agentic-payment-skills" || typeof value.skillVersion !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.skillVersion) || value.sourceRepository !== AGENTIC_PAYMENT_REPOSITORY || typeof value.sourceCommit !== "string" || !COMMIT_PATTERN.test(value.sourceCommit) || value.archiveFile !== "agentic-payment-skill.zip" || typeof value.archiveSha256 !== "string" || !SHA256_PATTERN.test(value.archiveSha256) || typeof value.archiveSizeBytes !== "number" || !Number.isSafeInteger(value.archiveSizeBytes) || value.archiveSizeBytes <= 0 || value.archiveSizeBytes > MAX_ARCHIVE_BYTES || typeof value.contentSha256 !== "string" || !SHA256_PATTERN.test(value.contentSha256) || typeof value.generatedAt !== "string" || !isIsoDate(value.generatedAt) || !Array.isArray(pruned) || pruned.length !== 2 || !pruned.every((entry) => typeof entry === "string") || [...pruned].sort().join(",") !== "docs,tests") {
+    throw installError(SOURCE_ERROR);
+  }
+  return value;
+}
+function isGithubFallbackResponse(response) {
+  return response.status === 404 || response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 403 && hasExplicitRateLimitHeader(response.headers);
+}
+function hasExplicitRateLimitHeader(headers) {
+  return headers.get("x-ratelimit-remaining")?.trim() === "0" || headers.has("retry-after");
+}
+function isFallbackArchiveUnavailableStatus(status) {
+  return status === 401 || status === 403 || status === 404 || status === 408 || status === 429 || status >= 500;
+}
+function isIsoDate(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+function isRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+async function cancelBody(response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+  }
+}
+
+// dist/skills/store.js
+import { join as join5 } from "node:path";
+
+// dist/skills/store-publication.js
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { constants as constants5 } from "node:fs";
+import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat5, mkdir as mkdir5, open as open7, readdir as readdir4, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm6, symlink as symlink2, utimes } from "node:fs/promises";
+import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative as relative4, resolve as resolve3, sep as sep3 } from "node:path";
+var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
+var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
+var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
+var PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
+var INSTALL_MARKER_NAME2 = ".clink-install.json";
+var SHA256_PATTERN2 = /^[a-f0-9]{64}$/;
+var MovedBackupError = class extends Error {
+  backup;
+  constructor(backup) {
+    super("current changed while being backed up");
+    this.backup = backup;
+  }
+};
+async function publishSkillRelease(input) {
+  const paths = input.paths;
+  validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
+  let current;
+  let existingRelease;
+  try {
+    current = await inspectCurrent(paths);
+    if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
+      if (!input.force) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+    }
+    if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
+      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
+      if (expectedRelease !== current.managed.canonicalReleasePath) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      const confirmedCurrent = await inspectCurrent(paths);
+      if (confirmedCurrent?.managed === null || confirmedCurrent?.managed === void 0 || !samePathFingerprint(confirmedCurrent.fingerprint, current.fingerprint) || confirmedCurrent.managed.canonicalReleasePath !== expectedRelease || confirmedCurrent.managed.marker.publisher !== input.marker.publisher || confirmedCurrent.managed.marker.skillName !== input.marker.skillName || confirmedCurrent.managed.marker.sha256 !== input.marker.sha256) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      return createUnchangedPublication(paths);
+    }
+    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const transaction = {
+    paths,
+    marker: input.marker,
+    uuid: input.uuid,
+    oldCurrent: current,
+    backup: null,
+    newCurrent: null,
+    createdRelease: null
+  };
+  try {
+    if (existingRelease === null) {
+      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker);
+    }
+    const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (selectedRelease === null) {
+      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+    }
+    const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (expectedRelease === null) {
+      throw new Error("published release is missing");
+    }
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    if (current !== null) {
+      const compatibleManaged = current.managed !== null && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName;
+      const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
+      try {
+        await paths.publicationMutationHook?.({ phase: "before-current-backup" });
+        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
+      } catch (error) {
+        if (error instanceof MovedBackupError) {
+          transaction.backup = error.backup;
+        }
+        throw error;
+      }
+      await paths.publicationMutationHook?.({ phase: "after-backup" });
+      await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    }
+    const target = relative4(dirname3(paths.currentPath), paths.releasePath);
+    await symlink2(target, paths.currentPath, "dir");
+    const newCurrent = await fingerprintPath2(paths.currentPath);
+    if (newCurrent.kind !== "symlink" || newCurrent.linkTarget !== target) {
+      throw new Error("current link changed during creation");
+    }
+    transaction.newCurrent = newCurrent;
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    await paths.publicationMutationHook?.({ phase: "after-current-switch" });
+    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
+  } catch (error) {
+    try {
+      await rollbackPublicationTransaction(transaction);
+    } catch {
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function createUnchangedPublication(paths) {
+  let state = "active";
+  return {
+    action: "unchanged",
+    releasePath: paths.releasePath,
+    currentPath: paths.currentPath,
+    backupPath: null,
+    async rollback() {
+      if (state === "active") {
+        state = "rolled-back";
+      }
+    },
+    async finalize() {
+      if (state === "active") {
+        state = "committed";
+      }
+    }
+  };
+}
+function createPublishedTransaction(transaction, action) {
+  let state = "active";
+  return {
+    action,
+    releasePath: transaction.paths.releasePath,
+    currentPath: transaction.paths.currentPath,
+    backupPath: transaction.backup?.retained === true ? transaction.backup.containerPath : null,
+    async rollback() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        await rollbackPublicationTransaction(transaction);
+        state = "rolled-back";
+      } catch {
+        throw installError(PUBLISH_ROLLBACK_MESSAGE);
+      }
+    },
+    async finalize() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        if (transaction.backup !== null && !transaction.backup.retained) {
+          await removeAuthenticatedBackup(transaction.backup);
+          transaction.backup = null;
+        }
+        state = "committed";
+      } catch {
+        throw installError(PUBLISH_FINALIZE_MESSAGE);
+      }
+    }
+  };
+}
+function validatePublicationInput(paths, extractedRoot, marker, uuid) {
+  if (!isInstallMarker(marker) || !SHA256_PATTERN2.test(marker.sha256)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(marker.publisher) || !isSafePathSegment(marker.skillName)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(uuid)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
+  if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function isSafePathSegment(value) {
+  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
+}
+async function inspectCurrent(paths) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(paths.currentPath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "symlink" || fingerprint.linkTarget === null) {
+    return { fingerprint, managed: null };
+  }
+  const managed = await inspectManagedCurrent(paths, fingerprint);
+  return { fingerprint, managed };
+}
+async function inspectManagedCurrent(paths, fingerprint) {
+  try {
+    const canonicalRoot = await realpath2(paths.releasesRoot);
+    const rootStat = await lstat5(paths.releasesRoot);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      return null;
+    }
+    const canonicalReleasePath = await realpath2(paths.currentPath);
+    const releaseStat = await lstat5(canonicalReleasePath);
+    if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink()) {
+      return null;
+    }
+    const releaseParts = pathPartsBelow(canonicalRoot, canonicalReleasePath);
+    if (releaseParts === null || releaseParts.length !== 3) {
+      return null;
+    }
+    const [publisher, skillName, sha256] = releaseParts;
+    if (!SHA256_PATTERN2.test(sha256)) {
+      return null;
+    }
+    const marker = await readNoFollowInstallMarker(join4(canonicalReleasePath, INSTALL_MARKER_NAME2));
+    if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
+      return null;
+    }
+    const confirmed = await fingerprintPath2(paths.currentPath);
+    if (!samePathFingerprint(fingerprint, confirmed)) {
+      return null;
+    }
+    return {
+      fingerprint,
+      linkTarget: fingerprint.linkTarget,
+      canonicalReleasePath,
+      marker
+    };
+  } catch {
+    return null;
+  }
+}
+async function canonicalExistingReleasePath(releasePath, releasesRoot) {
+  const releaseStat = await lstat5(releasePath);
+  const rootStat = await lstat5(releasesRoot);
+  if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRoot = await realpath2(releasesRoot);
+  const canonicalRelease = await realpath2(releasePath);
+  const parts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  if (parts === null || parts.length !== 3) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return canonicalRelease;
+}
+async function inspectExistingRelease(releasePath, releasesRoot, marker) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(releasePath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "directory") {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRelease = await canonicalExistingReleasePath(releasePath, releasesRoot);
+  const canonicalRoot = await realpath2(releasesRoot);
+  const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
+  const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  const existingMarker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
+  if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return fingerprint;
+}
+async function assertReleaseAuthenticated(paths, marker, expected) {
+  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (current === null || !samePathFingerprint(current, expected)) {
+    throw new Error("selected release changed during publication");
+  }
+}
+function pathPartsBelow(rootPath, candidatePath) {
+  const childPath = relative4(rootPath, candidatePath);
+  if (childPath.length === 0 || childPath === ".." || childPath.startsWith(`..${sep3}`) || isAbsolute3(childPath)) {
+    return null;
+  }
+  return childPath.split(sep3);
+}
+async function createImmutableRelease(paths, extractedRoot, marker) {
+  const extracted = await fingerprintPath2(extractedRoot);
+  if (extracted.kind !== "directory") {
+    throw new Error("extracted skill root is not a real directory");
+  }
+  await ensureReleaseParent(paths, marker);
+  await writeInstallMarker(extractedRoot, marker);
+  await paths.publicationMutationHook?.({ phase: "before-release-rename" });
+  const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (existingRelease !== null) {
+    return null;
+  }
+  await rename3(extractedRoot, paths.releasePath);
+  const releaseFingerprint = await fingerprintPath2(paths.releasePath);
+  if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
+    throw new Error("release changed during publication");
+  }
+  const installedMarker = await readNoFollowInstallMarker(join4(paths.releasePath, INSTALL_MARKER_NAME2));
+  if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
+    throw new Error("release marker changed during publication");
+  }
+  return { fingerprint: releaseFingerprint, marker };
+}
+async function ensureReleaseParent(paths, marker) {
+  await ensureRealDirectory(paths.releasesRoot);
+  const publisherPath = join4(paths.releasesRoot, marker.publisher);
+  await ensureRealDirectory(publisherPath);
+  await ensureRealDirectory(join4(publisherPath, marker.skillName));
+}
+async function ensureRealDirectory(path4) {
+  await mkdir5(path4, { recursive: true, mode: 448 });
+  const pathStat = await lstat5(path4);
+  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
+    throw new Error("store path is not a real directory");
+  }
+}
+async function writeInstallMarker(rootPath, marker) {
+  const markerPath = join4(rootPath, INSTALL_MARKER_NAME2);
+  const handle = await open7(markerPath, constants5.O_WRONLY | constants5.O_CREAT | constants5.O_EXCL | constants5.O_NOFOLLOW, 420);
+  try {
+    await handle.writeFile(JSON.stringify(marker), "utf8");
+    await handle.chmod(420);
+  } finally {
+    await handle.close();
+  }
+}
+async function readNoFollowInstallMarker(path4) {
+  const parsed = await readNoFollowJson(path4);
+  return isInstallMarker(parsed) ? parsed : null;
+}
+async function readNoFollowJson(path4) {
+  let handle;
+  try {
+    handle = await open7(path4, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+    const before = await handle.stat();
+    if (!before.isFile()) {
+      return null;
+    }
+    const raw = await handle.readFile("utf8");
+    const after = await handle.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || !after.isFile()) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+function isInstallMarker(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value;
+  const keys = Object.keys(marker).sort();
+  const expectedKeys = [
+    "installedAt",
+    "publisher",
+    "requestedVersion",
+    "schemaVersion",
+    "sha256",
+    "sizeBytes",
+    "skillName"
+  ];
+  return keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index]) && marker.schemaVersion === 1 && typeof marker.publisher === "string" && typeof marker.skillName === "string" && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && SHA256_PATTERN2.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string" && marker.installedAt.length > 0;
+}
+function sameInstallMarker(first, second) {
+  return first.schemaVersion === second.schemaVersion && first.publisher === second.publisher && first.skillName === second.skillName && first.requestedVersion === second.requestedVersion && first.sha256 === second.sha256 && first.sizeBytes === second.sizeBytes && first.installedAt === second.installedAt;
+}
+async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
+  await assertPathFingerprint(paths.currentPath, expectedCurrent);
+  await ensureRealDirectory(paths.backupsRoot);
+  const containerPath = join4(paths.backupsRoot, backupName);
+  await mkdir5(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  if (containerFingerprint.kind !== "directory") {
+    throw new Error("backup container is not a directory");
+  }
+  const entryPath = join4(containerPath, basename(paths.currentPath));
+  try {
+    await assertPathFingerprint(paths.currentPath, expectedCurrent);
+    await rename3(paths.currentPath, entryPath);
+  } catch (error) {
+    await removeEmptyOwnedContainer(containerPath, containerFingerprint);
+    throw error;
+  }
+  const entryFingerprint2 = await fingerprintPath2(entryPath);
+  const backup = {
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint: entryFingerprint2,
+    retained
+  };
+  if (!samePathFingerprint(entryFingerprint2, expectedCurrent)) {
+    throw new MovedBackupError(backup);
+  }
+  try {
+    await lstat5(paths.currentPath);
+    throw new MovedBackupError(backup);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return backup;
+    }
+    throw error;
+  }
+}
+async function removeEmptyOwnedContainer(containerPath, expected) {
+  try {
+    const current = await fingerprintPath2(containerPath);
+    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir4(containerPath)).length === 0) {
+      await rm6(containerPath, { recursive: true });
+    }
+  } catch {
+  }
+}
+async function rollbackPublicationTransaction(transaction) {
+  let rollbackFailed = false;
+  let currentSafeForReleaseCleanup = true;
+  if (transaction.newCurrent !== null) {
+    try {
+      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
+      transaction.newCurrent = null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  } else {
+    try {
+      const current = await fingerprintPath2(transaction.paths.currentPath);
+      if (transaction.oldCurrent === null || !samePathFingerprint(current, transaction.oldCurrent.fingerprint)) {
+        currentSafeForReleaseCleanup = false;
+      }
+    } catch (error) {
+      if (!isErrorCode4(error, "ENOENT")) {
+        rollbackFailed = true;
+        currentSafeForReleaseCleanup = false;
+      }
+    }
+  }
+  if (transaction.backup !== null) {
+    try {
+      await restoreBackup(transaction.paths.currentPath, transaction.backup);
+      if (!transaction.backup.retained) {
+        await removeAuthenticatedBackup(transaction.backup);
+      }
+      transaction.backup = transaction.backup.retained ? transaction.backup : null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  }
+  if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
+    try {
+      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
+      transaction.createdRelease = null;
+    } catch {
+      rollbackFailed = true;
+    }
+  }
+  if (rollbackFailed) {
+    throw new Error("publication rollback was incomplete");
+  }
+}
+async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanupName) {
+  let current;
+  try {
+    current = await fingerprintPath2(currentPath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("current was replaced before rollback");
+  }
+  await ensureRealDirectory(backupsRoot);
+  const containerPath = join4(backupsRoot, cleanupName);
+  await mkdir5(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  const entryPath = join4(containerPath, basename(currentPath));
+  await rename3(currentPath, entryPath);
+  const moved = await fingerprintPath2(entryPath);
+  if (!samePathFingerprint(moved, expected)) {
+    await restoreBackup(currentPath, {
+      containerPath,
+      entryPath,
+      containerFingerprint,
+      entryFingerprint: moved,
+      retained: true
+    });
+    throw new Error("current changed while rollback moved it");
+  }
+  await removeAuthenticatedBackup({
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint: expected,
+    retained: false
+  });
+}
+async function restoreBackup(currentPath, backup) {
+  await assertBackupAuthenticated(backup);
+  try {
+    await lstat5(currentPath);
+    throw new Error("current path is occupied during restoration");
+  } catch (error) {
+    if (!isErrorCode4(error, "ENOENT")) {
+      throw error;
+    }
+  }
+  switch (backup.entryFingerprint.kind) {
+    case "symlink": {
+      if (backup.entryFingerprint.linkTarget === null) {
+        throw new Error("backup link target is unavailable");
+      }
+      await symlink2(backup.entryFingerprint.linkTarget, currentPath, "dir");
+      break;
+    }
+    case "file":
+      if (backup.retained) {
+        await copyFile2(backup.entryPath, currentPath, constants5.COPYFILE_EXCL);
+        await chmod3(currentPath, backup.entryFingerprint.mode & 4095);
+        await assertBackupAuthenticated(backup);
+        const atime = backup.entryFingerprint.atimeMs / 1e3;
+        const mtime = backup.entryFingerprint.mtimeMs / 1e3;
+        await utimes(currentPath, atime, mtime);
+        await utimes(backup.entryPath, atime, mtime);
+      } else {
+        await link(backup.entryPath, currentPath);
+      }
+      break;
+    case "directory":
+      await restoreDirectory(backup.entryPath, currentPath, backup.entryFingerprint.mode);
+      break;
+    default:
+      throw new Error("backup type cannot be restored safely");
+  }
+  const restored = await fingerprintPath2(currentPath);
+  if (backup.entryFingerprint.kind === "symlink") {
+    if (restored.kind !== "symlink" || restored.linkTarget !== backup.entryFingerprint.linkTarget) {
+      throw new Error("restored link does not match its backup");
+    }
+  } else if (backup.entryFingerprint.kind === "file" && (restored.kind !== "file" || (backup.retained ? restored.dev !== backup.entryFingerprint.dev || restored.ino === backup.entryFingerprint.ino || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095) || Math.abs(restored.atimeMs - backup.entryFingerprint.atimeMs) > 1 || Math.abs(restored.mtimeMs - backup.entryFingerprint.mtimeMs) > 1 : restored.dev !== backup.entryFingerprint.dev || restored.ino !== backup.entryFingerprint.ino))) {
+    throw new Error("restored file does not match its backup");
+  } else if (backup.entryFingerprint.kind === "directory" && (restored.kind !== "directory" || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095))) {
+    throw new Error("restored directory does not match its backup");
+  }
+}
+async function restoreDirectory(sourcePath, destinationPath, mode) {
+  await mkdir5(destinationPath, { mode: mode & 4095 });
+  for (const entry of await readdir4(sourcePath)) {
+    await cp2(join4(sourcePath, entry), join4(destinationPath, entry), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      preserveTimestamps: true,
+      verbatimSymlinks: true
+    });
+  }
+  await chmod3(destinationPath, mode & 4095);
+}
+async function assertBackupAuthenticated(backup) {
+  const container = await fingerprintPath2(backup.containerPath);
+  const entry = await fingerprintPath2(backup.entryPath);
+  const entries = await readdir4(backup.containerPath);
+  if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
+    throw new Error("backup authentication failed");
+  }
+}
+async function removeAuthenticatedBackup(backup) {
+  await assertBackupAuthenticated(backup);
+  const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
+  await rename3(backup.containerPath, cleanupPath);
+  const movedContainer = await fingerprintPath2(cleanupPath);
+  const movedEntry = await fingerprintPath2(join4(cleanupPath, basename(backup.entryPath)));
+  if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
+    try {
+      await rename3(cleanupPath, backup.containerPath);
+    } catch {
+    }
+    throw new Error("backup changed during removal");
+  }
+  await rm6(cleanupPath, { recursive: true });
+}
+async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
+  const current = await fingerprintPath2(releasePath);
+  const marker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
+  await canonicalExistingReleasePath(releasePath, releasesRoot);
+  if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
+    throw new Error("created release changed before rollback");
+  }
+  const cleanupPath = `${releasePath}.rollback-${uuid}`;
+  await rename3(releasePath, cleanupPath);
+  const moved = await fingerprintPath2(cleanupPath);
+  const movedMarker = await readNoFollowInstallMarker(join4(cleanupPath, INSTALL_MARKER_NAME2));
+  if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
+    try {
+      await rename3(cleanupPath, releasePath);
+    } catch {
+    }
+    throw new Error("created release changed during rollback");
+  }
+  await rm6(cleanupPath, { recursive: true });
+}
+async function fingerprintPath2(path4) {
+  const before = await lstat5(path4);
+  const kind = pathKind(before);
+  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
+  const after = await lstat5(path4);
+  if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
+    throw new Error("path changed during inspection");
+  }
+  return {
+    dev: after.dev,
+    ino: after.ino,
+    mode: after.mode,
+    atimeMs: after.atimeMs,
+    mtimeMs: after.mtimeMs,
+    kind,
+    linkTarget
+  };
+}
+function pathKind(pathStat) {
+  if (pathStat.isSymbolicLink()) {
+    return "symlink";
+  }
+  if (pathStat.isFile()) {
+    return "file";
+  }
+  if (pathStat.isDirectory()) {
+    return "directory";
+  }
+  return "other";
+}
+async function assertPathFingerprint(path4, expected) {
+  const current = await fingerprintPath2(path4);
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("path changed before mutation");
+  }
+}
+function samePathFingerprint(first, second) {
+  return first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.kind === second.kind && first.linkTarget === second.linkTarget;
+}
+function isErrorCode4(error, code) {
+  return error?.code === code;
+}
+
+// dist/skills/store.js
+function resolveStorePaths(homeDir, spec, sha256, uuid) {
+  const skillsRoot = join5(homeDir, ".agents", "skills");
+  const clinkRoot = join5(skillsRoot, ".clink");
+  const releasesRoot = join5(clinkRoot, "releases");
+  return {
+    skillsRoot,
+    clinkRoot,
+    stagingPath: join5(clinkRoot, "staging", uuid),
+    releasesRoot,
+    releasePath: join5(releasesRoot, spec.publisher, spec.skillName, sha256),
+    backupsRoot: join5(clinkRoot, "backups"),
+    currentPath: join5(skillsRoot, spec.skillName)
+  };
+}
+
+// dist/skills/agentic-payment-sync.js
+var AGENTIC_PAYMENT_PUBLISHER = "clinkbillcom";
+var AGENTIC_PAYMENT_SKILL_NAME = "agentic-payment-skills";
+var PENDING_SHA_SENTINEL = "pending";
+var INSTALL_MARKER_FILE_NAME2 = ".clink-install.json";
+var SYNC_FAILURE = "failed to synchronize official agentic payment skill";
+var DOWNGRADE_FAILURE = "fallback agentic payment skill would downgrade the installed version";
+var DOWNGRADE_INSPECTION_FAILURE = "could not safely determine the installed agentic payment skill version";
+var AGENT_FINALIZE_WARNING = "an agent Skill target cleanup could not be finalized";
+var MAX_METADATA_BYTES = 64 * 1024;
+var SHA256_PATTERN3 = /^[a-f0-9]{64}$/;
 var DEFAULT_DEPENDENCIES = {
   fetch: (...args) => globalThis.fetch(...args),
-  sleep: async (ms) => new Promise((resolve4) => setTimeout(resolve4, ms)),
+  materializePackage: extractSkillPackage,
+  publishRelease: publishSkillRelease,
+  detectAgentRoots: detectAgents,
+  prepareAgents: prepareAgentPlans,
+  acquireLock: acquireAgenticPaymentInstallLock,
+  randomUUID: createRandomUUID,
+  now: () => /* @__PURE__ */ new Date(),
+  tempDirectory: tmpdir,
+  remove: async (path4) => rm7(path4, { recursive: true, force: true }),
+  log: (message) => process.stderr.write(`${message}
+`)
+};
+async function syncAgenticPaymentSkill(input, overrides = {}) {
+  const dependencies = {
+    ...DEFAULT_DEPENDENCIES,
+    ...overrides,
+    ...input.log === void 0 ? {} : { log: input.log }
+  };
+  const checkOnly = input.checkOnly === true;
+  const packageSpec = {
+    publisher: AGENTIC_PAYMENT_PUBLISHER,
+    skillName: AGENTIC_PAYMENT_SKILL_NAME,
+    requestedVersion: null
+  };
+  const skillsRoot = join6(input.homeDir, ".agents", "skills");
+  const installPath = join6(skillsRoot, AGENTIC_PAYMENT_SKILL_NAME);
+  const stagingUuid = dependencies.randomUUID();
+  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
+  let lock = null;
+  let stagingPath = null;
+  let primaryError;
+  let completedResult;
+  try {
+    if (checkOnly) {
+      stagingPath = await mkdtemp(join6(dependencies.tempDirectory(), "clink-agentic-payment-check-"));
+    } else {
+      lock = await dependencies.acquireLock({
+        homeDir: input.homeDir,
+        now: dependencies.now()
+      });
+      stagingPath = preliminaryPaths.stagingPath;
+      await mkdir6(stagingPath, { recursive: true, mode: 448 });
+    }
+    const candidate = await prepareCandidate(stagingPath, input.timeoutMs, dependencies);
+    const current = await readCurrentInstall(installPath);
+    assertNoFallbackDowngrade(candidate, current);
+    const updateAvailable = current.contentSha256 !== candidate.contentSha256;
+    if (checkOnly) {
+      completedResult = createResult({
+        candidate,
+        action: updateAvailable ? "planned" : "unchanged",
+        installPath,
+        updateAvailable,
+        checkOnly,
+        agents: []
+      });
+      return completedResult;
+    }
+    const installedAt = dependencies.now();
+    const provenance = createProvenance(candidate, installedAt);
+    await writeProvenance(candidate.skillRoot, provenance);
+    const paths = resolveStorePaths(input.homeDir, packageSpec, candidate.contentSha256, stagingUuid);
+    const marker = {
+      schemaVersion: 1,
+      publisher: AGENTIC_PAYMENT_PUBLISHER,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME,
+      requestedVersion: null,
+      sha256: candidate.contentSha256,
+      sizeBytes: candidate.downloaded.sizeBytes,
+      installedAt: installedAt.toISOString()
+    };
+    const detected = await dependencies.detectAgentRoots({
+      homeDir: input.homeDir,
+      env: input.env,
+      skillsRoot,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME
+    });
+    const plans = await dependencies.prepareAgents({
+      detected,
+      currentPath: paths.currentPath,
+      publisher: AGENTIC_PAYMENT_PUBLISHER,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME,
+      force: input.force === true,
+      backupsRoot: paths.backupsRoot,
+      uuid: dependencies.randomUUID()
+    });
+    const transaction = await publishAndApply({
+      paths,
+      marker,
+      skillRoot: candidate.skillRoot,
+      force: input.force === true,
+      plans,
+      publicationUuid: dependencies.randomUUID(),
+      dependencies
+    });
+    completedResult = createResult({
+      candidate,
+      action: transaction.published.action,
+      installPath: transaction.published.currentPath,
+      updateAvailable: transaction.published.action !== "unchanged",
+      checkOnly,
+      agents: transaction.agentResults
+    });
+    completedResult.warnings.push(...transaction.warnings);
+    return completedResult;
+  } catch (error) {
+    primaryError = error;
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(SYNC_FAILURE);
+  } finally {
+    const cleanupWarnings = [];
+    if (stagingPath !== null) {
+      try {
+        await dependencies.remove(stagingPath);
+      } catch {
+        cleanupWarnings.push("temporary Skill files could not be removed");
+      }
+    }
+    if (lock !== null) {
+      try {
+        await lock.release();
+      } catch {
+        cleanupWarnings.push("the Skill synchronization lock could not be released");
+      }
+    }
+    if (primaryError === void 0 && completedResult !== void 0) {
+      completedResult.warnings.push(...cleanupWarnings);
+      for (const warning of cleanupWarnings) {
+        try {
+          dependencies.log(`Warning: ${warning}`);
+        } catch {
+        }
+      }
+    }
+  }
+}
+async function prepareCandidate(stagingPath, timeoutMs, dependencies) {
+  const sourceDependencies = {
+    fetch: dependencies.fetch
+  };
+  let downloaded;
+  let source;
+  let sourceUrl;
+  let sourceCommit;
+  let integrity;
+  let manifest = null;
+  try {
+    dependencies.log("Resolving official agentic payment skill from GitHub");
+    const github = await downloadGithubAgenticPaymentSkill({
+      destinationPath: join6(stagingPath, "github-package.zip"),
+      timeoutMs,
+      dependencies: sourceDependencies
+    });
+    downloaded = github.downloaded;
+    source = "github";
+    sourceUrl = github.sourceUrl;
+    sourceCommit = github.sourceCommit;
+    integrity = "github-commit";
+  } catch (error) {
+    if (!(error instanceof SourceUnavailableError)) {
+      throw error;
+    }
+    dependencies.log("GitHub source unavailable; using Clink fallback archive");
+    manifest = await fetchAgenticPaymentFallbackManifest({
+      timeoutMs,
+      dependencies: sourceDependencies
+    });
+    downloaded = await downloadFallbackAgenticPaymentSkill({
+      destinationPath: join6(stagingPath, "fallback-package.zip"),
+      timeoutMs,
+      manifest,
+      dependencies: sourceDependencies
+    });
+    source = "fallback";
+    sourceUrl = AGENTIC_PAYMENT_FALLBACK_ARCHIVE;
+    sourceCommit = manifest.sourceCommit;
+    integrity = "manifest";
+  }
+  dependencies.log("Validating official agentic payment skill content");
+  const extracted = await dependencies.materializePackage(downloaded.path, join6(stagingPath, "extract"));
+  if (extracted.layout !== "single") {
+    throw installError("official agentic payment skill must contain one skill root");
+  }
+  await pruneAgenticPaymentSkillRoot(extracted.skillRoot);
+  const validated = await validateAgenticPaymentSkillRoot(extracted.skillRoot);
+  if (parseSemanticVersion(validated.skillVersion) === null) {
+    throw installError("official agentic payment skill version is not valid SemVer");
+  }
+  const contentSha256 = await hashAgenticPaymentSkillTree(extracted.skillRoot);
+  if (manifest !== null) {
+    if (manifest.contentSha256 !== contentSha256 || manifest.skillVersion !== validated.skillVersion) {
+      throw installError("fallback agentic payment skill manifest does not match content");
+    }
+  }
+  return {
+    downloaded,
+    skillRoot: extracted.skillRoot,
+    skillVersion: validated.skillVersion,
+    contentSha256,
+    source,
+    sourceUrl,
+    sourceCommit,
+    integrity,
+    manifest
+  };
+}
+async function publishAndApply(input) {
+  let published = null;
+  const applied = [];
+  const agentResults = [];
+  const warnings = [];
+  let publicationCommitted = false;
+  try {
+    input.dependencies.log("Publishing official agentic payment skill release");
+    published = await input.dependencies.publishRelease({
+      paths: input.paths,
+      extractedRoot: input.skillRoot,
+      marker: input.marker,
+      force: input.force,
+      uuid: input.publicationUuid
+    });
+    input.dependencies.log("Updating detected agent skill roots");
+    for (const plan of input.plans) {
+      const result = await plan.apply({
+        releasePath: published.releasePath,
+        marker: input.marker
+      });
+      applied.push(plan);
+      agentResults.push(result);
+    }
+    await published.finalize();
+    publicationCommitted = true;
+    for (const plan of applied) {
+      try {
+        await plan.finalize();
+      } catch {
+        warnings.push(AGENT_FINALIZE_WARNING);
+        try {
+          input.dependencies.log(`Warning: ${AGENT_FINALIZE_WARNING}`);
+        } catch {
+        }
+      }
+    }
+    return { published, agentResults, warnings };
+  } catch (error) {
+    if (!publicationCommitted) {
+      for (const plan of [...applied].reverse()) {
+        try {
+          await plan.rollback();
+        } catch {
+        }
+      }
+      if (published !== null) {
+        try {
+          await published.rollback();
+        } catch {
+        }
+      }
+    }
+    throw error;
+  }
+}
+function createProvenance(candidate, installedAt) {
+  return {
+    schemaVersion: 1,
+    name: AGENTIC_PAYMENT_SKILL_NAME,
+    skillVersion: candidate.skillVersion,
+    sourceRepository: AGENTIC_PAYMENT_REPOSITORY,
+    sourceCommit: candidate.sourceCommit,
+    source: candidate.source,
+    sourceUrl: candidate.sourceUrl,
+    integrity: candidate.integrity,
+    archiveSha256: candidate.downloaded.sha256,
+    archiveSizeBytes: candidate.downloaded.sizeBytes,
+    contentSha256: candidate.contentSha256,
+    installedAt: installedAt.toISOString(),
+    manifestUrl: candidate.manifest === null ? null : AGENTIC_PAYMENT_FALLBACK_MANIFEST,
+    prunedDirectories: ["docs", "tests"]
+  };
+}
+async function writeProvenance(skillRoot, provenance) {
+  const path4 = join6(skillRoot, PROVENANCE_FILE_NAME);
+  const handle = await open8(path4, constants6.O_WRONLY | constants6.O_CREAT | constants6.O_EXCL | constants6.O_NOFOLLOW, 420);
+  try {
+    await handle.writeFile(JSON.stringify(provenance), "utf8");
+    await handle.sync();
+    await handle.chmod(420);
+  } finally {
+    await handle.close();
+  }
+}
+async function readCurrentInstall(installPath) {
+  let installStats;
+  try {
+    installStats = await lstat6(installPath);
+  } catch (error) {
+    if (isErrorCode5(error, "ENOENT")) {
+      return {
+        exists: false,
+        managed: false,
+        contentSha256: null,
+        skillVersion: null,
+        provenance: null
+      };
+    }
+    throw error;
+  }
+  if (!installStats.isSymbolicLink()) {
+    return unmanagedCurrentInstall();
+  }
+  let snapshot;
+  try {
+    const inspected = await inspectManagedReleaseSnapshot(installPath, installStats);
+    if (inspected === null) {
+      return unmanagedCurrentInstall();
+    }
+    snapshot = inspected;
+  } catch {
+    return unmanagedCurrentInstall();
+  }
+  let markerRead;
+  try {
+    markerRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, INSTALL_MARKER_FILE_NAME2), MAX_METADATA_BYTES);
+  } catch {
+    return unmanagedCurrentInstall();
+  }
+  const marker = markerRead.value;
+  if (!isRecord7(marker) || marker.schemaVersion !== 1 || marker.publisher !== AGENTIC_PAYMENT_PUBLISHER || marker.skillName !== AGENTIC_PAYMENT_SKILL_NAME || typeof marker.sha256 !== "string" || marker.sha256 !== snapshot.contentSha256 || !SHA256_PATTERN3.test(marker.sha256)) {
+    return unmanagedCurrentInstall();
+  }
+  let packageRead = null;
+  let skillVersion = null;
+  try {
+    packageRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, "package.json"), MAX_METADATA_BYTES);
+    const packageJson = packageRead.value;
+    if (isRecord7(packageJson) && packageJson.name === "clink-payment-skill" && typeof packageJson.version === "string" && parseSemanticVersion(packageJson.version) !== null) {
+      skillVersion = packageJson.version;
+    }
+  } catch {
+  }
+  let provenanceRead = null;
+  let provenance = null;
+  try {
+    provenanceRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, PROVENANCE_FILE_NAME), MAX_METADATA_BYTES);
+    const value = provenanceRead.value;
+    if (isAgenticPaymentProvenance(value, marker.sha256)) {
+      provenance = value;
+    }
+  } catch {
+  }
+  if (!await managedReleaseSnapshotIsUnchanged(snapshot) || !await namedFileIsUnchanged(markerRead) || packageRead !== null && !await namedFileIsUnchanged(packageRead) || provenanceRead !== null && !await namedFileIsUnchanged(provenanceRead)) {
+    throw installError("installed agentic payment skill changed during inspection");
+  }
+  return {
+    exists: true,
+    managed: true,
+    contentSha256: marker.sha256,
+    skillVersion,
+    provenance
+  };
+}
+function unmanagedCurrentInstall() {
+  return {
+    exists: true,
+    managed: false,
+    contentSha256: null,
+    skillVersion: null,
+    provenance: null
+  };
+}
+async function inspectManagedReleaseSnapshot(installPath, installStats) {
+  const installFingerprint = entryFingerprint(installStats);
+  const linkText = await readlink3(installPath);
+  const confirmedInstallStats = await lstat6(installPath);
+  if (!confirmedInstallStats.isSymbolicLink() || !sameEntryFingerprint(installFingerprint, entryFingerprint(confirmedInstallStats))) {
+    return null;
+  }
+  const skillsRoot = dirname4(installPath);
+  const clinkRoot = resolve4(skillsRoot, ".clink");
+  const releasesRoot = resolve4(clinkRoot, "releases");
+  const releasePath = resolve4(skillsRoot, linkText);
+  const relativeRelease = relative5(releasesRoot, releasePath);
+  const releaseParts = relativeRelease.split(sep4);
+  if (relativeRelease.length === 0 || relativeRelease.startsWith(`..${sep4}`) || releaseParts.length !== 3 || releaseParts[0] !== AGENTIC_PAYMENT_PUBLISHER || releaseParts[1] !== AGENTIC_PAYMENT_SKILL_NAME || !SHA256_PATTERN3.test(releaseParts[2] ?? "")) {
+    return null;
+  }
+  const directories = [];
+  for (const path4 of [
+    clinkRoot,
+    releasesRoot,
+    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER),
+    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER, AGENTIC_PAYMENT_SKILL_NAME),
+    releasePath
+  ]) {
+    const stats = await lstat6(path4);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      return null;
+    }
+    directories.push({ path: path4, fingerprint: entryFingerprint(stats) });
+  }
+  return {
+    installPath,
+    installFingerprint,
+    linkText,
+    releasePath,
+    contentSha256: releaseParts[2],
+    directories
+  };
+}
+async function managedReleaseSnapshotIsUnchanged(snapshot) {
+  try {
+    const installStats = await lstat6(snapshot.installPath);
+    if (!installStats.isSymbolicLink() || !sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(installStats)) || await readlink3(snapshot.installPath) !== snapshot.linkText) {
+      return false;
+    }
+    const confirmedInstallStats = await lstat6(snapshot.installPath);
+    if (!sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(confirmedInstallStats))) {
+      return false;
+    }
+    for (const directory of snapshot.directories) {
+      const stats = await lstat6(directory.path);
+      if (!stats.isDirectory() || stats.isSymbolicLink() || !sameEntryFingerprint(directory.fingerprint, entryFingerprint(stats))) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function readBoundedNoFollowJson(path4, maximumBytes) {
+  const handle = await open8(path4, constants6.O_RDONLY | constants6.O_NOFOLLOW | constants6.O_NONBLOCK);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || !Number.isSafeInteger(before.size) || before.size < 0 || before.size > maximumBytes) {
+      throw new Error("metadata is not a bounded regular file");
+    }
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+      if (bytesRead === 0) {
+        throw new Error("metadata was truncated while reading");
+      }
+      offset += bytesRead;
+    }
+    const trailing = Buffer.alloc(1);
+    if ((await handle.read(trailing, 0, 1, offset)).bytesRead !== 0) {
+      throw new Error("metadata grew while reading");
+    }
+    const after = await handle.stat();
+    const beforeFingerprint = entryFingerprint(before);
+    if (!sameEntryFingerprint(beforeFingerprint, entryFingerprint(after)) || after.size !== bytes.byteLength) {
+      throw new Error("metadata changed while reading");
+    }
+    const namedStats = await lstat6(path4);
+    if (!namedStats.isFile() || namedStats.isSymbolicLink() || !sameEntryFingerprint(beforeFingerprint, entryFingerprint(namedStats))) {
+      throw new Error("metadata path changed while reading");
+    }
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return {
+      path: path4,
+      fingerprint: beforeFingerprint,
+      value: JSON.parse(text)
+    };
+  } finally {
+    await handle.close();
+  }
+}
+async function namedFileIsUnchanged(read) {
+  try {
+    const stats = await lstat6(read.path);
+    return stats.isFile() && !stats.isSymbolicLink() && sameEntryFingerprint(read.fingerprint, entryFingerprint(stats));
+  } catch {
+    return false;
+  }
+}
+function entryFingerprint(stats) {
+  return {
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs
+  };
+}
+function sameEntryFingerprint(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+function isAgenticPaymentProvenance(value, contentSha256) {
+  if (!isRecord7(value)) {
+    return false;
+  }
+  return value.schemaVersion === 1 && value.name === AGENTIC_PAYMENT_SKILL_NAME && typeof value.skillVersion === "string" && value.sourceRepository === AGENTIC_PAYMENT_REPOSITORY && (value.sourceCommit === null || typeof value.sourceCommit === "string") && (value.source === "github" || value.source === "fallback") && typeof value.sourceUrl === "string" && (value.integrity === "github-commit" || value.integrity === "manifest" || value.integrity === "unverified") && typeof value.archiveSha256 === "string" && typeof value.archiveSizeBytes === "number" && value.contentSha256 === contentSha256 && typeof value.installedAt === "string";
+}
+function assertNoFallbackDowngrade(candidate, current) {
+  if (candidate.source !== "fallback" || !current.managed) {
+    return;
+  }
+  if (current.skillVersion === null) {
+    throw installError(DOWNGRADE_INSPECTION_FAILURE);
+  }
+  if (compareVersions(candidate.skillVersion, current.skillVersion) < 0) {
+    throw installError(DOWNGRADE_FAILURE);
+  }
+}
+function compareVersions(left, right) {
+  const parsedLeft = parseSemanticVersion(left);
+  const parsedRight = parseSemanticVersion(right);
+  if (parsedLeft === null || parsedRight === null) {
+    throw installError(DOWNGRADE_INSPECTION_FAILURE);
+  }
+  for (const key of ["major", "minor", "patch"]) {
+    if (parsedLeft[key] < parsedRight[key]) {
+      return -1;
+    }
+    if (parsedLeft[key] > parsedRight[key]) {
+      return 1;
+    }
+  }
+  if (parsedLeft.prerelease.length === 0 || parsedRight.prerelease.length === 0) {
+    if (parsedLeft.prerelease.length === parsedRight.prerelease.length) {
+      return 0;
+    }
+    return parsedLeft.prerelease.length === 0 ? 1 : -1;
+  }
+  const identifierCount = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+  for (let index = 0; index < identifierCount; index += 1) {
+    const leftIdentifier = parsedLeft.prerelease[index];
+    const rightIdentifier = parsedRight.prerelease[index];
+    if (leftIdentifier === void 0 || rightIdentifier === void 0) {
+      return leftIdentifier === void 0 ? -1 : 1;
+    }
+    if (typeof leftIdentifier === "bigint" && typeof rightIdentifier === "bigint") {
+      if (leftIdentifier !== rightIdentifier) {
+        return leftIdentifier < rightIdentifier ? -1 : 1;
+      }
+      continue;
+    }
+    if (typeof leftIdentifier !== typeof rightIdentifier) {
+      return typeof leftIdentifier === "bigint" ? -1 : 1;
+    }
+    if (leftIdentifier !== rightIdentifier) {
+      return leftIdentifier < rightIdentifier ? -1 : 1;
+    }
+  }
+  return 0;
+}
+function parseSemanticVersion(value) {
+  if (value.length === 0 || value.length > 256) {
+    return null;
+  }
+  const plusIndex = value.indexOf("+");
+  if (plusIndex !== -1 && plusIndex !== value.lastIndexOf("+")) {
+    return null;
+  }
+  const versionWithoutBuild = plusIndex === -1 ? value : value.slice(0, plusIndex);
+  if (plusIndex !== -1) {
+    const build = value.slice(plusIndex + 1);
+    if (!isDotSeparatedIdentifiers(build, false)) {
+      return null;
+    }
+  }
+  const dashIndex = versionWithoutBuild.indexOf("-");
+  const core = dashIndex === -1 ? versionWithoutBuild : versionWithoutBuild.slice(0, dashIndex);
+  const prereleaseText = dashIndex === -1 ? null : versionWithoutBuild.slice(dashIndex + 1);
+  const coreParts = core.split(".");
+  if (coreParts.length !== 3 || coreParts.some((part) => !/^(?:0|[1-9][0-9]*)$/.test(part))) {
+    return null;
+  }
+  const prerelease = [];
+  if (prereleaseText !== null) {
+    if (!isDotSeparatedIdentifiers(prereleaseText, true)) {
+      return null;
+    }
+    for (const identifier of prereleaseText.split(".")) {
+      prerelease.push(/^[0-9]+$/.test(identifier) ? BigInt(identifier) : identifier);
+    }
+  }
+  return {
+    major: BigInt(coreParts[0]),
+    minor: BigInt(coreParts[1]),
+    patch: BigInt(coreParts[2]),
+    prerelease
+  };
+}
+function isDotSeparatedIdentifiers(value, prerelease) {
+  if (value.length === 0) {
+    return false;
+  }
+  return value.split(".").every((identifier) => {
+    if (!/^[0-9A-Za-z-]+$/.test(identifier)) {
+      return false;
+    }
+    return !(prerelease && /^[0-9]+$/.test(identifier) && identifier.length > 1 && identifier.startsWith("0"));
+  });
+}
+function createResult(input) {
+  return {
+    publisher: AGENTIC_PAYMENT_PUBLISHER,
+    skillName: AGENTIC_PAYMENT_SKILL_NAME,
+    skillVersion: input.candidate.skillVersion,
+    action: input.action,
+    installPath: input.installPath,
+    updateAvailable: input.updateAvailable,
+    checkOnly: input.checkOnly,
+    source: input.candidate.source,
+    integrity: input.candidate.integrity,
+    sourceCommit: input.candidate.sourceCommit,
+    archiveSha256: input.candidate.downloaded.sha256,
+    archiveSizeBytes: input.candidate.downloaded.sizeBytes,
+    contentSha256: input.candidate.contentSha256,
+    agents: input.agents,
+    warnings: []
+  };
+}
+function isRecord7(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isErrorCode5(error, code) {
+  return error.code === code;
+}
+
+// dist/self-update.js
+var CLI_PACKAGE_NAME = "@clink-ai/clink-cli";
+var SELF_UPDATE_GUARD = "CLINK_CLI_SELF_UPDATE_ACTIVE";
+var NPM_INSTALL_MIN_TIMEOUT_MS = 3e5;
+var MAX_NPM_OUTPUT_BYTES = 1024 * 1024;
+async function installCliAndSkill(options2, dependencies = {}) {
+  assertMutationAllowed(options2);
+  await assertNpmSelfUpdateSupported(dependencies);
+  const latestVersion = await readLatestCliVersion(options2, dependencies);
+  const cli = await installLatestCli("installed", options2, dependencies, latestVersion);
+  const skill = await syncAfterCliMutation(cli, options2, dependencies);
+  return {
+    action: cli.action,
+    checkOnly: false,
+    cli,
+    skill
+  };
+}
+async function updateCliAndSkill(options2, dependencies = {}) {
+  if (!options2.checkOnly) {
+    assertMutationAllowed(options2);
+  }
+  await assertNpmSelfUpdateSupported(dependencies);
+  const latestVersion = await readLatestCliVersion(options2, dependencies);
+  const comparison = compareSemver(CLI_VERSION, latestVersion);
+  const updateAvailable = comparison < 0;
+  const currentIsNewer = comparison > 0;
+  if (options2.checkOnly) {
+    const cli2 = {
+      packageName: CLI_PACKAGE_NAME,
+      action: "checked",
+      currentVersion: CLI_VERSION,
+      latestVersion,
+      updateAvailable,
+      currentIsNewer,
+      requestedVersion: "latest"
+    };
+    const skill2 = await synchronizeSkill(options2, dependencies);
+    return {
+      action: "checked",
+      checkOnly: true,
+      cli: cli2,
+      skill: skill2
+    };
+  }
+  let cli;
+  if (updateAvailable || options2.force) {
+    cli = await installLatestCli(updateAvailable ? "updated" : "reinstalled", options2, dependencies, latestVersion);
+  } else {
+    cli = {
+      packageName: CLI_PACKAGE_NAME,
+      action: "unchanged",
+      currentVersion: CLI_VERSION,
+      latestVersion,
+      updateAvailable: false,
+      currentIsNewer,
+      requestedVersion: "latest"
+    };
+  }
+  const skill = cli.action === "updated" || cli.action === "reinstalled" ? await syncAfterCliMutation(cli, options2, dependencies) : await synchronizeSkill(options2, dependencies);
+  return {
+    action: cli.action,
+    checkOnly: false,
+    cli,
+    skill
+  };
+}
+async function syncOfficialSkill(options2, dependencies = {}) {
+  return synchronizeSkill(options2, dependencies);
+}
+async function defaultExecFileRunner(request) {
+  return new Promise((resolveResult) => {
+    execFile2(request.file, request.args, {
+      encoding: "utf8",
+      env: request.env,
+      maxBuffer: MAX_NPM_OUTPUT_BYTES,
+      shell: false,
+      timeout: request.timeoutMs,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      const errorCode = error && typeof error.code === "string" ? error.code : void 0;
+      resolveResult({
+        exitCode: error ? typeof error.code === "number" ? error.code : null : EXIT_CODES.OK,
+        stdout,
+        stderr,
+        ...errorCode ? { errorCode } : {},
+        timedOut: Boolean(error && (error.killed || error.signal))
+      });
+    });
+  });
+}
+async function isCurrentNpmDistribution(moduleUrl = import.meta.url) {
+  let current = dirname5(fileURLToPath(moduleUrl));
+  const filesystemRoot = parse(current).root;
+  while (true) {
+    try {
+      const manifest = JSON.parse(await readFile4(resolve5(current, "package.json"), "utf8"));
+      if (manifest.name === CLI_PACKAGE_NAME) {
+        return isInstalledPackageRoot(current);
+      }
+    } catch (error) {
+      if (!isNonMatchingPackageManifestError(error)) {
+        throw error;
+      }
+    }
+    if (current === filesystemRoot) {
+      return false;
+    }
+    current = dirname5(current);
+  }
+}
+function compareSemver(left, right) {
+  const leftVersion = parseSemver(left);
+  const rightVersion = parseSemver(right);
+  for (const key of ["major", "minor", "patch"]) {
+    if (leftVersion[key] !== rightVersion[key]) {
+      return leftVersion[key] < rightVersion[key] ? -1 : 1;
+    }
+  }
+  return comparePrerelease(leftVersion.prerelease, rightVersion.prerelease);
+}
+async function assertNpmSelfUpdateSupported(dependencies) {
+  const isNpmDistribution = dependencies.isNpmDistribution ?? (() => isCurrentNpmDistribution());
+  if (await isNpmDistribution()) {
+    return;
+  }
+  throw new CliError("install_error", `CLI self-update is available only for the npm distribution. Install it with \`npm install --global ${CLI_PACKAGE_NAME}\`, then run \`clink update\`.`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "distribution_check", packageName: CLI_PACKAGE_NAME });
+}
+function assertMutationAllowed(options2) {
+  if (options2.checkOnly) {
+    throw validationError("install does not support --check");
+  }
+  if (options2.env[SELF_UPDATE_GUARD] === "1") {
+    throw new CliError("install_error", "Refusing recursive CLI self-update.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "recursion_guard", packageName: CLI_PACKAGE_NAME });
+  }
+}
+async function installLatestCli(action, options2, dependencies, latestVersion) {
+  const result = await runNpm([
+    "install",
+    "--global",
+    `${CLI_PACKAGE_NAME}@${latestVersion ?? "latest"}`,
+    "--no-audit",
+    "--no-fund",
+    "--loglevel=error"
+  ], {
+    ...options2,
+    timeoutMs: Math.max(options2.timeoutMs, NPM_INSTALL_MIN_TIMEOUT_MS)
+  }, dependencies);
+  if (result.exitCode !== EXIT_CODES.OK) {
+    throw npmCommandError("install the latest CLI", "cli_install", result);
+  }
+  options2.log(`${CLI_PACKAGE_NAME} npm installation completed.`);
+  return {
+    packageName: CLI_PACKAGE_NAME,
+    action,
+    currentVersion: CLI_VERSION,
+    ...latestVersion ? { latestVersion } : {},
+    ...latestVersion ? { updateAvailable: action === "updated" } : {},
+    requestedVersion: "latest"
+  };
+}
+async function readLatestCliVersion(options2, dependencies) {
+  const createCache = dependencies.createNpmCacheDirectory ?? (() => mkdtemp2(join7(tmpdir2(), "clink-npm-check-")));
+  const removeCache = dependencies.removeNpmCacheDirectory ?? ((path4) => rm8(path4, { recursive: true, force: true }));
+  let cachePath;
+  try {
+    cachePath = await createCache();
+  } catch {
+    throw new CliError("install_error", "Unable to create an isolated npm cache for the CLI version check.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check_cache", packageName: CLI_PACKAGE_NAME });
+  }
+  let primaryError;
+  try {
+    const result = await runNpm([
+      "view",
+      `${CLI_PACKAGE_NAME}@latest`,
+      "version",
+      "--json",
+      "--loglevel=error",
+      "--prefer-online",
+      "--cache",
+      cachePath
+    ], options2, dependencies);
+    if (result.exitCode !== EXIT_CODES.OK) {
+      throw npmCommandError("check the latest CLI version", "cli_check", result);
+    }
+    const parsed = JSON.parse(result.stdout.trim());
+    if (typeof parsed !== "string") {
+      throw new Error("npm returned a non-string version");
+    }
+    parseSemver(parsed);
+    return parsed;
+  } catch (error) {
+    primaryError = error;
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw new CliError("install_error", "npm returned an invalid latest CLI version.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check", packageName: CLI_PACKAGE_NAME });
+  } finally {
+    try {
+      await removeCache(cachePath);
+    } catch {
+      if (primaryError === void 0) {
+        options2.log("Warning: unable to remove the isolated npm cache after the CLI version check.");
+      }
+    }
+  }
+}
+async function runNpm(args, options2, dependencies) {
+  const invocation = resolveNpmInvocation(options2.env, dependencies.platform ?? process.platform, dependencies.execPath ?? process.execPath);
+  const runner = dependencies.execFileRunner ?? defaultExecFileRunner;
+  return runner({
+    file: invocation.file,
+    args: [...invocation.prefixArgs, ...args],
+    env: {
+      ...options2.env,
+      [SELF_UPDATE_GUARD]: "1"
+    },
+    timeoutMs: options2.timeoutMs
+  });
+}
+function resolveNpmInvocation(env, platform, execPath) {
+  const npmExecPath = env.npm_execpath;
+  if (npmExecPath && isAbsolute4(npmExecPath) && isNpmCliFilename(npmExecPath) && existsSync(npmExecPath)) {
+    return { file: execPath, prefixArgs: [npmExecPath] };
+  }
+  if (platform !== "win32") {
+    return { file: "npm", prefixArgs: [] };
+  }
+  const candidates = [
+    resolve5(dirname5(execPath), "node_modules/npm/bin/npm-cli.js"),
+    resolve5(dirname5(execPath), "../node_modules/npm/bin/npm-cli.js"),
+    resolve5(dirname5(execPath), "../lib/node_modules/npm/bin/npm-cli.js")
+  ];
+  const npmCliPath = candidates.find((candidate) => existsSync(candidate));
+  if (npmCliPath) {
+    return { file: execPath, prefixArgs: [npmCliPath] };
+  }
+  throw new CliError("install_error", "Unable to locate npm without using a command shell. Run the update from an npm-installed CLI.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "npm_resolution", packageName: CLI_PACKAGE_NAME });
+}
+async function synchronizeSkill(options2, dependencies) {
+  const syncSkill = dependencies.syncSkill ?? ((input) => syncAgenticPaymentSkill({
+    homeDir: input.homeDir,
+    env: input.env,
+    timeoutMs: input.timeoutMs,
+    force: input.force,
+    checkOnly: input.checkOnly,
+    log: input.log
+  }));
+  const result = await syncSkill(options2);
+  if (options2.checkOnly && isRecord8(result) && result.action !== "checked") {
+    return {
+      ...result,
+      action: "checked",
+      plannedAction: result.action
+    };
+  }
+  return result;
+}
+async function syncAfterCliMutation(cli, options2, dependencies) {
+  try {
+    return await synchronizeSkill(options2, dependencies);
+  } catch (error) {
+    throw new CliError("install_error", "CLI installation completed, but the official payment Skill could not be synchronized. Run `clink skills sync` to retry the Skill-only step.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
+      partial: true,
+      phase: "skill_sync",
+      cli,
+      skill: {
+        syncCompleted: false,
+        recoveryCommand: "clink skills sync",
+        errorType: error instanceof CliError ? error.type : "install_error"
+      }
+    });
+  }
+}
+function npmCommandError(operation, phase, result) {
+  const reason = result.timedOut ? "The npm command timed out." : result.errorCode === "ENOENT" ? "npm was not found on PATH." : "The npm command failed.";
+  return new CliError("install_error", `Unable to ${operation}. ${reason}`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
+    phase,
+    packageName: CLI_PACKAGE_NAME,
+    exitCode: result.exitCode,
+    timedOut: result.timedOut
+  });
+}
+function isNpmCliFilename(value) {
+  return /(?:^|[\\/])npm(?:-cli)?\.(?:c?js)$/iu.test(value);
+}
+function isInstalledPackageRoot(value) {
+  const installedSuffix = join7("node_modules", "@clink-ai", "clink-cli");
+  return value === installedSuffix || value.endsWith(`${sep5}${installedSuffix}`);
+}
+function isNonMatchingPackageManifestError(error) {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  return typeof error.code === "string" && ["ENOENT", "ENOTDIR", "EISDIR", "EACCES", "EPERM"].includes(error.code);
+}
+function isRecord8(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseSemver(value) {
+  const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(value);
+  if (!match) {
+    throw new Error("invalid semantic version");
+  }
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4]?.split(".") ?? []
+  };
+}
+function comparePrerelease(left, right) {
+  if (left.length === 0 || right.length === 0) {
+    if (left.length === right.length) {
+      return 0;
+    }
+    return left.length === 0 ? 1 : -1;
+  }
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    if (leftPart === void 0 || rightPart === void 0) {
+      return leftPart === void 0 ? -1 : 1;
+    }
+    if (leftPart === rightPart) {
+      continue;
+    }
+    const leftNumber = /^\d+$/u.test(leftPart) ? Number(leftPart) : null;
+    const rightNumber = /^\d+$/u.test(rightPart) ? Number(rightPart) : null;
+    if (leftNumber !== null && rightNumber !== null) {
+      return leftNumber < rightNumber ? -1 : 1;
+    }
+    if (leftNumber !== null || rightNumber !== null) {
+      return leftNumber !== null ? -1 : 1;
+    }
+    return leftPart < rightPart ? -1 : 1;
+  }
+  return 0;
+}
+
+// dist/payment/authorization-api.js
+var INSTRUCTION_PATH = "/agent/cwallet/instructions";
+function createTipAuthorizationApi(input, overrides = {}) {
+  const dependencies = {
+    requestJson: overrides.requestJson ?? requestJson,
+    updateStoredConfig: overrides.updateStoredConfig ?? updateStoredConfig,
+    collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
+    ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
+  };
+  const getRuntimeConfig = input.getRuntimeConfig ?? (() => input.runtimeConfig);
+  const resolveStoredRuntimeConfig = input.resolveStoredRuntimeConfig ?? storedRuntimeConfig;
+  const requestRuntime = {
+    getRuntimeConfig,
+    ...input.getRuntimeConfig ? { reloadRuntimeConfig: input.getRuntimeConfig } : {},
+    ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {}
+  };
+  const refreshPaymentMethods = async () => {
+    let requestedIdentity = { type: "none" };
+    const binding = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => {
+      requestedIdentity = runtimeAuthorizationIdentity(runtimeConfig);
+      return {
+        baseUrl: runtimeConfig.baseUrl,
+        method: "POST",
+        path: "/agent/cwallet/card/bindingLink",
+        headers: buildCustomerHeaders(runtimeConfig),
+        body: {
+          customerId: runtimeConfig.customerId,
+          hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
+        },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      };
+    }, dependencies.requestJson);
+    const data = unwrapResponse(binding, "invalid card binding response");
+    const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
+    const storedPaymentMethods = paymentMethods.map((method) => ({ ...method }));
+    const nextConfig = await dependencies.updateStoredConfig((current) => {
+      const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
+      if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
+        throw authError("Authentication changed while payment methods were refreshing; retry the command.");
+      }
+      current.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+      return current;
+    });
+    input.storedConfig.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+    input.setStoredConfig?.(nextConfig);
+    return paymentMethods;
+  };
+  return {
+    refreshPaymentMethods,
+    refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
+    listInstructions: async (paymentInstrumentId) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
+        method: "GET",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(runtimeConfig),
+        query: { status: "ACTIVE", paymentInstrumentId },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      return unwrapResponse(result, "invalid instruction list response");
+    },
+    createInstruction: async (draft) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
+        baseUrl: runtimeConfig2.baseUrl,
+        method: "POST",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(runtimeConfig2),
+        body: draft,
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      const data = unwrapResponse(result, "invalid instruction create response");
+      const instructionId = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
+      if (!instructionId) {
+        throw apiError("missing instructionId in instruction create response", 502);
+      }
+      const runtimeConfig = await getRuntimeConfig();
+      return {
+        instructionId,
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId, runtimeConfig.email)
+      };
+    },
+    waitForActivation: async (instructionId) => {
+      const collected = await dependencies.collectWebhookEvents({
+        runtimeConfig: await getRuntimeConfig(),
+        getRuntimeConfig,
+        resolveStoredRuntimeConfig,
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
+        timeoutMs: input.timeoutMs,
+        type: "purchase_instruction.activated",
+        ack: false
+      });
+      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId));
+      if (matches.length === 0) {
+        return { activated: false };
+      }
+      const eventIds = matches.map((event) => event.eventId).filter(Boolean);
+      const ackRuntimeConfig = await getRuntimeConfig();
+      await dependencies.ackWebhookEvents({
+        runtimeConfig: ackRuntimeConfig,
+        getRuntimeConfig,
+        expectedIdentity: runtimeAuthorizationIdentity(ackRuntimeConfig),
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
+        timeoutMs: input.timeoutMs
+      }, eventIds);
+      return { activated: true };
+    },
+    getInstruction: async (instructionId) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
+        method: "GET",
+        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId)}`,
+        headers: buildInstructionHeaders(runtimeConfig),
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      return unwrapResponse(result, "invalid instruction response");
+    },
+    now: input.now,
+    watch: input.watch,
+    onPasskeyUrl: input.onPasskeyUrl
+  };
+}
+function unwrapResponse(result, invalidMessage) {
+  if ("dryRun" in result) {
+    throw apiError(invalidMessage, 502);
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord9(data)) {
+    throw apiError(invalidMessage, 502);
+  }
+  return data;
+}
+function normalizePaymentMethods(value) {
+  if (!Array.isArray(value)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  if (!value.every((item) => isRecord9(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  return value.map((item) => ({ ...item }));
+}
+function optionalString2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord9(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/payment/post-payment-refresh.js
+var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
+async function executePaymentRequestWithRefresh(input) {
+  if (input.dryRun) {
+    return { result: await input.request() };
+  }
+  let result;
+  try {
+    result = await input.request();
+  } catch (error) {
+    await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+    throw error;
+  }
+  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+  return {
+    result,
+    ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
+  };
+}
+function addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) {
+  return paymentMethodsRefreshWarning ? { ...data, paymentMethodsRefreshWarning } : data;
+}
+async function refreshPaymentMethodsBestEffort(refreshPaymentMethods) {
+  try {
+    await refreshPaymentMethods();
+    return void 0;
+  } catch (error) {
+    return `${PAYMENT_METHODS_REFRESH_WARNING_PREFIX}: ${errorMessage(error)}`;
+  }
+}
+function errorMessage(error) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return String(error);
+}
+
+// dist/payment/charge.js
+function buildChargeBody(input) {
+  const authorization = input.authorization;
+  const aiAgentInstructionBo = compact({
+    instructionId: authorization?.instructionId,
+    mandateId: authorization?.mandateId,
+    shippingAddressJson: input.shippingAddress === void 0 ? void 0 : JSON.stringify(input.shippingAddress),
+    merchantInfo: { merchantCategoryCode: "5999" },
+    products: input.products
+  });
+  const shared = compact({
+    paymentInstrumentId: input.paymentInstrumentId,
+    paymentMethodType: input.paymentMethodType,
+    instruction_id: authorization?.instructionId,
+    mandate_id: authorization?.mandateId,
+    shippingaddress: input.shippingAddress,
+    aiAgentInstructionBo,
+    purchaseInstructionId: authorization?.legacyInstructionId
+  });
+  return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
+    ...shared,
+    merchantId: input.merchantId,
+    ...input.customerPointsAmount === void 0 ? {} : { customerPointsAmount: input.customerPointsAmount },
+    customAmount: input.amount,
+    paymentCurrency: input.currency
+  };
+}
+function classifyChargeData(data) {
+  const channel = isRecord10(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord10(channel.action) ? channel.action : {};
+  const walletAction = isRecord10(action.walletHandleRedirectOrDisplayQrCode) ? action.walletHandleRedirectOrDisplayQrCode : {};
+  const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
+  const status = finiteNumber2(channel.status);
+  const imageUrlPng = typeof walletAction.imageUrlPng === "string" && walletAction.imageUrlPng.length > 0 ? walletAction.imageUrlPng : void 0;
+  const qrCodeContent = typeof walletAction.qrCodeContent === "string" && walletAction.qrCodeContent.trim().length > 0 ? walletAction.qrCodeContent : void 0;
+  const qrCode = status === 5 && imageUrlPng ? {
+    dataUrl: imageUrlPng,
+    ...qrCodeContent ? { content: qrCodeContent } : {},
+    orderId: nonEmptyString2(data.orderId),
+    paymentExecutionDetailId: nonEmptyString2(channel.paymentExecutionDetailId) ?? nonEmptyString2(isRecord10(channel.processingDetail) ? channel.processingDetail.paymentExecutionDetailId : void 0),
+    expiresAt: nonNegativeInteger(walletAction.expiresAt),
+    expiresSecond: nonNegativeInteger(walletAction.expiresSecond)
+  } : void 0;
+  return {
+    status,
+    requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
+    ...redirectUrl ? { redirectUrl } : {},
+    ...qrCode ? { qrCode } : {}
+  };
+}
+async function executeCharge(input, runtime) {
+  const refreshed = await executePaymentRequestWithRefresh({
+    request: () => requestJsonWithOAuthRetry({
+      getRuntimeConfig: runtime.getRuntimeConfig ?? (() => runtime.runtimeConfig),
+      ...runtime.getRuntimeConfig ? { reloadRuntimeConfig: runtime.getRuntimeConfig } : {},
+      ...runtime.refreshRuntimeConfig ? { refreshRuntimeConfig: runtime.refreshRuntimeConfig } : {}
+    }, (runtimeConfig) => ({
+      baseUrl: runtimeConfig.baseUrl,
+      method: "POST",
+      path: "/agent/order/charge",
+      headers: buildCustomerHeaders(runtimeConfig),
+      body: buildChargeBody(input),
+      timeoutMs: runtime.timeoutMs,
+      dryRun: runtime.dryRun
+    })),
+    refreshPaymentMethods: runtime.refreshPaymentMethods,
+    dryRun: runtime.dryRun
+  });
+  const result = refreshed.result;
+  if ("dryRun" in result) {
+    return { dryRun: true, request: result };
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  return {
+    dryRun: false,
+    data,
+    ...classifyChargeData(data),
+    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
+  };
+}
+function isRecord10(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function finiteNumber2(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return void 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function nonNegativeInteger(value) {
+  const parsed = finiteNumber2(value);
+  return parsed !== void 0 && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+function nonEmptyString2(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized || null;
+}
+function compact(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
+}
+
+// dist/payment/method-selection.js
+var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
+var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
+function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
+  return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+}
+function allowsMissingPaymentInstrument(paymentMethodType) {
+  return OPTIONAL_PAYMENT_INSTRUMENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+}
+function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  const candidates = /* @__PURE__ */ new Map();
+  if (Array.isArray(paymentMethods)) {
+    for (const item of paymentMethods) {
+      if (!isRecord11(item) || paymentMethodTypeOf(item) !== normalizedType) {
+        continue;
+      }
+      const paymentInstrumentId = nonEmptyString3(item.paymentInstrumentId);
+      if (!paymentInstrumentId) {
+        continue;
+      }
+      const existing = candidates.get(paymentInstrumentId);
+      candidates.set(paymentInstrumentId, {
+        paymentInstrumentId,
+        isDefault: Boolean(existing?.isDefault || isDefaultPaymentMethod(item))
+      });
+    }
+  }
+  const matches = [...candidates.values()];
+  if (matches.length === 0) {
+    throw validationError(`no ${normalizedType} payment method is available; bind one and refresh payment methods`);
+  }
+  if (matches.length === 1) {
+    return matches[0].paymentInstrumentId;
+  }
+  const defaultMatches = matches.filter((candidate) => candidate.isDefault);
+  if (defaultMatches.length === 1) {
+    return defaultMatches[0].paymentInstrumentId;
+  }
+  throw validationError(`multiple ${normalizedType} payment methods are available without one unique default; pass --payment-instrument-id explicitly`);
+}
+function validatePaymentInstrumentType(paymentMethods, paymentInstrumentId, paymentMethodType) {
+  const normalizedId = nonEmptyString3(paymentInstrumentId);
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  if (!normalizedId) {
+    throw validationError("--payment-instrument-id must not be blank");
+  }
+  const matchingIdRecords = Array.isArray(paymentMethods) ? paymentMethods.filter((item) => isRecord11(item) && nonEmptyString3(item.paymentInstrumentId) === normalizedId) : [];
+  if (matchingIdRecords.length === 0) {
+    throw validationError(`payment instrument ${normalizedId} was not found after refreshing payment methods`);
+  }
+  if (matchingIdRecords.some((item) => paymentMethodTypeOf(item) === normalizedType)) {
+    return normalizedId;
+  }
+  const actualTypes = [...new Set(matchingIdRecords.map((item) => paymentMethodTypeOf(item) ?? "UNKNOWN"))].join(", ");
+  throw validationError(`payment instrument ${normalizedId} has type ${actualTypes}, not ${normalizedType}`);
+}
+function normalizePaymentMethodType(value) {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    throw validationError("--payment-method-type must not be blank");
+  }
+  return normalized;
+}
+function normalizeOptionalType(value) {
+  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : void 0;
+}
+function paymentMethodTypeOf(item) {
+  return normalizeOptionalType(item.paymentMethodType) ?? normalizeOptionalType(item.paymentInstrumentType);
+}
+function isDefaultPaymentMethod(item) {
+  return item.isDefault === true || item.default === true || item.defaultPaymentMethod === true;
+}
+function nonEmptyString3(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord11(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/payment/qr-code.js
+var import_qrcode = __toESM(require_lib(), 1);
+import { chmod as chmod4, mkdtemp as mkdtemp3, rm as rm9, writeFile as writeFile3 } from "node:fs/promises";
+import { tmpdir as tmpdir3 } from "node:os";
+import { join as join8 } from "node:path";
+var PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+var MAX_QR_PNG_BYTES = 1024 * 1024;
+var MAX_QR_PNG_DATA_URL_LENGTH = PNG_DATA_URL_PREFIX.length + Math.ceil(MAX_QR_PNG_BYTES / 3) * 4;
+var PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+var REDACTED_PNG_DATA_URL = "[redacted:png-data-url]";
+var REDACTED_QR_CODE_CONTENT = "[redacted:qr-code-content]";
+var TERMINAL_QR_WARNING = "Warning: terminal QR could not be displayed; use customerAction.imagePath instead.\n";
+async function materializeQrCodeCustomerAction(qrCode, options2 = {}) {
+  const png = decodePngDataUrl(qrCode.dataUrl);
+  let directoryPath;
+  try {
+    directoryPath = await mkdtemp3(join8(options2.temporaryDirectory ?? tmpdir3(), "clink-cli-payment-qr-"));
+    if (process.platform !== "win32") {
+      await chmod4(directoryPath, 448);
+    }
+    const imagePath = join8(directoryPath, "payment-qr.png");
+    await writeFile3(imagePath, png, { flag: "wx", mode: 384 });
+    if (process.platform !== "win32") {
+      await chmod4(imagePath, 384);
+    }
+    return {
+      type: "QR_CODE_REQUIRED",
+      mediaType: "image/png",
+      imagePath,
+      temporary: true,
+      cleanupRequired: true,
+      cleanupPath: directoryPath,
+      orderId: qrCode.orderId,
+      paymentExecutionDetailId: qrCode.paymentExecutionDetailId,
+      expiresAt: qrCode.expiresAt,
+      expiresSecond: qrCode.expiresSecond
+    };
+  } catch {
+    if (directoryPath) {
+      await rm9(directoryPath, { recursive: true, force: true }).catch(() => {
+      });
+    }
+    throw apiError("failed to store payment QR code", 500);
+  }
+}
+function buildQrCodePaymentOutput(data, customerAction) {
+  const redacted = redactPaymentQrSecrets(data);
+  if (!isRecord12(redacted)) {
+    throw apiError("invalid payment response", 502);
+  }
+  return {
+    ...redacted,
+    customerAction
+  };
+}
+async function writeTerminalQrCode(content) {
+  if (!content) {
+    process.stderr.write(TERMINAL_QR_WARNING);
+    return;
+  }
+  try {
+    const rendered = await import_qrcode.default.toString(content, {
+      type: "utf8",
+      small: true,
+      margin: 2
+    });
+    process.stderr.write(`
+${rendered}${rendered.endsWith("\n") ? "" : "\n"}`);
+  } catch {
+    process.stderr.write(TERMINAL_QR_WARNING);
+  }
+}
+function redactPaymentQrSecrets(value) {
+  if (typeof value === "string") {
+    return looksLikePngDataUrl(value) ? REDACTED_PNG_DATA_URL : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactPaymentQrSecrets(item));
+  }
+  if (!isRecord12(value)) {
+    return value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    key.toLowerCase() === "qrcodecontent" ? REDACTED_QR_CODE_CONTENT : redactPaymentQrSecrets(item)
+  ]));
+}
+function decodePngDataUrl(dataUrl) {
+  if (dataUrl.length > MAX_QR_PNG_DATA_URL_LENGTH || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+    throw invalidQrCode();
+  }
+  const encoded = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
+  if (encoded.length === 0 || encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(encoded)) {
+    throw invalidQrCode();
+  }
+  const png = Buffer.from(encoded, "base64");
+  if (png.length === 0 || png.length > MAX_QR_PNG_BYTES || png.toString("base64") !== encoded) {
+    throw invalidQrCode();
+  }
+  validatePngStructure(png);
+  return png;
+}
+function validatePngStructure(png) {
+  if (png.length < 33 || !png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    throw invalidQrCode();
+  }
+  let offset = PNG_SIGNATURE.length;
+  let firstChunk = true;
+  let foundEnd = false;
+  while (offset + 12 <= png.length) {
+    const length = png.readUInt32BE(offset);
+    const typeOffset = offset + 4;
+    const dataOffset = typeOffset + 4;
+    const chunkEnd = dataOffset + length + 4;
+    if (length > MAX_QR_PNG_BYTES || chunkEnd > png.length) {
+      throw invalidQrCode();
+    }
+    const type = png.toString("ascii", typeOffset, dataOffset);
+    if (!/^[A-Za-z]{4}$/u.test(type)) {
+      throw invalidQrCode();
+    }
+    if (firstChunk) {
+      if (type !== "IHDR" || length !== 13) {
+        throw invalidQrCode();
+      }
+      const width = png.readUInt32BE(dataOffset);
+      const height = png.readUInt32BE(dataOffset + 4);
+      if (width === 0 || height === 0 || width > 4096 || height > 4096) {
+        throw invalidQrCode();
+      }
+      firstChunk = false;
+    }
+    if (type === "IEND") {
+      if (length !== 0 || chunkEnd !== png.length) {
+        throw invalidQrCode();
+      }
+      foundEnd = true;
+      break;
+    }
+    offset = chunkEnd;
+  }
+  if (!foundEnd) {
+    throw invalidQrCode();
+  }
+}
+function looksLikePngDataUrl(value) {
+  return value.trimStart().toLowerCase().startsWith("data:image/png");
+}
+function invalidQrCode() {
+  return apiError("payment response contained an invalid PNG QR code", 502);
+}
+function isRecord12(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/skills/install.js
+import { randomUUID as createRandomUUID2 } from "node:crypto";
+import { mkdir as mkdir7, rm as rm11 } from "node:fs/promises";
+import { join as join9 } from "node:path";
+
+// dist/skills/download.js
+import { createHash as createHash5 } from "node:crypto";
+import { createWriteStream as createFileWriteStream } from "node:fs";
+import { lstat as lstat7, rm as rm10 } from "node:fs/promises";
+import { Readable, Transform as Transform2 } from "node:stream";
+import { pipeline as pipeline2 } from "node:stream/promises";
+var DEFAULT_DEPENDENCIES2 = {
+  fetch: (...args) => globalThis.fetch(...args),
+  sleep: async (ms) => new Promise((resolve6) => setTimeout(resolve6, ms)),
   createWriteStream: (destinationPath) => createFileWriteStream(destinationPath, { flags: "wx", mode: 384 })
 };
 var RETRYABLE = [408, 429, 500, 502, 503, 504];
 var REDIRECTS = [301, 302, 303, 307, 308];
 var MAX_ATTEMPTS = 2;
-var MAX_REDIRECTS = 3;
+var MAX_REDIRECTS2 = 3;
 var RETRY_DELAY_MS = 100;
 var NETWORK_ERROR_MESSAGE = "failed to download skill package";
 var REJECTED_TICKET_MESSAGE = "temporary skill download link was rejected";
@@ -17197,9 +19865,9 @@ async function downloadSkillPackage(input, overrides) {
     throw installError(INSTALL_ERROR_MESSAGE2);
   }
   const dependencies = {
-    fetch: overrides?.fetch ?? DEFAULT_DEPENDENCIES.fetch,
-    sleep: overrides?.sleep ?? DEFAULT_DEPENDENCIES.sleep,
-    createWriteStream: overrides?.createWriteStream ?? DEFAULT_DEPENDENCIES.createWriteStream
+    fetch: overrides?.fetch ?? DEFAULT_DEPENDENCIES2.fetch,
+    sleep: overrides?.sleep ?? DEFAULT_DEPENDENCIES2.sleep,
+    createWriteStream: overrides?.createWriteStream ?? DEFAULT_DEPENDENCIES2.createWriteStream
   };
   const state = { createdDestination: false };
   let ticket = input.ticket;
@@ -17279,7 +19947,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
       break;
     }
     await cancelResponseBody(candidate);
-    if (followedRedirects === MAX_REDIRECTS) {
+    if (followedRedirects === MAX_REDIRECTS2) {
       throw new NonRetryableDownloadError();
     }
     const location = candidate.headers.get("location");
@@ -17314,7 +19982,7 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
   }
   let firstFailureOrigin;
   try {
-    const hash = createHash3("sha256");
+    const hash = createHash5("sha256");
     let actualBytes = 0;
     const meter = new Transform2({
       transform(chunk, _encoding, callback) {
@@ -17329,10 +19997,10 @@ async function downloadAttempt(ticket, destinationPath, dependencies, state, sig
     });
     const destination = dependencies.createWriteStream(destinationPath);
     try {
-      await new Promise((resolve4, reject) => {
+      await new Promise((resolve6, reject) => {
         const onOpen = () => {
           destination.off("error", onError);
-          resolve4();
+          resolve6();
         };
         const onError = (error) => {
           destination.off("open", onOpen);
@@ -17380,7 +20048,7 @@ async function cleanupDestination(destinationPath, state) {
     return true;
   }
   try {
-    await rm5(destinationPath, { force: true });
+    await rm10(destinationPath, { force: true });
     state.createdDestination = false;
     return true;
   } catch {
@@ -17389,7 +20057,7 @@ async function cleanupDestination(destinationPath, state) {
 }
 async function assertDestinationAbsent(destinationPath) {
   try {
-    await lstat3(destinationPath);
+    await lstat7(destinationPath);
   } catch (error) {
     if (error.code === "ENOENT") {
       return;
@@ -17484,7 +20152,7 @@ var INVALID_BASE_URL_MESSAGE = "invalid skill registry base URL";
 async function requestPublicSkillsJson(input, overrides = {}) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch,
-    sleep: overrides.sleep ?? (async (ms) => new Promise((resolve4) => setTimeout(resolve4, ms))),
+    sleep: overrides.sleep ?? (async (ms) => new Promise((resolve6) => setTimeout(resolve6, ms))),
     random: overrides.random ?? Math.random
   };
   const invalidResponseMessage = input.invalidResponseMessage ?? INVALID_RESPONSE_MESSAGE;
@@ -17638,7 +20306,7 @@ function parseTipsConfig(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord9(parsed) ? parsed : void 0;
+    return isRecord13(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -17648,22 +20316,22 @@ function hasNonemptyString(value) {
 }
 function selectPublicSkillItems(body) {
   const payload = selectPublicSkillPayload(body);
-  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord9)) {
+  if (!payload || !Array.isArray(payload.items) || !payload.items.every(isRecord13)) {
     return void 0;
   }
   return payload.items;
 }
 function selectPublicSkillPayload(body) {
-  if (isRecord9(body) && Array.isArray(body.items)) {
+  if (isRecord13(body) && Array.isArray(body.items)) {
     return body;
   }
   const unwrapped = unwrapApiData(body);
-  if (isRecord9(unwrapped) && Array.isArray(unwrapped.items)) {
+  if (isRecord13(unwrapped) && Array.isArray(unwrapped.items)) {
     return unwrapped;
   }
   return void 0;
 }
-function isRecord9(value) {
+function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -17738,680 +20406,10 @@ function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path3.posix.basename(value) === value && path3.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-// dist/skills/store.js
-import { join as join4 } from "node:path";
-
-// dist/skills/store-publication.js
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { constants as constants2 } from "node:fs";
-import { chmod as chmod4, cp as cp2, copyFile as copyFile2, link, lstat as lstat4, mkdir as mkdir4, open as open4, readdir as readdir3, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm6, symlink as symlink2, utimes } from "node:fs/promises";
-import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join3, relative as relative3, resolve as resolve3, sep as sep2 } from "node:path";
-var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
-var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
-var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
-var PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
-var INSTALL_MARKER_NAME2 = ".clink-install.json";
-var SHA256_PATTERN = /^[a-f0-9]{64}$/;
-var MovedBackupError = class extends Error {
-  backup;
-  constructor(backup) {
-    super("current changed while being backed up");
-    this.backup = backup;
-  }
-};
-async function publishSkillRelease(input) {
-  const paths = input.paths;
-  validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
-  let current;
-  let existingRelease;
-  try {
-    current = await inspectCurrent(paths);
-    if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
-      if (!input.force) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-    }
-    if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
-      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
-      if (expectedRelease !== current.managed.canonicalReleasePath) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-      const confirmedCurrent = await inspectCurrent(paths);
-      if (confirmedCurrent?.managed === null || confirmedCurrent?.managed === void 0 || !samePathFingerprint(confirmedCurrent.fingerprint, current.fingerprint) || confirmedCurrent.managed.canonicalReleasePath !== expectedRelease || confirmedCurrent.managed.marker.publisher !== input.marker.publisher || confirmedCurrent.managed.marker.skillName !== input.marker.skillName || confirmedCurrent.managed.marker.sha256 !== input.marker.sha256) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-      return createUnchangedPublication(paths);
-    }
-    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
-  } catch (error) {
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  const transaction = {
-    paths,
-    marker: input.marker,
-    uuid: input.uuid,
-    oldCurrent: current,
-    backup: null,
-    newCurrent: null,
-    createdRelease: null
-  };
-  try {
-    if (existingRelease === null) {
-      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker);
-    }
-    const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
-    if (selectedRelease === null) {
-      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
-    }
-    const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
-    if (expectedRelease === null) {
-      throw new Error("published release is missing");
-    }
-    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    if (current !== null) {
-      const compatibleManaged = current.managed !== null && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName;
-      const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
-      try {
-        await paths.publicationMutationHook?.({ phase: "before-current-backup" });
-        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
-      } catch (error) {
-        if (error instanceof MovedBackupError) {
-          transaction.backup = error.backup;
-        }
-        throw error;
-      }
-      await paths.publicationMutationHook?.({ phase: "after-backup" });
-      await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    }
-    const target = relative3(dirname3(paths.currentPath), paths.releasePath);
-    await symlink2(target, paths.currentPath, "dir");
-    const newCurrent = await fingerprintPath2(paths.currentPath);
-    if (newCurrent.kind !== "symlink" || newCurrent.linkTarget !== target) {
-      throw new Error("current link changed during creation");
-    }
-    transaction.newCurrent = newCurrent;
-    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    await paths.publicationMutationHook?.({ phase: "after-current-switch" });
-    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
-  } catch (error) {
-    try {
-      await rollbackPublicationTransaction(transaction);
-    } catch {
-    }
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-}
-function createUnchangedPublication(paths) {
-  let state = "active";
-  return {
-    action: "unchanged",
-    releasePath: paths.releasePath,
-    currentPath: paths.currentPath,
-    backupPath: null,
-    async rollback() {
-      if (state === "active") {
-        state = "rolled-back";
-      }
-    },
-    async finalize() {
-      if (state === "active") {
-        state = "committed";
-      }
-    }
-  };
-}
-function createPublishedTransaction(transaction, action) {
-  let state = "active";
-  return {
-    action,
-    releasePath: transaction.paths.releasePath,
-    currentPath: transaction.paths.currentPath,
-    backupPath: transaction.backup?.retained === true ? transaction.backup.containerPath : null,
-    async rollback() {
-      if (state !== "active") {
-        return;
-      }
-      try {
-        await rollbackPublicationTransaction(transaction);
-        state = "rolled-back";
-      } catch {
-        throw installError(PUBLISH_ROLLBACK_MESSAGE);
-      }
-    },
-    async finalize() {
-      if (state !== "active") {
-        return;
-      }
-      try {
-        if (transaction.backup !== null && !transaction.backup.retained) {
-          await removeAuthenticatedBackup(transaction.backup);
-          transaction.backup = null;
-        }
-        state = "committed";
-      } catch {
-        throw installError(PUBLISH_FINALIZE_MESSAGE);
-      }
-    }
-  };
-}
-function validatePublicationInput(paths, extractedRoot, marker, uuid) {
-  if (!isInstallMarker(marker) || !SHA256_PATTERN.test(marker.sha256)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  if (!isSafePathSegment(marker.publisher) || !isSafePathSegment(marker.skillName)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  if (!isSafePathSegment(uuid)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
-  if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-}
-function isSafePathSegment(value) {
-  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
-}
-async function inspectCurrent(paths) {
-  let fingerprint;
-  try {
-    fingerprint = await fingerprintPath2(paths.currentPath);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-  if (fingerprint.kind !== "symlink" || fingerprint.linkTarget === null) {
-    return { fingerprint, managed: null };
-  }
-  const managed = await inspectManagedCurrent(paths, fingerprint);
-  return { fingerprint, managed };
-}
-async function inspectManagedCurrent(paths, fingerprint) {
-  try {
-    const canonicalRoot = await realpath2(paths.releasesRoot);
-    const rootStat = await lstat4(paths.releasesRoot);
-    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-      return null;
-    }
-    const canonicalReleasePath = await realpath2(paths.currentPath);
-    const releaseStat = await lstat4(canonicalReleasePath);
-    if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink()) {
-      return null;
-    }
-    const releaseParts = pathPartsBelow(canonicalRoot, canonicalReleasePath);
-    if (releaseParts === null || releaseParts.length !== 3) {
-      return null;
-    }
-    const [publisher, skillName, sha256] = releaseParts;
-    if (!SHA256_PATTERN.test(sha256)) {
-      return null;
-    }
-    const marker = await readNoFollowInstallMarker(join3(canonicalReleasePath, INSTALL_MARKER_NAME2));
-    if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
-      return null;
-    }
-    const confirmed = await fingerprintPath2(paths.currentPath);
-    if (!samePathFingerprint(fingerprint, confirmed)) {
-      return null;
-    }
-    return {
-      fingerprint,
-      linkTarget: fingerprint.linkTarget,
-      canonicalReleasePath,
-      marker
-    };
-  } catch {
-    return null;
-  }
-}
-async function canonicalExistingReleasePath(releasePath, releasesRoot) {
-  const releaseStat = await lstat4(releasePath);
-  const rootStat = await lstat4(releasesRoot);
-  if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  const canonicalRoot = await realpath2(releasesRoot);
-  const canonicalRelease = await realpath2(releasePath);
-  const parts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  if (parts === null || parts.length !== 3) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  return canonicalRelease;
-}
-async function inspectExistingRelease(releasePath, releasesRoot, marker) {
-  let fingerprint;
-  try {
-    fingerprint = await fingerprintPath2(releasePath);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-  if (fingerprint.kind !== "directory") {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  const canonicalRelease = await canonicalExistingReleasePath(releasePath, releasesRoot);
-  const canonicalRoot = await realpath2(releasesRoot);
-  const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
-  const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  const existingMarker = await readNoFollowInstallMarker(join3(releasePath, INSTALL_MARKER_NAME2));
-  if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  return fingerprint;
-}
-async function assertReleaseAuthenticated(paths, marker, expected) {
-  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
-  if (current === null || !samePathFingerprint(current, expected)) {
-    throw new Error("selected release changed during publication");
-  }
-}
-function pathPartsBelow(rootPath, candidatePath) {
-  const childPath = relative3(rootPath, candidatePath);
-  if (childPath.length === 0 || childPath === ".." || childPath.startsWith(`..${sep2}`) || isAbsolute3(childPath)) {
-    return null;
-  }
-  return childPath.split(sep2);
-}
-async function createImmutableRelease(paths, extractedRoot, marker) {
-  const extracted = await fingerprintPath2(extractedRoot);
-  if (extracted.kind !== "directory") {
-    throw new Error("extracted skill root is not a real directory");
-  }
-  await ensureReleaseParent(paths, marker);
-  await writeInstallMarker(extractedRoot, marker);
-  await paths.publicationMutationHook?.({ phase: "before-release-rename" });
-  const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
-  if (existingRelease !== null) {
-    return null;
-  }
-  await rename3(extractedRoot, paths.releasePath);
-  const releaseFingerprint = await fingerprintPath2(paths.releasePath);
-  if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
-    throw new Error("release changed during publication");
-  }
-  const installedMarker = await readNoFollowInstallMarker(join3(paths.releasePath, INSTALL_MARKER_NAME2));
-  if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
-    throw new Error("release marker changed during publication");
-  }
-  return { fingerprint: releaseFingerprint, marker };
-}
-async function ensureReleaseParent(paths, marker) {
-  await ensureRealDirectory(paths.releasesRoot);
-  const publisherPath = join3(paths.releasesRoot, marker.publisher);
-  await ensureRealDirectory(publisherPath);
-  await ensureRealDirectory(join3(publisherPath, marker.skillName));
-}
-async function ensureRealDirectory(path4) {
-  await mkdir4(path4, { recursive: true, mode: 448 });
-  const pathStat = await lstat4(path4);
-  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
-    throw new Error("store path is not a real directory");
-  }
-}
-async function writeInstallMarker(rootPath, marker) {
-  const markerPath = join3(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open4(markerPath, constants2.O_WRONLY | constants2.O_CREAT | constants2.O_EXCL | constants2.O_NOFOLLOW, 420);
-  try {
-    await handle.writeFile(JSON.stringify(marker), "utf8");
-    await handle.chmod(420);
-  } finally {
-    await handle.close();
-  }
-}
-async function readNoFollowInstallMarker(path4) {
-  const parsed = await readNoFollowJson(path4);
-  return isInstallMarker(parsed) ? parsed : null;
-}
-async function readNoFollowJson(path4) {
-  let handle;
-  try {
-    handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
-    const before = await handle.stat();
-    if (!before.isFile()) {
-      return null;
-    }
-    const raw = await handle.readFile("utf8");
-    const after = await handle.stat();
-    if (before.dev !== after.dev || before.ino !== after.ino || !after.isFile()) {
-      return null;
-    }
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  } finally {
-    await handle?.close();
-  }
-}
-function isInstallMarker(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const marker = value;
-  const keys = Object.keys(marker).sort();
-  const expectedKeys = [
-    "installedAt",
-    "publisher",
-    "requestedVersion",
-    "schemaVersion",
-    "sha256",
-    "sizeBytes",
-    "skillName"
-  ];
-  return keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index]) && marker.schemaVersion === 1 && typeof marker.publisher === "string" && typeof marker.skillName === "string" && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && SHA256_PATTERN.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string" && marker.installedAt.length > 0;
-}
-function sameInstallMarker(first, second) {
-  return first.schemaVersion === second.schemaVersion && first.publisher === second.publisher && first.skillName === second.skillName && first.requestedVersion === second.requestedVersion && first.sha256 === second.sha256 && first.sizeBytes === second.sizeBytes && first.installedAt === second.installedAt;
-}
-async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
-  await assertPathFingerprint(paths.currentPath, expectedCurrent);
-  await ensureRealDirectory(paths.backupsRoot);
-  const containerPath = join3(paths.backupsRoot, backupName);
-  await mkdir4(containerPath, { mode: 448 });
-  const containerFingerprint = await fingerprintPath2(containerPath);
-  if (containerFingerprint.kind !== "directory") {
-    throw new Error("backup container is not a directory");
-  }
-  const entryPath = join3(containerPath, basename(paths.currentPath));
-  try {
-    await assertPathFingerprint(paths.currentPath, expectedCurrent);
-    await rename3(paths.currentPath, entryPath);
-  } catch (error) {
-    await removeEmptyOwnedContainer(containerPath, containerFingerprint);
-    throw error;
-  }
-  const entryFingerprint = await fingerprintPath2(entryPath);
-  const backup = {
-    containerPath,
-    entryPath,
-    containerFingerprint,
-    entryFingerprint,
-    retained
-  };
-  if (!samePathFingerprint(entryFingerprint, expectedCurrent)) {
-    throw new MovedBackupError(backup);
-  }
-  try {
-    await lstat4(paths.currentPath);
-    throw new MovedBackupError(backup);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return backup;
-    }
-    throw error;
-  }
-}
-async function removeEmptyOwnedContainer(containerPath, expected) {
-  try {
-    const current = await fingerprintPath2(containerPath);
-    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir3(containerPath)).length === 0) {
-      await rm6(containerPath, { recursive: true });
-    }
-  } catch {
-  }
-}
-async function rollbackPublicationTransaction(transaction) {
-  let rollbackFailed = false;
-  let currentSafeForReleaseCleanup = true;
-  if (transaction.newCurrent !== null) {
-    try {
-      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
-      transaction.newCurrent = null;
-    } catch {
-      rollbackFailed = true;
-      currentSafeForReleaseCleanup = false;
-    }
-  } else {
-    try {
-      const current = await fingerprintPath2(transaction.paths.currentPath);
-      if (transaction.oldCurrent === null || !samePathFingerprint(current, transaction.oldCurrent.fingerprint)) {
-        currentSafeForReleaseCleanup = false;
-      }
-    } catch (error) {
-      if (!isErrorCode2(error, "ENOENT")) {
-        rollbackFailed = true;
-        currentSafeForReleaseCleanup = false;
-      }
-    }
-  }
-  if (transaction.backup !== null) {
-    try {
-      await restoreBackup(transaction.paths.currentPath, transaction.backup);
-      if (!transaction.backup.retained) {
-        await removeAuthenticatedBackup(transaction.backup);
-      }
-      transaction.backup = transaction.backup.retained ? transaction.backup : null;
-    } catch {
-      rollbackFailed = true;
-      currentSafeForReleaseCleanup = false;
-    }
-  }
-  if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
-    try {
-      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
-      transaction.createdRelease = null;
-    } catch {
-      rollbackFailed = true;
-    }
-  }
-  if (rollbackFailed) {
-    throw new Error("publication rollback was incomplete");
-  }
-}
-async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanupName) {
-  let current;
-  try {
-    current = await fingerprintPath2(currentPath);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  if (!samePathFingerprint(current, expected)) {
-    throw new Error("current was replaced before rollback");
-  }
-  await ensureRealDirectory(backupsRoot);
-  const containerPath = join3(backupsRoot, cleanupName);
-  await mkdir4(containerPath, { mode: 448 });
-  const containerFingerprint = await fingerprintPath2(containerPath);
-  const entryPath = join3(containerPath, basename(currentPath));
-  await rename3(currentPath, entryPath);
-  const moved = await fingerprintPath2(entryPath);
-  if (!samePathFingerprint(moved, expected)) {
-    await restoreBackup(currentPath, {
-      containerPath,
-      entryPath,
-      containerFingerprint,
-      entryFingerprint: moved,
-      retained: true
-    });
-    throw new Error("current changed while rollback moved it");
-  }
-  await removeAuthenticatedBackup({
-    containerPath,
-    entryPath,
-    containerFingerprint,
-    entryFingerprint: expected,
-    retained: false
-  });
-}
-async function restoreBackup(currentPath, backup) {
-  await assertBackupAuthenticated(backup);
-  try {
-    await lstat4(currentPath);
-    throw new Error("current path is occupied during restoration");
-  } catch (error) {
-    if (!isErrorCode2(error, "ENOENT")) {
-      throw error;
-    }
-  }
-  switch (backup.entryFingerprint.kind) {
-    case "symlink": {
-      if (backup.entryFingerprint.linkTarget === null) {
-        throw new Error("backup link target is unavailable");
-      }
-      await symlink2(backup.entryFingerprint.linkTarget, currentPath, "dir");
-      break;
-    }
-    case "file":
-      if (backup.retained) {
-        await copyFile2(backup.entryPath, currentPath, constants2.COPYFILE_EXCL);
-        await chmod4(currentPath, backup.entryFingerprint.mode & 4095);
-        await assertBackupAuthenticated(backup);
-        const atime = backup.entryFingerprint.atimeMs / 1e3;
-        const mtime = backup.entryFingerprint.mtimeMs / 1e3;
-        await utimes(currentPath, atime, mtime);
-        await utimes(backup.entryPath, atime, mtime);
-      } else {
-        await link(backup.entryPath, currentPath);
-      }
-      break;
-    case "directory":
-      await restoreDirectory(backup.entryPath, currentPath, backup.entryFingerprint.mode);
-      break;
-    default:
-      throw new Error("backup type cannot be restored safely");
-  }
-  const restored = await fingerprintPath2(currentPath);
-  if (backup.entryFingerprint.kind === "symlink") {
-    if (restored.kind !== "symlink" || restored.linkTarget !== backup.entryFingerprint.linkTarget) {
-      throw new Error("restored link does not match its backup");
-    }
-  } else if (backup.entryFingerprint.kind === "file" && (restored.kind !== "file" || (backup.retained ? restored.dev !== backup.entryFingerprint.dev || restored.ino === backup.entryFingerprint.ino || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095) || Math.abs(restored.atimeMs - backup.entryFingerprint.atimeMs) > 1 || Math.abs(restored.mtimeMs - backup.entryFingerprint.mtimeMs) > 1 : restored.dev !== backup.entryFingerprint.dev || restored.ino !== backup.entryFingerprint.ino))) {
-    throw new Error("restored file does not match its backup");
-  } else if (backup.entryFingerprint.kind === "directory" && (restored.kind !== "directory" || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095))) {
-    throw new Error("restored directory does not match its backup");
-  }
-}
-async function restoreDirectory(sourcePath, destinationPath, mode) {
-  await mkdir4(destinationPath, { mode: mode & 4095 });
-  for (const entry of await readdir3(sourcePath)) {
-    await cp2(join3(sourcePath, entry), join3(destinationPath, entry), {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      preserveTimestamps: true,
-      verbatimSymlinks: true
-    });
-  }
-  await chmod4(destinationPath, mode & 4095);
-}
-async function assertBackupAuthenticated(backup) {
-  const container = await fingerprintPath2(backup.containerPath);
-  const entry = await fingerprintPath2(backup.entryPath);
-  const entries = await readdir3(backup.containerPath);
-  if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
-    throw new Error("backup authentication failed");
-  }
-}
-async function removeAuthenticatedBackup(backup) {
-  await assertBackupAuthenticated(backup);
-  const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
-  await rename3(backup.containerPath, cleanupPath);
-  const movedContainer = await fingerprintPath2(cleanupPath);
-  const movedEntry = await fingerprintPath2(join3(cleanupPath, basename(backup.entryPath)));
-  if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
-    try {
-      await rename3(cleanupPath, backup.containerPath);
-    } catch {
-    }
-    throw new Error("backup changed during removal");
-  }
-  await rm6(cleanupPath, { recursive: true });
-}
-async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
-  const current = await fingerprintPath2(releasePath);
-  const marker = await readNoFollowInstallMarker(join3(releasePath, INSTALL_MARKER_NAME2));
-  await canonicalExistingReleasePath(releasePath, releasesRoot);
-  if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
-    throw new Error("created release changed before rollback");
-  }
-  const cleanupPath = `${releasePath}.rollback-${uuid}`;
-  await rename3(releasePath, cleanupPath);
-  const moved = await fingerprintPath2(cleanupPath);
-  const movedMarker = await readNoFollowInstallMarker(join3(cleanupPath, INSTALL_MARKER_NAME2));
-  if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
-    try {
-      await rename3(cleanupPath, releasePath);
-    } catch {
-    }
-    throw new Error("created release changed during rollback");
-  }
-  await rm6(cleanupPath, { recursive: true });
-}
-async function fingerprintPath2(path4) {
-  const before = await lstat4(path4);
-  const kind = pathKind(before);
-  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
-  const after = await lstat4(path4);
-  if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
-    throw new Error("path changed during inspection");
-  }
-  return {
-    dev: after.dev,
-    ino: after.ino,
-    mode: after.mode,
-    atimeMs: after.atimeMs,
-    mtimeMs: after.mtimeMs,
-    kind,
-    linkTarget
-  };
-}
-function pathKind(pathStat) {
-  if (pathStat.isSymbolicLink()) {
-    return "symlink";
-  }
-  if (pathStat.isFile()) {
-    return "file";
-  }
-  if (pathStat.isDirectory()) {
-    return "directory";
-  }
-  return "other";
-}
-async function assertPathFingerprint(path4, expected) {
-  const current = await fingerprintPath2(path4);
-  if (!samePathFingerprint(current, expected)) {
-    throw new Error("path changed before mutation");
-  }
-}
-function samePathFingerprint(first, second) {
-  return first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.kind === second.kind && first.linkTarget === second.linkTarget;
-}
-function isErrorCode2(error, code) {
-  return error?.code === code;
-}
-
-// dist/skills/store.js
-function resolveStorePaths(homeDir, spec, sha256, uuid) {
-  const skillsRoot = join4(homeDir, ".agents", "skills");
-  const clinkRoot = join4(skillsRoot, ".clink");
-  const releasesRoot = join4(clinkRoot, "releases");
-  return {
-    skillsRoot,
-    clinkRoot,
-    stagingPath: join4(clinkRoot, "staging", uuid),
-    releasesRoot,
-    releasePath: join4(releasesRoot, spec.publisher, spec.skillName, sha256),
-    backupsRoot: join4(clinkRoot, "backups"),
-    currentPath: join4(skillsRoot, spec.skillName)
-  };
-}
-
 // dist/skills/install.js
-var PENDING_SHA_SENTINEL = "pending";
+var PENDING_SHA_SENTINEL2 = "pending";
 var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
-var DEFAULT_DEPENDENCIES2 = {
+var DEFAULT_DEPENDENCIES3 = {
   getTicket: getSkillDownloadTicket,
   downloadPackage: downloadSkillPackage,
   materializePackage: extractSkillPackage,
@@ -18419,9 +20417,9 @@ var DEFAULT_DEPENDENCIES2 = {
   publishRelease: publishSkillRelease,
   detectAgentRoots: detectAgents,
   prepareAgents: prepareAgentPlans,
-  randomUUID: createRandomUUID,
+  randomUUID: createRandomUUID2,
   now: () => /* @__PURE__ */ new Date(),
-  remove: async (path4) => rm7(path4, { recursive: true, force: true }),
+  remove: async (path4) => rm11(path4, { recursive: true, force: true }),
   log: (message) => {
     process.stderr.write(`${message}
 `);
@@ -18429,12 +20427,12 @@ var DEFAULT_DEPENDENCIES2 = {
 };
 async function installSkill(input, overrides = {}) {
   const dependencies = {
-    ...DEFAULT_DEPENDENCIES2,
+    ...DEFAULT_DEPENDENCIES3,
     ...overrides
   };
   const packageSpec = toPackageSpec(input);
-  const skillsRoot = join5(input.homeDir, ".agents", "skills");
-  const installPath = join5(skillsRoot, input.skillName);
+  const skillsRoot = join9(input.homeDir, ".agents", "skills");
+  const installPath = join9(skillsRoot, input.skillName);
   const downloadTimeoutMs = Math.max(input.timeoutMs, MIN_SKILL_DOWNLOAD_TIMEOUT_MS);
   if (input.dryRun) {
     const detectedAgents = await dependencies.detectAgentRoots({
@@ -18457,13 +20455,13 @@ async function installSkill(input, overrides = {}) {
     };
   }
   const stagingUuid = dependencies.randomUUID();
-  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
+  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL2, stagingUuid);
   const publishedSkills = [];
   const appliedAgents = [];
   let committed = false;
   let finalCleanupStarted = false;
   try {
-    await mkdir5(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
+    await mkdir7(preliminaryPaths.stagingPath, { recursive: true, mode: 448 });
     dependencies.log("Resolving skill download URL");
     const ticket = await dependencies.getTicket({
       baseUrl: input.dashboardBaseUrl,
@@ -18473,7 +20471,7 @@ async function installSkill(input, overrides = {}) {
     dependencies.log("Downloading skill package");
     const downloaded = await dependencies.downloadPackage({
       ticket,
-      destinationPath: join5(preliminaryPaths.stagingPath, "package"),
+      destinationPath: join9(preliminaryPaths.stagingPath, "package"),
       timeoutMs: downloadTimeoutMs,
       refreshTicket: () => dependencies.getTicket({
         baseUrl: input.dashboardBaseUrl,
@@ -18482,7 +20480,7 @@ async function installSkill(input, overrides = {}) {
       })
     });
     dependencies.log("Materializing skill package");
-    const extracted = await dependencies.materializePackage(downloaded.path, join5(preliminaryPaths.stagingPath, "extract"));
+    const extracted = await dependencies.materializePackage(downloaded.path, join9(preliminaryPaths.stagingPath, "extract"));
     const installUnits = await prepareInstallUnits(input, extracted, downloaded, stagingUuid, dependencies.now(), dependencies);
     dependencies.log("Publishing skill release");
     for (const unit of installUnits) {
@@ -18535,7 +20533,7 @@ async function installSkill(input, overrides = {}) {
   }
 }
 async function prepareInstallUnits(input, extracted, downloaded, stagingUuid, installedAt, dependencies) {
-  const skillsRoot = join5(input.homeDir, ".agents", "skills");
+  const skillsRoot = join9(input.homeDir, ".agents", "skills");
   const roots = extracted.layout === "single" ? [{ skillName: input.skillName, skillRoot: extracted.skillRoot }] : extracted.skillRoots;
   const units = [];
   for (const [index, root] of roots.entries()) {
@@ -18852,12 +20850,12 @@ function recipientFromItem(item, errorIdentity) {
   };
 }
 function paymentOrderId(data) {
-  const paySuccessInfo = isRecord10(data.paySuccessInfo) ? data.paySuccessInfo : {};
+  const paySuccessInfo = isRecord14(data.paySuccessInfo) ? data.paySuccessInfo : {};
   const orderId = stringValue2(paySuccessInfo.orderId).trim();
   return orderId || void 0;
 }
 function channelPaymentMessage(data) {
-  const channel = isRecord10(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const channel = isRecord14(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
   for (const key of ["message", "msg", "errorMessage", "error_message", "error"]) {
     const message = stringValue2(channel[key]).trim();
     if (message) {
@@ -18872,7 +20870,7 @@ function stringValue2(value) {
 function normalizedUppercase(value) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
-function isRecord10(value) {
+function isRecord14(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function equalIdentity(value, expected) {
@@ -18880,10 +20878,10 @@ function equalIdentity(value, expected) {
 }
 
 // dist/tool.js
-import { execFile as execFile2 } from "node:child_process";
+import { execFile as execFile3 } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
-var execFileAsync = promisify(execFile2);
+var execFileAsync = promisify(execFile3);
 var DEFAULT_SITE_TIMEOUT_MS = 1e4;
 var DEFAULT_RESOURCE_TIMEOUT_MS = 3e4;
 var BROWSER_LAUNCH_TIMEOUT_MS = 3e4;
@@ -19167,11 +21165,11 @@ async function replaceWithValidatedShopifyOrigin(itemUrl, candidateOrigin, resol
   return true;
 }
 function readShopifyMerchantOrigins(profile) {
-  if (!isRecord11(profile)) {
+  if (!isRecord15(profile)) {
     return [];
   }
-  const ucp = isRecord11(profile.ucp) ? profile.ucp : profile;
-  const paymentHandlers = isRecord11(ucp.payment_handlers) ? ucp.payment_handlers : isRecord11(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
+  const ucp = isRecord15(profile.ucp) ? profile.ucp : profile;
+  const paymentHandlers = isRecord15(ucp.payment_handlers) ? ucp.payment_handlers : isRecord15(ucp.paymentHandlers) ? ucp.paymentHandlers : void 0;
   if (!paymentHandlers) {
     return [];
   }
@@ -19182,10 +21180,10 @@ function readShopifyMerchantOrigins(profile) {
       continue;
     }
     for (const handler of handlers) {
-      if (!isRecord11(handler) || !isRecord11(handler.config)) {
+      if (!isRecord15(handler) || !isRecord15(handler.config)) {
         continue;
       }
-      const merchantInfo = isRecord11(handler.config.merchant_info) ? handler.config.merchant_info : isRecord11(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
+      const merchantInfo = isRecord15(handler.config.merchant_info) ? handler.config.merchant_info : isRecord15(handler.config.merchantInfo) ? handler.config.merchantInfo : void 0;
       const merchantOrigin = merchantInfo ? asTrimmedString(merchantInfo.merchant_origin) ?? asTrimmedString(merchantInfo.merchantOrigin) : void 0;
       if (merchantOrigin && !seenOrigins.has(merchantOrigin)) {
         seenOrigins.add(merchantOrigin);
@@ -19846,11 +21844,11 @@ function collectCheckoutTotalCandidates(value) {
   return candidates;
 }
 function collectCheckoutTotalCandidatesInto(value, candidates) {
-  if (!isRecord11(value)) {
+  if (!isRecord15(value)) {
     return;
   }
   const result = readPath(value, ["session", "negotiate", "result"]);
-  if (isRecord11(result)) {
+  if (isRecord15(result)) {
     collectProposalTotal(result.buyerProposal, "serialized-graphql.buyerProposal.runningTotal", candidates);
     collectProposalTotal(result.sellerProposal, "serialized-graphql.sellerProposal.runningTotal", candidates);
   }
@@ -19866,7 +21864,7 @@ function collectCheckoutTotalCandidatesInto(value, candidates) {
 }
 function collectProposalTotal(proposal, source, candidates) {
   const runningTotal = readPath(proposal, ["runningTotal", "value"]);
-  if (!isRecord11(runningTotal)) {
+  if (!isRecord15(runningTotal)) {
     return;
   }
   const amount = runningTotal.amount;
@@ -19891,7 +21889,7 @@ function dedupeCheckoutTotals(candidates) {
   return [...unique.values()];
 }
 function parseShopifyProductItems(rawUrl, productJson, currency) {
-  if (!isRecord11(productJson)) {
+  if (!isRecord15(productJson)) {
     throw validationError("shopify_product_invalid");
   }
   const itemUrl = buildCanonicalItemUrl(rawUrl);
@@ -19913,7 +21911,7 @@ function parseShopifyProductItems(rawUrl, productJson, currency) {
   };
 }
 function parseShopifyVariantItem(variant, productJson, currency, canonicalItemUrl, optionNames) {
-  if (!isRecord11(variant)) {
+  if (!isRecord15(variant)) {
     throw validationError("shopify_product_variant_invalid");
   }
   const variantId = asIdString(variant.id);
@@ -19949,7 +21947,7 @@ function buildVariantItemUrl(rawUrl, variantId) {
 function readShopifyOptionNames(productJson) {
   const options2 = Array.isArray(productJson.options) ? productJson.options : [];
   return options2.map((option, index) => {
-    if (!isRecord11(option)) {
+    if (!isRecord15(option)) {
       return `option${index + 1}`;
     }
     return asTrimmedString(option.name) ?? `option${index + 1}`;
@@ -19967,7 +21965,7 @@ function readShopifyVariantOptions(variant, optionNames) {
   return options2;
 }
 function readCurrency(value) {
-  if (!isRecord11(value)) {
+  if (!isRecord15(value)) {
     return void 0;
   }
   return asTrimmedString(value.currency) ?? asTrimmedString(value.currencyCode);
@@ -20025,14 +22023,14 @@ function asTrimmedString(value) {
 function readPath(value, path4) {
   let current = value;
   for (const key of path4) {
-    if (!isRecord11(current)) {
+    if (!isRecord15(current)) {
       return void 0;
     }
     current = current[key];
   }
   return current;
 }
-function isRecord11(value) {
+function isRecord15(value) {
   return typeof value === "object" && value !== null;
 }
 function resolveUcpProviderFromHostname(hostname) {
@@ -20058,7 +22056,7 @@ var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
   "rejected",
   "requires_escalation"
 ]);
-var realSleep2 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+var realSleep2 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function waitForUcpCheckoutTerminal(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? realSleep2;
@@ -20092,7 +22090,7 @@ async function waitForUcpCheckoutTerminal(options2) {
   }
 }
 function requireCheckout(checkoutId, value) {
-  if (!isRecord12(value)) {
+  if (!isRecord16(value)) {
     throw apiError("UCP Checkout response must be an object.");
   }
   const observedId = normalizedText(value.id ?? value.checkoutId ?? value.checkout_id);
@@ -20128,7 +22126,7 @@ function resolvePollDelayMs(nextRetryAt, now) {
 function normalizedText(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
-function isRecord12(value) {
+function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -20136,7 +22134,7 @@ function isRecord12(value) {
 var DEFAULT_POLL_INTERVAL_MS3 = 3e3;
 var MAX_POLL_INTERVAL_MS2 = 3e4;
 var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
-var realSleep3 = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+var realSleep3 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function waitForUcpDigitalDelivery(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? realSleep3;
@@ -20176,7 +22174,7 @@ function classifyUcpDigitalDelivery(order) {
   if (rawDelivery === void 0 || rawDelivery === null) {
     return { status: "pending" };
   }
-  if (!isRecord13(rawDelivery)) {
+  if (!isRecord17(rawDelivery)) {
     throw apiError("UCP order digital_delivery must be an object.");
   }
   const rawStatus = rawDelivery.status;
@@ -20203,7 +22201,7 @@ function classifyUcpDigitalDelivery(order) {
   throw apiError(`unsupported UCP digital delivery status: ${status}`);
 }
 function requireOrder(orderId, value) {
-  if (!isRecord13(value)) {
+  if (!isRecord17(value)) {
     throw apiError("UCP order response must be an object.");
   }
   if (typeof value.id !== "string" || !value.id.trim()) {
@@ -20231,7 +22229,7 @@ function resolvePollDelayMs2(nextRetryAt, now) {
   }
   return Math.min(MAX_POLL_INTERVAL_MS2, Math.max(DEFAULT_POLL_INTERVAL_MS3, delay));
 }
-function isRecord13(value) {
+function isRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -20272,6 +22270,8 @@ var UCP_MERCHANT_LIST_FLAGS = /* @__PURE__ */ new Set([
   "help"
 ]);
 var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
+  "install",
+  "update",
   "wallet",
   "card",
   "risk",
@@ -20311,6 +22311,9 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
   if (!command) {
     process.stdout.write((edition.getHelpText ?? getHelpText)());
     return EXIT_CODES.OK;
+  }
+  if (isMaintenanceCommand(command, subcommand)) {
+    return handleMaintenanceCommand(command, subcommand, args, edition.maintenanceRuntime ?? {});
   }
   const preparedCommand = await edition.prepareCommand?.(command, subcommand, args);
   const usesPublicCatalogEnvironment = isPublicCatalogEnvironmentCommand(command, subcommand, nestedCommand);
@@ -20373,6 +22376,44 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     return editionExitCode;
   }
   throw validationError(`unsupported command: ${command}`);
+}
+function isMaintenanceCommand(command, subcommand) {
+  return command === "install" || command === "update" || command === "skills" && subcommand === "sync";
+}
+async function handleMaintenanceCommand(command, subcommand, args, runtime) {
+  const operation = command === "skills" ? "skills sync" : command;
+  const allowedFlags = /* @__PURE__ */ new Set(["check", "force", "format", "timeout"]);
+  for (const flag of Object.keys(args.flags)) {
+    if (!allowedFlags.has(flag)) {
+      throw validationError(`--${flag} is not supported by ${operation}`);
+    }
+  }
+  const expectedPositionals = command === "skills" ? 2 : 1;
+  if (args.positionals.length !== expectedPositionals) {
+    throw validationError(`${operation} does not accept positional arguments`);
+  }
+  if (command === "install" && getBooleanFlag(args.flags, "check")) {
+    throw validationError("install does not support --check");
+  }
+  const globalOptions = resolveGlobalOptions(args, defaultConfig());
+  const options2 = {
+    homeDir: runtime.homeDir?.() ?? homedir(),
+    env: runtime.env ?? process.env,
+    timeoutMs: globalOptions.timeoutMs,
+    force: getBooleanFlag(args.flags, "force"),
+    checkOnly: getBooleanFlag(args.flags, "check"),
+    log: runtime.log ?? writeMaintenanceLog
+  };
+  const result = command === "install" ? await (runtime.installCliAndSkill ?? installCliAndSkill)(options2) : command === "update" ? await (runtime.updateCliAndSkill ?? updateCliAndSkill)(options2) : await (runtime.syncOfficialSkill ?? syncOfficialSkill)(options2);
+  printSuccess(result, globalOptions.format);
+  return EXIT_CODES.OK;
+}
+function writeMaintenanceLog(message) {
+  const normalized = message.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/gu, " ").trim().slice(0, 2e3);
+  if (normalized) {
+    process.stderr.write(`[clink] ${normalized}
+`);
+  }
 }
 function validateUcpMerchantListSelector(command, subcommand, positionals, flags) {
   const isMerchantList = command === "ucp-merchant" && subcommand === "list";
@@ -21088,7 +23129,7 @@ async function fetchUcpOrderAfterPaymentEvent(context, checkoutId, frozenUcpOrde
   }
 }
 var UCP_ORDER_PROJECTION_RETRY_DELAYS_MS = [0, 1e3, 2e3, 4e3, 8e3];
-var sleepForUcpProjection = (milliseconds) => new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+var sleepForUcpProjection = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function resolveUcpOrderProjection(options2) {
   const retryDelaysMs = options2.retryDelaysMs ?? UCP_ORDER_PROJECTION_RETRY_DELAYS_MS;
   const sleep3 = options2.sleep ?? sleepForUcpProjection;
@@ -22289,8 +24330,8 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
   const preparedCreate = prepareUcpCheckoutCreate(context, {
     requireMajorUnitMoneyStrings: true
   });
-  const createResult = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCreateRequest(context, runtimeConfig, preparedCreate));
-  if (isDryRun3(createResult)) {
+  const createResult2 = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCreateRequest(context, runtimeConfig, preparedCreate));
+  if (isDryRun3(createResult2)) {
     const checkoutIdTemplate = "{checkoutId}";
     const preparedComplete2 = await prepareUcpCheckoutComplete(context, checkoutIdTemplate);
     const completeResult = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCompleteRequest(context, runtimeConfig, preparedComplete2));
@@ -22298,7 +24339,7 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
       throw apiError("ucp-checkout run dry-run unexpectedly produced a live complete response");
     }
     return buildUcpCheckoutRunDryRunPlan({
-      create: createResult,
+      create: createResult2,
       complete: completeResult,
       endpoint: ucpCheckoutEndpointPrefix(preparedCreate.target),
       waitDelivery,
@@ -22306,8 +24347,8 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
       confirmedPurchase: getBooleanFlag(flags, "confirm-purchase")
     });
   }
-  assertApiSuccess(createResult.status, createResult.body);
-  const create = requireUcpCheckoutRunData(createResult.body, "create");
+  assertApiSuccess(createResult2.status, createResult2.body);
+  const create = requireUcpCheckoutRunData(createResult2.body, "create");
   const checkoutId = requireUcpCheckoutRunCheckoutId(create);
   const createStatus = normalizedUcpCheckoutRunStatus(create);
   const createOrderId = ucpCheckoutRunOrderId(create, "create");
@@ -22933,7 +24974,7 @@ async function resolveUcpCheckoutUpdateCurrency(context, target, currencyHint) {
 }
 function extractUcpCheckoutCurrency(body) {
   const checkout = unwrapApiData(body);
-  if (!isRecord14(checkout)) {
+  if (!isRecord18(checkout)) {
     return void 0;
   }
   const direct = asOptionalString(checkout.currency)?.trim();
@@ -22941,7 +24982,7 @@ function extractUcpCheckoutCurrency(body) {
     return direct;
   }
   const checkoutContext = checkout.context;
-  if (!isRecord14(checkoutContext)) {
+  if (!isRecord18(checkoutContext)) {
     return void 0;
   }
   const contextual = asOptionalString(checkoutContext.currency)?.trim();
@@ -23095,7 +25136,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
   if (Array.isArray(value)) {
     return value.map((item, index) => normalizeUcpCheckoutMoneyFields(item, currency, `${path4}[${index}]`, preserveIntegerMinorUnits, requireMajorUnitMoneyStrings));
   }
-  if (!isRecord14(value)) {
+  if (!isRecord18(value)) {
     return value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, fieldValue]) => {
@@ -23115,7 +25156,7 @@ function normalizeUcpCheckoutMoneyFields(value, currency, path4, preserveInteger
     ];
   }));
 }
-function isRecord14(value) {
+function isRecord18(value) {
   return typeof value === "object" && value !== null;
 }
 function shouldNormalizeUcpCheckoutMoneyInput(value, preserveIntegerMinorUnits) {
@@ -23395,7 +25436,7 @@ function filterValidInstructionsPayload(data) {
   if (Array.isArray(data)) {
     return filterValidInstructionArray(data);
   }
-  if (!isRecord14(data)) {
+  if (!isRecord18(data)) {
     return data;
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
@@ -23408,7 +25449,7 @@ function filterValidInstructionsPayload(data) {
 }
 function filterValidInstructionArray(instructions) {
   return instructions.flatMap((instruction) => {
-    if (!isRecord14(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
+    if (!isRecord18(instruction) || normalizedString(instruction.status) !== "ACTIVE") {
       return [];
     }
     if (!isOneTimeInstruction(instruction)) {
@@ -23433,7 +25474,7 @@ function isOneTimeInstruction(instruction) {
   return isZeroLike(instruction.isRecurring);
 }
 function isUsableOneTimeMandate(mandate) {
-  return isRecord14(mandate) && isZeroLike(mandate.reserveStatus);
+  return isRecord18(mandate) && isZeroLike(mandate.reserveStatus);
 }
 function isZeroLike(value) {
   return value === 0 || value === "0" || value === false;
@@ -23627,7 +25668,7 @@ async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
   }
   assertApiSuccess(result.status, result.body);
   const data = unwrapApiData(result.body);
-  printSuccess(paymentMethodsRefreshWarning && isRecord14(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
+  printSuccess(paymentMethodsRefreshWarning && isRecord18(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function finishPublicCatalogCommand(result, context) {
@@ -23730,7 +25771,7 @@ function extractMandateIds(instruction) {
   if (!mandateKey) {
     return [];
   }
-  return instruction[mandateKey].map((mandate) => isRecord14(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
+  return instruction[mandateKey].map((mandate) => isRecord18(mandate) ? extractMandateId(mandate) : void 0).filter((mandateId) => mandateId !== void 0);
 }
 function extractMandateId(mandate) {
   for (const key of ["mandateId", "mandateNo", "mandate_id", "id"]) {
@@ -23744,6 +25785,8 @@ function extractMandateId(mandate) {
 
 // dist/entrypoint.js
 var MAIN_HELP_COMMANDS = [
+  "install",
+  "update",
   "wallet",
   "card",
   "risk",

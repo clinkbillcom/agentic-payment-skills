@@ -1490,7 +1490,10 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
 
 test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);
-  assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
+  assert.match(
+    runBundle(['skills', '--help']),
+    /skills <list\|install\|sync\|tip>/u,
+  );
   const listHelp = runBundle(['skills', 'list', '--help']);
   assert.match(listHelp, /skills list --all/u);
   assert.match(listHelp, /--tippable/u);
@@ -2392,11 +2395,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.31');
+  assert.equal(vendorPackage.version, '0.2.32');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '1b35dd543b0bc60418c0e637b6144c765676e86b',
+    '2e0dfe11856f51e1fb9c5fc2f651340d7809dcdd',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
