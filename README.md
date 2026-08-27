@@ -46,11 +46,18 @@ merchant-list request.
 The Skill reads the joined Visa Offer and directly orderable provider-product
 collections as authoritative candidate groups. The Agent independently filters
 both by the original query's brand, category, geography, product, merchant, and
-other hard constraints, then organizes the relevant results without a fixed
+other hard constraints. Relevant orderable products take presentation priority;
+Visa Offers are shown only when no relevant orderable product remains. The
+user-facing answer does not expose the internal collection distinction and has no fixed
 display template or count. An unrelated provider product is not shown, but its
 CLI-returned `directlyOrderable` fact is not changed. Provider products keep
 `VISA_PROVIDER_PRODUCT`; `PROGRAM_PROVIDER_MATCH` is preserved only when the
 CLI proves the relation.
+
+Joined orderable products expose normalized purchase facts: a localized display
+title, provider `sourceTitle`, minor-unit audit amount, major-unit purchase
+amount, currency, and availability. Purchase contexts use `sourceTitle` and the
+major-unit amount directly, without reinterpreting raw Catalog fields.
 
 Visa Program, provider, and other Catalog purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
@@ -58,8 +65,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.33` vendors Visa CLI `0.2.36` from upstream commit
-`9cc700b840ba383a04fd295c1b0c680bee674636`. It supports joined Visa Offer and
+Skill `0.1.34` vendors Visa CLI `0.2.37` from upstream commit
+`a51266f243d05af5b061480d4921884764d68631`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -81,7 +88,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.33`
+Skill version: `0.1.34`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

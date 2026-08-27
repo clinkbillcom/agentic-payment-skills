@@ -41,11 +41,17 @@ Catalog 或 merchant-list 请求拼接结果。
 
 Skill 将 joined 返回的 Visa Offer 集合和可直接下单 provider 商品集合作为
 两类权威候选集合。Agent 必须分别按照原始 query 的品牌、品类、地理、
-商品、商户和其他硬约束过滤，再根据真实结果自由组织、排序、编号和表述，
+商品、商户和其他硬约束过滤。有相关可下单商品时只向用户展示这些商品；
+没有相关可下单商品时才展示 Visa Offer。用户回复不暴露两类内部集合的区别，
+再根据真实结果自由组织、排序、编号和表述，
 不使用固定标题、数量或展示模板。不相关 provider 商品不展示，但不会改变
 CLI 返回的 `directlyOrderable` 事实。provider 商品保持
 `VISA_PROVIDER_PRODUCT`；只有 CLI 已证明关系时才保留
 `PROGRAM_PROVIDER_MATCH`。
+
+joined 可下单商品同时返回本地化展示标题、provider `sourceTitle`、minor-unit
+审计金额、major-unit 购买金额、币种和库存。购买上下文直接使用
+`sourceTitle` 和 major-unit 金额，不再重新解释原始 Catalog 字段。
 
 Visa Program、provider 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 运行时工作流 JavaScript、长 Action Matrix 或大量操作 reference。钱包、
@@ -53,8 +59,8 @@ Visa Program、provider 和其他 Catalog 购买都保持 CLI 聚合。Skill 不
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.33` 已 vendor 上游提交
-`9cc700b840ba383a04fd295c1b0c680bee674636` 的 Visa CLI `0.2.36`。它支持
+Skill `0.1.34` 已 vendor 上游提交
+`a51266f243d05af5b061480d4921884764d68631` 的 Visa CLI `0.2.37`。它支持
 Visa Offer 与 provider 商品 joined 查询、可选的旧版 `program.code`、
 完整 Eats365 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。vendor
@@ -74,7 +80,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.33`
+Skill 版本：`0.1.34`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
