@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.35. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.36. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.35"
+  version: "0.1.36"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -570,9 +570,8 @@ For an external/platform result, use its exact returned product URL with
 `tool parse-item`. For an Eats365 platform-store candidate,
 `manual_item_facts` with an empty items array is the expected success result:
 use the broad Catalog candidate's frozen product ID, title, structured price,
-currency, availability, channel, store ID, original Catalog query, Catalog
-environment, Catalog language, and returned product/store URL. Do not browse
-for a nonexistent detail page or ask for a replacement URL.
+currency, availability, channel, store ID, and returned product/store URL. Do
+not browse for a nonexistent detail page or ask for a replacement URL.
 
 During `mode=catalog_purchase`, the CLI must resolve a frozen Eats365 platform
 candidate without requesting the internal merchant list. It starts from the
@@ -580,9 +579,11 @@ trusted product URL, accepts only the exact Eats365 manual-item signal, and
 then calls the anonymous extra Catalog product endpoint with the exact frozen
 channel, store, URL-derived region, and product ID. It must not depend on broad
 Catalog discovery selecting that store again. The exact response revalidates
-the URL, title, structured price/currency, availability, and platform metadata.
-This exception does not apply to `mode=purchase` or to ordinary internal
-merchants.
+the menu route, title, structured price/currency, availability, and platform
+metadata. The frozen selection URL may carry `product_id` while the exact
+response returns the same menu URL without that query; this is valid when host,
+region, store path, and the separately verified product ID match. This
+exception does not apply to `mode=purchase` or to ordinary internal merchants.
 
 Freeze all of these authoritative facts:
 
@@ -598,9 +599,9 @@ Freeze all of these authoritative facts:
 - `availability`: currently orderable status
 - `merchantCategoryCode`: one four-digit MCC classified from the exact frozen
   merchant/product context; ask when confidence is low
-- for Eats365, `channelType`, `storeId`, `catalogQuery`,
-  `catalogEnvironment`, and `catalogLanguage`: exact values from the same broad
-  Catalog snapshot
+- for Eats365, only `channelType` and `storeId` are required route fields.
+  `catalogQuery`, `catalogEnvironment`, and `catalogLanguage` are optional
+  compatibility metadata and must not block purchase when omitted
 - for a registered provider product, `merchantId` and `merchantUrl`: the exact
   CLI-returned provider identity from the same joined snapshot, never
   caller-supplied
@@ -720,9 +721,6 @@ contract:
     "merchantUrl": "<exact-returned-eats365-product-or-store-url>",
     "channelType": "eats365",
     "storeId": "<frozen-store-id>",
-    "catalogQuery": "<original-current-user-query>",
-    "catalogEnvironment": "<locked-catalog-environment>",
-    "catalogLanguage": "<locked-language-tag>",
     "productId": "<frozen-product-id>",
     "productQuery": "<frozen-provider-title>",
     "quantity": 1
@@ -747,9 +745,10 @@ contract:
 Merge the route-specific fields into the shared object; do not send either
 fragment separately. The Eats365 `merchantUrl` must carry the same product ID
 as `selection.productId`, and the frozen title, structured price, currency,
-availability, channel, store, query, environment, language, and URL must all
-come from one broad Catalog snapshot. Any mismatch, missing provenance field,
-or changed snapshot stops before login.
+availability, channel, store, and URL must all come from one broad Catalog
+snapshot. Do not add `catalogQuery`, `catalogEnvironment`, or `catalogLanguage`
+merely to satisfy CLI validation. A real mismatch in required identity or
+purchase facts stops before login.
 
 Use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only with an authoritative complete
 shipping address. Put that identical object both at final-context top level as
