@@ -35,11 +35,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.27');
+  assert.equal(vendorPackage.version, '0.2.32');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'be61dcabc3120e1054811260ed53cbd855fd6f2e',
+    '625eb133f946ade532a10f282e5005f4a92f9c5f',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -105,6 +105,145 @@ test('public Skill listing requires the real --all contract', () => {
   const missingAll = run(['skills', 'list', '--format', 'json']);
   assert.equal(missingAll.status, 2, missingAll.stderr);
   assert.match(missingAll.stderr, /skills list requires --all/u);
+});
+
+test('public Fuhui discovery supports authoritative merchant lookup and cursor pagination', () => {
+  const merchantList = run([
+    'tool',
+    'internal-ucp',
+    'get-merchant-list',
+    '--sandbox',
+    '--format',
+    'json',
+  ]);
+  assert.equal(merchantList.status, 0, merchantList.stderr);
+  const merchantDocument = JSON.parse(merchantList.stdout);
+  const fuhui = merchantDocument.merchants.filter((merchant) =>
+    merchant.enabled === true && /Fuhui/iu.test(merchant.description ?? '')
+  );
+  assert.ok(fuhui.length >= 1);
+  for (const merchant of fuhui) {
+    assert.match(merchant.merchant_id, /^mcht_[a-z0-9]+$/u);
+    assert.match(merchant.domain_name, /^[a-z0-9.-]+$/u);
+    assert.match(merchant.merchant_url, /^https:\/\//u);
+  }
+
+  const catalogPage = run([
+    'ucp-catalog',
+    'search',
+    '--merchant-id',
+    fuhui[0].merchant_id,
+    '--query',
+    'supermarket voucher',
+    '--language',
+    'zh-HK',
+    '--limit',
+    '100',
+    '--cursor',
+    'cursor_example',
+    '--sandbox',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+  assert.equal(catalogPage.status, 0, catalogPage.stderr);
+  const request = JSON.parse(catalogPage.stdout).data.request;
+  assert.equal(request.body.query, 'supermarket voucher');
+  assert.equal(request.body.context.language, 'zh-Hant');
+  assert.deepEqual(request.body.pagination, {
+    cursor: 'cursor_example',
+    limit: 100,
+  });
+});
+
+test('broad Visa availability explicitly requests every Program page', () => {
+  const result = run([
+    'visa',
+    'recommend',
+    '我想知道香港有哪些 visa权益可以用',
+    '--all',
+    '--lang',
+    'zh-HK',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  const request = JSON.parse(result.stdout).data.request;
+  assert.match(request.url, /limit=50/u);
+  assert.match(request.url, /page=1/u);
+  assert.match(request.url, /region%5B%5D=hk/u);
+  assert.equal(request.headers['X-Locale'], 'zh-HK');
+});
+
+test('broad Catalog search is anonymous and carries the locked query and language', () => {
+  const result = run([
+    'catalog',
+    'search',
+    '--query',
+    'XX coffee',
+    '--language',
+    'zh-HK',
+    '--sandbox',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  const request = JSON.parse(result.stdout).data.request;
+  assert.match(request.url, /\/agent\/ucp\/extra\/catalog\/search$/u);
+  assert.equal(request.body.query, 'XX coffee');
+  assert.equal(request.body.context.language, 'zh-Hant');
+});
+
+test('Catalog purchase mode is executable with the complete frozen contract', () => {
+  const result = run([
+    'visa',
+    'commerce-run',
+    '--context',
+    JSON.stringify({
+      mode: 'catalog_purchase',
+      environment: 'uat',
+      requestText: 'Buy one selected Catalog voucher',
+      selection: {
+        merchantUrl: 'https://merchant.example/products/voucher-1',
+        productId: 'voucher-1',
+        productQuery: 'Catalog voucher',
+        quantity: 1,
+      },
+      expected: {
+        merchantName: 'Example Merchant',
+        itemTitle: 'Catalog voucher',
+        amount: '10.00',
+        currency: 'USD',
+        availability: 'IN_STOCK',
+      },
+      instructionContext: {
+        title: 'Buy Catalog voucher',
+        mandates: [{
+          title: 'Catalog voucher',
+          description: 'Purchase the selected Catalog product',
+          amountLimit: '10.00',
+          currencyCode: 'USD',
+          merchantCategoryCode: '5999',
+        }],
+      },
+      fulfillmentType: 'NO_SHIPPING_REQUIRED',
+      digitalDeliveryExpected: true,
+    }),
+    '--confirm-purchase',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(result.stdout).data;
+  assert.equal(plan.mode, 'catalog_purchase');
+  assert.equal(plan.status, 'dry_run');
+  assert.equal(plan.sideEffects, false);
+  assert.equal(plan.purchase.authorizedAvailability, 'IN_STOCK');
+  assert.equal(plan.purchase.fulfillmentType, 'NO_SHIPPING_REQUIRED');
 });
 
 test('aggregate commands support side-effect-free planning', () => {

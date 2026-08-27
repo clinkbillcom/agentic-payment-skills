@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.26. Use for Visa card benefits and commerce plus concise Clink wallet, card, risk, Catalog, payment, UCP, Instruction, refund, event, Skill tipping, and Skill installation capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.27. Use for Visa card benefits, Fuhui coupon matching, fast Visa commerce, broad Catalog shopping, and concise Clink payment capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.26"
+  version: "0.1.27"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -49,14 +49,23 @@ authoritative Program, merchant, product, and Skill names exactly as returned.
 
 Lock one environment before the first command and never mix environments:
 
-- a sandbox/UAT distribution uses `--sandbox` for public search and
+- a sandbox/UAT distribution uses `--sandbox` for public Catalog and
+  `visa product-search` commands and
   `"environment": "uat"` in contexts
-- a test distribution uses `--test` and `"environment": "test"`
+- a test distribution uses `--test` for public Catalog and
+  `visa product-search` commands and `"environment": "test"`
 - production uses no search environment flag and `"environment": "production"`
 
 The installed distribution lock wins when the user omits the environment.
 Never let an installed UAT or test Skill silently default to production.
 Authenticated commands must agree with the current wallet environment.
+
+`visa recommend`, `visa detail`, and `visa taxonomy` do not accept
+`--sandbox` or `--test`; do not add either flag. Their issuing market,
+destination region, and language select the Visa source independently from the
+Clink Catalog environment. "Benefits usable in Hong Kong" means destination
+`--region hk`; use issuing `--market hk` only when the user explicitly says
+their card is Hong Kong-issued.
 
 ### Authorization And Input
 
@@ -122,21 +131,45 @@ rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
 ## Intent Routing
 
-Use Visa aggregation whenever the target originates from a Visa Program:
+Classify the request before the first command:
+
+- **Case 1, broad Visa availability:** requests such as "What Visa Benefits can
+  I use in Hong Kong?" use Visa and Fuhui Joined Discovery. Present every
+  returned relevant Visa Program plus matching Fuhui Catalog products.
+- **Case 2, Visa category shopping:** requests such as "Are there Visa
+  household-goods coupons in Hong Kong?" use the same joined discovery with
+  the current category wording.
+- **Case 3, Visa merchant/product shopping:** requests such as "Are there
+  Watsons coupons?" use the same joined discovery with the current brand or
+  product wording.
+- **Case 4, direct shopping without Visa wording or prior Benefit context:**
+  requests such as "Buy me an XX coffee" use Broad Catalog Shopping. Do not
+  call `visa recommend` merely because this Skill can access Visa Benefits.
+
+Use Visa aggregation only when the selected item is an `EXACT_MATCH` that
+originates from a Visa Program:
 
 ```text
 visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
 ```
 
-Do not route a Visa Program purchase through generic Catalog, `pay`, atomic
-Instruction, events, or UCP commands. The Visa aggregates preserve Program
-identity, price and currency checks, Quick Instruction handling, Card/VIC
-readiness, Instruction selection, Checkout safety, and delivery.
+Use Catalog Purchase aggregation for a selected `CATALOG_ONLY` product or a
+Case 4 product:
+
+```text
+catalog search or ucp-catalog search -> commerce-login ->
+visa commerce-run mode=catalog_purchase
+```
+
+Never attach Visa Benefit language, Program eligibility, or Program terms to a
+Catalog-only product. Do not route a Visa Program purchase through generic
+Catalog purchase, `pay`, atomic Instruction, events, or UCP commands. Do not
+route a Catalog-only product through Program `mode=purchase`.
 
 Use a Base Capability Contract only for a non-Program request whose exact
 inputs and authorization satisfy that contract.
 
-## Visa Benefit Discovery
+## Visa And Fuhui Joined Discovery
 
 Queries never proactively log in, bind a card, create an Instruction, or
 prepare payment:
@@ -150,10 +183,29 @@ prepare payment:
   --lang <language-tag> --format json
 ```
 
-For `matching_offers`, evaluate all returned rows against the user's wording,
-geography, eligibility, status, dates, channel, and hard terms. Present at most
-the five best matches and preserve the authoritative matching total. Do not
-rerun recommendation merely to shrink the list.
+For Case 1 broad availability wording such as "What Visa Benefits can I use in
+Hong Kong?", always add `--all` because the required result is the complete
+regional set. Also add `--all` for any other explicit all-Benefits request; do
+not rely on natural language alone to widen the request:
+
+```text
+<Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --all \
+  --region hk \
+  --lang <language-tag> \
+  --format json
+```
+
+Use `--region hk` when Hong Kong is the requested place of use. Do not add
+`--market hk` unless Hong Kong card issuance is explicit.
+
+For Case 2 or Case 3, run `visa recommend` once with the current user request
+and add `--all` when the user asks for every matching Benefit.
+
+Present every returned Program in `matching_offers` or
+`all_offers_requested` without a display cap. Preserve the authoritative total
+and Program order while clearly marking Programs that do not have a
+purchasable Catalog match.
 
 For `fallback_all_offers` or `no_matching_offers`, report that no relevant
 Offer was found. Do not rank, display, recommend, or purchase fallback rows,
@@ -164,10 +216,92 @@ For explicit food delivery use `--category dining_delivery_food` and exclude
 `instore_only` or dine-in-only Programs. For explicit dine-in use
 `dining_restaurant`. Ask one question when the intent is genuinely ambiguous.
 
-### Token-Free Product Resolution
+Then locate Fuhui from the complete public internal-merchant list:
 
-Immediately product-resolve each of the at-most-five selected query Offers, or
-the one selected purchase Program, before any browser login:
+```text
+<Skill Path>/bin/visa-cli tool internal-ucp get-merchant-list \
+  <environment-flag> \
+  --format json
+```
+
+- Identify Fuhui only from enabled authoritative merchant-list entries and
+  their returned `description`, `merchant_id`, `domain_name`, and
+  `merchant_url`. Never hardcode a Fuhui merchant ID or construct a merchant
+  URL.
+- Multiple Fuhui domains may share one `merchant_id`. Deduplicate by the
+  returned merchant ID for Catalog search while retaining the authoritative
+  URL belonging to the selected product route.
+- If Fuhui is absent, disabled, or not uniquely identifiable, report that
+  Fuhui Catalog coverage is unavailable. Continue to present the Visa results,
+  but do not guess a merchant.
+
+Search the Fuhui Catalog with the original current user query, not generated
+Program titles:
+
+```text
+<Skill Path>/bin/visa-cli ucp-catalog search \
+  --merchant-id "<authoritative-fuhui-merchant-id>" \
+  --query "<original-current-user-query>" \
+  --language <language-tag> \
+  --limit 100 \
+  <environment-flag> \
+  --format json
+```
+
+If `pagination.has_next_page=true`, require a nonempty opaque next cursor and
+repeat the same command with the same merchant, query, language, environment,
+and limit plus `--cursor "<returned-cursor>"`. Continue until
+`has_next_page=false`. If a cursor repeats, a page adds no new product
+identity, `has_next_page=true` has no cursor, a page fails, or the environment
+changes, stop pagination and report partial Catalog coverage; never silently
+call it complete. Deduplicate only by stable merchant, product, and variant
+identifiers, never by title.
+
+For a follow-up such as "What supermarket coupons are there?" reuse the Visa
+Programs and Fuhui merchant identity from the immediately preceding joined
+discovery when language, geography, and environment are unchanged. Filter the
+existing Visa Programs against the new wording and rerun the complete Fuhui
+Catalog search with the follow-up as the current query. Do not repeat
+`visa recommend` merely to answer that refinement. If the prior context is
+missing or its locks changed, start a new joined discovery.
+
+Every displayed joined result belongs to one current snapshot containing the
+environment, language, geography, Fuhui merchant identity, query, Program code,
+Catalog product/variant ID, price, currency, availability, and classification.
+Number labels are valid only for that latest snapshot. A new query, refreshed
+list, changed environment, or changed geography invalidates old Numbers,
+selection, and purchase authorization. A purchase reply must resolve one
+stable ID from the latest snapshot; title-only fuzzy matching is insufficient.
+
+### Match Classification And Presentation
+
+Evaluate all returned Visa Programs and all paginated Fuhui products. Classify
+the combined rows without inventing a relationship:
+
+- `EXACT_MATCH`: one Program and one Catalog product identify the same merchant
+  and orderable product in the same geography, with compatible brand, product
+  type, title or variant, channel, and hard terms, with equal authorized price
+  and currency. Similar
+  category, region, wording, or merchant ownership alone is insufficient.
+- `BENEFIT_ONLY`: the Program is relevant to the request, but no Catalog
+  product is an exact identity match.
+- `CATALOG_ONLY`: the Catalog product is relevant to the request, but no Visa
+  Program is an exact identity match.
+
+Present all three groups explicitly. Preserve authoritative Program and
+Catalog titles. Do not describe `CATALOG_ONLY` as a Visa Benefit, Visa coupon,
+eligible Offer, or Benefit redemption. Do not hide a relevant unmatched
+Program merely because it cannot be purchased, and do not hide a relevant
+Fuhui product merely because it lacks a Visa match.
+
+An entry Offer, campaign URL, similar title, shared category, or merchant-level
+association never proves `EXACT_MATCH`. When uncertain, classify the two rows
+separately as `BENEFIT_ONLY` and `CATALOG_ONLY`.
+
+### Selected Program Resolution
+
+Before purchasing one selected `EXACT_MATCH`, bind it through the existing
+token-free Program product resolver before any browser login:
 
 ```text
 <Skill Path>/bin/visa-cli visa product-search \
@@ -192,8 +326,10 @@ the one selected purchase Program, before any browser login:
   question.
 - On `PRODUCT_UNAVAILABLE`, report a Program-Catalog mismatch and stop that
   candidate. Do not substitute another product or a campaign link.
-- For a query-only request, present the enriched results and stop even when the
-  result could continue to login.
+- The verified product must be the same product already classified as
+  `EXACT_MATCH`. A different closest product does not inherit the Program.
+- For a query-only request, present the classified joined results and stop even
+  when one result could continue to login.
 
 ## Visa Purchase Fast Path
 
@@ -331,6 +467,153 @@ only an exact CLI-returned aggregate read-only continuation, once. Never
 reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 `ucp-order` component commands for this Visa Program purchase.
 
+## Catalog Purchase Fast Path
+
+Use this path only for a selected `CATALOG_ONLY` product from Cases 1-3 or a
+selected Case 4 broad-Catalog result. Tell the user plainly that this is a
+Catalog purchase and is not being purchased as a Visa Benefit.
+
+Case 4 discovery is anonymous and must not call `visa recommend`:
+
+```text
+<Skill Path>/bin/visa-cli catalog search \
+  --query "<original-current-user-query>" \
+  --language <language-tag> \
+  --context '{"address_country":"HK"}' \
+  <environment-flag> \
+  --format json
+```
+
+Use the locked geography instead of hardcoding `HK` when the user selected
+another market. Broad Catalog results are bounded and non-exhaustive; say so.
+Agent-rank only products that satisfy the user's actual product, brand,
+geography, channel, and other hard constraints.
+
+Before login, resolve the selected item to one authoritative orderable product.
+For an internal merchant, use the selected `merchant_id` and
+`ucp-catalog product`; use the public merchant list for its authoritative
+`merchant_url`. Do not purchase directly from a broad-search display row when
+the exact product detail has not been resolved.
+
+For an external/platform result, use its exact returned product URL with
+`tool parse-item`. Continue only when the command returns actual product and
+merchant facts. A `manual_item_facts` result that merely names required fields
+is not product evidence; collect those authoritative facts from the merchant
+or stop.
+
+Freeze all of these authoritative facts:
+
+- `merchantUrl`: returned merchant URL, never a constructed, campaign, Visa,
+  or VSRP URL
+- `productId`: exact orderable Catalog product or variant ID
+- `title`: provider-authoritative product title
+- `price`: exact major-unit unit price and exact total for the quantity
+- `currency`: authoritative three-letter currency
+- `availability`: currently orderable status
+- `merchantCategoryCode`: exactly one authoritative four-digit MCC
+
+Also freeze merchant identity, quantity, fulfillment, endpoint when returned,
+and whether digital delivery is actually expected. If any required fact is
+missing, conflicting, ambiguous, stale, or inferred, stop. Never guess an MCC,
+derive one from product category, reuse a Program MCC, add a price buffer, or
+substitute a similar product.
+
+An explicit request to buy the unambiguous displayed product is one purchase
+authorization. Build the same minimal login shape, using only the Catalog
+product facts:
+
+```json
+{
+  "environment": "uat",
+  "instructionContext": {
+    "title": "<authoritative-catalog-title>",
+    "description": "Purchase the selected Catalog product",
+    "mandates": [
+      {
+        "title": "<authoritative-catalog-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<exact-authorized-total>",
+        "currencyCode": "<authoritative-currency>",
+        "merchantCategoryCode": "<authoritative-four-digit-mcc>"
+      }
+    ]
+  }
+}
+```
+
+For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, include the same complete authoritative
+`shippingAddress` inside this login `instructionContext`.
+
+Apply the Restricted Instruction Gate, then run `visa commerce-login` once with
+`--confirm-purchase --open --format json`. Continue only when it returns
+`ok=true` and `ready=true`.
+
+Build one frozen Catalog purchase context without a Program:
+
+```json
+{
+  "mode": "catalog_purchase",
+  "environment": "uat",
+  "requestText": "<original purchase request>",
+  "selection": {
+    "merchantUrl": "<authoritative-merchant-url>",
+    "merchantId": "<authoritative-merchant-id>",
+    "endpoint": "<authoritative-endpoint-if-returned>",
+    "productId": "<authoritative-product-id>",
+    "productQuery": "<authoritative-product-title>",
+    "quantity": 1
+  },
+  "expected": {
+    "merchantName": "<authoritative-merchant-name>",
+    "itemTitle": "<authoritative-product-title>",
+    "amount": "<exact-authorized-total>",
+    "currency": "<authoritative-currency>",
+    "availability": "<authoritative-orderable-status>"
+  },
+  "instructionContext": {
+    "title": "<authoritative-catalog-title>",
+    "mandates": [
+      {
+        "title": "<authoritative-catalog-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<exact-authorized-total>",
+        "currencyCode": "<authoritative-currency>",
+        "merchantCategoryCode": "<authoritative-four-digit-mcc>"
+      }
+    ]
+  },
+  "fulfillmentType": "NO_SHIPPING_REQUIRED",
+  "digitalDeliveryExpected": true
+}
+```
+
+Use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only with an authoritative complete
+shipping address. Put that identical object both at final-context top level as
+`shippingAddress` and inside final `instructionContext.shippingAddress`; the
+CLI rejects a missing or different Quick/Checkout address.
+`digitalDeliveryExpected=true` is valid only with `NO_SHIPPING_REQUIRED`.
+Missing or inferred fulfillment stops the purchase.
+
+Run exactly once:
+
+```text
+<Skill Path>/bin/visa-cli visa commerce-run \
+  --context-file <catalog-purchase-context.json> \
+  --confirm-purchase \
+  --open \
+  --format json
+```
+
+The distributed Visa Edition must support `mode=catalog_purchase` before this
+path is released. If the command rejects that mode, stop and report that the
+installed distribution does not yet support aggregate Catalog purchase. Never
+fall back to Program `mode=purchase`, `ucp-checkout run`, atomic Instruction,
+Checkout, events, or pay commands.
+
+As with Program purchase, never rerun `visa commerce-run` after possible
+Checkout creation. Use only the exact CLI-returned bound read-only
+continuation, and report payment and delivery separately.
+
 ### Visa Preparation
 
 For explicit login-only or Visa card readiness, use the aggregate in prepare
@@ -398,6 +681,8 @@ general workflow engine.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. A later purchase must freeze one exact
   selected product.
+- Cases 1-3 use Visa And Fuhui Joined Discovery. Case 4 uses Broad Catalog
+  Shopping and, after an exact selection, Catalog Purchase Fast Path.
 
 ### CAP-PAY: Direct Or Session Pay
 
@@ -427,6 +712,9 @@ general workflow engine.
   Catalog identity, item, quantity, price, currency, fulfillment, required
   shipping address, payment instrument, canonical HTTPS endpoint, and explicit
   purchase authorization.
+- Do not use this legacy aggregate for a product selected by Cases 1-4; those
+  products use Catalog Purchase Fast Path so login, Instruction, card/VIC,
+  Checkout, payment, and delivery stay CLI-aggregated.
 - Refresh the selected payment instrument first. If it is Visa with VIC
   enabled, stop: this lightweight generic aggregate cannot carry or safely
   resolve an Instruction and Mandate. Visa Program purchases must use
@@ -498,8 +786,10 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Visa discovery, report only verified matching Programs and enriched
-  Catalog availability.
+- For Cases 1-3, report every relevant returned Visa Program and paginated
+  Fuhui Catalog product under `EXACT_MATCH`, `BENEFIT_ONLY`, or
+  `CATALOG_ONLY`.
+- Never imply that `CATALOG_ONLY` receives Visa eligibility or terms.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
 - Report digital delivery only when nonempty authoritative artifacts exist.
@@ -510,7 +800,12 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Visa Program purchase always uses the three CLI aggregates.
+- Cases 1-3 join all relevant Visa results with the complete paginated Fuhui
+  query result and never fabricate a match.
+- Case 4 skips Visa recommendation and starts with broad Catalog discovery.
+- Visa Program purchase always uses the three CLI aggregates in Program mode.
+- Catalog-only purchase uses login plus `mode=catalog_purchase`, never Program
+  mode or atomic UCP.
 - Program and Catalog product, amount, and currency must agree.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.

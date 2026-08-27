@@ -30,7 +30,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.26');
+  assert.equal(packageJson.version, '0.1.27');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -97,7 +97,198 @@ test('Visa discovery remains query-only with language and environment locks', ()
   );
   assert.match(
     skill,
-    /query-only request[\s\S]*present the enriched results and stop/iu,
+    /query-only request[\s\S]*present the classified joined results and stop/iu,
+  );
+  assert.match(
+    skill,
+    /visa recommend[\s\S]*do not accept[\s\S]*--sandbox[\s\S]*destination\s+`--region hk`[\s\S]*issuing `--market hk` only/iu,
+  );
+});
+
+test('Case 1 lists every returned Visa Benefit and joins paginated Fuhui Catalog results', () => {
+  const routing = skill.slice(
+    skill.indexOf('## Intent Routing'),
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+  );
+  const joined = skill.slice(
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+    skill.indexOf('## Visa Purchase Fast Path'),
+  );
+
+  assert.match(
+    routing,
+    /Case 1, broad Visa availability[\s\S]*every[\s\S]*Visa Program[\s\S]*Fuhui Catalog/iu,
+  );
+  assert.match(
+    joined,
+    /Case 1 broad availability[\s\S]*always add `--all`[\s\S]*complete\s+regional set[\s\S]*present every returned Program/iu,
+  );
+  assert.match(
+    joined,
+    /visa recommend[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
+  );
+  assert.doesNotMatch(joined, /at most\s+(?:the\s+)?five|top five/iu);
+  assert.match(
+    joined,
+    /tool internal-ucp get-merchant-list[\s\S]*enabled authoritative merchant-list entries/iu,
+  );
+  assert.match(
+    joined,
+    /Never hardcode a Fuhui merchant ID[\s\S]*construct a merchant\s+URL/iu,
+  );
+  assert.match(
+    joined,
+    /ucp-catalog search[\s\S]*--query "<original-current-user-query>"[\s\S]*--language <language-tag>[\s\S]*--limit 100/iu,
+  );
+  assert.match(
+    joined,
+    /pagination\.has_next_page=true[\s\S]*--cursor "<returned-cursor>"[\s\S]*until[\s\S]*has_next_page=false/iu,
+  );
+  assert.match(
+    joined,
+    /cursor repeats[\s\S]*adds no new product[\s\S]*has_next_page=true[\s\S]*has no cursor[\s\S]*partial Catalog coverage/iu,
+  );
+  assert.match(
+    joined,
+    /Deduplicate only by stable merchant, product, and variant\s+identifiers, never by title/iu,
+  );
+  for (const classification of ['EXACT_MATCH', 'BENEFIT_ONLY', 'CATALOG_ONLY']) {
+    assert.ok(joined.includes(`\`${classification}\``));
+  }
+});
+
+test('Case 2 uses the Visa plus Fuhui route for category coupon shopping', () => {
+  const routing = skill.slice(
+    skill.indexOf('## Intent Routing'),
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+  );
+  const joined = skill.slice(
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+    skill.indexOf('## Visa Purchase Fast Path'),
+  );
+
+  assert.match(
+    routing,
+    /Case 2, Visa category shopping[\s\S]*household-goods coupons[\s\S]*joined discovery/iu,
+  );
+  assert.match(
+    joined,
+    /original current user query, not generated\s+Program titles/iu,
+  );
+  assert.match(
+    joined,
+    /EXACT_MATCH[\s\S]*same merchant[\s\S]*orderable product[\s\S]*hard terms[\s\S]*price[\s\S]*currency/iu,
+  );
+  assert.match(
+    joined,
+    /Similar[\s\S]*category[\s\S]*alone is insufficient/iu,
+  );
+});
+
+test('Case 3 uses the joined route for merchant-specific coupons without false matching', () => {
+  const routing = skill.slice(
+    skill.indexOf('## Intent Routing'),
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+  );
+  const joined = skill.slice(
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+    skill.indexOf('## Visa Purchase Fast Path'),
+  );
+
+  assert.match(
+    routing,
+    /Case 3, Visa merchant\/product shopping[\s\S]*Watsons coupons[\s\S]*joined discovery/iu,
+  );
+  assert.match(
+    joined,
+    /entry Offer[\s\S]*campaign URL[\s\S]*similar title[\s\S]*never proves `EXACT_MATCH`/iu,
+  );
+  assert.match(
+    joined,
+    /When uncertain[\s\S]*`BENEFIT_ONLY` and `CATALOG_ONLY`/iu,
+  );
+  assert.match(
+    joined,
+    /follow-up[\s\S]*supermarket coupons/iu,
+  );
+  assert.match(
+    joined,
+    /reuse the Visa\s+Programs and Fuhui merchant identity[\s\S]*rerun the complete Fuhui\s+Catalog search/iu,
+  );
+  assert.match(
+    joined,
+    /Do not repeat\s+`visa recommend` merely to answer that refinement/iu,
+  );
+  assert.match(
+    joined,
+    /Number labels are valid only for that latest snapshot[\s\S]*invalidates old Numbers[\s\S]*stable ID[\s\S]*title-only fuzzy matching is insufficient/iu,
+  );
+});
+
+test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () => {
+  const routing = skill.slice(
+    skill.indexOf('## Intent Routing'),
+    skill.indexOf('## Visa And Fuhui Joined Discovery'),
+  );
+  const catalogPurchase = skill.slice(
+    skill.indexOf('## Catalog Purchase Fast Path'),
+    skill.indexOf('### Visa Preparation'),
+  );
+  const discoveryCommand = catalogPurchase.slice(
+    catalogPurchase.indexOf('Case 4 discovery'),
+    catalogPurchase.indexOf('Before login'),
+  );
+
+  assert.match(
+    routing,
+    /Case 4, direct shopping without Visa wording[\s\S]*Buy me an XX coffee[\s\S]*Broad Catalog Shopping/iu,
+  );
+  assert.match(
+    discoveryCommand,
+    /bin\/visa-cli catalog search[\s\S]*--query "<original-current-user-query>"[\s\S]*--language <language-tag>/iu,
+  );
+  assert.doesNotMatch(
+    discoveryCommand,
+    /bin\/visa-cli visa recommend/iu,
+  );
+  assert.match(catalogPurchase, /bounded and non-exhaustive/iu);
+  assert.match(
+    catalogPurchase,
+    /selected `CATALOG_ONLY` product[\s\S]*not being purchased as a Visa Benefit/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /merchantUrl[\s\S]*productId[\s\S]*title[\s\S]*price[\s\S]*currency[\s\S]*availability[\s\S]*merchantCategoryCode/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /exactly one authoritative four-digit MCC[\s\S]*missing[\s\S]*stop[\s\S]*Never guess an MCC/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /tool parse-item[\s\S]*manual_item_facts[\s\S]*is not product evidence/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /PHYSICAL_GOODS_REQUIRES_SHIPPING[\s\S]*same complete authoritative[\s\S]*shippingAddress[\s\S]*login `instructionContext`/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /"fulfillmentType": "NO_SHIPPING_REQUIRED"[\s\S]*identical object[\s\S]*instructionContext\.shippingAddress[\s\S]*Missing or inferred fulfillment stops/iu,
+  );
+  assert.match(catalogPurchase, /"mode": "catalog_purchase"/u);
+  assert.doesNotMatch(catalogPurchase, /"program"\s*:/u);
+
+  const login = catalogPurchase.indexOf('visa commerce-login');
+  const run = catalogPurchase.indexOf('bin/visa-cli visa commerce-run');
+  assert.ok(login >= 0 && run > login);
+  assert.match(
+    catalogPurchase,
+    /must support `mode=catalog_purchase` before this\s+path is released/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /Never\s+fall back to Program `mode=purchase`[\s\S]*`ucp-checkout run`/iu,
   );
 });
 
