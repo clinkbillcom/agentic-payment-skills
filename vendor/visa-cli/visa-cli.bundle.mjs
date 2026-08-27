@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.37";
+var CLI_VERSION = "0.2.38";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -22124,6 +22124,7 @@ var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
+var EXTRA_CATALOG_PRODUCT_PATH = "/agent/ucp/extra/catalog/product";
 var UCP_ORDER_PATH = "/agent/ucp/orders";
 var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
   "draft",
@@ -23958,26 +23959,28 @@ async function searchCommandUcpCatalogPage(context, input) {
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
 }
-async function searchCommandCatalog(context, input) {
+async function getCommandCatalogProduct(context, input) {
   const result = await requestJson({
     baseUrl: input.baseUrl,
     method: "POST",
-    path: EXTRA_CATALOG_SEARCH_PATH,
+    path: EXTRA_CATALOG_PRODUCT_PATH,
     acceptLanguage: input.language,
     headers: {
       "Request-Id": randomUUID4(),
       "UCP-Agent": DEFAULT_UCP_AGENT
     },
     body: {
-      query: input.query,
-      context: { language: input.language },
-      channel_type: input.channelType
+      id: input.productId,
+      channel_type: input.channelType,
+      store_id: input.storeId,
+      region: input.region,
+      context: { language: input.language }
     },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false
   });
   if (isDryRun3(result)) {
-    throw apiError("Catalog search unexpectedly produced a dry-run response");
+    throw apiError("Catalog product unexpectedly produced a dry-run response");
   }
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
@@ -30066,20 +30069,23 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
   const productUrl2 = requireEats365CatalogProductUrl(purchase.merchantUrl);
   const pathSegments = productUrl2.pathname.split("/").filter(Boolean).map((value) => decodeUrlPathSegment(value));
   const menuIndex = pathSegments.lastIndexOf("menu");
-  if (menuIndex < 1 || pathSegments[menuIndex - 1] !== purchase.storeId) {
+  if (menuIndex < 3 || pathSegments[menuIndex - 1] !== purchase.storeId) {
     throw validationError("Eats365 Catalog product URL store does not match the frozen storeId");
   }
   const productIds = productUrl2.searchParams.getAll("product_id").map((value) => value.trim()).filter(Boolean);
   if (productIds.length === 0 || productIds.some((productId2) => productId2 !== purchase.productId)) {
     throw validationError("platform Catalog product URL must contain only the frozen product_id");
   }
-  const catalog = await searchCommandCatalog(context, {
+  const region = pathSegments[0].toLowerCase();
+  const catalog = await getCommandCatalogProduct(context, {
     baseUrl: catalogBaseUrl,
-    query: purchase.catalogQuery,
+    productId: purchase.productId,
     channelType: purchase.channelType,
+    storeId: purchase.storeId,
+    region,
     language: purchase.catalogLanguage
   });
-  const candidate = resolveUniquePlatformCatalogCandidate(catalog, purchase);
+  const candidate = resolveExactPlatformCatalogCandidate(catalog, purchase);
   return {
     purchaseContext: { ...purchase },
     route: {
@@ -30102,6 +30108,18 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
       availability: candidate.availability
     }
   };
+}
+function resolveExactPlatformCatalogCandidate(payload, purchase) {
+  const root = requireRecord3(payload, "invalid exact Catalog product response");
+  const product = requireRecord3(root.product, "exact Catalog product response is missing product");
+  return resolveUniquePlatformCatalogCandidate({
+    groups: [{
+      channel_type: purchase.channelType,
+      store_id: purchase.storeId,
+      name: purchase.merchantName,
+      products: [product]
+    }]
+  }, purchase);
 }
 function requireEats365CatalogProductUrl(merchantUrl) {
   const productUrl2 = new URL(merchantUrl);
@@ -32030,10 +32048,11 @@ Context:
   structured purchase price/currency, availability, store ID, channel, query, environment,
   language, and product URL only after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL
   host, store path, and product_id must match those frozen facts. Before Instruction or Checkout
-  work, commerce-run repeats that anonymous broad Catalog search and requires one exact
-  store/product/URL match whose title, structured price/currency, and orderable availability still
-  match the frozen candidate. mode=purchase and ordinary internal merchants retain merchant-list
-  routing.
+  work, commerce-run calls the anonymous extra Catalog product endpoint with the exact frozen
+  channel, store, region, and product ID. It does not depend on broad discovery selecting that
+  store again. The exact product's URL, title, structured price/currency, and orderable
+  availability must still match the frozen candidate. mode=purchase and ordinary internal
+  merchants retain merchant-list routing.
 
   Both purchase modes use the following shared contract.
   selection.quantity must be a positive JSON integer number such as 1, never "1" or 1.5.

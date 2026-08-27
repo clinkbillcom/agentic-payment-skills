@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.34');
+  assert.equal(packageJson.version, '0.1.35');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.34/u);
-  assert.match(skill, /version: "0\.1\.34"/u);
+  assert.match(skill, /Visa Skill 0\.1\.35/u);
+  assert.match(skill, /version: "0\.1\.35"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -388,7 +388,7 @@ test('direct shopping skips Visa recommendation and uses aggregate Catalog purch
   );
   assert.match(
     catalogPurchase,
-    /mode=catalog_purchase[\s\S]*Eats365[\s\S]*without requesting the internal merchant list[\s\S]*manual-item signal[\s\S]*revalidate[\s\S]*mode=purchase[\s\S]*ordinary internal merchants/iu,
+    /mode=catalog_purchase[\s\S]*Eats365[\s\S]*without requesting the internal merchant list[\s\S]*manual-item signal[\s\S]*extra Catalog product endpoint[\s\S]*exact frozen[\s\S]*store[\s\S]*product ID[\s\S]*must not depend on broad[\s\S]*Catalog discovery[\s\S]*mode=purchase[\s\S]*ordinary internal[\s\S]*merchants/iu,
   );
   for (const field of [
     'channelType',

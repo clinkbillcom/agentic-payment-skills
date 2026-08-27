@@ -74,11 +74,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.37');
+  assert.equal(vendorPackage.version, '0.2.38');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'a51266f243d05af5b061480d4921884764d68631',
+    '2eee3d9e3d22de4c04fd121633d179608e5367bd',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -770,23 +770,25 @@ globalThis.fetch = async (input, init) => {
   }
 
   if (scenario === 'eats365-success') {
-    if (url.pathname === '/agent/ucp/extra/catalog/search') {
+    if (url.pathname === '/agent/ucp/extra/catalog/product') {
       if (init?.method !== 'POST') {
-        throw new Error('unexpected broad Catalog method: ' + init?.method);
+        throw new Error('unexpected exact Catalog method: ' + init?.method);
       }
       const body = JSON.parse(String(init.body));
       if (
-        body.query !== '咖啡'
+        body.id !== '10210949'
         || body.channel_type !== 'eats365'
+        || body.store_id !== 'chaptercoffee_kowloontong'
+        || body.region !== 'hk'
         || body.context?.language !== 'zh-Hans'
       ) {
-        throw new Error('unexpected broad Catalog request: ' + JSON.stringify(body));
+        throw new Error('unexpected exact Catalog request: ' + JSON.stringify(body));
       }
       const response = coffeeCatalogResponse();
       response.groups[0].products[0].title = '美式咖啡 Americano';
       response.groups[0].products[0].variants[0].title =
         '美式咖啡 Americano';
-      return jsonResponse(response);
+      return jsonResponse({ product: response.groups[0].products[0] });
     }
     if (url.pathname === '/agent/cwallet/card/bindingLink') {
       throw new Error('intentional card refresh stop after product resolution');
