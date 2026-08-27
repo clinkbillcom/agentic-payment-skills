@@ -10266,6 +10266,9 @@ var DASHBOARD_BASE_URLS = {
   test: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
+var MERCHANT_LIST_URLS = {
+  production: "https://www.clinkbill.com/.well-known/ucp-merchants.json"
+};
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
@@ -10738,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.37";
+var CLI_VERSION = "0.2.38";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -12416,7 +12419,7 @@ Wallet Environment:
   later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
   process override for those authenticated commands.
 
-Public Discovery Environment:
+Public Catalog Environment:
   ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
   config-independent commands. They default to production and accept --sandbox or --test per call.
 
@@ -12840,9 +12843,8 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   get-endpoint uses the effective wallet API base and does not accept environment flags.
   get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
-  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
+  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
-  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12863,16 +12865,14 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
   using the environment saved by wallet init. Re-run wallet init to switch environments.
-  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
-  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
-  miss is refreshed before it can become an external-route decision; errors are never cached.
-  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
-  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
-  independently from the effective wallet API base and merchant_id.
+  Production fetches its merchant list from https://www.clinkbill.com/.well-known/ucp-merchants.json
+  on every call and never caches it, so upstream merchant changes apply without a new CLI release.
+  Sandbox/UAT and test use the lists bundled from public/uat and public/test with no request.
+  A merchant entry with "enabled": false is treated as absent.
   Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
-  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
-  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
-  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
+  A production merchant-list request that fails, times out, or does not return JSON is a network
+  error (exit 6) and is never reported as a missing merchant.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12887,14 +12887,16 @@ Options:
 ${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
-  Returns {"merchants":[...]} from the public merchant-list API after validation.
+  Returns the complete merchant-list document after validating its merchant entries.
   The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
   It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
-  It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
-  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
-  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
-  that may include a path.
+  Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
+  Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
+  The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
+  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry with no
+  fragment whose hostname must exactly match domain_name; callers must not construct a replacement URL.
+  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
 
 Examples:
   clink tool internal-ucp get-merchant-list --format json
@@ -12937,7 +12939,7 @@ Options:
   --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
   --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
   --description <text>         Optional Quick Instruction description
-  --is-recurring               Mark it recurring; mandates require recurringFrequency
+  --is-recurring               Mark the Quick Instruction as recurring
   --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
   --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
@@ -12961,13 +12963,13 @@ Quick Instruction:
   --extra are rejected because no card exists yet and the context is intentionally bounded.
   Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
   contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
-  requires description, a positive amountLimit with at most two decimals, and currencyCode.
+  requires a description of at most 150 characters, a positive amountLimit with at most two
+  decimals, and currencyCode.
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  After browser authorization, the server attempts to create a PENDING purchase instruction and
-  reports pendingInstructionId. A null value means no usable Quick ID was returned and does not
-  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
-  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
-  \`instruction list --valid-only\` until it is ACTIVE.
+  A successful token response reports pendingInstructionId; null means no usable Quick ID was
+  returned and does not prove whether creation was skipped or failed.
+  A PENDING instruction activates after VIC card binding completes and emits
+  purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -14185,6 +14187,7 @@ Options:
   --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
                                --ucp-order-id is unavailable
   --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
+  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
   --event-only                 ACK and return the exact succeeded event without UCP order lookup
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -14422,52 +14425,125 @@ function getRawHelpText(command, subcommand, nestedCommand) {
   }
 }
 
+// public/uat/ucp-merchants.json
+var ucp_merchants_default = {
+  version: 1,
+  updated_at: "2026-08-10T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "uat-magento.clinkpay.team",
+      merchant_url: "https://uat-magento.clinkpay.team/",
+      merchant_id: "mcht_f5d0rys1hjxe",
+      enabled: true,
+      description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    },
+    {
+      domain_name: "vtravel.link2shops.com",
+      merchant_url: "https://vtravel.link2shops.com/yiyuan/",
+      merchant_id: "mcht_ftmse61a6az0",
+      enabled: true,
+      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
+    }
+  ]
+};
+
+// public/test/ucp-merchants.json
+var ucp_merchants_default2 = {
+  version: 1,
+  updated_at: "2026-08-14T00:00:00Z",
+  merchants: [
+    {
+      domain_name: "modelmax-store-uat.myshopify.com",
+      merchant_url: "https://modelmax-store-uat.myshopify.com/",
+      merchant_id: "mcht_fcq09yoqqink",
+      enabled: true,
+      description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
+    },
+    {
+      domain_name: "testa.link2shops.com",
+      merchant_url: "https://testa.link2shops.com/",
+      merchant_id: "mcht_f5xuyduv1a0j",
+      enabled: true,
+      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
+    }
+  ]
+};
+
 // dist/internal-ucp.js
-var MERCHANT_LIST_PATH = "/agent/ucp/merchants";
 var MERCHANT_LIST_USER_AGENT = "clink-cli";
 var MERCHANT_LIST_TIMEOUT_MS = 15e3;
-var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
-var MERCHANT_LIST_MAX_ATTEMPTS = 2;
-var MERCHANT_LIST_RETRY_DELAY_MS = 50;
-var merchantListRequests = /* @__PURE__ */ new WeakMap();
-async function getInternalUcpMerchantList(options2 = {}) {
-  return (await loadInternalUcpMerchantList(options2)).merchants;
-}
-function validateInternalUcpMerchantList(value, source) {
-  if (!Array.isArray(value)) {
-    throw invalidMerchantList(source, "expected an array");
-  }
-  const merchants = [];
-  for (const record of value) {
+var BUNDLED_MERCHANT_LISTS = {
+  sandbox: ucp_merchants_default,
+  test: ucp_merchants_default2
+};
+function validateInternalUcpMerchants(value, source) {
+  const records = merchantRecordsOf(value, source);
+  const merchants = /* @__PURE__ */ new Map();
+  const seenDomains = /* @__PURE__ */ new Set();
+  records.forEach((record, index) => {
     if (!record || typeof record !== "object" || Array.isArray(record)) {
-      continue;
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
     const fields = record;
-    const merchantId = nonBlankString(fields.merchant_id);
-    const merchantName = nonBlankString(fields.merchant_name);
-    const description = optionalDescription(fields.description);
-    const domain = merchantRouteUrl(fields.domain);
-    if (!merchantId || !merchantName || description === void 0 || !domain) {
-      continue;
+    const domainName = canonicalDomain(fields.domain_name);
+    const merchantId = stringValue(fields.merchant_id);
+    if (!domainName || !merchantId) {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
     }
-    const merchant = {
-      merchant_id: merchantId,
-      merchant_name: merchantName,
-      description,
-      domain
-    };
-    if (Object.hasOwn(fields, "ext")) {
-      const ext = safeCloneJsonValue(fields.ext);
-      if (ext !== void 0) {
-        merchant.ext = ext;
-      }
+    if (fields.merchant_url !== void 0) {
+      validateMerchantUrl(fields.merchant_url, domainName, source, index);
     }
-    merchants.push(merchant);
-  }
-  if (value.length > 0 && merchants.length === 0) {
-    throw invalidMerchantList(source, "no valid merchant identities");
-  }
+    if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
+      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    }
+    if (seenDomains.has(domainName)) {
+      throw validationError(`duplicate internal UCP domain: ${domainName}`);
+    }
+    seenDomains.add(domainName);
+    if (fields.enabled !== false) {
+      merchants.set(domainName, merchantId);
+    }
+  });
   return merchants;
+}
+function merchantRecordsOf(value, source) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const envelope = value;
+    if (Array.isArray(envelope.merchants)) {
+      return envelope.merchants;
+    }
+  }
+  throw validationError(`invalid internal UCP config: ${source}`);
+}
+async function getInternalUcpMerchantList(options2 = {}) {
+  const environment = options2.environment ?? "production";
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  validateInternalUcpMerchants(loaded.document, loaded.source);
+  const merchants = merchantRecordsOf(loaded.document, loaded.source);
+  if (Array.isArray(loaded.document)) {
+    return { merchants: [...merchants] };
+  }
+  return {
+    ...loaded.document,
+    merchants: [...merchants]
+  };
 }
 async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl2;
@@ -14481,17 +14557,8 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  let merchantId;
-  if (options2.merchants) {
-    merchantId = options2.merchants.get(domainName);
-  } else {
-    let loaded = await loadInternalUcpMerchants(options2);
-    merchantId = loaded.merchants.get(domainName);
-    if (!merchantId && loaded.fromCache) {
-      loaded = await loadInternalUcpMerchants(options2, true);
-      merchantId = loaded.merchants.get(domainName);
-    }
-  }
+  const merchants = options2.merchants ?? await loadInternalUcpMerchants(environment, options2);
+  const merchantId = merchants.get(domainName);
   if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
@@ -14502,7 +14569,7 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   } catch {
     throw validationError("invalid internal UCP base URL");
   }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
     throw validationError("invalid internal UCP base URL");
   }
   return {
@@ -14512,305 +14579,92 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     endpoint: endpoint.toString()
   };
 }
-async function loadInternalUcpMerchants(options2, forceRefresh = false) {
-  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
-  const environment = options2.environment ?? "production";
-  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+async function loadInternalUcpMerchants(environment, options2) {
+  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
+  return validateInternalUcpMerchants(loaded.document, loaded.source);
+}
+async function loadInternalUcpMerchantListDocument(environment, options2) {
+  const explicitUrl = options2.merchantListUrl?.trim() || process.env.CLINK_UCP_MERCHANTS_URL?.trim() || void 0;
+  if (!explicitUrl) {
+    const bundled = BUNDLED_MERCHANT_LISTS[environment];
+    if (bundled !== void 0) {
+      return {
+        document: bundled,
+        source: `public/${bundledListName(environment)}/ucp-merchants.json`
+      };
+    }
+  }
+  const listUrl = explicitUrl ?? MERCHANT_LIST_URLS[environment];
+  if (!listUrl) {
+    throw configError(`no internal UCP merchant list for the ${environment} environment; set CLINK_UCP_MERCHANTS_URL`);
+  }
+  const fetchList = options2.fetchMerchantList ?? ((url) => fetchMerchantListDocument(url, options2.timeoutMs));
   return {
-    merchants: merchantMap(loaded.merchants, source),
-    fromCache: loaded.fromCache
+    document: await fetchList(listUrl),
+    source: listUrl
   };
 }
-async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
-  const environment = options2.environment ?? "production";
-  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
-  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
-  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
-  if (!requestsByUrl) {
-    requestsByUrl = /* @__PURE__ */ new Map();
-    merchantListRequests.set(fetchMerchantList, requestsByUrl);
-  }
-  let state = requestsByUrl.get(url);
-  if (!state) {
-    state = {};
-    requestsByUrl.set(url, state);
-  }
-  const now = Date.now();
-  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
-    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
-  }
-  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
-  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
-  if (inFlight) {
-    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
-  }
-  const requestState = state;
-  const request = (async () => {
-    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
-    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
-    const cached = Object.freeze(validated);
-    requestState.cached = {
-      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
-      merchants: cached
-    };
-    return cached;
-  })();
-  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
-  requestState.inFlightByTimeout.set(timeoutMs, request);
+function bundledListName(environment) {
+  return environment === "sandbox" ? "uat" : environment;
+}
+async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
   try {
-    return { merchants: cloneMerchantList(await request), fromCache: false };
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "en-US",
+        "User-Agent": MERCHANT_LIST_USER_AGENT
+      },
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+    }
+    throw networkError(`internal UCP merchant list request failed: ${error.message}`);
   } finally {
-    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
-      requestState.inFlightByTimeout.delete(timeoutMs);
-      if (requestState.inFlightByTimeout.size === 0) {
-        delete requestState.inFlightByTimeout;
-      }
-    }
+    clearTimeout(timeout);
   }
-}
-async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
-  const deadline = Date.now() + timeoutMs;
-  let lastFailure;
-  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
-      break;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), remainingMs);
-    let response;
-    try {
-      response = await fetchMerchantList(url, {
-        method: "GET",
-        credentials: "omit",
-        headers: {
-          Accept: "application/json",
-          "Accept-Language": "en-US",
-          "User-Agent": MERCHANT_LIST_USER_AGENT,
-          [CLI_VERSION_HEADER]: CLI_VERSION
-        },
-        signal: controller.signal
-      });
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    if (!response.ok) {
-      clearTimeout(timeout);
-      discardMerchantListResponse(response);
-      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
-      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    let rawText;
-    try {
-      rawText = await response.text();
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    } finally {
-      clearTimeout(timeout);
-    }
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      throw apiError("internal UCP merchant list response is not valid JSON", 502);
-    }
+  if (!response.ok) {
+    throw networkError(`internal UCP merchant list request failed with status ${response.status}`);
   }
-  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-}
-function merchantRouteUrl(value) {
-  const rawDomain = nonBlankString(value);
-  if (!rawDomain) {
-    return void 0;
-  }
-  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
-    return void 0;
-  }
-  let domain;
+  const rawText = await response.text();
   try {
-    domain = new URL(rawDomain);
+    return JSON.parse(rawText);
   } catch {
-    return void 0;
+    throw networkError(`internal UCP merchant list is not valid JSON: ${url}`);
   }
-  const domainName = canonicalDomain(domain.hostname);
-  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
-    return void 0;
-  }
-  domain.hostname = domainName;
-  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
-    domain.port = "";
-  }
-  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
-}
-function nonBlankString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function stringValue(value) {
-  return typeof value === "string" ? value.trim() : void 0;
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function optionalDescription(value) {
-  return value === null || value === void 0 ? "" : stringValue(value);
-}
-function safeCloneJsonValue(value) {
+function validateMerchantUrl(value, domainName, source, index) {
+  const rawUrl = stringValue(value);
+  let merchantUrl;
   try {
-    return cloneJsonValue(value, /* @__PURE__ */ new Set());
+    merchantUrl = new URL(rawUrl ?? "");
   } catch {
-    return void 0;
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
-}
-function cloneJsonValue(value, ancestors) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (!value || typeof value !== "object" || ancestors.has(value)) {
-    return void 0;
-  }
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const result = [];
-      for (const item of value) {
-        const cloned = cloneJsonValue(item, ancestors);
-        if (cloned === void 0) {
-          return void 0;
-        }
-        result.push(cloned);
-      }
-      return result;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      return void 0;
-    }
-    const entries = [];
-    for (const [key, item] of Object.entries(value)) {
-      const cloned = cloneJsonValue(item, ancestors);
-      if (cloned === void 0) {
-        return void 0;
-      }
-      entries.push([key, cloned]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
+  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password || merchantUrl.hash) {
+    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
   }
 }
 function canonicalDomain(value) {
-  return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
-}
-function merchantMap(merchants, source) {
-  const merchantIdsByDomain = /* @__PURE__ */ new Map();
-  for (const merchant of merchants) {
-    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
-    if (!domainName) {
-      continue;
-    }
-    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
-    merchantIds.add(merchant.merchant_id);
-    merchantIdsByDomain.set(domainName, merchantIds);
-  }
-  const mapped = new ConflictAwareMerchantMap(source);
-  for (const [domainName, merchantIds] of merchantIdsByDomain) {
-    if (merchantIds.size === 1) {
-      mapped.set(domainName, merchantIds.values().next().value);
-    } else {
-      mapped.addConflict(domainName);
-    }
-  }
-  return mapped;
-}
-var ConflictAwareMerchantMap = class extends Map {
-  source;
-  conflicts = /* @__PURE__ */ new Set();
-  constructor(source) {
-    super();
-    this.source = source;
-  }
-  addConflict(domainName) {
-    this.delete(domainName);
-    this.conflicts.add(domainName);
-  }
-  get(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.get(domainName);
-  }
-  has(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.has(domainName);
-  }
-  assertUnambiguous(domainName) {
-    if (this.conflicts.has(domainName)) {
-      throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
-    }
-  }
-};
-function cloneMerchantList(merchants) {
-  return merchants.map((merchant) => {
-    const cloned = {
-      merchant_id: merchant.merchant_id,
-      merchant_name: merchant.merchant_name,
-      description: merchant.description,
-      domain: merchant.domain
-    };
-    if (Object.hasOwn(merchant, "ext")) {
-      const ext = safeCloneJsonValue(merchant.ext);
-      if (ext !== void 0) {
-        cloned.ext = ext;
-      }
-    }
-    return cloned;
-  });
-}
-function retryableMerchantListStatus(status) {
-  return status === 408 || status === 429 || status >= 500 && status <= 599;
-}
-function discardMerchantListResponse(response) {
-  if (response.body) {
-    void response.body.cancel().catch(() => {
-    });
-  }
-}
-async function waitForMerchantListRetry(deadline) {
-  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
-    return false;
-  }
-  await new Promise((resolve6) => {
-    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
-  });
-  return Date.now() < deadline;
-}
-function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
-  if (error?.name === "AbortError") {
-    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-  }
-  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
-  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
-}
-function invalidMerchantList(source, reason) {
-  return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
+  return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
 }
 
 // dist/instruction-context.js
 import { readFile as readFile3 } from "node:fs/promises";
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
-var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
   "title",
   "description",
@@ -22270,6 +22124,7 @@ var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
 ]);
 var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
 var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
+var EXTRA_CATALOG_PRODUCT_PATH = "/agent/ucp/extra/catalog/product";
 var UCP_ORDER_PATH = "/agent/ucp/orders";
 var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
   "draft",
@@ -22787,14 +22642,15 @@ async function toolInternalUcp(context) {
   switch (nestedCommand) {
     case "get-merchant-list": {
       rejectPublicCatalogAuthenticationFlags(context.args.flags);
-      if (!configuredEnvironment) {
+      const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
+      if (!configuredEnvironment && !hasMerchantListOverride) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
       }
       const result = await getInternalUcpMerchantList({
-        environment: configuredEnvironment,
+        environment: configuredEnvironment ?? "production",
         timeoutMs: context.globalOptions.timeoutMs
       });
-      printJson({ merchants: result }, context.globalOptions.format);
+      printJson(result, context.globalOptions.format);
       return EXIT_CODES.OK;
     }
     case "get-endpoint": {
@@ -24103,26 +23959,28 @@ async function searchCommandUcpCatalogPage(context, input) {
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
 }
-async function searchCommandCatalog(context, input) {
+async function getCommandCatalogProduct(context, input) {
   const result = await requestJson({
     baseUrl: input.baseUrl,
     method: "POST",
-    path: EXTRA_CATALOG_SEARCH_PATH,
+    path: EXTRA_CATALOG_PRODUCT_PATH,
     acceptLanguage: input.language,
     headers: {
       "Request-Id": randomUUID4(),
       "UCP-Agent": DEFAULT_UCP_AGENT
     },
     body: {
-      query: input.query,
-      context: { language: input.language },
-      channel_type: input.channelType
+      id: input.productId,
+      channel_type: input.channelType,
+      store_id: input.storeId,
+      region: input.region,
+      context: { language: input.language }
     },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false
   });
   if (isDryRun3(result)) {
-    throw apiError("Catalog search unexpectedly produced a dry-run response");
+    throw apiError("Catalog product unexpectedly produced a dry-run response");
   }
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
@@ -24134,7 +23992,7 @@ function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   }
 }
 function rejectPublicCatalogAuthenticationFlags(flags) {
-  const unsupported = ["customer-api-key", "customer-id", "credential-token"].find((name) => name in flags);
+  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
@@ -28107,7 +27965,7 @@ var LEGAL_TRANSITIONS = {
 function defaultVisaState() {
   return {
     fsmState: "IDLE",
-    activeMarket: "hk",
+    activeMarket: "cn",
     vsraTokens: {}
   };
 }
@@ -29363,7 +29221,7 @@ async function getVisaProgramDetail(options2) {
   return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa Program detail");
 }
 function parseVisaMarket(value, storedConfig) {
-  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "hk");
+  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "cn");
 }
 function normalizeVisaLocale(value) {
   const locale = String(value ?? "zh-CN").trim().replaceAll("_", "-").toLowerCase();
@@ -30211,20 +30069,23 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
   const productUrl2 = requireEats365CatalogProductUrl(purchase.merchantUrl);
   const pathSegments = productUrl2.pathname.split("/").filter(Boolean).map((value) => decodeUrlPathSegment(value));
   const menuIndex = pathSegments.lastIndexOf("menu");
-  if (menuIndex < 1 || pathSegments[menuIndex - 1] !== purchase.storeId) {
+  if (menuIndex < 3 || pathSegments[menuIndex - 1] !== purchase.storeId) {
     throw validationError("Eats365 Catalog product URL store does not match the frozen storeId");
   }
   const productIds = productUrl2.searchParams.getAll("product_id").map((value) => value.trim()).filter(Boolean);
   if (productIds.length === 0 || productIds.some((productId2) => productId2 !== purchase.productId)) {
     throw validationError("platform Catalog product URL must contain only the frozen product_id");
   }
-  const catalog = await searchCommandCatalog(context, {
+  const region = pathSegments[0].toLowerCase();
+  const catalog = await getCommandCatalogProduct(context, {
     baseUrl: catalogBaseUrl,
-    query: purchase.catalogQuery,
+    productId: purchase.productId,
     channelType: purchase.channelType,
+    storeId: purchase.storeId,
+    region,
     language: purchase.catalogLanguage
   });
-  const candidate = resolveUniquePlatformCatalogCandidate(catalog, purchase);
+  const candidate = resolveExactPlatformCatalogCandidate(catalog, purchase);
   return {
     purchaseContext: { ...purchase },
     route: {
@@ -30247,6 +30108,18 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
       availability: candidate.availability
     }
   };
+}
+function resolveExactPlatformCatalogCandidate(payload, purchase) {
+  const root = requireRecord3(payload, "invalid exact Catalog product response");
+  const product = requireRecord3(root.product, "exact Catalog product response is missing product");
+  return resolveUniquePlatformCatalogCandidate({
+    groups: [{
+      channel_type: purchase.channelType,
+      store_id: purchase.storeId,
+      name: purchase.merchantName,
+      products: [product]
+    }]
+  }, purchase);
 }
 function requireEats365CatalogProductUrl(merchantUrl) {
   const productUrl2 = new URL(merchantUrl);
@@ -32175,10 +32048,11 @@ Context:
   structured purchase price/currency, availability, store ID, channel, query, environment,
   language, and product URL only after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL
   host, store path, and product_id must match those frozen facts. Before Instruction or Checkout
-  work, commerce-run repeats that anonymous broad Catalog search and requires one exact
-  store/product/URL match whose title, structured price/currency, and orderable availability still
-  match the frozen candidate. mode=purchase and ordinary internal merchants retain merchant-list
-  routing.
+  work, commerce-run calls the anonymous extra Catalog product endpoint with the exact frozen
+  channel, store, region, and product ID. It does not depend on broad discovery selecting that
+  store again. The exact product's URL, title, structured price/currency, and orderable
+  availability must still match the frozen candidate. mode=purchase and ordinary internal
+  merchants retain merchant-list routing.
 
   Both purchase modes use the following shared contract.
   selection.quantity must be a positive JSON integer number such as 1, never "1" or 1.5.

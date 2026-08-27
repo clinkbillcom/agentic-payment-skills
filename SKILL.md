@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.34. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.35. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.34"
+  version: "0.1.35"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -577,9 +577,12 @@ for a nonexistent detail page or ask for a replacement URL.
 During `mode=catalog_purchase`, the CLI must resolve a frozen Eats365 platform
 candidate without requesting the internal merchant list. It starts from the
 trusted product URL, accepts only the exact Eats365 manual-item signal, and
-then repeats anonymous broad Catalog discovery to revalidate the complete
-frozen identity and purchase facts. This exception does not apply to
-`mode=purchase` or to ordinary internal merchants.
+then calls the anonymous extra Catalog product endpoint with the exact frozen
+channel, store, URL-derived region, and product ID. It must not depend on broad
+Catalog discovery selecting that store again. The exact response revalidates
+the URL, title, structured price/currency, availability, and platform metadata.
+This exception does not apply to `mode=purchase` or to ordinary internal
+merchants.
 
 Freeze all of these authoritative facts:
 

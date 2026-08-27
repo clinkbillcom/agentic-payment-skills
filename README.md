@@ -58,6 +58,8 @@ Joined orderable products expose normalized purchase facts: a localized display
 title, provider `sourceTitle`, minor-unit audit amount, major-unit purchase
 amount, currency, and availability. Purchase contexts use `sourceTitle` and the
 major-unit amount directly, without reinterpreting raw Catalog fields.
+Eats365 purchase revalidation uses the exact frozen store and product endpoint,
+so it does not depend on broad discovery selecting the same store twice.
 
 Visa Program, provider, and other Catalog purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
@@ -65,8 +67,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.34` vendors Visa CLI `0.2.37` from upstream commit
-`5f22799dd87e0c0612b3fb7316d2d25d127d4533`. It supports joined Visa Offer and
+Skill `0.1.35` vendors Visa CLI `0.2.38` from upstream commit
+`2eee3d9e3d22de4c04fd121633d179608e5367bd`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -88,7 +90,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.34`
+Skill version: `0.1.35`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
