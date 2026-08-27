@@ -131,7 +131,7 @@ test('Case 1 lists every returned Visa Benefit and joins paginated Fuhui Catalog
   );
   assert.match(
     joined,
-    /Case 1 broad availability[\s\S]*always add `--all`[\s\S]*complete\s+regional set[\s\S]*present every returned Program/iu,
+    /Case 1 broad availability[\s\S]*always add `--all`[\s\S]*complete\s+regional set[\s\S]*Present every semantically relevant returned Program/iu,
   );
   assert.match(
     joined,
@@ -200,6 +200,14 @@ test('Case 2 uses the Visa plus Fuhui route for category coupon shopping', () =>
   );
   assert.match(
     joined,
+    /authoritative candidates[\s\S]*explicit brand[\s\S]*product[\s\S]*category constraints[\s\S]*generic coupon[\s\S]*not relevant/iu,
+  );
+  assert.match(
+    joined,
+    /no\s+Program survives[\s\S]*no matching Visa Program[\s\S]*still present relevant Fuhui products/iu,
+  );
+  assert.match(
+    joined,
     /voucher denomination and purchase price as separate facts[\s\S]*HKD 100[\s\S]*structured\s+Catalog[\s\S]*actual purchase price/iu,
   );
 });
@@ -233,6 +241,10 @@ test('Case 3 uses the joined route for merchant-specific coupons without false m
   assert.match(
     joined,
     /reuse the Visa\s+Programs and Fuhui merchant identity[\s\S]*rerun the complete Fuhui\s+Catalog search/iu,
+  );
+  assert.match(
+    joined,
+    /Multiple Fuhui domains[\s\S]*exactly one returned route description[\s\S]*Visa benefit redemption\/internal Catalog and checkout route[\s\S]*stop before login/iu,
   );
   assert.match(
     joined,
@@ -278,6 +290,10 @@ test('Case 4 skips Visa recommendation and uses aggregate Catalog purchase', () 
   assert.match(
     catalogPurchase,
     /merchantUrl[\s\S]*productId[\s\S]*title[\s\S]*price[\s\S]*currency[\s\S]*availability[\s\S]*merchantCategoryCode/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /duplicate routes share the merchant ID[\s\S]*never[\s\S]*list order[\s\S]*hardcoded domain/iu,
   );
   assert.match(
     catalogPurchase,
