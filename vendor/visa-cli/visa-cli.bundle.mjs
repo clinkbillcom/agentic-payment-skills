@@ -10741,7 +10741,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.34";
+var CLI_VERSION = "0.2.36";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -13509,7 +13509,7 @@ Optional Request Fields:
   --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
                               zh-Hans, or fr-CA
   --context <json>            UCP Catalog context JSON object. Fields:
-                              - address_country: ISO 3166-1 alpha-2 region hint (e.g., "SG", "HK")
+                              - address_region: regional discovery hint (e.g., "SG", "HK")
                               - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
                               - currency: ISO 4217 code (e.g., "USD", "HKD")
   --language <tag>            Convenience override for context.language
@@ -13530,7 +13530,7 @@ Behavior:
   invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
   Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
   not need to know one up front. Use ucp-catalog search when the merchant is already known.
-  address_country is a discovery hint, not a strict filter. Published external-store mappings
+  address_region is a discovery hint, not a strict filter. Published external-store mappings
   currently cover HK and SG; other ISO codes may leave results un-narrowed.
   Broad discovery returns a bounded, non-exhaustive result window and currently exposes no pagination.
   Use ucp-catalog search for real cursor pagination when a merchant is already known.
@@ -13552,7 +13552,7 @@ Examples:
     --format pretty
   clink catalog search \\
     --query coffee \\
-    --language en --context '{"address_country":"SG","currency":"SGD"}' \\
+    --language en --context '{"address_region":"SG","currency":"SGD"}' \\
     --format json
 `;
 var UCP_ORDER_HELP = `clink ucp-order
@@ -29471,6 +29471,10 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
   if (registeredProvider) {
     return resolveInternalCatalogPurchase(context, commerceContext, purchase, registeredProvider);
   }
+  if (commerceContext.mode === "catalog_purchase" && purchase.channelType === "eats365") {
+    requireEats365CatalogProductUrl(purchase.merchantUrl);
+    return resolveExternalCommercePurchase(context, commerceContext, expectedBaseUrl, purchase);
+  }
   try {
     const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, {
       baseUrl: expectedBaseUrl,
@@ -29483,6 +29487,9 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
       throw error;
     }
   }
+  return resolveExternalCommercePurchase(context, commerceContext, expectedBaseUrl, purchase);
+}
+async function resolveExternalCommercePurchase(context, commerceContext, expectedBaseUrl, purchase) {
   if (purchase.merchantId || purchase.endpoint) {
     throw validationError("frozen merchantId or endpoint does not match the internal-first merchant route");
   }
@@ -29544,11 +29551,7 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
   if (purchase.channelType !== "eats365" || !purchase.storeId || !purchase.catalogQuery || !purchase.catalogEnvironment || !purchase.catalogLanguage) {
     throw validationError("manual platform Catalog purchase requires the complete frozen Eats365 Catalog provenance");
   }
-  const productUrl2 = new URL(purchase.merchantUrl);
-  const hostname = productUrl2.hostname.toLowerCase();
-  if (hostname !== "eats365pos.com" && !hostname.endsWith(".eats365pos.com")) {
-    throw validationError("Eats365 Catalog product URL must use an eats365pos.com host");
-  }
+  const productUrl2 = requireEats365CatalogProductUrl(purchase.merchantUrl);
   const pathSegments = productUrl2.pathname.split("/").filter(Boolean).map((value) => decodeUrlPathSegment(value));
   const menuIndex = pathSegments.lastIndexOf("menu");
   if (menuIndex < 1 || pathSegments[menuIndex - 1] !== purchase.storeId) {
@@ -29587,6 +29590,14 @@ async function resolvePlatformCatalogPurchase(context, catalogBaseUrl, purchase)
       availability: candidate.availability
     }
   };
+}
+function requireEats365CatalogProductUrl(merchantUrl) {
+  const productUrl2 = new URL(merchantUrl);
+  const hostname = productUrl2.hostname.toLowerCase();
+  if (hostname !== "eats365pos.com" && !hostname.endsWith(".eats365pos.com")) {
+    throw validationError("Eats365 Catalog product URL must use an eats365pos.com host");
+  }
+  return productUrl2;
 }
 function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   const root = requireRecord2(payload, "invalid broad Catalog search response");
@@ -31502,12 +31513,15 @@ Context:
   selection.merchantId and merchantUrl; selection.endpoint, when supplied, must exactly match the
   endpoint derived from the locked commerce environment. This allows direct anonymous product
   revalidation without a merchant-list request and does not accept caller-defined internal routes.
-  An Eats365 candidate may use its frozen item ID, title, structured purchase
-  price/currency, availability, store ID, channel, query, environment, language, and product URL
-  after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL host, store path, and product_id
-  must match those frozen facts. Before Instruction or Checkout work, commerce-run repeats that
-  anonymous broad Catalog search and requires one exact store/product/URL match whose title,
-  structured price/currency, and orderable availability still match the frozen candidate.
+  For catalog_purchase with channelType=eats365, product resolution skips the internal merchant
+  list and calls parse-item first. An Eats365 candidate may use its frozen item ID, title,
+  structured purchase price/currency, availability, store ID, channel, query, environment,
+  language, and product URL only after parse-item reports EATS365_MANUAL_ITEM_REQUIRED. The URL
+  host, store path, and product_id must match those frozen facts. Before Instruction or Checkout
+  work, commerce-run repeats that anonymous broad Catalog search and requires one exact
+  store/product/URL match whose title, structured price/currency, and orderable availability still
+  match the frozen candidate. mode=purchase and ordinary internal merchants retain merchant-list
+  routing.
 
   Both purchase modes use the following shared contract.
   selection.quantity must be a positive JSON integer number such as 1, never "1" or 1.5.

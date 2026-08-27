@@ -35,9 +35,9 @@ visa commerce-run
   `commerce-run mode=catalog_purchase` 的聚合购买合同
 
 CLI 是 Visa Benefit Catalog provider registry 和 provider identity 的唯一
-权威源。Cases 1-3 只调用一次 joined CLI 命令，由 CLI 内部遍历 provider
-并完成 cursor 分页；Skill 不复制 provider 条目，也不再用第二条 Catalog
-或 merchant-list 请求拼接结果。
+权威源。Visa 权益相关查询只调用一次 joined CLI 命令，由 CLI 内部遍历
+provider 并完成 cursor 分页；Skill 不复制 provider 条目，也不再用第二条
+Catalog 或 merchant-list 请求拼接结果。
 
 Skill 将 joined 返回的 Visa Offer 集合和可直接下单 provider 商品集合作为
 两类权威候选集合。Agent 必须分别按照原始 query 的品牌、品类、地理、
@@ -53,8 +53,8 @@ Visa Program、provider 和其他 Catalog 购买都保持 CLI 聚合。Skill 不
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.31` 已 vendor 上游提交
-`42af4fadc12413623a4a64fee108a26d9342174a` 的 Visa CLI `0.2.34`。它支持
+Skill `0.1.33` 已 vendor 上游提交
+`9cc700b840ba383a04fd295c1b0c680bee674636` 的 Visa CLI `0.2.36`。它支持
 Visa Offer 与 provider 商品 joined 查询、可选的旧版 `program.code`、
 完整 Eats365 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。vendor
@@ -74,7 +74,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.31`
+Skill 版本：`0.1.33`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

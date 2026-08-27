@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.31. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.33. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.31"
+  version: "0.1.33"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -131,21 +131,21 @@ rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
 ## Intent Routing
 
-Classify the request before the first command:
+Classify the request silently before the first command. Acceptance-scenario
+numbers, routing categories, and workflow names are internal maintenance
+details. Never announce the classification or expose those labels in
+user-facing text; respond directly to the user's request.
 
-- **Case 1, broad Visa availability:** requests such as "What Visa Benefits can
-  I use in Hong Kong?" use Visa And Provider Catalog Joined Discovery. Present
-  every returned relevant Visa Program plus matching registered provider
-  products.
-- **Case 2, Visa category shopping:** requests such as "Are there Visa
-  household-goods coupons in Hong Kong?" use the same joined discovery with
-  the current category wording.
-- **Case 3, Visa merchant/product shopping:** requests such as "Are there
-  Watsons coupons?" use the same joined discovery with the current brand or
-  product wording.
-- **Case 4, direct shopping without Visa wording or prior Benefit context:**
-  requests such as "Buy me an XX coffee" use Broad Catalog Shopping. Do not
-  call `visa recommend` merely because this Skill can access Visa Benefits.
+- Requests such as "What Visa Benefits can I use in Hong Kong?" use joined
+  Visa and provider Catalog discovery. Present every returned relevant Visa
+  Program plus matching registered provider products.
+- Requests such as "Are there Visa household-goods coupons in Hong Kong?" use
+  the same joined discovery with the current category wording.
+- Requests such as "Are there Watsons coupons?" use the same joined discovery
+  with the current brand or product wording.
+- Direct shopping requests without Visa wording or prior Benefit context, such
+  as "Buy me an XX coffee", use broad Catalog shopping. Do not call
+  `visa recommend` merely because this Skill can access Visa Benefits.
 
 Use Program aggregation only for a selected non-provider Visa Program purchase
 that has an authoritative Program commerce route:
@@ -156,12 +156,12 @@ visa recommend -> visa product-search -> visa commerce-login -> visa commerce-ru
 
 Use Catalog Purchase aggregation for every selected registered provider
 product, including a product carrying the optional `PROGRAM_PROVIDER_MATCH`
-relation label, and for a Case 4 product:
+relation label, and for a direct broad-Catalog product:
 
 ```text
-Cases 1-3: visa recommend --include-provider-products ->
+Visa-related Benefit discovery: visa recommend --include-provider-products ->
 commerce-login -> visa commerce-run mode=catalog_purchase
-Case 4: catalog search -> commerce-login ->
+Direct Catalog shopping: catalog search -> commerce-login ->
 visa commerce-run mode=catalog_purchase
 ```
 
@@ -181,8 +181,9 @@ inputs and authorization satisfy that contract.
 
 ## Visa And Provider Catalog Joined Discovery
 
-Cases 1-3 must make exactly one initial discovery call. That joined aggregate
-returns both Visa Programs and directly orderable registered-provider products:
+Visa-related Benefit discovery must make exactly one initial discovery call.
+That joined aggregate returns both Visa Programs and directly orderable
+registered-provider products:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
@@ -195,10 +196,10 @@ Do not issue a separate initial `ucp-catalog search`, merchant-list request, or
 second `visa recommend` to assemble the joined result. The joined command never
 logs in, binds a card, creates an Instruction, or prepares payment.
 
-For Case 1 broad availability wording such as "What Visa Benefits can I use in
-Hong Kong?", always add `--all` because the required result is the complete
-regional set. Also add `--all` for any other explicit all-Benefits request; do
-not rely on natural language alone to widen the request:
+For broad availability wording such as "What Visa Benefits can I use in Hong
+Kong?", always add `--all` because the required result is the complete regional
+set. Also add `--all` for any other explicit all-Benefits request; do not rely
+on natural language alone to widen the request:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
@@ -212,8 +213,9 @@ not rely on natural language alone to widen the request:
 Use `--region hk` when Hong Kong is the requested place of use. Do not add
 `--market hk` unless Hong Kong card issuance is explicit.
 
-For Case 2 or Case 3, run the same joined command once with the current user
-request and add `--all` when the user asks for every matching Benefit.
+For category-, merchant-, or product-specific Visa requests, run the same
+joined command once with the current user request and add `--all` when the user
+asks for every matching Benefit.
 
 Treat both returned collections as authoritative candidate sets, not as
 already-filtered display results. Independently retain only Visa Offers and
@@ -266,9 +268,10 @@ identities, and attach authoritative provider identity to every provider
 product. The Skill must not perform that traversal itself.
 
 Do not call `tool internal-ucp get-merchant-list` or a separate
-`ucp-catalog search` for Cases 1-3. Do not infer, discover, replace, or
-construct a provider merchant ID or route at runtime. If the aggregate reports
-a repeated/missing cursor, failed provider page, changed environment, or
+`ucp-catalog search` during joined Visa/provider discovery. Do not infer,
+discover, replace, or construct a provider merchant ID or route at runtime. If
+the aggregate reports a repeated/missing cursor, failed provider page, changed
+environment, or
 partial coverage, preserve that status and never call the result complete.
 
 If a returned or selected provider product lacks one unambiguous
@@ -495,19 +498,19 @@ reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 
 ## Catalog Purchase Fast Path
 
-Use this path for a selected `VISA_PROVIDER_PRODUCT` from Cases 1-3 or a
-selected Case 4 broad-Catalog result. A registered provider purchase is a Visa
-Benefit product purchase. An unregistered Case 4 product is ordinary Catalog
-shopping and must not inherit unrelated Program eligibility or terms.
+Use this path for a selected `VISA_PROVIDER_PRODUCT` from joined discovery or a
+selected direct broad-Catalog result. A registered provider purchase is a Visa
+Benefit product purchase. An unregistered direct-shopping product is ordinary
+Catalog shopping and must not inherit unrelated Program eligibility or terms.
 
-Case 4 discovery is anonymous and must not call `visa recommend` or pass
-`--include-provider-products`:
+Direct broad-Catalog discovery is anonymous and must not call `visa recommend`
+or pass `--include-provider-products`:
 
 ```text
 <Skill Path>/bin/visa-cli catalog search \
   --query "<original-current-user-query>" \
   --language <language-tag> \
-  --context '{"address_country":"HK"}' \
+  --context '{"address_region":"HK"}' \
   <environment-flag> \
   --format json
 ```
@@ -518,13 +521,13 @@ Agent-rank only products that satisfy the user's actual product, brand,
 geography, channel, and other hard constraints.
 
 Before login, resolve the selected item to one authoritative orderable product.
-For a Cases 1-3 provider product, use `ucp-catalog product` with the exact
+For a joined provider product, use `ucp-catalog product` with the exact
 CLI-returned provider merchant ID and freeze the exact authoritative purchase
 route from that same joined result. Never query the merchant list or accept a
 route from the product title, Program, broad-search row, hostname familiarity,
 or caller input. Missing or ambiguous CLI provider identity is
 `unknown_provider` and must stop.
-For a Case 4 internal merchant, use the selected `merchant_id`,
+For a direct-shopping internal merchant, use the selected `merchant_id`,
 `ucp-catalog product`, and the normal authoritative merchant-route resolution.
 Do not purchase directly from a broad-search display row when the exact product
 detail has not been resolved.
@@ -536,6 +539,13 @@ use the broad Catalog candidate's frozen product ID, title, structured price,
 currency, availability, channel, store ID, original Catalog query, Catalog
 environment, Catalog language, and returned product/store URL. Do not browse
 for a nonexistent detail page or ask for a replacement URL.
+
+During `mode=catalog_purchase`, the CLI must resolve a frozen Eats365 platform
+candidate without requesting the internal merchant list. It starts from the
+trusted product URL, accepts only the exact Eats365 manual-item signal, and
+then repeats anonymous broad Catalog discovery to revalidate the complete
+frozen identity and purchase facts. This exception does not apply to
+`mode=purchase` or to ordinary internal merchants.
 
 Freeze all of these authoritative facts:
 
@@ -798,8 +808,9 @@ general workflow engine.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. A later purchase must freeze one exact
   selected product.
-- Cases 1-3 use Visa And Provider Catalog Joined Discovery. Case 4 uses Broad
-  Catalog Shopping and, after an exact selection, Catalog Purchase Fast Path.
+- Visa-related Benefit requests use joined Visa/provider discovery. Direct
+  shopping uses broad Catalog discovery and, after an exact selection, the
+  Catalog Purchase Fast Path.
 
 ### CAP-PAY: Direct Or Session Pay
 
@@ -829,9 +840,10 @@ general workflow engine.
   Catalog identity, item, quantity, price, currency, fulfillment, required
   shipping address, payment instrument, canonical HTTPS endpoint, and explicit
   purchase authorization.
-- Do not use this legacy aggregate for a product selected by Cases 1-4; those
-  products use Catalog Purchase Fast Path so login, Instruction, card/VIC,
-  Checkout, payment, and delivery stay CLI-aggregated.
+- Do not use this legacy aggregate for a product selected through Visa/provider
+  or broad Catalog discovery; those products use Catalog Purchase Fast Path so
+  login, Instruction, card/VIC, Checkout, payment, and delivery stay
+  CLI-aggregated.
 - Refresh the selected payment instrument first. If it is Visa with VIC
   enabled, stop: this lightweight generic aggregate cannot carry or safely
   resolve an Instruction and Mandate. Visa Program purchases must use
@@ -903,9 +915,10 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Cases 1-3, independently filter both authoritative candidate collections
-  by the original query's hard constraints, then report every relevant returned
-  Visa Offer and provider product. Every displayed provider row keeps
+- For joined Visa/provider discovery, independently filter both authoritative
+  candidate collections by the original query's hard constraints, then report
+  every relevant returned Visa Offer and provider product. Every displayed
+  provider row keeps
   `productType=VISA_PROVIDER_PRODUCT`; add `PROGRAM_PROVIDER_MATCH` only as a
   proven optional relation label, and use `VISA_PROGRAM_ONLY` for an unmatched
   relevant Offer.
@@ -923,12 +936,14 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Cases 1-3 receive authoritative Visa Offer and provider-product candidate
-  collections, then independently filter both by the original query's brand,
-  category, geography, product, merchant, and other hard constraints.
+- Joined Visa/provider discovery receives authoritative Visa Offer and
+  provider-product candidate collections, then independently filters both by
+  the original query's brand, category, geography, product, merchant, and other
+  hard constraints.
 - Unrelated provider products are not displayed or counted as matches, but
   filtering never changes their CLI-returned `directlyOrderable` fact.
-- Case 4 skips Visa recommendation and starts with broad Catalog discovery.
+- Direct shopping skips Visa recommendation and starts with broad Catalog
+  discovery.
 - Non-provider Visa Program purchase uses the three CLI aggregates in Program
   mode.
 - Every registered provider product, including a Program-associated one, uses
