@@ -1466,6 +1466,20 @@ test('vendored CLI discovers skills list and tip commands', () => {
   );
 });
 
+// This intentionally stays red until clink-cli main is officially synchronized into vendor/.
+// Feature work must not hand-edit the generated bundle to make this smoke test pass.
+test('vendored CLI exposes instruction prepare after official sync', () => {
+  assert.match(
+    runBundle(['instruction', '--help']),
+    /instruction <prepare\|create\|sign-url\|list\|get\|update\|cancel>/u,
+  );
+  const help = runBundleRaw(['instruction', 'prepare', '--help']);
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /clink instruction prepare/u);
+  assert.match(help.stdout, /--max-wait/u);
+  assert.match(help.stdout, /--open and --no-watch are intentionally unsupported/u);
+});
+
 test('vendored CLI exposes ucp-catalog and keeps catalog cross-merchant only', () => {
   const rootHelp = runBundle(['--help']);
   const catalogHelp = runBundle(['ucp-catalog', '--help']);

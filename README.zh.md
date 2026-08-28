@@ -24,7 +24,7 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-sk
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
 2. 否则向用户询问邮箱地址（唯一必填项；显示名取邮箱 `@` 前的部分，无需询问姓名）。
 3. 执行 `clink wallet init --email <email> --open --format json`。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 OAuth device-token 轮询已启动，不是 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成授权；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
-4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含受信 Agent Portal 上精确的 `/payment-method-setup` `bindingUrl`（只允许受控的可选 `email` 参数）、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
+4. 钱包初始化不得启动绑卡命令，也不得发送 init 缓存的 `bindingUrl`。后续已授权支付若没有卡，或 Visa 卡尚未完成 VIC，执行 `clink instruction prepare --title <title> --mandates '<mandates_json>' ... --max-wait 900 --format json`。CLI 在等待前输出结构化 `PENDING` envelope，包含 `instructionId`、`bindingUrl`、`watchReady=true`、`watchEventType=purchase_instruction.activated`、`processRunning=true` 和 `terminal=false`；Agent 可以提示该链接但不得自动打开，并必须保持同一进程前台运行以读取最终 envelope。只有最终 envelope 保持同一 ID、返回 `instructionStatus=ACTIVE` 且带有 `paymentInstrumentId`，才可继续。超时只能使用 CLI 返回的同 ID 只读 resume；如果外部进程先终止，也只能执行精确 ID 的只读 `instruction get`。禁止再次 prepare Instruction、Checkout 或 payment。
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
 
@@ -67,11 +67,11 @@ https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行
-- VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
+- VIC 代理授权准备（Visa 状态检查、Instruction 复用/创建、CLI 负责的无卡 PENDING continuation，以及页面完成授权）
 - UCP 商品下单 —— 解析并冻结一个商品，判断履约方式；实物邮寄必须提供完整的标准收货地址；完成 Visa/VIC 授权后，先运行 `clink tool internal-ucp get-endpoint`。仅 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `get-rest-endpoint`；每个 provider（包括 `clinkbill` 和非 clinkbill）都必须解析出 canonical HTTPS endpoint，且其 origin 与当前成功的 wallet-status 证据完全同源。runtime 原子 claim 唯一的 `checkoutAttemptId` 后，才在冻结的 `CLINK_BASE_URL` 下以前台方式执行一次 `clink ucp-checkout run ... --confirm-purchase --format json`；只读 resume 继续保留该环境锁。仅数字交付追加 `--wait-delivery --max-wait 900`；Agent 不再手工串联 create、complete、事件轮询或交付轮询
 - 退款提交与状态轮询
 - 风控规则查看与配置
-- 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
+- 事件驱动的异步完成 —— 发出链接后保持原 CLI 进程等待精确 Instruction/卡激活、退款、VIC 或 3DS 后订单事件，而不是结束当前工作或反复重试
 
 ## 必须由用户自己打开的页面
 
