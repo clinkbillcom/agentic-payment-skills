@@ -33,6 +33,9 @@ visa commerce-run
 - 非 Visa 的直接购物请求先做 Catalog 广域搜索
 - provider 和平台 Catalog 商品使用 `commerce-login` 后接
   `commerce-run mode=catalog_purchase` 的聚合购买合同
+- 聚合缺卡合同：创建或复用一条精确的无卡 `PENDING` Instruction；可以提示
+  Bind Card 链接但绝不自动打开；CLI 保持前台等待；只有同一张卡完成 VIC 且
+  CWallet 自动激活该精确 Instruction 后才继续
 
 CLI 是 Visa Benefit Catalog provider registry 和 provider identity 的唯一
 权威源。Visa 权益相关查询只调用一次 joined CLI 命令，由 CLI 内部遍历
@@ -65,19 +68,27 @@ Visa Program、provider 和其他 Catalog 购买都保持 CLI 聚合。Skill 不
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.37` 已 vendor 上游提交
-`5c2f9cf6d458fdfd6414406a235c33c4e4f348a6` 的 Visa CLI `0.2.40`。它支持
+Skill `0.1.38` 保持上游提交
+`5c2f9cf6d458fdfd6414406a235c33c4e4f348a6` 的 Visa CLI `0.2.40` 不变。它支持
 Visa Offer 与 provider 商品 joined 查询、可选的旧版 `program.code`、
 完整 Eats365 `manual_item_facts` 复验和
-`mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。vendor
-来源只通过 `clink-cli` 官方同步流程刷新。旧版或不兼容安装必须停止，
-不能回退到 Program mode 或原子支付命令。
+`mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
+聚合缺卡流程只提示、不自动打开 Bind Card 链接，提示后继续前台等待同一条
+PENDING Instruction，并且只在同卡 `visaRegistrationSucceeded=true` 且该
+精确 Instruction 为 `ACTIVE` 后继续。
+
+本分支有意不修改 vendored bundle 及其来源信息。vendor 只能通过
+`clink-cli` 官方同步流程刷新。在同步后的 CLI 实现上述合同前，当前安装应视为
+不兼容并停止，不能自动打开绑卡/VIC 页面、不能提示链接后结束、不能回退到
+Program mode，也不能拆成原子命令执行购买。
 
 ## 环境要求
 
 - Node.js 20 或更高版本
 - 始终按路径调用内置 launcher，不使用全局 CLI
 - OAuth、绑卡、Passkey、3DS、Instruction 和风控页面由用户在系统浏览器完成
+- 可以展示 Bind Card 链接，但 CLI 不得自动打开，也不得展示后停止等待同一条
+  PENDING Instruction
 
 ## 验证
 
@@ -86,7 +97,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.37`
+Skill 版本：`0.1.38`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

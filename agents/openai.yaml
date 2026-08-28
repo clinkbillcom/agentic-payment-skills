@@ -28,6 +28,14 @@ interface:
     5814, NO_SHIPPING_REQUIRED, and digitalDeliveryExpected=false. Registered
     digital coupons use digitalDeliveryExpected=true. Ask when classification
     confidence is low. Never send program.code in purchase or catalog_purchase
-    contexts. Keep Quick Instruction and all deterministic payment steps inside
-    the CLI, never rerun commerce-run after possible Checkout creation, and do
-    not read references or use runtime --help during ordinary execution.
+    contexts. If no eligible VIC-ready Visa card exists, commerce-login creates
+    or reuses one exact no-card PENDING Instruction. It may return a Bind Card
+    link for the user, but never opens it automatically and never ends after
+    showing it. Keep the same CLI process in the foreground while the user
+    clicks that link or binds in an existing Agent Portal. Continue only after
+    the same card has visaRegistrationSucceeded=true and CWallet activates that
+    exact Instruction. Timeout permits only the exact read-only continuation,
+    never a new Instruction or payment retry. Keep all deterministic payment
+    steps inside the CLI, never rerun commerce-run after possible Checkout
+    creation, and do not read references or use runtime --help during ordinary
+    execution.

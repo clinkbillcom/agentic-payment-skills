@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.37');
+  assert.equal(packageJson.version, '0.1.38');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.37/u);
-  assert.match(skill, /version: "0\.1\.37"/u);
+  assert.match(skill, /Visa Skill 0\.1\.38/u);
+  assert.match(skill, /version: "0\.1\.38"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -537,7 +537,7 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   assert.match(section, /single\s+purchase authorization/iu);
   assert.match(
     section,
-    /CLI alone decides[\s\S]*Quick Instruction activation\s+wait/iu,
+    /CLI alone owns the Pending Instruction Card\s+Gate/iu,
   );
   assert.match(
     section,
@@ -551,6 +551,59 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   const atomicInvocation =
     /^\s*(?:<Skill Path>\/bin\/visa-cli\s+)?(?:card|instruction|events|pay|ucp-checkout|ucp-order)\b/mu;
   assert.doesNotMatch(section, atomicInvocation);
+});
+
+test('missing-card aggregate shows but never opens Bind Card and keeps exact PENDING wait', () => {
+  const gate = skill.slice(
+    skill.indexOf('### Pending Instruction Card Gate'),
+    skill.indexOf('## Intent Routing'),
+  );
+
+  assert.match(
+    gate,
+    /eligible Visa Payment Instrument[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*creates or reuses exactly[\s\S]*one no-card `PENDING` Instruction/iu,
+  );
+  assert.match(
+    gate,
+    /exact returned ID[\s\S]*never select a latest or similar PENDING/iu,
+  );
+  assert.match(
+    gate,
+    /return one exact Bind Card link[\s\S]*Show it without opening it/iu,
+  );
+  assert.match(
+    gate,
+    /click it[\s\S]*already-open Agent Portal/iu,
+  );
+  assert.match(
+    gate,
+    /Showing the link is not[\s\S]*completion[\s\S]*same CLI process stays foreground/iu,
+  );
+  assert.match(
+    gate,
+    /Payment[\s\S]*Instrument reaches `visaRegistrationSucceeded=true`[\s\S]*CWallet[\s\S]*automatically activates/iu,
+  );
+  assert.match(
+    gate,
+    /Continue only after[\s\S]*same-card[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*exact Instruction[\s\S]*`ACTIVE`/iu,
+  );
+  assert.match(
+    gate,
+    /Timeout preserves that exact PENDING[\s\S]*read-only\s+continuation[\s\S]*Do not create another Instruction[\s\S]*retry payment/iu,
+  );
+
+  const cardCapability = skill.slice(
+    skill.indexOf('### CAP-CARD:'),
+    skill.indexOf('### CAP-RISK:'),
+  );
+  assert.match(
+    cardCapability,
+    /Show the exact link but never[\s\S]*`--open`[\s\S]*claim that showing it completed the action/iu,
+  );
+  assert.match(
+    cardCapability,
+    /authorized aggregate purchase[\s\S]*do not decompose[\s\S]*atomic card commands/iu,
+  );
 });
 
 test('all absorbed Base capabilities have short fail-closed contracts', () => {
@@ -634,8 +687,9 @@ test('funds, browser, and result boundaries remain explicit', () => {
   );
   assert.match(
     skill,
-    /must be completed by\s+the user in the operating system's browser/iu,
+    /OAuth[\s\S]*Agent Portal card\/VIC[\s\S]*belong in the user's browser/iu,
   );
+  assert.match(skill, /Bind Card[\s\S]*never auto-open/iu);
   assert.match(skill, /Alipay QR is not a browser page/iu);
   assert.match(skill, /No payment, Tip, refund, Checkout completion[\s\S]*blindly retried/iu);
 });

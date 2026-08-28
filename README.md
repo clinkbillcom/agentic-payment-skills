@@ -36,6 +36,10 @@ The lightweight shopping routes cover:
 - broad non-Visa Catalog discovery for direct shopping requests
 - a provider/platform Catalog purchase contract using `commerce-login`
   followed by `commerce-run` with `mode=catalog_purchase`
+- one aggregate missing-card contract: create or reuse an exact no-card
+  `PENDING` Instruction, optionally show but never auto-open the Bind Card link,
+  keep the CLI in the foreground, and continue only after the same card is
+  VIC-ready and CWallet activates that exact Instruction
 
 The CLI is the sole authority for the Visa Benefit Catalog provider registry
 and provider identity. Visa-related Benefit discovery makes one joined CLI
@@ -71,14 +75,22 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.37` vendors Visa CLI `0.2.40` from upstream commit
+Skill `0.1.38` vendors Visa CLI `0.2.40` from upstream commit
 `5c2f9cf6d458fdfd6414406a235c33c4e4f348a6`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
-contexts. Vendor provenance is refreshed only through the official `clink-cli`
-synchronization flow. An incompatible installation must stop instead of
-falling back to Program mode or atomic payment commands.
+contexts. It also requires the aggregate missing-card flow to show rather than
+auto-open a Bind Card link, remain in the foreground after showing it, wait on
+one exact PENDING Instruction, and continue only after same-card
+`visaRegistrationSucceeded=true` plus exact-Instruction `ACTIVE`.
+
+The vendored bundle and its provenance are intentionally unchanged in this
+branch. They may be refreshed only through the official `clink-cli`
+synchronization flow. Until a synchronized CLI implements the required
+missing-card contract, the installation is incompatible and must stop instead
+of opening a card/VIC page, returning after a link, falling back to Program
+mode, or decomposing the purchase into atomic commands.
 
 ## Requirements
 
@@ -86,6 +98,8 @@ falling back to Program mode or atomic payment commands.
 - Invoke the bundled launcher by path; do not use a global CLI
 - Complete OAuth, card, Passkey, 3DS, Instruction, and risk pages in the user's
   system browser
+- A Bind Card link may be displayed, but the CLI must not auto-open it or stop
+  waiting for the same PENDING Instruction after displaying it
 
 ## Verification
 
@@ -94,7 +108,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.37`
+Skill version: `0.1.38`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
