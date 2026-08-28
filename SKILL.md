@@ -1,12 +1,12 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.37. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.38. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.37"
+  version: "0.1.38"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
-  requiresHumanBrowser: "OAuth, card setup, Visa Passkey, 3DS, Instruction, and risk pages belong in the user's system browser"
+  requiresHumanBrowser: "OAuth, Agent Portal card/VIC setup, Visa Passkey, 3DS, Instruction, and risk pages belong in the user's system browser"
 ---
 
 # Visa Skill
@@ -118,16 +118,40 @@ Never reroute a refused purchase through plain `pay` or UCP.
 
 ### Browser Boundary
 
-OAuth verification, card binding/setup/modify, Visa Passkey registration and
-signing, Instruction update/cancel, 3DS, and risk pages must be completed by
-the user in the operating system's browser. Use CLI `--open`; when launch
-fails, surface only the exact CLI-returned `manualOpenUrl`. Never open, preview,
-prefetch, screenshot, inspect, fill, or submit these pages with an Agent
-browser. Merchant product pages may be inspected by the Agent.
+OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
+belong in the user's browser. CLI `--open` may launch OAuth/login, Instruction,
+3DS, or risk; on failure, show only the exact CLI `manualOpenUrl`.
+
+For card/VIC work, show but never auto-open an exact CLI-returned Bind Card
+link. The user may click it or use an already-open Agent Portal. Never inspect,
+fill, or submit protected pages with an Agent browser. Merchant product pages
+may be inspected by the Agent.
 
 An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
 exactly, or use the CLI-returned private `imagePath` only when terminal QR
 rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
+
+### Pending Instruction Card Gate
+
+For every authorized `visa commerce-login` purchase:
+
+- Without an eligible Visa Payment Instrument whose
+  `visaRegistrationSucceeded=true`, the aggregate creates or reuses exactly
+  one no-card `PENDING` Instruction for the frozen intent. Bind every check to
+  its exact returned ID; never select a latest or similar PENDING.
+- It may return one exact Bind Card link. Show it without opening it. The user
+  may click it or bind in an already-open Agent Portal. Showing the link is not
+  completion: the same CLI process stays foreground for bounded event waiting
+  and authoritative exact-ID refresh.
+- Agent Portal owns binding, 3DS, Visa Passkey, and VIC. When one exact Payment
+  Instrument reaches `visaRegistrationSucceeded=true`, CWallet associates that
+  same card and automatically activates the exact PENDING Instruction.
+- Continue only after refresh proves same-card
+  `visaRegistrationSucceeded=true` and that exact Instruction is `ACTIVE`.
+  Card-added, Passkey, VIC event, or another ACTIVE Instruction is insufficient.
+- Timeout preserves that exact PENDING and permits only its bound read-only
+  continuation. Do not create another Instruction, regenerate the link, rerun
+  either aggregate, create a Checkout, or retry payment.
 
 ## Intent Routing
 
@@ -434,10 +458,9 @@ Instruction context:
 Mandate descriptions must be at most 150 characters. The amount is the exact
 authorized price with no buffer.
 
-Tell the user in the locked language that Visa login, card binding, and VIC
-status are being checked and that, if a browser opens, they should complete
-only the missing step shown there. This is status, not another confirmation.
-Then run once in the foreground:
+Say that login, card, VIC, and Instruction readiness are being checked. Login
+may open in the browser. Show but never open a returned Bind Card link; an
+already-open Agent Portal also works. Then run once in the foreground:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
@@ -447,9 +470,9 @@ Then run once in the foreground:
   --format json
 ```
 
-Continue only on `ok=true` and `ready=true`. The CLI alone decides whether
-authoritative REGISTER facts permit a bounded Quick Instruction activation
-wait. The Agent must not inspect, persist, infer, or copy registration fields,
+Keep this process foreground until `ok=true` and `ready=true` or a bound
+timeout continuation. The CLI alone owns the Pending Instruction Card Gate.
+The Agent must not inspect, persist, infer, or copy registration fields,
 `pendingInstructionId`, or any login-returned Instruction ID. Quick
 Instruction is an internal acceleration path, not purchase identity.
 
@@ -661,8 +684,8 @@ For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, include the same complete authoritative
 `shippingAddress` inside this login `instructionContext`.
 
 Apply the Restricted Instruction Gate, then run `visa commerce-login` once with
-`--confirm-purchase --open --format json`. Continue only when it returns
-`ok=true` and `ready=true`.
+`--confirm-purchase --open --format json`. Apply the Pending Instruction Card
+Gate unchanged and continue only on `ok=true` and `ready=true`.
 
 Build one frozen Catalog purchase context without a Program. Start with these
 shared fields:
@@ -811,7 +834,8 @@ mode:
 }
 ```
 
-Use `target: "visa_card_ready"` for card/VIC preparation.
+Use `target: "visa_card_ready"` for card/VIC preparation. The aggregate may
+show but never auto-open a Bind Card link and must stay foreground.
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
@@ -842,7 +866,10 @@ general workflow engine.
 ### CAP-CARD: Card Management
 
 - Use `card binding-link`, `setup-link`, `modify-link`, or `passkey-link` only
-  for the card action the user requested.
+  for the requested card action. Show the exact link but never pass `--open`,
+  Agent-open it, or claim that showing it completed the action.
+- During an authorized aggregate purchase, do not decompose the Pending
+  Instruction Card Gate into atomic card commands.
 - Refresh current card state before selecting a payment instrument. Require one
   exact enabled instrument; never choose from stale or ambiguous data.
 - Card and Passkey pages are user-browser handoffs. A returned event must be
@@ -1017,7 +1044,10 @@ general workflow engine.
   `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Quick Instruction is owned by `visa commerce-login`.
+- `visa commerce-login` owns the Pending Instruction Card Gate; showing a Bind
+  Card link never ends its foreground exact-ID wait.
+- Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
+  Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.
 - Generic capabilities execute only with complete, authoritative input and
   fail closed otherwise.
