@@ -649,8 +649,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.0');
-  assert.equal(packageJson.version, '1.14.0');
+  assert.equal(skillVersion, '1.14.3');
+  assert.equal(packageJson.version, '1.14.3');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -796,8 +796,19 @@ test('the reservation filter is scoped to one-time instructions', () => {
 // let one run spend the whole week's budget in a single order.
 test('the per-run cap is distinguished from the recurring cycle budget', () => {
   assert.match(ucpCheckout, /cycle budget, not the per-order ceiling/u);
-  assert.match(ucpCheckout, /Do not select a broad mandate merely because the backend might accept/u);
+  assert.match(ucpCheckout, /Do not select a broad mandate merely because/u);
   assert.match(instruction, /cycle budget, not the per-order cap/u);
+});
+
+// Authorization caps include their boundary. A strict less-than reading would incorrectly reject
+// a checkout whose normalized total is exactly the amount the user authorized.
+test('authorization amount caps include an equal checkout total', () => {
+  assert.match(skill, /`paymentAmount <= amountLimit`/u);
+  assert.match(skill, /`orderTotal <= amountLimit`/u);
+  assert.match(skill, /equality MUST match/u);
+  assert.match(ucpCheckout, /`orderTotal <= amountLimit`/u);
+  assert.match(ucpCheckout, /HKD 576\.00 is covered by an HKD 576\.00 cap/u);
+  assert.doesNotMatch(ucpCheckout, /`amount < amountLimit`/u);
 });
 
 test('skill documents atomic sequential batch tipping with itemized outcomes', () => {
