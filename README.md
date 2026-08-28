@@ -75,7 +75,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.38` vendors Visa CLI `0.2.40` from upstream commit
+Skill `0.1.39` vendors Visa CLI `0.2.40` from upstream commit
 `5c2f9cf6d458fdfd6414406a235c33c4e4f348a6`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -108,7 +108,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.38`
+Skill version: `0.1.39`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
