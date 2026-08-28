@@ -608,8 +608,12 @@ test('the preflight is documented on every instruction-creation path', () => {
   assert.match(skill, /`REFUSE_RESTRICTED_INSTRUCTION`/u);
   assert.match(skill, /`CONTINUE_INSTRUCTION_CREATION`/u);
   assert.match(skill, /Never carry instruction context through Quick `wallet init`/u);
-  assert.match(skill, /never run `clink instruction create` on any later path/u);
+  assert.match(
+    skill,
+    /run `clink instruction prepare`, or run `clink instruction create` until `classifyInstructionRestriction`/u,
+  );
   assert.match(restrictedDoc, /Quick setup that carries `instructionContext`/u);
+  assert.match(restrictedDoc, /START_AUTHORIZATION_PREPARE_AND_WAIT/u);
   assert.match(restrictedDoc, /Never rephrase, translate/u);
 
   assert.match(instruction, /classifyInstructionRestriction/u);

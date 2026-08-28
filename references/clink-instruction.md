@@ -6,13 +6,15 @@ Read this before using Visa agentic authorization or any `clink instruction` com
 
 VIC authorization prepares permission for a future purchase within mandate limits. It does not prove that a payment has completed.
 
-Use this path only for a Visa card whose refreshed payment-method data has:
+List and reuse ordinary Visa Instructions only for a card whose refreshed payment-method data has:
 
 ```text
 visaRegistrationSucceeded === true
 ```
 
-If the selected Visa card is not registered, send the Passkey registration URL:
+For an authorized purchase with no card or a selected Visa card that is not registered, do not send or open a standalone VIC registration page. Enter the [No-Card PENDING Continuation](#no-card-pending-continuation); Agent Portal owns card binding and VIC while the same `instruction prepare` process waits.
+
+The standalone registration URL below is compatibility information for an explicit card-enrollment maintenance request, not the normal purchase continuation:
 
 ```text
 https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa
@@ -38,7 +40,7 @@ The agent page environment follows the base URL persisted by `wallet init` (see 
 
 1. Refresh cards with `clink card binding-link --no-watch --no-open --format json`.
 2. Select the user-specified Visa card, otherwise the default card, otherwise the first usable Visa card.
-3. If registration is missing, send the registration URL and immediately start a concurrent listener for `vic_device.binding_succeeded` or a same-card `payment_method.update` showing readiness, then refresh and confirm `visaRegistrationSucceeded === true` before continuing.
+3. If the selected Visa is missing registration during a purchase, enter the no-card PENDING continuation. Do not send the standalone registration URL or start a separate VIC listener.
 4. List reusable ACTIVE instructions before creating anything.
 5. Reuse an instruction only if card, amount cap, currency, service window, and merchant/category/title/description semantics cover the request. For a scheduled/recurring task, cover the whole schedule horizon instead — see the scheduled-task section below.
 6. If no reusable instruction exists, screen the complete purchase context against `references/clink-restricted-categories.md` with `classifyInstructionRestriction`. Refuse a restricted purchase, fix invalid/missing gate input, and create a draft only after the classifier returns `CONTINUE_INSTRUCTION_CREATION`, the mandate scope is complete, and the user has authorized that scope.
@@ -186,7 +188,7 @@ Pass the result to `classifyUnattendedAuthorization` with the pinned ids and the
 Classify the purchase before creating a draft:
 
 - Physical goods that ship: collect a standard complete shipping address and pass `--shipping-address`.
-- Services, subscriptions, hotels, tickets, bookings, reservations, or digital goods: classify as `NO_SHIPPING_REQUIRED`, do not ask the user for an address, and pass the fixed Apple Park default address to `instruction create`.
+- Services, subscriptions, hotels, tickets, bookings, reservations, or digital goods: classify as `NO_SHIPPING_REQUIRED`, do not ask the user for an address, and pass the fixed Apple Park default address to `instruction prepare` or `instruction create`.
 - Unclear fulfillment: ask the user before preparing.
 
 For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address. It is a payment-context placeholder, not a delivery address:
@@ -245,7 +247,7 @@ Never fabricate hidden Passkey payloads such as `authResult`, `appInstance`, `fi
 
 `create` and `sign-url` use their built-in watch. Omit `--no-watch` and keep that same process alive: the CLI prints the draft envelope, then blocks polling `purchase_instruction.activated` filtered to this instruction's `instructionId` / `purchaseInstructionId`, and prints a second envelope when the event arrives. Do not start an `events poll` beside it — two watchers compete for the same event and ack it out from under each other.
 
-Run `classifyAuthorizationDraftObservation` on the draft envelope and send the returned `passkeyUrl` immediately; the watch is already listening behind it. When the second envelope arrives, pass it back through the same classifier as `watchStdout`.
+Run `classifyAuthorizationDraftObservation` on the first ordinary create/sign envelope. A VIC-ready card returns the `passkeyUrl` branch, and that same CLI process is already listening. Missing-card and incomplete-Visa flows use the separate `instruction prepare` contract below.
 
 The watch runs at most 15 minutes. If it times out, the runtime kills the foreground command, or only an unrelated instruction's event arrives, the classifier answers `VERIFY_AUTHORIZATION_AFTER_WATCH_GAP` — **not** a failure. The user may have completed the Passkey regardless, so ask the instruction itself before concluding anything; restart `events poll` only if it is still pending:
 
@@ -259,21 +261,38 @@ Either way the activation must correlate by the same `instructionId` / `purchase
 clink instruction get --purchase-instruction-id <instructionId> --format json
 ```
 
-Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed. If `instruction get` exits nonzero or returns an explicit error envelope, surface that error and stop. Only a successful `CREATED`, `PENDING`, or `INPROGRESS` response is still activatable and may restart the event poll. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are verification errors, not pending states.
+Then use `classifyAuthorizationActiveVerification`. The instruction must be `ACTIVE` before it is considered reusable or before a pending pay/UCP checkout flow is resumed. If `instruction get` exits nonzero or returns an explicit error envelope, surface that error and stop. Only a successful `CREATED`, `PENDING`, or `INPROGRESS` response is still activatable. `COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`, missing, and unknown statuses are verification errors, not pending states.
 
-## Quick Instruction
+## No-Card PENDING Continuation
 
-Quick instruction setup rides the wallet-init journey instead of the regular create-then-Passkey flow above: the instruction context travels with `clink wallet init`, the backend creates the instruction as `PENDING` when authentication completes, and a fresh Visa + VIC binding ceremony activates it — one browser journey instead of two.
+When the authoritative payment-method refresh is empty, or the selected Visa is not VIC-ready, do not open a standalone Bind Card or VIC page. After restricted-category screening, run:
 
-- Run `classifyInstructionRestriction` over the complete frozen purchase and the nested `instructionContext` before invoking `wallet init`; Quick setup creates an instruction too, so it never bypasses the restricted-category gate.
-- A pending quick instruction never satisfies `clink instruction list --valid-only`; only `ACTIVE` does. Never treat a `PENDING` quick instruction as usable authorization.
-- Activation is driven solely by that fresh Visa + VIC binding ceremony. A non-Visa first card or skipped VIC enrollment leaves the instruction pending: continue the non-VIC path without waiting and let supersede or expiry clean it up.
-- A repeated quick `wallet init` carrying new context supersedes the older pending instruction server-side — the newest intent wins.
+```bash
+clink instruction prepare \
+  --title <title> \
+  --mandates '<mandates_json>' \
+  [--description <text>] \
+  [--shipping-address <json_object>] \
+  [--effective-until-time <utc>] \
+  [--is-recurring] \
+  --max-wait 900 \
+  --format json
+```
 
-`payment_method.added` is only card-addition evidence; CWallet does not put `visaRegistrationSucceeded` in that event and does not attempt Quick activation at that point. After the binding watch delivers it:
+Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. The CLI and CWallet combine the earlier Quick mechanism with ordinary preparation:
 
-1. Extract its exact `paymentInstrumentId`, run `clink card binding-link --no-watch --no-open --format json`, and invoke `classifyQuickInstructionActivationGate` with the recorded nullable `pendingInstructionId`, that exact card ID, and the refreshed `paymentMethodsVoList`. Never fall back to the default or first card.
-2. A missing Quick ID, a non-Visa card, or a Visa card still not VIC-ready after the one bounded readiness wait returns to `classifyPaymentAuthorizationResolver`; null cannot distinguish a deliberate backend skip from swallowed creation failure and never means “list instructions unconditionally.”
-3. For a Visa card with a Quick ID but `visaRegistrationSucceeded !== true`, run the gate's `singleAttempt` same-card any-of poll for `payment_method.update,vic_device.binding_succeeded`. Accept the update only when it carries `visaRegistrationSucceeded=true`. Event, timeout, wrong-card/non-ready event, empty result, and poll gap all return `VERIFY_RESOURCE_STATUS`, never a resume poll: refresh once, merge `{vicReadinessWaitAttempted:true}` from the returned continuation, and re-enter the gate.
-4. Only Visa + VIC-ready + a non-empty Quick ID may run `clink instruction get --purchase-instruction-id <id> --format json`. Bind verification to both that exact instruction ID and the newly added card ID. `ACTIVE` resumes the frozen purchase; a card/instruction mismatch or a GET/auth failure stops it.
-5. `CREATED`, `PENDING`, or `INPROGRESS` may use the returned `singleAttempt` bounded `purchase_instruction.activated` poll. Preserve its `activationWaitAttempted=true` waitSpec through event, timeout, wrong-resource event, empty result, or poll gap, then run one final GET. If it is still non-active, the classifier returns regular `LIST_AUTHORIZATIONS` with no poll command; do not create a parallel watcher or keep polling forever.
+- Create or reuse exactly one no-card `PENDING` Instruction for the frozen title, mandates, amount/currency, merchant semantics, service window, and fulfillment context.
+- Before waiting, return a structured `PENDING` envelope with non-empty `instructionId`, trusted Agent Portal `bindingUrl`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`.
+- Keep that `instruction prepare` process in the foreground after the first envelope is emitted. The user may open the link or finish card/VIC setup in an Agent Portal page they already have open; the URL is not required to carry the Instruction ID.
+- CWallet attaches the card and activates the same Instruction only after Visa/VIC completion. `payment_method.added`, page completion text, or an activation event for another Instruction is insufficient.
+- The final CLI envelope must preserve the same `instructionId`, report `command=instruction prepare`, `status=ready`, `instructionStatus=ACTIVE`, and carry a non-empty `instruction.paymentInstrumentId`.
+
+`classifyAuthorizationPrepareObservation` returns `HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI` only after the exact watch-ready fields are present. Send `bindingUrl` once without auto-opening, prefetching, or inspecting it, then keep reading the same process. Do not start `card binding-link`, a standalone VIC registration flow, `events poll`, `instruction create`, another `instruction prepare`, Checkout, or payment beside it.
+
+If the process times out or exits without its authoritative final envelope, run only:
+
+```bash
+clink instruction get --purchase-instruction-id <same_pending_instruction_id> --format json
+```
+
+Use the exact `resumeCommand` returned by `instruction prepare`; it must be an environment-locked same-ID `instruction get` with `resumeReadOnly=true`. If the external process dies before the final envelope, use only an exact-ID read-only `instruction get`. Never prepare, recreate, or supersede the Instruction, resend Checkout/payment, or restart a Skill-side binding/VIC event sequence. A still-`PENDING` result remains pending and does not authorize payment.

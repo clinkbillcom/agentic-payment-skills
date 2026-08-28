@@ -1,6 +1,6 @@
 # Clink Restricted Purchase Categories
 
-Read this before any `clink instruction create`. Clink refuses to create purchase
+Read this before any `clink instruction prepare` or `clink instruction create`. Clink refuses to create purchase
 instructions for the categories below — the backend rejects them as illegal
 content, so the skill must refuse up front instead of sending a doomed draft.
 
@@ -25,6 +25,7 @@ Run `classifyInstructionRestriction` from `lib/restricted-categories.mjs`
 before every request that can create an instruction, on all of these paths:
 
 - Quick setup that carries `instructionContext` / `instruction_context` through `wallet init`.
+- The no-card or incomplete-Visa branch (`START_AUTHORIZATION_PREPARE_AND_WAIT`).
 - The direct/session pay no-match branch (`START_AUTHORIZATION_DRAFT_AND_WAIT`).
 - Every scheduled-task pre-authorization draft (`CREATE_SCHEDULED_AUTHORIZATION_DRAFT`).
 - The UCP checkout no-match branch that falls back to creating an instruction.
