@@ -1,12 +1,12 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.26. Use for Visa card benefits and commerce plus concise Clink wallet, card, risk, Catalog, payment, UCP, Instruction, refund, event, Skill tipping, and Skill installation capabilities. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.39. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.26"
+  version: "0.1.39"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
-  requiresHumanBrowser: "OAuth, card setup, Visa Passkey, 3DS, Instruction, and risk pages belong in the user's system browser"
+  requiresHumanBrowser: "OAuth, Agent Portal card/VIC setup, Visa Passkey, 3DS, Instruction, and risk pages belong in the user's system browser"
 ---
 
 # Visa Skill
@@ -49,14 +49,23 @@ authoritative Program, merchant, product, and Skill names exactly as returned.
 
 Lock one environment before the first command and never mix environments:
 
-- a sandbox/UAT distribution uses `--sandbox` for public search and
+- a sandbox/UAT distribution uses `--sandbox` for public Catalog and
+  `visa product-search` commands and
   `"environment": "uat"` in contexts
-- a test distribution uses `--test` and `"environment": "test"`
+- a test distribution uses `--test` for public Catalog and
+  `visa product-search` commands and `"environment": "test"`
 - production uses no search environment flag and `"environment": "production"`
 
 The installed distribution lock wins when the user omits the environment.
 Never let an installed UAT or test Skill silently default to production.
 Authenticated commands must agree with the current wallet environment.
+
+`visa recommend`, `visa detail`, and `visa taxonomy` do not accept
+`--sandbox` or `--test`; do not add either flag. Their issuing market,
+destination region, and language select the Visa source independently from the
+Clink Catalog environment. "Benefits usable in Hong Kong" means destination
+`--region hk`; use issuing `--market hk` only when the user explicitly says
+their card is Hong Kong-issued.
 
 ### Authorization And Input
 
@@ -109,65 +118,274 @@ Never reroute a refused purchase through plain `pay` or UCP.
 
 ### Browser Boundary
 
-OAuth verification, card binding/setup/modify, Visa Passkey registration and
-signing, Instruction update/cancel, 3DS, and risk pages must be completed by
-the user in the operating system's browser. Use CLI `--open`; when launch
-fails, surface only the exact CLI-returned `manualOpenUrl`. Never open, preview,
-prefetch, screenshot, inspect, fill, or submit these pages with an Agent
-browser. Merchant product pages may be inspected by the Agent.
+OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
+belong in the user's browser. CLI `--open` may launch OAuth/login, Instruction,
+3DS, or risk; on failure, show only the exact CLI `manualOpenUrl`.
+
+For card/VIC work, show but never auto-open an exact CLI-returned Bind Card
+link. The user may click it or use an already-open Agent Portal. Never inspect,
+fill, or submit protected pages with an Agent browser. Merchant product pages
+may be inspected by the Agent.
 
 An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
 exactly, or use the CLI-returned private `imagePath` only when terminal QR
 rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
+### Pending Instruction Card Gate
+
+For every authorized `visa commerce-login` purchase:
+
+- Without an eligible Visa Payment Instrument whose
+  `visaRegistrationSucceeded=true`, the aggregate creates or reuses exactly
+  one no-card `PENDING` Instruction for the frozen intent. Bind every check to
+  its exact returned ID; never select a latest or similar PENDING.
+- It may return one exact Bind Card link. Show it without opening it. The user
+  may click it or bind in an already-open Agent Portal. Showing the link is not
+  completion: the same CLI process stays foreground for bounded event waiting
+  and authoritative exact-ID refresh.
+- Agent Portal owns binding, 3DS, Visa Passkey, and VIC. When one exact Payment
+  Instrument reaches `visaRegistrationSucceeded=true`, CWallet associates that
+  same card and automatically activates the exact PENDING Instruction.
+- Continue only after refresh proves same-card
+  `visaRegistrationSucceeded=true` and that exact Instruction is `ACTIVE`.
+  Card-added, Passkey, VIC event, or another ACTIVE Instruction is insufficient.
+- Timeout preserves that exact PENDING and permits only its bound read-only
+  continuation. Do not create another Instruction, regenerate the link, rerun
+  either aggregate, create a Checkout, or retry payment.
+
 ## Intent Routing
 
-Use Visa aggregation whenever the target originates from a Visa Program:
+Classify the request silently before the first command. Acceptance-scenario
+numbers, routing categories, and workflow names are internal maintenance
+details. Never announce the classification or expose those labels in
+user-facing text; respond directly to the user's request.
+
+- Requests such as "What Visa Benefits can I use in Hong Kong?" use joined
+  Visa and provider Catalog discovery, then apply the orderable-first
+  presentation rule below.
+- Requests such as "Are there Visa household-goods coupons in Hong Kong?" use
+  the same joined discovery with the current category wording.
+- Requests such as "Are there Watsons coupons?" use the same joined discovery
+  with the current brand or product wording.
+- Direct shopping requests without Visa wording or prior Benefit context, such
+  as "Buy me an XX coffee", use broad Catalog shopping. Do not call
+  `visa recommend` merely because this Skill can access Visa Benefits.
+
+Use Program aggregation only for a selected non-provider Visa Program purchase
+that has an authoritative Program commerce route:
 
 ```text
 visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run
 ```
 
-Do not route a Visa Program purchase through generic Catalog, `pay`, atomic
-Instruction, events, or UCP commands. The Visa aggregates preserve Program
-identity, price and currency checks, Quick Instruction handling, Card/VIC
-readiness, Instruction selection, Checkout safety, and delivery.
+Use Catalog Purchase aggregation for every selected registered provider
+product, including a product carrying the optional `PROGRAM_PROVIDER_MATCH`
+relation label, and for a direct broad-Catalog product:
+
+```text
+Visa-related Benefit discovery: visa recommend --include-provider-products ->
+commerce-login -> visa commerce-run mode=catalog_purchase
+Direct Catalog shopping: catalog search -> commerce-login ->
+visa commerce-run mode=catalog_purchase
+```
+
+A relevant product returned by a registered Visa Benefit Catalog provider is
+itself an orderable Visa Benefit product even when no separate VSRA Program
+row matches it. Program eligibility or Program terms may be attached only when
+an authoritative Program relationship is also proven. Do not route an
+unregistered broad-Catalog product through Program `mode=purchase`.
+
+New `mode=purchase` and `mode=catalog_purchase` contexts must omit both the
+top-level `program` object and `metadata.programCode`. Older callers may still
+provide `program.code` as compatibility metadata, but this Skill never authors
+or requires it.
 
 Use a Base Capability Contract only for a non-Program request whose exact
 inputs and authorization satisfy that contract.
 
-## Visa Benefit Discovery
+## Visa And Provider Catalog Joined Discovery
 
-Queries never proactively log in, bind a card, create an Instruction, or
-prepare payment:
+Visa-related Benefit discovery must make exactly one initial discovery call.
+That joined aggregate returns both Visa Programs and directly orderable
+registered-provider products:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
-  --lang <language-tag> --format json
-<Skill Path>/bin/visa-cli visa detail <program-code> \
-  --lang <language-tag> --format json
-<Skill Path>/bin/visa-cli visa taxonomy \
-  --lang <language-tag> --format json
+  --include-provider-products \
+  --lang <language-tag> \
+  --format json
 ```
 
-For `matching_offers`, evaluate all returned rows against the user's wording,
-geography, eligibility, status, dates, channel, and hard terms. Present at most
-the five best matches and preserve the authoritative matching total. Do not
-rerun recommendation merely to shrink the list.
+Do not issue a separate initial `ucp-catalog search`, merchant-list request, or
+second `visa recommend` to assemble the joined result. The joined command never
+logs in, binds a card, creates an Instruction, or prepares payment.
 
-For `fallback_all_offers` or `no_matching_offers`, report that no relevant
-Offer was found. Do not rank, display, recommend, or purchase fallback rows,
-and do not present their count as a matching total. For count-only wording,
-return only the authoritative matching total.
+For broad availability wording such as "What Visa Benefits can I use in Hong
+Kong?", always add `--all` because the required result is the complete regional
+set. Also add `--all` for any other explicit all-Benefits request; do not rely
+on natural language alone to widen the request:
+
+```text
+<Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --include-provider-products \
+  --all \
+  --region hk \
+  --lang <language-tag> \
+  --format json
+```
+
+Use `--region hk` when Hong Kong is the requested place of use. Do not add
+`--market hk` unless Hong Kong card issuance is explicit.
+
+For category-, merchant-, or product-specific Visa requests, run the same
+joined command once with the current user request and add `--all` when the user
+asks for every matching Benefit.
+
+Treat both returned collections as authoritative candidate sets, not as
+already-filtered display results. Independently retain only Visa Offers and
+provider products that satisfy the original request's explicit brand,
+category, geography, product, merchant, and other hard constraints. A generic
+coupon or lifestyle Offer is not relevant to a brand-specific or
+product-specific query merely because it shares the coupon reward type. After
+filtering, apply one user-facing precedence:
+
+1. If at least one relevant directly orderable product remains, display only
+   those products. Do not mention missing or available Visa Offers, unmatched
+   merchants, the provider collection, Catalog sourcing, Program relationships,
+   or the fact that another collection was suppressed. End with a natural next
+   step that helps the user choose a product, quantity, or continue ordering.
+2. If no relevant directly orderable product remains, display every relevant
+   Visa Offer without a second Skill-side cap and preserve their relative
+   order. Include useful detail directly when concise; otherwise offer to show
+   the selected Offer's details. Do not use a purchase call to action unless an
+   orderable product is actually available.
+3. If neither collection has a relevant result, say only that no matching
+   result was found. Do not explain unrelated rows returned by either
+   collection.
+
+For `fallback_all_offers` or `no_matching_offers`, never rank, display,
+recommend, or purchase fallback rows. If a relevant orderable product exists,
+present it without narrating the Offer miss. Otherwise report no matching
+result. For count-only wording, count the displayed priority set: relevant
+orderable products when any exist, otherwise relevant Visa Offers.
 
 For explicit food delivery use `--category dining_delivery_food` and exclude
 `instore_only` or dine-in-only Programs. For explicit dine-in use
 `dining_restaurant`. Ask one question when the intent is genuinely ambiguous.
 
-### Token-Free Product Resolution
+### Joined Provider Contract
 
-Immediately product-resolve each of the at-most-five selected query Offers, or
-the one selected purchase Program, before any browser login:
+The CLI is the only authority for the Visa Benefit Catalog provider registry,
+provider identity, merchant route, traversal, and pagination. The Skill must
+not copy or maintain provider entries.
+
+Read only the two dynamic structured collections returned by the joined
+command:
+
+- Visa Offer results
+- `providerProducts` or `directlyOrderable` results
+
+For purchase-capable provider rows, `orderableItems` is the only authoritative
+Agent-facing purchase-facts collection. Select one exact item by stable
+`productId` and preserve:
+
+- `title`: localized display title for the user and `metadata.displayTitle`
+- `sourceTitle`: provider-owned transaction title for `expected.itemTitle`,
+  the Instruction title, and the frozen purchase title
+- `unitPriceMinor`: audit fact only; never place it in an Instruction or
+  `expected.amount`
+- `unitPriceMajor`: authoritative major-unit unit price
+- `currency` and `availability`: authoritative purchase facts
+
+For quantity greater than one, compute the total from `unitPriceMajor` exactly
+once and use that same major-unit decimal in `expected.amount` and the Mandate
+`amountLimit`. Never derive a purchase title or authorized amount from the raw
+`product.title`, `variant.title`, `product.price.amount`,
+`variant.price.amount`, or `price_range`. If `orderableItems`, `sourceTitle`, or
+`unitPriceMajor` is missing, stop before login instead of translating,
+guessing, or converting raw fields.
+
+Both collections are authoritative for the identities and facts they carry,
+but neither collection is automatically relevant to the user's query. Apply
+the original query's brand, category, geography, product, merchant, and other
+hard constraints independently to both collections before presentation,
+ranking, selection, or relation labeling.
+
+Do not display, number, rank, select, or count an unrelated provider product as
+a matching result. Filtering it from the current presentation does not alter
+its authoritative `directlyOrderable` fact: query relevance controls display,
+while `directlyOrderable` describes whether that product can be purchased.
+
+The CLI-owned joined aggregate must query providers with the original current
+user query and locked language/environment, follow each opaque provider
+cursor until complete, deduplicate by stable merchant, product, and variant
+identities, and attach authoritative provider identity to every provider
+product. The Skill must not perform that traversal itself.
+
+Do not call `tool internal-ucp get-merchant-list` or a separate
+`ucp-catalog search` during joined Visa/provider discovery. Do not infer,
+discover, replace, or construct a provider merchant ID or route at runtime. If
+the aggregate reports a repeated/missing cursor, failed provider page, changed
+environment, or
+partial coverage, preserve that status and never call the result complete.
+
+If a returned or selected provider product lacks one unambiguous
+CLI-authoritative provider identity, merchant ID, or HTTPS purchase route, stop
+before login with `unknown_provider`; do not fall back to a merchant-list
+lookup or another storefront.
+
+For a follow-up such as "What supermarket coupons are there?", run one new
+joined command with the follow-up as the original current query. Do not reuse
+old provider rows or issue separate Program/provider discovery commands. The
+new joined snapshot replaces the old one.
+
+Every displayed joined result belongs to one current snapshot containing the
+environment, language, geography, CLI-returned provider identity, authoritative
+purchase route, query, Program code, Catalog product/variant ID, price,
+currency, availability, and classification. A new query, refreshed list,
+changed environment, or changed geography invalidates the old ordering,
+selection, and purchase authorization. A purchase reply must resolve one stable
+ID from the latest snapshot; title-only fuzzy matching is insufficient.
+
+### Product Type, Relation Label, And Presentation
+
+Evaluate all returned Visa Programs and all registered-provider products from
+the same joined response:
+
+- Preserve `productType=VISA_PROVIDER_PRODUCT` on every relevant, available
+  product in the provider-product collection. A Program match is not required.
+- Preserve `PROGRAM_PROVIDER_MATCH` only when the joined CLI result proves that
+  optional relation. Never synthesize or force it from titles, categories, or
+  presentation needs, and never replace `VISA_PROVIDER_PRODUCT` with it.
+- Classify a relevant Program internally as `VISA_PROGRAM_ONLY` when it has no
+  verified orderable provider-product relationship.
+
+These product types, relation labels, collection names, and routing facts are
+internal only. Never expose labels such as Visa Offer, provider product,
+provider Catalog, Visa Program, `VISA_PROVIDER_PRODUCT`,
+`PROGRAM_PROVIDER_MATCH`, or `VISA_PROGRAM_ONLY` merely to explain the source
+of a result. Present the priority set as one natural answer using authoritative
+titles, stable IDs, prices, currencies, availability, and relevant terms. The
+Agent may organize, sort, number, and phrase that set without fixed headings,
+letters, counts, or a fixed display template.
+
+An entry Offer, campaign URL, similar title, shared category, or merchant-level
+association never proves `PROGRAM_PROVIDER_MATCH`. It does not, however,
+remove the constant `VISA_PROVIDER_PRODUCT` product type of a relevant
+registered item. Never force a Program/provider match merely to combine the two
+display groups.
+
+Treat voucher denomination and purchase price as separate facts. Text such as
+`HKD 100` in a title or description is the voucher face value. The structured
+Catalog `price.amount` and `price.currency` are the actual purchase price and
+payment currency. Do not reject a provider product merely because its HKD face
+value is purchased using USD. Convert the structured minor-unit amount once
+to the major-unit decimal used by Instruction and Checkout.
+
+### Selected Program Resolution
+
+Before purchasing one selected non-provider Program route, bind it through the
+existing token-free Program product resolver before any browser login:
 
 ```text
 <Skill Path>/bin/visa-cli visa product-search \
@@ -192,8 +410,10 @@ the one selected purchase Program, before any browser login:
   question.
 - On `PRODUCT_UNAVAILABLE`, report a Program-Catalog mismatch and stop that
   candidate. Do not substitute another product or a campaign link.
-- For a query-only request, present the enriched results and stop even when the
-  result could continue to login.
+- The verified product must be the same product associated with the selected
+  Program. A different closest product does not inherit the Program.
+- For a query-only request, present the classified joined results and stop even
+  when one result could continue to login.
 
 ## Visa Purchase Fast Path
 
@@ -238,10 +458,9 @@ Instruction context:
 Mandate descriptions must be at most 150 characters. The amount is the exact
 authorized price with no buffer.
 
-Tell the user in the locked language that Visa login, card binding, and VIC
-status are being checked and that, if a browser opens, they should complete
-only the missing step shown there. This is status, not another confirmation.
-Then run once in the foreground:
+Say that login, card, VIC, and Instruction readiness are being checked. Login
+may open in the browser. Show but never open a returned Bind Card link; an
+already-open Agent Portal also works. Then run once in the foreground:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
@@ -251,9 +470,9 @@ Then run once in the foreground:
   --format json
 ```
 
-Continue only on `ok=true` and `ready=true`. The CLI alone decides whether
-authoritative REGISTER facts permit a bounded Quick Instruction activation
-wait. The Agent must not inspect, persist, infer, or copy registration fields,
+Keep this process foreground until `ok=true` and `ready=true` or a bound
+timeout continuation. The CLI alone owns the Pending Instruction Card Gate.
+The Agent must not inspect, persist, infer, or copy registration fields,
 `pendingInstructionId`, or any login-returned Instruction ID. Quick
 Instruction is an internal acceleration path, not purchase identity.
 
@@ -264,9 +483,6 @@ Build one frozen purchase context from the same Program and verified product:
   "mode": "purchase",
   "environment": "uat",
   "requestText": "<original purchase request>",
-  "program": {
-    "code": "<program-code>"
-  },
   "selection": {
     "merchantUrl": "<authoritative-program-commerce-url>",
     "merchantId": "<verified-merchant-id>",
@@ -306,6 +522,10 @@ Build one frozen purchase context from the same Program and verified product:
 }
 ```
 
+Do not include a top-level `program` object or `metadata.programCode`.
+`commerce-run` may accept legacy Program metadata for compatibility, but this
+Skill never sends it and never treats it as a purchase prerequisite.
+
 Use native JSON types: `quantity` is a positive integer and
 `digitalDeliveryExpected` is a boolean. Use `true` only for a verified digital
 artifact. Keep Program, Catalog, expected, and Instruction facts unchanged.
@@ -331,6 +551,275 @@ only an exact CLI-returned aggregate read-only continuation, once. Never
 reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 `ucp-order` component commands for this Visa Program purchase.
 
+## Catalog Purchase Fast Path
+
+Use this path for a selected `VISA_PROVIDER_PRODUCT` from joined discovery or a
+selected direct broad-Catalog result. A registered provider purchase is a Visa
+Benefit product purchase. An unregistered direct-shopping product is ordinary
+Catalog shopping and must not inherit unrelated Program eligibility or terms.
+
+Direct broad-Catalog discovery is anonymous and must not call `visa recommend`
+or pass `--include-provider-products`:
+
+```text
+<Skill Path>/bin/visa-cli catalog search \
+  --query "<original-current-user-query>" \
+  --language <language-tag> \
+  --context '{"address_region":"HK"}' \
+  <environment-flag> \
+  --format json
+```
+
+Use the locked geography instead of hardcoding `HK` when the user selected
+another market. Broad Catalog results are bounded and non-exhaustive; say so.
+Agent-rank only products that satisfy the user's actual product, brand,
+geography, channel, and other hard constraints.
+
+Before login, resolve the selected item to one authoritative orderable product.
+For a joined provider product, use the exact selected `orderableItems` entry
+and the CLI-returned provider identity from the same joined snapshot. Do not
+call `ucp-catalog product` merely to rediscover or reinterpret title and price;
+`visa commerce-run` exact-revalidates that product before card, Instruction,
+Checkout, or payment work. Never query the merchant list or accept a route
+from the product title, Program, broad-search row, hostname familiarity, or
+caller input. Missing or ambiguous CLI provider identity is `unknown_provider`
+and must stop.
+For a direct-shopping internal merchant, use the selected `merchant_id`,
+`ucp-catalog product`, and the normal authoritative merchant-route resolution.
+Do not purchase directly from a broad-search display row when the exact product
+detail has not been resolved.
+
+For an external/platform result, use its exact returned product URL with
+`tool parse-item`. For an Eats365 platform-store candidate,
+`manual_item_facts` with an empty items array is the expected success result:
+use the broad Catalog candidate's frozen product ID, title, structured price,
+currency, availability, channel, store ID, and returned product/store URL. Do
+not browse for a nonexistent detail page or ask for a replacement URL.
+
+During `mode=catalog_purchase`, the CLI must resolve a frozen Eats365 platform
+candidate without requesting the internal merchant list. It starts from the
+trusted product URL, accepts only the exact Eats365 manual-item signal, and
+then calls the anonymous extra Catalog product endpoint with the exact frozen
+channel, store, URL-derived region, and product ID. It must not depend on broad
+Catalog discovery selecting that store again. The exact response revalidates
+the menu route, title, structured price/currency, availability, and platform
+metadata. The frozen selection URL may carry `product_id` while the exact
+response returns the same menu URL without that query; this is valid when host,
+region, store path, and the separately verified product ID match. This
+exception does not apply to `mode=purchase` or to ordinary internal merchants.
+
+Freeze all of these authoritative facts:
+
+- `merchantUrl`: returned internal merchant URL, or for a platform-store item
+  its returned product/store ordering URL carrying the same `product_id`;
+  never a constructed, campaign, Visa, or VSRP URL
+- `productId`: exact orderable Catalog product or variant ID
+- `title`: exact provider `sourceTitle` for the purchase context; keep the
+  localized `title` separately as `metadata.displayTitle`
+- `price`: exact `unitPriceMajor` and exact total for the quantity; never raw
+  `unitPriceMinor` or Catalog `price.amount`
+- `currency`: authoritative three-letter currency
+- `availability`: currently orderable status
+- `merchantCategoryCode`: one four-digit MCC classified from the exact frozen
+  merchant/product context; ask when confidence is low
+- for Eats365, only `channelType` and `storeId` are required route fields.
+  `catalogQuery`, `catalogEnvironment`, and `catalogLanguage` are optional
+  compatibility metadata and must not block purchase when omitted
+- for a registered provider product, `merchantId` and `merchantUrl`: the exact
+  CLI-returned provider identity from the same joined snapshot, never
+  caller-supplied
+
+Also freeze merchant/store identity, channel, quantity, fulfillment, endpoint
+when returned, and whether digital delivery is actually expected. The Agent
+classifies MCC and fulfillment from the exact product context, matching the
+existing Agentic payment capability. Ask when either classification is
+uncertain. Never reuse an unrelated Program MCC, add a price buffer, or
+substitute a similar product.
+
+Use these high-confidence fulfillment rules:
+
+- Registered provider coupons/vouchers: `NO_SHIPPING_REQUIRED`,
+  `digitalDeliveryExpected=true`.
+- Eats365 coffee or quick-service food is high-confidence MCC `5814`,
+  `NO_SHIPPING_REQUIRED`, and
+  `digitalDeliveryExpected=false`; the meal itself is not a digital artifact.
+- Shipped physical goods: `PHYSICAL_GOODS_REQUIRES_SHIPPING` with the complete
+  address contract below.
+
+For any other merchant or product, use a high-confidence MCC and fulfillment
+classification or ask once. Stop when either remains uncertain after that
+clarification.
+
+Before `visa commerce-login` for an Eats365 purchase, collect the buyer's
+`first_name`, `last_name`, and E.164 `phone_number`. Do not create an
+Instruction until these required Checkout facts are present. The CLI adds the
+current wallet email automatically; include `buyer.email` only when the user
+explicitly selected a different order-contact email. Treat buyer data as
+private: never place it in metadata or echo it in summaries.
+
+An explicit request to buy the unambiguous displayed product is one purchase
+authorization. Build the same minimal login shape, using only the Catalog
+product facts:
+
+```json
+{
+  "environment": "uat",
+  "instructionContext": {
+    "title": "<authoritative-catalog-title>",
+    "description": "Purchase the selected Catalog product",
+    "mandates": [
+      {
+        "title": "<authoritative-catalog-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "<classified-four-digit-mcc>"
+      }
+    ]
+  }
+}
+```
+
+For `PHYSICAL_GOODS_REQUIRES_SHIPPING`, include the same complete authoritative
+`shippingAddress` inside this login `instructionContext`.
+
+Apply the Restricted Instruction Gate, then run `visa commerce-login` once with
+`--confirm-purchase --open --format json`. Apply the Pending Instruction Card
+Gate unchanged and continue only on `ok=true` and `ready=true`.
+
+Build one frozen Catalog purchase context without a Program. Start with these
+shared fields:
+
+```json
+{
+  "mode": "catalog_purchase",
+  "environment": "uat",
+  "requestText": "<original purchase request>",
+  "selection": {
+    "merchantUrl": "<authoritative-merchant-url>",
+    "merchantId": "<authoritative-merchant-id>",
+    "endpoint": "<authoritative-endpoint-if-returned>",
+    "productId": "<authoritative-product-id>",
+    "productQuery": "<authoritative-product-title>",
+    "quantity": 1
+  },
+  "expected": {
+    "merchantName": "<authoritative-merchant-name>",
+    "itemTitle": "<authoritative-product-title>",
+    "amount": "<structured-catalog-purchase-price>",
+    "currency": "<structured-catalog-purchase-currency>",
+    "availability": "<authoritative-orderable-status>"
+  },
+  "instructionContext": {
+    "title": "<authoritative-catalog-title>",
+    "mandates": [
+      {
+        "title": "<authoritative-catalog-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "<classified-four-digit-mcc>"
+      }
+    ]
+  }
+}
+```
+
+For a registered provider product, replace the shared `merchantId` and
+`merchantUrl` placeholders with the exact values carried by the selected
+product's CLI-returned provider identity. The selected product, provider
+identity, merchant route, and Catalog detail must all belong to the same joined
+snapshot. Unknown or mismatched provider identity stops before login.
+
+Before writing the context file, add exactly one route-specific top-level
+fulfillment contract. For a registered provider digital coupon:
+
+```json
+{
+  "fulfillmentType": "NO_SHIPPING_REQUIRED",
+  "digitalDeliveryExpected": true
+}
+```
+
+For an Eats365 coffee or quick-service food result, keep the same shared
+context and use this complete route-specific selection and fulfillment
+contract:
+
+```json
+{
+  "selection": {
+    "merchantUrl": "<exact-returned-eats365-product-or-store-url>",
+    "channelType": "eats365",
+    "storeId": "<frozen-store-id>",
+    "productId": "<frozen-product-id>",
+    "productQuery": "<frozen-provider-title>",
+    "quantity": 1
+  },
+  "instructionContext": {
+    "title": "<frozen-provider-title>",
+    "mandates": [
+      {
+        "title": "<frozen-provider-title>",
+        "description": "Purchase the selected Catalog product",
+        "amountLimit": "<structured-catalog-purchase-price>",
+        "currencyCode": "<structured-catalog-purchase-currency>",
+        "merchantCategoryCode": "5814"
+      }
+    ]
+  },
+  "buyer": {
+    "first_name": "<buyer-first-name>",
+    "last_name": "<buyer-last-name>",
+    "phone_number": "<e164-phone-number>"
+  },
+  "fulfillmentType": "NO_SHIPPING_REQUIRED",
+  "digitalDeliveryExpected": false
+}
+```
+
+Merge the route-specific fields into the shared object; do not send either
+fragment separately. The Eats365 `merchantUrl` must carry the same product ID
+as `selection.productId`, and the frozen title, structured price, currency,
+availability, channel, store, and URL must all come from one broad Catalog
+snapshot. Do not add `catalogQuery`, `catalogEnvironment`, or `catalogLanguage`
+merely to satisfy CLI validation. A real mismatch in required identity or
+purchase facts stops before login.
+
+Use `PHYSICAL_GOODS_REQUIRES_SHIPPING` only with an authoritative complete
+shipping address. Put that identical object both at final-context top level as
+`shippingAddress` and inside final `instructionContext.shippingAddress`; the
+CLI rejects a missing or different Quick/Checkout address.
+`digitalDeliveryExpected=true` is valid only with `NO_SHIPPING_REQUIRED` and
+an explicit artifact-delivery contract. A high-confidence Agent classification
+is valid; low confidence requires one question, and no answer stops the
+purchase.
+
+Run exactly once:
+
+```text
+<Skill Path>/bin/visa-cli visa commerce-run \
+  --context-file <catalog-purchase-context.json> \
+  --confirm-purchase \
+  --open \
+  --format json
+```
+
+The distributed Visa Edition must support `mode=catalog_purchase` before this
+path is released. If the command rejects that mode, stop and report that the
+installed distribution does not yet support aggregate Catalog purchase. Never
+fall back to Program `mode=purchase`, `ucp-checkout run`, atomic Instruction,
+Checkout, events, or pay commands.
+
+As with Program purchase, never rerun `visa commerce-run` after possible
+Checkout creation. Use only the exact CLI-returned bound read-only
+continuation, and report payment and delivery separately.
+
+A product-resolution title or price mismatch is not a discovery mechanism.
+Do not edit the title or amount by trial and error and rerun
+`visa commerce-run`. Stop, return to the latest authoritative snapshot or
+read-only product detail, rebuild the frozen context from exact normalized
+facts, and obtain new purchase authorization whenever title or amount changes.
+
 ### Visa Preparation
 
 For explicit login-only or Visa card readiness, use the aggregate in prepare
@@ -345,7 +834,8 @@ mode:
 }
 ```
 
-Use `target: "visa_card_ready"` for card/VIC preparation.
+Use `target: "visa_card_ready"` for card/VIC preparation. The aggregate may
+show but never auto-open a Bind Card link and must stay foreground.
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
@@ -376,7 +866,10 @@ general workflow engine.
 ### CAP-CARD: Card Management
 
 - Use `card binding-link`, `setup-link`, `modify-link`, or `passkey-link` only
-  for the card action the user requested.
+  for the requested card action. Show the exact link but never pass `--open`,
+  Agent-open it, or claim that showing it completed the action.
+- During an authorized aggregate purchase, do not decompose the Pending
+  Instruction Card Gate into atomic card commands.
 - Refresh current card state before selecting a payment instrument. Require one
   exact enabled instrument; never choose from stale or ambiguous data.
 - Card and Passkey pages are user-browser handoffs. A returned event must be
@@ -398,6 +891,9 @@ general workflow engine.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. A later purchase must freeze one exact
   selected product.
+- Visa-related Benefit requests use joined Visa/provider discovery. Direct
+  shopping uses broad Catalog discovery and, after an exact selection, the
+  Catalog Purchase Fast Path.
 
 ### CAP-PAY: Direct Or Session Pay
 
@@ -427,6 +923,10 @@ general workflow engine.
   Catalog identity, item, quantity, price, currency, fulfillment, required
   shipping address, payment instrument, canonical HTTPS endpoint, and explicit
   purchase authorization.
+- Do not use this legacy aggregate for a product selected through Visa/provider
+  or broad Catalog discovery; those products use Catalog Purchase Fast Path so
+  login, Instruction, card/VIC, Checkout, payment, and delivery stay
+  CLI-aggregated.
 - Refresh the selected payment instrument first. If it is Visa with VIC
   enabled, stop: this lightweight generic aggregate cannot carry or safely
   resolve an Instruction and Mandate. Visa Program purchases must use
@@ -498,8 +998,16 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Visa discovery, report only verified matching Programs and enriched
-  Catalog availability.
+- For joined Visa/provider discovery, independently filter both authoritative
+  candidate collections by the original query's hard constraints. If relevant
+  orderable products remain, report only them; otherwise report the relevant
+  Visa Offers. Keep `productType=VISA_PROVIDER_PRODUCT`,
+  `PROGRAM_PROVIDER_MATCH`, and `VISA_PROGRAM_ONLY` only as internal structured
+  facts, never as user-facing group labels or source explanations.
+- Excluding an unrelated provider product from the current result does not
+  negate or modify its CLI-returned `directlyOrderable` fact.
+- Registered provider products are Visa Benefit products. Program-specific
+  eligibility and terms require a proven Program relationship.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
 - Report digital delivery only when nonempty authoritative artifacts exist.
@@ -510,11 +1018,36 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Visa Program purchase always uses the three CLI aggregates.
-- Program and Catalog product, amount, and currency must agree.
+- Joined Visa/provider discovery receives authoritative Visa Offer and
+  provider-product candidate collections, then independently filters both by
+  the original query's brand, category, geography, product, merchant, and other
+  hard constraints.
+- Relevant directly orderable products suppress Visa Offer presentation. Visa
+  Offers are shown only when no relevant orderable product remains.
+- Unrelated provider products are not displayed or counted as matches, but
+  filtering never changes their CLI-returned `directlyOrderable` fact.
+- Direct shopping skips Visa recommendation and starts with broad Catalog
+  discovery.
+- Non-provider Visa Program purchase uses the three CLI aggregates in Program
+  mode.
+- Every registered provider product, including a Program-associated one, uses
+  Catalog mode with the structured Catalog purchase price/currency.
+- Provider and non-Program Catalog purchase use login plus
+  `mode=catalog_purchase`, never atomic UCP.
+- For a non-provider Program purchase, the Program and resolved Catalog product
+  identity plus recommendation-backed purchase amount/currency must agree.
+  For registered provider products, Instruction and Checkout use only the
+  structured Catalog purchase price/currency; a title or description's voucher
+  face value may use another currency and is never compared as the purchase
+  price.
+- New `mode=purchase` and `mode=catalog_purchase` contexts never send
+  `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Quick Instruction is owned by `visa commerce-login`.
+- `visa commerce-login` owns the Pending Instruction Card Gate; showing a Bind
+  Card link never ends its foreground exact-ID wait.
+- Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
+  Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.
 - Generic capabilities execute only with complete, authoritative input and
   fail closed otherwise.
