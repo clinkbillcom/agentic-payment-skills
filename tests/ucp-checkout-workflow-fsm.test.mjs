@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   UcpCheckoutWorkflowAction,
   UcpCheckoutWorkflowState,
+  classifyUcpCheckoutPrerequisites,
   classifyUcpCheckoutRunExecution,
 } from '../lib/ucp-checkout-workflow-fsm.mjs';
 
@@ -34,6 +35,48 @@ function checkoutRequest(overrides = {}) {
     ...overrides,
   };
 }
+
+function prerequisiteInput(overrides = {}) {
+  return {
+    selectedProduct: {
+      source: 'INTERNAL_UCP_CATALOG',
+      itemId: 'sku_123',
+      merchantUrl: 'https://shop.example/products/demo',
+      catalogEnvironment: 'production',
+    },
+    walletStatus: {
+      ok: true,
+      data: { baseUrl: 'https://api.clinkbill.com' },
+    },
+    title: 'Demo',
+    currency: 'USD',
+    amountMinor: 100,
+    quantity: 1,
+    fulfillmentType: 'NO_SHIPPING_REQUIRED',
+    ...overrides,
+  };
+}
+
+test('confirmed missing card starts the pending-instruction continuation', () => {
+  const result = classifyUcpCheckoutPrerequisites(prerequisiteInput({
+    paymentInstrumentRefreshAttempted: true,
+  }));
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.AUTHORIZATION_PREPARE_REQUIRED);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.START_AUTHORIZATION_PREPARE_AND_WAIT);
+  assert.equal(result.reason, 'no_payment_instrument_pending_instruction_required');
+});
+
+test('scheduled checkout never starts an interactive pending-instruction continuation', () => {
+  const result = classifyUcpCheckoutPrerequisites(prerequisiteInput({
+    paymentInstrumentRefreshAttempted: true,
+    unattended: true,
+  }));
+
+  assert.equal(result.state, UcpCheckoutWorkflowState.UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.action, UcpCheckoutWorkflowAction.SURFACE_UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.reason, 'unattended_payment_instrument_missing');
+});
 
 test('requests one runtime-owned atomic checkout-attempt claim without returning a command', () => {
   const result = classifyUcpCheckoutRunExecution(checkoutRequest());
