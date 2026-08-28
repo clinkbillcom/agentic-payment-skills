@@ -75,8 +75,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.39` vendors Visa CLI `0.2.40` from upstream commit
-`5c2f9cf6d458fdfd6414406a235c33c4e4f348a6`. It supports joined Visa Offer and
+Skill `0.1.39` vendors Visa CLI `0.2.41` from upstream commit
+`86de0ff71bca0a24acd07ea9bd9236f45f684d7e`. It supports joined Visa Offer and
 provider-product discovery, optional legacy
 `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase

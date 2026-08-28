@@ -4214,8 +4214,8 @@ var require_yauzl = __commonJS({
             var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
             entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
             entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
-            var errorMessage2 = validateFileName(entry.fileName);
-            if (errorMessage2 != null) return emitErrorAndAutoClose(self, new Error(errorMessage2));
+            var errorMessage3 = validateFileName(entry.fileName);
+            if (errorMessage3 != null) return emitErrorAndAutoClose(self, new Error(errorMessage3));
           } else {
             entry.fileComment = entry.fileCommentRaw;
             entry.fileName = entry.fileNameRaw;
@@ -10266,9 +10266,6 @@ var DASHBOARD_BASE_URLS = {
   test: "https://dashboard.clinkbill.dev",
   production: "https://dashboard.clinkbill.com"
 };
-var MERCHANT_LIST_URLS = {
-  production: "https://www.clinkbill.com/.well-known/ucp-merchants.json"
-};
 var DEFAULT_BASE_URL = API_BASE_URLS.production;
 
 // dist/config.js
@@ -10741,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.40";
+var CLI_VERSION = "0.2.41";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -11960,6 +11957,8 @@ async function collectWebhookEvents(options2) {
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
+  let watchReady = false;
+  let lastRecoverablePollError;
   let checkoutNextToken = normalizedValue(options2.nextToken);
   const targetReached = () => collected.length > 0;
   const processPolledRecords = async (records) => {
@@ -11992,45 +11991,73 @@ async function collectWebhookEvents(options2) {
     }
     return targetReached();
   };
-  const deadline = now() + maxDurationMs;
+  let deadline = now() + maxDurationMs;
   for (; ; ) {
-    const page = hasCheckoutFilter ? await pollWebhookEventPage({
-      runtimeConfig: runtimeState.value,
-      ...getRuntimeConfig ? { getRuntimeConfig } : {},
-      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-      timeoutMs: options2.timeoutMs,
-      pageSize: effectivePageSize,
-      eventTypes: [...requestedTypes],
-      checkoutId,
-      ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
-    }) : {
-      records: await pollWebhookEvents({
+    try {
+      const page = hasCheckoutFilter ? await pollWebhookEventPage({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         timeoutMs: options2.timeoutMs,
         pageSize: effectivePageSize,
-        ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
-      })
-    };
-    const records = page.records;
-    if (await processPolledRecords(records)) {
-      return { ready: true, timedOut: false, events: collected, ackedEventIds };
-    }
-    if (hasCheckoutFilter) {
-      if (page.nextToken !== void 0) {
-        if (records.length > 0 && page.nextToken === checkoutNextToken) {
-          throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+        eventTypes: [...requestedTypes],
+        checkoutId,
+        ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+      }) : {
+        records: await pollWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          timeoutMs: options2.timeoutMs,
+          pageSize: effectivePageSize,
+          ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
+        })
+      };
+      const records = page.records;
+      if (!watchReady) {
+        if (options2.onReady) {
+          const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+          if (getRuntimeConfig) {
+            const currentRuntimeConfig = await getRuntimeConfig();
+            assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
+          }
+          assertPolledEventCustomers(records, polledIdentity);
+          deadline = now() + maxDurationMs;
         }
-        checkoutNextToken = page.nextToken;
-      } else if (records.length >= effectivePageSize) {
-        throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
+        watchReady = true;
+        options2.onReady?.();
       }
+      if (await processPolledRecords(records)) {
+        return { ready: true, timedOut: false, events: collected, ackedEventIds };
+      }
+      if (hasCheckoutFilter) {
+        if (page.nextToken !== void 0) {
+          if (records.length > 0 && page.nextToken === checkoutNextToken) {
+            throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+          }
+          checkoutNextToken = page.nextToken;
+        } else if (records.length >= effectivePageSize) {
+          throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
+        }
+      }
+    } catch (error) {
+      if (options2.onReady && !watchReady && isRecoverableWatchPollError(error)) {
+        lastRecoverablePollError = error;
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      throw error;
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
     }
     await sleep3(pollIntervalMs);
+  }
+  if (options2.onReady && !watchReady && lastRecoverablePollError !== void 0) {
+    throw lastRecoverablePollError;
   }
   return {
     ready: false,
@@ -12419,7 +12446,7 @@ Wallet Environment:
   later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
   process override for those authenticated commands.
 
-Public Catalog Environment:
+Public Discovery Environment:
   ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
   config-independent commands. They default to production and accept --sandbox or --test per call.
 
@@ -12843,8 +12870,9 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   get-endpoint uses the effective wallet API base and does not accept environment flags.
   get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
-  Production is fetched on every call; sandbox/UAT and test use their bundled lists.
+  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
   A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
+  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12865,14 +12893,16 @@ ${TOOL_NETWORK_OPTIONS}
 Behavior:
   Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
   using the environment saved by wallet init. Re-run wallet init to switch environments.
-  Production fetches its merchant list from https://www.clinkbill.com/.well-known/ucp-merchants.json
-  on every call and never caches it, so upstream merchant changes apply without a new CLI release.
-  Sandbox/UAT and test use the lists bundled from public/uat and public/test with no request.
-  A merchant entry with "enabled": false is treated as absent.
+  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
+  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
+  miss is refreshed before it can become an external-route decision; errors are never cached.
+  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
+  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
+  independently from the effective wallet API base and merchant_id.
   Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
-  A production merchant-list request that fails, times out, or does not return JSON is a network
-  error (exit 6) and is never reported as a missing merchant.
-  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
+  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
+  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
+  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
 
 Examples:
   clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
@@ -12887,16 +12917,14 @@ Options:
 ${PUBLIC_CATALOG_LIST_OPTIONS}
 
 Behavior:
-  Returns the complete merchant-list document after validating its merchant entries.
+  Returns {"merchants":[...]} from the public merchant-list API after validation.
   The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
   It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
   CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
-  Production fetches https://www.clinkbill.com/.well-known/ucp-merchants.json on every call.
-  Sandbox/UAT and test read their lists bundled from public/uat and public/test without a request.
-  The output preserves list metadata, descriptions, enabled flags, disabled entries, and an optional
-  merchant_url. When present, merchant_url is an authoritative HTTP(S) merchant entry with no
-  fragment whose hostname must exactly match domain_name; callers must not construct a replacement URL.
-  CLINK_UCP_MERCHANTS_URL overrides the list source for any environment.
+  It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
+  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
+  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
+  that may include a path.
 
 Examples:
   clink tool internal-ucp get-merchant-list --format json
@@ -12939,7 +12967,7 @@ Options:
   --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
   --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
   --description <text>         Optional Quick Instruction description
-  --is-recurring               Mark the Quick Instruction as recurring
+  --is-recurring               Mark it recurring; mandates require recurringFrequency
   --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
   --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
 ${OUTPUT_OPTIONS}
@@ -12963,13 +12991,13 @@ Quick Instruction:
   --extra are rejected because no card exists yet and the context is intentionally bounded.
   Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
   contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
-  requires a description of at most 150 characters, a positive amountLimit with at most two
-  decimals, and currencyCode.
+  requires description, a positive amountLimit with at most two decimals, and currencyCode.
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  A successful token response reports pendingInstructionId; null means no usable Quick ID was
-  returned and does not prove whether creation was skipped or failed.
-  A PENDING instruction activates after VIC card binding completes and emits
-  purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
+  After browser authorization, the server attempts to create a PENDING purchase instruction and
+  reports pendingInstructionId. A null value means no usable Quick ID was returned and does not
+  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
+  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
+  \`instruction list --valid-only\` until it is ACTIVE.
 
 Payment Methods:
   After authorization succeeds, wallet init refreshes cached payment methods through the
@@ -13969,9 +13997,10 @@ Examples:
 var INSTRUCTION_HELP = `clink instruction
 
 Usage:
-  clink instruction <create|sign-url|list|get|update|cancel> [options]
+  clink instruction <prepare|create|sign-url|list|get|update|cancel> [options]
 
 Actions:
+  prepare   Create/reuse a no-card PENDING instruction, prompt for Portal card binding, and wait
   create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
   sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
   list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
@@ -13980,6 +14009,13 @@ Actions:
   cancel    Print the agent page URL for user-managed cancellation; no backend cancel call in this phase
 
 Notes:
+  prepare POSTs the complete restricted instructionContext to
+  /agent/cwallet/instructions/pending. Only after CWallet returns the exact PENDING instructionId
+  does the CLI resolve the trusted card binding link. After the first successful exact-ID Event Hub
+  poll, it prints a machine-readable PENDING handoff envelope with watchReady=true, then keeps
+  waiting in the foreground. It never opens that link or a standalone VIC page. Activation is
+  exact-GET verified and timeout returns an instruction get continuation bound to the original ID;
+  it never creates a second Instruction or retries Checkout/payment.
   create POSTs /agent/cwallet/instructions and creates the instruction in CREATED (draft) state,
   then prints the Passkey page URL for the returned instructionId.
   An instruction turns ACTIVE only after the Passkey/FIDO signature completes on the agent page
@@ -13997,6 +14033,10 @@ Notes:
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
 Examples:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
   clink instruction create \\
     --payment-instrument-id pi_xxx --title "Business trip" \\
     --effective-until-time "2026-06-25 00:00:00" \\
@@ -14007,6 +14047,62 @@ Examples:
   clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
   clink instruction get --purchase-instruction-id ins_xxx --format json
   clink instruction cancel --format json
+`;
+var INSTRUCTION_PREPARE_HELP = `clink instruction prepare
+
+Usage:
+  clink instruction prepare --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
+
+Required Arguments:
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
+
+Optional Arguments:
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
+  --is-recurring               Mark the instruction as reusable/recurring
+  --shipping-address <json>    Shipping address JSON object for physical goods
+  --max-wait <seconds>         Foreground activation wait bound, defaults to 900
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions/pending
+
+Behavior:
+  Sends the complete restricted instructionContext without paymentInstrumentId or extra. CWallet
+  creates or reuses one no-card PENDING Instruction and returns its exact instructionId/status.
+  The CLI then obtains the existing card binding link but withholds it until the first successful
+  Event Hub poll and identity validation. At readiness it writes the stable English prompt to stderr
+  and stdout emits a structured handoff envelope:
+  status=PENDING, the exact instructionId, trusted bindingUrl, watchReady=true,
+  watchEventType=purchase_instruction.activated, terminal=false, and processRunning=true.
+  The process remains in the foreground and later emits one final exact-ID envelope.
+  The CLI never opens the card binding link or a standalone VIC page. Portal owns card binding,
+  3DS, and VIC; after Portal completion CWallet attaches that card and activates the same ID.
+  The activation event is only a wake-up signal: the CLI exact-GETs the returned ID before reporting
+  ready. Timeout or a wait failure returns a read-only instruction get continuation for the same ID.
+  It never creates a replacement Instruction and never starts Checkout or payment.
+  Pending expiry is server-owned: exact verification requires one valid future Instruction expiry
+  shared by every Mandate, but does not require equality with caller-supplied expiry values.
+  If CWallet returns CARD_READY or VIC_READY without an instructionId because VIC completed during
+  the request race, the command returns card_ready without another POST or a binding handoff.
+  --open and --no-watch are intentionally unsupported.
+
+Mandate Fields:
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
+  merchantCategoryCode, preferredMerchantName or merchantCategory, and effectiveUntilTime.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
+
+Example:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
 `;
 var INSTRUCTION_CREATE_HELP = `clink instruction create
 
@@ -14187,7 +14283,6 @@ Options:
   --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
                                --ucp-order-id is unavailable
   --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
-  --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
   --event-only                 ACK and return the exact succeeded event without UCP order lookup
 ${CUSTOMER_API_KEY_REQUEST_OPTIONS}
@@ -14308,6 +14403,8 @@ function getRawHelpText(command, subcommand, nestedCommand) {
       return PAY_HELP;
     case "instruction":
       switch (subcommand) {
+        case "prepare":
+          return INSTRUCTION_PREPARE_HELP;
         case "create":
           return INSTRUCTION_CREATE_HELP;
         case "sign-url":
@@ -14425,125 +14522,52 @@ function getRawHelpText(command, subcommand, nestedCommand) {
   }
 }
 
-// public/uat/ucp-merchants.json
-var ucp_merchants_default = {
-  version: 1,
-  updated_at: "2026-08-10T00:00:00Z",
-  merchants: [
-    {
-      domain_name: "modelmax-store-uat.myshopify.com",
-      merchant_url: "https://modelmax-store-uat.myshopify.com/",
-      merchant_id: "mcht_fcq09yoqqink",
-      enabled: true,
-      description: "ModelMax UAT test storefront on Shopify, used to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
-    },
-    {
-      domain_name: "uat-magento.clinkpay.team",
-      merchant_url: "https://uat-magento.clinkpay.team/",
-      merchant_id: "mcht_f5d0rys1hjxe",
-      enabled: true,
-      description: "Magento UAT storefront focused on furniture and home furnishings. Product categories include living-room, bedroom, dining, storage, workspace, kitchen, kids, lighting, bathroom, textile, and related household items. Products are physical goods that generally require shipping, and the catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
-    },
-    {
-      domain_name: "testa.link2shops.com",
-      merchant_url: "https://testa.link2shops.com/",
-      merchant_id: "mcht_ftmse61a6az0",
-      enabled: true,
-      description: "Fuhui UAT storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is UAT test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
-    },
-    {
-      domain_name: "vtravel.link2shops.com",
-      merchant_url: "https://vtravel.link2shops.com/yiyuan/",
-      merchant_id: "mcht_ftmse61a6az0",
-      enabled: true,
-      description: "Fuhui UCP merchant used for Visa benefit redemption in UAT. The vtravel.link2shops.com storefront is an SPA entry rather than a parseable product-detail page, so requests for this domain must use the internal Clink UCP catalog and checkout APIs. Catalog APIs remain the source of truth for product identity, title, price, currency, availability, and the orderable URL."
-    }
-  ]
-};
-
-// public/test/ucp-merchants.json
-var ucp_merchants_default2 = {
-  version: 1,
-  updated_at: "2026-08-14T00:00:00Z",
-  merchants: [
-    {
-      domain_name: "modelmax-store-uat.myshopify.com",
-      merchant_url: "https://modelmax-store-uat.myshopify.com/",
-      merchant_id: "mcht_fcq09yoqqink",
-      enabled: true,
-      description: "ModelMax test storefront on Shopify, reused from the UAT environment to exercise the internal Clink UCP checkout path against a non-production merchant. The storefront is password protected and not open to shoppers, so its catalog is not publicly browsable and its product mix is whatever the team stages for a given test run. Product categories: unspecified test fixtures, typically generic sample products created to validate item parsing, shipping classification, and checkout completion. Treat this entry as integration scaffolding rather than a real commercial catalog, and do not rely on any specific product being present."
-    },
-    {
-      domain_name: "testa.link2shops.com",
-      merchant_url: "https://testa.link2shops.com/",
-      merchant_id: "mcht_f5xuyduv1a0j",
-      enabled: true,
-      description: "Fuhui test storefront, a Visa cardholder-benefits coupon and voucher mall covering Hong Kong and selected Asia-Pacific markets. Product categories include dining, retail, travel, entertainment, lifestyle, and shopping offers redeemable as Visa benefits. Listings are coupons and vouchers rather than shipped merchandise, so they are normally digital fulfillment with no shipping required. The catalog is test data used to validate internal Clink UCP catalog discovery, checkout routing, and order completion."
-    }
-  ]
-};
-
 // dist/internal-ucp.js
+var MERCHANT_LIST_PATH = "/agent/ucp/merchants";
 var MERCHANT_LIST_USER_AGENT = "clink-cli";
 var MERCHANT_LIST_TIMEOUT_MS = 15e3;
-var BUNDLED_MERCHANT_LISTS = {
-  sandbox: ucp_merchants_default,
-  test: ucp_merchants_default2
-};
-function validateInternalUcpMerchants(value, source) {
-  const records = merchantRecordsOf(value, source);
-  const merchants = /* @__PURE__ */ new Map();
-  const seenDomains = /* @__PURE__ */ new Set();
-  records.forEach((record, index) => {
+var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
+var MERCHANT_LIST_MAX_ATTEMPTS = 2;
+var MERCHANT_LIST_RETRY_DELAY_MS = 50;
+var merchantListRequests = /* @__PURE__ */ new WeakMap();
+async function getInternalUcpMerchantList(options2 = {}) {
+  return (await loadInternalUcpMerchantList(options2)).merchants;
+}
+function validateInternalUcpMerchantList(value, source) {
+  if (!Array.isArray(value)) {
+    throw invalidMerchantList(source, "expected an array");
+  }
+  const merchants = [];
+  for (const record of value) {
     if (!record || typeof record !== "object" || Array.isArray(record)) {
-      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+      continue;
     }
     const fields = record;
-    const domainName = canonicalDomain(fields.domain_name);
-    const merchantId = stringValue(fields.merchant_id);
-    if (!domainName || !merchantId) {
-      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
+    const merchantId = nonBlankString(fields.merchant_id);
+    const merchantName = nonBlankString(fields.merchant_name);
+    const description = optionalDescription(fields.description);
+    const domain = merchantRouteUrl(fields.domain);
+    if (!merchantId || !merchantName || description === void 0 || !domain) {
+      continue;
     }
-    if (fields.merchant_url !== void 0) {
-      validateMerchantUrl(fields.merchant_url, domainName, source, index);
+    const merchant = {
+      merchant_id: merchantId,
+      merchant_name: merchantName,
+      description,
+      domain
+    };
+    if (Object.hasOwn(fields, "ext")) {
+      const ext = safeCloneJsonValue(fields.ext);
+      if (ext !== void 0) {
+        merchant.ext = ext;
+      }
     }
-    if (fields.enabled !== void 0 && typeof fields.enabled !== "boolean") {
-      throw validationError(`invalid internal UCP merchant at ${source}[${index}]`);
-    }
-    if (seenDomains.has(domainName)) {
-      throw validationError(`duplicate internal UCP domain: ${domainName}`);
-    }
-    seenDomains.add(domainName);
-    if (fields.enabled !== false) {
-      merchants.set(domainName, merchantId);
-    }
-  });
+    merchants.push(merchant);
+  }
+  if (value.length > 0 && merchants.length === 0) {
+    throw invalidMerchantList(source, "no valid merchant identities");
+  }
   return merchants;
-}
-function merchantRecordsOf(value, source) {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  if (value && typeof value === "object") {
-    const envelope = value;
-    if (Array.isArray(envelope.merchants)) {
-      return envelope.merchants;
-    }
-  }
-  throw validationError(`invalid internal UCP config: ${source}`);
-}
-async function getInternalUcpMerchantList(options2 = {}) {
-  const environment = options2.environment ?? "production";
-  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
-  validateInternalUcpMerchants(loaded.document, loaded.source);
-  const merchants = merchantRecordsOf(loaded.document, loaded.source);
-  if (Array.isArray(loaded.document)) {
-    return { merchants: [...merchants] };
-  }
-  return {
-    ...loaded.document,
-    merchants: [...merchants]
-  };
 }
 async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   let productUrl2;
@@ -14557,8 +14581,17 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  const merchants = options2.merchants ?? await loadInternalUcpMerchants(environment, options2);
-  const merchantId = merchants.get(domainName);
+  let merchantId;
+  if (options2.merchants) {
+    merchantId = options2.merchants.get(domainName);
+  } else {
+    let loaded = await loadInternalUcpMerchants(options2);
+    merchantId = loaded.merchants.get(domainName);
+    if (!merchantId && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchants(options2, true);
+      merchantId = loaded.merchants.get(domainName);
+    }
+  }
   if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
@@ -14569,7 +14602,7 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   } catch {
     throw validationError("invalid internal UCP base URL");
   }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
     throw validationError("invalid internal UCP base URL");
   }
   return {
@@ -14579,92 +14612,305 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     endpoint: endpoint.toString()
   };
 }
-async function loadInternalUcpMerchants(environment, options2) {
-  const loaded = await loadInternalUcpMerchantListDocument(environment, options2);
-  return validateInternalUcpMerchants(loaded.document, loaded.source);
-}
-async function loadInternalUcpMerchantListDocument(environment, options2) {
-  const explicitUrl = options2.merchantListUrl?.trim() || process.env.CLINK_UCP_MERCHANTS_URL?.trim() || void 0;
-  if (!explicitUrl) {
-    const bundled = BUNDLED_MERCHANT_LISTS[environment];
-    if (bundled !== void 0) {
-      return {
-        document: bundled,
-        source: `public/${bundledListName(environment)}/ucp-merchants.json`
-      };
-    }
-  }
-  const listUrl = explicitUrl ?? MERCHANT_LIST_URLS[environment];
-  if (!listUrl) {
-    throw configError(`no internal UCP merchant list for the ${environment} environment; set CLINK_UCP_MERCHANTS_URL`);
-  }
-  const fetchList = options2.fetchMerchantList ?? ((url) => fetchMerchantListDocument(url, options2.timeoutMs));
+async function loadInternalUcpMerchants(options2, forceRefresh = false) {
+  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
+  const environment = options2.environment ?? "production";
+  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
   return {
-    document: await fetchList(listUrl),
-    source: listUrl
+    merchants: merchantMap(loaded.merchants, source),
+    fromCache: loaded.fromCache
   };
 }
-function bundledListName(environment) {
-  return environment === "sandbox" ? "uat" : environment;
-}
-async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
+async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
+  const environment = options2.environment ?? "production";
+  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
+  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
+  if (!requestsByUrl) {
+    requestsByUrl = /* @__PURE__ */ new Map();
+    merchantListRequests.set(fetchMerchantList, requestsByUrl);
+  }
+  let state = requestsByUrl.get(url);
+  if (!state) {
+    state = {};
+    requestsByUrl.set(url, state);
+  }
+  const now = Date.now();
+  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
+    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
+  }
+  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
+  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
+  if (inFlight) {
+    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
+  }
+  const requestState = state;
+  const request = (async () => {
+    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
+    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
+    const cached = Object.freeze(validated);
+    requestState.cached = {
+      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
+      merchants: cached
+    };
+    return cached;
+  })();
+  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
+  requestState.inFlightByTimeout.set(timeoutMs, request);
   try {
-    response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Accept-Language": "en-US",
-        "User-Agent": MERCHANT_LIST_USER_AGENT
-      },
-      signal: controller.signal
-    });
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-    }
-    throw networkError(`internal UCP merchant list request failed: ${error.message}`);
+    return { merchants: cloneMerchantList(await request), fromCache: false };
   } finally {
-    clearTimeout(timeout);
-  }
-  if (!response.ok) {
-    throw networkError(`internal UCP merchant list request failed with status ${response.status}`);
-  }
-  const rawText = await response.text();
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    throw networkError(`internal UCP merchant list is not valid JSON: ${url}`);
+    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
+      requestState.inFlightByTimeout.delete(timeoutMs);
+      if (requestState.inFlightByTimeout.size === 0) {
+        delete requestState.inFlightByTimeout;
+      }
+    }
   }
 }
-function stringValue(value) {
+async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
+  const deadline = Date.now() + timeoutMs;
+  let lastFailure;
+  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), remainingMs);
+    let response;
+    try {
+      response = await fetchMerchantList(url, {
+        method: "GET",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          "Accept-Language": "en-US",
+          "User-Agent": MERCHANT_LIST_USER_AGENT,
+          [CLI_VERSION_HEADER]: CLI_VERSION
+        },
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    }
+    if (!response.ok) {
+      clearTimeout(timeout);
+      discardMerchantListResponse(response);
+      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
+      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    }
+    let rawText;
+    try {
+      rawText = await response.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    } finally {
+      clearTimeout(timeout);
+    }
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw apiError("internal UCP merchant list response is not valid JSON", 502);
+    }
+  }
+  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+}
+function merchantRouteUrl(value) {
+  const rawDomain = nonBlankString(value);
+  if (!rawDomain) {
+    return void 0;
+  }
+  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
+    return void 0;
+  }
+  let domain;
+  try {
+    domain = new URL(rawDomain);
+  } catch {
+    return void 0;
+  }
+  const domainName = canonicalDomain(domain.hostname);
+  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
+    return void 0;
+  }
+  domain.hostname = domainName;
+  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
+    domain.port = "";
+  }
+  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
+}
+function nonBlankString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
-function validateMerchantUrl(value, domainName, source, index) {
-  const rawUrl = stringValue(value);
-  let merchantUrl;
+function stringValue(value) {
+  return typeof value === "string" ? value.trim() : void 0;
+}
+function optionalDescription(value) {
+  return value === null || value === void 0 ? "" : stringValue(value);
+}
+function safeCloneJsonValue(value) {
   try {
-    merchantUrl = new URL(rawUrl ?? "");
+    return cloneJsonValue(value, /* @__PURE__ */ new Set());
   } catch {
-    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+    return void 0;
   }
-  if (merchantUrl.protocol !== "http:" && merchantUrl.protocol !== "https:" || canonicalDomain(merchantUrl.hostname) !== domainName || merchantUrl.username || merchantUrl.password || merchantUrl.hash) {
-    throw validationError(`invalid internal UCP merchant_url at ${source}[${index}]`);
+}
+function cloneJsonValue(value, ancestors) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (!value || typeof value !== "object" || ancestors.has(value)) {
+    return void 0;
+  }
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const result = [];
+      for (const item of value) {
+        const cloned = cloneJsonValue(item, ancestors);
+        if (cloned === void 0) {
+          return void 0;
+        }
+        result.push(cloned);
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return void 0;
+    }
+    const entries = [];
+    for (const [key, item] of Object.entries(value)) {
+      const cloned = cloneJsonValue(item, ancestors);
+      if (cloned === void 0) {
+        return void 0;
+      }
+      entries.push([key, cloned]);
+    }
+    return Object.fromEntries(entries);
+  } finally {
+    ancestors.delete(value);
   }
 }
 function canonicalDomain(value) {
-  return stringValue(value)?.toLowerCase().replace(/\.+$/, "");
+  return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
+}
+function merchantMap(merchants, source) {
+  const merchantIdsByDomain = /* @__PURE__ */ new Map();
+  for (const merchant of merchants) {
+    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
+    if (!domainName) {
+      continue;
+    }
+    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
+    merchantIds.add(merchant.merchant_id);
+    merchantIdsByDomain.set(domainName, merchantIds);
+  }
+  const mapped = new ConflictAwareMerchantMap(source);
+  for (const [domainName, merchantIds] of merchantIdsByDomain) {
+    if (merchantIds.size === 1) {
+      mapped.set(domainName, merchantIds.values().next().value);
+    } else {
+      mapped.addConflict(domainName);
+    }
+  }
+  return mapped;
+}
+var ConflictAwareMerchantMap = class extends Map {
+  source;
+  conflicts = /* @__PURE__ */ new Set();
+  constructor(source) {
+    super();
+    this.source = source;
+  }
+  addConflict(domainName) {
+    this.delete(domainName);
+    this.conflicts.add(domainName);
+  }
+  get(domainName) {
+    this.assertUnambiguous(domainName);
+    return super.get(domainName);
+  }
+  has(domainName) {
+    this.assertUnambiguous(domainName);
+    return super.has(domainName);
+  }
+  assertUnambiguous(domainName) {
+    if (this.conflicts.has(domainName)) {
+      throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
+    }
+  }
+};
+function cloneMerchantList(merchants) {
+  return merchants.map((merchant) => {
+    const cloned = {
+      merchant_id: merchant.merchant_id,
+      merchant_name: merchant.merchant_name,
+      description: merchant.description,
+      domain: merchant.domain
+    };
+    if (Object.hasOwn(merchant, "ext")) {
+      const ext = safeCloneJsonValue(merchant.ext);
+      if (ext !== void 0) {
+        cloned.ext = ext;
+      }
+    }
+    return cloned;
+  });
+}
+function retryableMerchantListStatus(status) {
+  return status === 408 || status === 429 || status >= 500 && status <= 599;
+}
+function discardMerchantListResponse(response) {
+  if (response.body) {
+    void response.body.cancel().catch(() => {
+    });
+  }
+}
+async function waitForMerchantListRetry(deadline) {
+  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
+    return false;
+  }
+  await new Promise((resolve6) => {
+    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
+  });
+  return Date.now() < deadline;
+}
+function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
+  if (error?.name === "AbortError") {
+    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+  }
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
+  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
+}
+function invalidMerchantList(source, reason) {
+  return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
 }
 
 // dist/instruction-context.js
 import { readFile as readFile3 } from "node:fs/promises";
 var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
 var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
+var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
-var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
 var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
   "title",
   "description",
@@ -15142,7 +15388,7 @@ async function requestToken(options2) {
   }
   const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
-  const pendingInstructionId = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
+  const pendingInstructionId2 = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
   return {
     tokenType: "Bearer",
     accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
@@ -15152,7 +15398,7 @@ async function requestToken(options2) {
     customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
     ...agentClientId ? { agentClientId } : {},
     ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
-    ...pendingInstructionId ? { pendingInstructionId } : {},
+    ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
     scope: requiredString2(data.scope, "OAuth response is missing scope")
   };
 }
@@ -19466,6 +19712,149 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
+// dist/pending-instruction.js
+var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+  "CANCELLED",
+  "CANCELED",
+  "EXPIRED",
+  "DECLINED",
+  "FAILED"
+]);
+async function preparePendingInstruction(instructionContext, maxWaitSeconds, dependencies) {
+  const created = await dependencies.createPendingInstruction(instructionContext);
+  const initialStatus = normalizedStatus(created.status);
+  if (initialStatus === "UNKNOWN") {
+    throw apiError("missing status in pending instruction response", 502);
+  }
+  if (initialStatus === "CARD_READY" || initialStatus === "VIC_READY") {
+    return {
+      instructionStatus: initialStatus,
+      state: "CARD_READY",
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false
+    };
+  }
+  const instructionId2 = requiredText(created.instructionId, "missing instructionId in pending instruction response");
+  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus)) {
+    throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
+  }
+  if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus)) {
+    return finalizePendingInstruction({
+      instructionId: instructionId2,
+      initialStatus,
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false
+    }, dependencies);
+  }
+  let bindingUrl;
+  let bindingLinkError;
+  try {
+    bindingUrl = await dependencies.resolveBindingUrl();
+  } catch (error) {
+    rethrowAuthError(error);
+    bindingLinkError = errorMessage2(error);
+  }
+  let timedOut = false;
+  let eventTypes = [];
+  let waitError;
+  let watchReady = false;
+  try {
+    const wait = await dependencies.waitForInstructionActivation(instructionId2, maxWaitSeconds, dependencies.onWatchReady ? () => {
+      watchReady = true;
+      dependencies.onWatchReady?.({
+        instructionId: instructionId2,
+        instructionStatus: initialStatus,
+        ...bindingUrl ? { bindingUrl } : {},
+        ...bindingLinkError ? { bindingLinkError } : {}
+      });
+    } : void 0);
+    timedOut = wait.timedOut;
+    eventTypes = wait.eventTypes;
+  } catch (error) {
+    rethrowAuthError(error);
+    waitError = errorMessage2(error);
+  }
+  return finalizePendingInstruction({
+    instructionId: instructionId2,
+    initialStatus,
+    createdDetail: created.detail,
+    timedOut,
+    eventTypes,
+    watchReady,
+    bindingLinkPresented: watchReady && bindingUrl !== void 0,
+    ...bindingLinkError ? { bindingLinkError } : {},
+    ...waitError ? { waitError } : {}
+  }, dependencies);
+}
+async function finalizePendingInstruction(input, dependencies) {
+  let instruction;
+  let exactGetError;
+  try {
+    instruction = await dependencies.getInstruction(input.instructionId);
+  } catch (error) {
+    rethrowAuthError(error);
+    exactGetError = errorMessage2(error);
+  }
+  if (instruction) {
+    assertExactInstruction(instruction, input.instructionId);
+  }
+  const instructionStatus3 = instruction ? normalizedStatus(instruction.status ?? instruction.state) : input.initialStatus;
+  const state = instructionStatus3 === "ACTIVE" ? "ACTIVE" : isTerminalInstructionStatus(instructionStatus3) ? "TERMINAL" : "PENDING";
+  return {
+    instructionId: input.instructionId,
+    instructionStatus: instructionStatus3,
+    state,
+    ...instruction ? { instruction } : {},
+    createdDetail: input.createdDetail,
+    timedOut: input.timedOut,
+    eventTypes: input.eventTypes,
+    watchReady: input.watchReady,
+    bindingLinkPresented: input.bindingLinkPresented,
+    resumeCommand: dependencies.resumeCommand(input.instructionId),
+    ...input.bindingLinkError ? { bindingLinkError: input.bindingLinkError } : {},
+    ...input.waitError ? { waitError: input.waitError } : {},
+    ...exactGetError ? { exactGetError } : {}
+  };
+}
+function pendingInstructionId(instruction) {
+  return optionalText(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+}
+function isTerminalInstructionStatus(status) {
+  return TERMINAL_INSTRUCTION_STATUSES.has(normalizedStatus(status));
+}
+function assertExactInstruction(instruction, expectedInstructionId) {
+  if (pendingInstructionId(instruction) !== expectedInstructionId) {
+    throw apiError("pending Instruction identity mismatch during exact GET", 502);
+  }
+}
+function requiredText(value, message) {
+  const text = optionalText(value);
+  if (!text) {
+    throw apiError(message, 502);
+  }
+  return text;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function normalizedStatus(value) {
+  return optionalText(value)?.toUpperCase() ?? "UNKNOWN";
+}
+function errorMessage2(error) {
+  return error instanceof Error && error.message.trim() ? error.message.trim() : String(error);
+}
+function rethrowAuthError(error) {
+  if (error instanceof CliError && error.type === "auth_error") {
+    throw error;
+  }
+}
+
 // dist/payment/method-selection.js
 var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
 var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
@@ -22110,6 +22499,7 @@ function isRecord17(value) {
 
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
+var PENDING_INSTRUCTION_PATH = `${INSTRUCTION_PATH2}/pending`;
 var CARD_SETUP_PATH = "/payment-method-setup";
 var CARD_MANAGEMENT_PATH = "/payment-method-modify";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
@@ -22642,15 +23032,14 @@ async function toolInternalUcp(context) {
   switch (nestedCommand) {
     case "get-merchant-list": {
       rejectPublicCatalogAuthenticationFlags(context.args.flags);
-      const hasMerchantListOverride = Boolean(process.env.CLINK_UCP_MERCHANTS_URL?.trim());
-      if (!configuredEnvironment && !hasMerchantListOverride) {
+      if (!configuredEnvironment) {
         throw configError("configured base URL does not match production, sandbox, or test; run wallet init to select an environment");
       }
       const result = await getInternalUcpMerchantList({
-        environment: configuredEnvironment ?? "production",
+        environment: configuredEnvironment,
         timeoutMs: context.globalOptions.timeoutMs
       });
-      printJson(result, context.globalOptions.format);
+      printJson({ merchants: result }, context.globalOptions.format);
       return EXIT_CODES.OK;
     }
     case "get-endpoint": {
@@ -22752,7 +23141,8 @@ async function collectCommandEvents(context, options2) {
     ack: true,
     type: options2.type,
     maxDurationMs,
-    ...options2.expectedResource ? { expectedResource: options2.expectedResource } : {}
+    ...options2.expectedResource ? { expectedResource: options2.expectedResource } : {},
+    ...options2.onReady ? { onReady: options2.onReady } : {}
   });
   return {
     ...result,
@@ -23992,7 +24382,7 @@ function rejectUcpCatalogFlags(flags, subcommand, unsupportedFlags) {
   }
 }
 function rejectPublicCatalogAuthenticationFlags(flags) {
-  const unsupported = ["customer-api-key", "customer-id"].find((name) => name in flags);
+  const unsupported = ["customer-api-key", "customer-id", "credential-token"].find((name) => name in flags);
   if (unsupported) {
     throw validationError(`--${unsupported} is not supported by public Catalog commands`);
   }
@@ -25192,6 +25582,8 @@ async function handleInstructionCommand(subcommand, context) {
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
+    case "prepare":
+      return instructionPrepare(context);
     case "create":
       return instructionCreate(context);
     case "sign-url":
@@ -25227,6 +25619,158 @@ async function instructionBody(context) {
     body.shippingAddress = shippingAddress;
   }
   return body;
+}
+async function instructionPrepare(context) {
+  if (getBooleanFlag(context.args.flags, "no-watch")) {
+    throw validationError("instruction prepare must keep waiting for the exact pending Instruction; --no-watch is not supported");
+  }
+  if ("open" in context.args.flags) {
+    throw validationError("instruction prepare never opens the card binding page; --open is not supported");
+  }
+  const instructionContext = await buildQuickInstructionContext(context.args.flags, "instruction prepare");
+  if (!instructionContext) {
+    throw validationError("instruction prepare requires --title and --mandates or --mandates-file");
+  }
+  const maxWaitSeconds = parseIntFlag(getStringFlag(context.args.flags, "max-wait"), "invalid --max-wait", 1) ?? 900;
+  if (context.globalOptions.dryRun) {
+    const result2 = await requestCommandPendingInstruction(context, instructionContext, true);
+    printSuccess(result2, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const result = await prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, { emitPendingEnvelope: true });
+  printSuccess(pendingInstructionCommandOutput(result), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, options2 = {}) {
+  return preparePendingInstruction(instructionContext, maxWaitSeconds, {
+    createPendingInstruction: async (input) => {
+      const detail = await createCommandPendingInstruction(context, input);
+      const instructionId2 = asOptionalString(detail.instructionId ?? detail.purchaseInstructionId);
+      return {
+        ...instructionId2 ? { instructionId: instructionId2 } : {},
+        status: asRequiredString(detail.status ?? detail.state ?? detail.readiness ?? detail.result, "missing status in pending instruction response"),
+        detail
+      };
+    },
+    getInstruction: (instructionId2) => getCommandInstruction(context, instructionId2),
+    waitForInstructionActivation: async (instructionId2, waitSeconds, onReady) => {
+      const wait = await collectCommandEvents(context, {
+        type: "purchase_instruction.activated",
+        maxWaitSeconds: waitSeconds,
+        expectedResource: {
+          instructionId: instructionId2,
+          purchaseInstructionId: instructionId2
+        },
+        ...onReady ? { onReady } : {}
+      });
+      return {
+        timedOut: wait.timedOut,
+        eventTypes: wait.events.map((event) => event.eventType)
+      };
+    },
+    resolveBindingUrl: async () => {
+      if (options2.bindingResolution?.status === "ready") {
+        return options2.bindingResolution.url;
+      }
+      if (options2.bindingResolution?.status === "failed") {
+        throw options2.bindingResolution.error;
+      }
+      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+      if (prepared.dryRun) {
+        throw apiError("card binding-link unexpectedly produced a dry-run response", 502);
+      }
+      return prepared.url;
+    },
+    onWatchReady: ({ instructionId: instructionId2, instructionStatus: instructionStatus3, bindingUrl, bindingLinkError }) => {
+      process.stderr.write(`Pending Instruction ${instructionId2} is ${instructionStatus3}.
+`);
+      if (bindingUrl) {
+        process.stderr.write(`If no card is bound yet, open this link:
+${bindingUrl}
+`);
+      } else if (bindingLinkError) {
+        process.stderr.write(`Card binding link is unavailable (${bindingLinkError}); continuing to wait for Portal completion.
+`);
+      }
+      process.stderr.write(`Waiting for exact Instruction ${instructionId2} activation...
+`);
+      if (options2.emitPendingEnvelope) {
+        printSuccess({
+          command: "instruction prepare",
+          stage: "instruction_activation",
+          status: "PENDING",
+          instructionId: instructionId2,
+          instructionStatus: instructionStatus3,
+          ...bindingUrl ? { bindingUrl } : {},
+          ...bindingLinkError ? { bindingLinkError } : {},
+          watchReady: true,
+          watchEventType: "purchase_instruction.activated",
+          terminal: false,
+          processRunning: true
+        }, context.globalOptions.format);
+      }
+    },
+    resumeCommand: (instructionId2) => buildInstructionGetResumeCommand(context, instructionId2)
+  });
+}
+async function requestCommandPendingInstruction(context, instructionContext, dryRun) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: PENDING_INSTRUCTION_PATH,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body: instructionContext,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun
+  }));
+  if (isDryRun3(result)) {
+    return result;
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord18(data)) {
+    throw apiError("invalid pending instruction response", 502);
+  }
+  return data;
+}
+async function createCommandPendingInstruction(context, instructionContext) {
+  const result = await requestCommandPendingInstruction(context, instructionContext, false);
+  if ("dryRun" in result) {
+    throw apiError("pending instruction unexpectedly produced a dry-run response", 502);
+  }
+  return result;
+}
+function pendingInstructionCommandOutput(result) {
+  const terminal = result.state !== "PENDING";
+  return {
+    command: "instruction prepare",
+    stage: "instruction_activation",
+    status: result.state === "ACTIVE" ? "ready" : result.state === "CARD_READY" ? "card_ready" : result.state === "TERMINAL" ? result.instructionStatus.toLowerCase() : result.timedOut ? "timeout" : "pending",
+    terminal,
+    instructionId: result.instructionId ?? null,
+    instructionStatus: result.instructionStatus,
+    instruction: result.instruction ?? result.createdDetail,
+    eventTypes: result.eventTypes,
+    watchReady: result.watchReady,
+    bindingLinkPresented: result.bindingLinkPresented,
+    ...result.state === "PENDING" && result.resumeCommand ? {
+      userActionRequired: true,
+      resumeCommand: result.resumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    } : {},
+    ...result.bindingLinkError ? { bindingLinkError: result.bindingLinkError } : {},
+    ...result.waitError ? { waitError: result.waitError } : {},
+    ...result.exactGetError ? { exactGetError: result.exactGetError } : {}
+  };
+}
+function buildInstructionGetResumeCommand(context, instructionId2) {
+  return preserveBaseUrlOverride([
+    `${context.executableName} instruction get`,
+    `--purchase-instruction-id ${quoteShellArgument(instructionId2)}`,
+    `--format ${context.globalOptions.format}`
+  ].join(" "), canonicalWalletOriginForResume(context.runtimeConfig.baseUrl));
 }
 function requireJsonArrayFlag(flags, name) {
   const parsed = parseJsonFlag(requireStringFlag(flags, `missing --${name} (JSON array)`, name), `--${name}`);
@@ -25909,11 +26453,11 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
   if (options2.expectedAmount === void 0 !== (options2.expectedCurrency === void 0)) {
     throw new Error("expectedAmount and expectedCurrency must be provided together");
   }
-  const title = requiredText(raw.title, "instructionContext.title");
+  const title = requiredText2(raw.title, "instructionContext.title");
   if (title.length > 256) {
     throw validationError("instructionContext.title must be at most 256 characters");
   }
-  const description = optionalText(raw.description, "instructionContext.description");
+  const description = optionalText2(raw.description, "instructionContext.description");
   if (description && description.length > 1024) {
     throw validationError("instructionContext.description must be at most 1024 characters");
   }
@@ -25959,26 +26503,26 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
 }
 function normalizeVisaMandate(mandate, index, isRecurring) {
   const field = `instructionContext.mandates[${index}]`;
-  const title = requiredText(mandate.title, `${field}.title`);
-  const description = requiredText(mandate.description, `${field}.description`);
+  const title = requiredText2(mandate.title, `${field}.title`);
+  const description = requiredText2(mandate.description, `${field}.description`);
   const amountLimit = normalizeAmountLimit(mandate.amountLimit, `${field}.amountLimit`);
-  const currencyCode = requiredText(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
+  const currencyCode = requiredText2(mandate.currencyCode, `${field}.currencyCode`).toUpperCase();
   if (!CURRENCY_FORMAT.test(currencyCode)) {
     throw validationError(`${field}.currencyCode must be a three-letter currency code`);
   }
-  const merchantCategoryCode2 = requiredText(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
+  const merchantCategoryCode2 = requiredText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
   if (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000") {
     throw validationError(`${field}.merchantCategoryCode must be a nonzero four-digit MCC`);
   }
-  const preferredMerchantName = optionalText(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
-  const merchantCategory = optionalText(mandate.merchantCategory, `${field}.merchantCategory`);
+  const preferredMerchantName = optionalText2(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
+  const merchantCategory = optionalText2(mandate.merchantCategory, `${field}.merchantCategory`);
   if (preferredMerchantName && merchantCategory) {
     throw validationError(`${field} cannot contain both preferredMerchantName and merchantCategory`);
   }
   if (!isRecurring && mandate.recurringFrequency !== void 0) {
     throw validationError(`${field}.recurringFrequency requires instructionContext.isRecurring=true`);
   }
-  const recurringFrequency = isRecurring ? requiredText(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
+  const recurringFrequency = isRecurring ? requiredText2(mandate.recurringFrequency, `${field}.recurringFrequency`).toUpperCase() : void 0;
   const effectiveUntilTime = optionalUtcDateTime(mandate.effectiveUntilTime, `${field}.effectiveUntilTime`);
   const normalized = {
     ...structuredClone(mandate),
@@ -26010,20 +26554,20 @@ function comparableAmount(value) {
   return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
 }
 function optionalUtcDateTime(value, field) {
-  const text = optionalText(value, field);
+  const text = optionalText2(value, field);
   if (text && !UTC_DATETIME_FORMAT2.test(text)) {
     throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
   }
   return text;
 }
-function requiredText(value, field) {
-  const text = optionalText(value, field);
+function requiredText2(value, field) {
+  const text = optionalText2(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText(value, field) {
+function optionalText2(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26159,7 +26703,7 @@ function normalizeVisaCommerceContext(raw) {
   if (!isRecord20(raw)) {
     throw validationError("commerce context must be a JSON object");
   }
-  const mode = requiredText2(raw.mode, "mode").toLowerCase();
+  const mode = requiredText3(raw.mode, "mode").toLowerCase();
   const context = mode === "prepare" ? normalizePrepareContext(raw) : mode === "purchase" ? normalizePurchaseRunContext(raw, "purchase") : mode === "catalog_purchase" ? normalizePurchaseRunContext(raw, "catalog_purchase") : (() => {
     throw validationError('mode must be "prepare", "purchase", or "catalog_purchase"');
   })();
@@ -26205,11 +26749,11 @@ function normalizePrepareContext(raw) {
   if (raw.instructionContext !== void 0) {
     throw validationError("prepare mode does not accept instructionContext because it cannot create an Instruction");
   }
-  const target = requiredText2(raw.target, "target").toLowerCase();
+  const target = requiredText3(raw.target, "target").toLowerCase();
   if (target !== "login" && target !== "visa_card_ready") {
     throw validationError('prepare mode target must be "login" or "visa_card_ready"');
   }
-  const requestText = optionalText2(raw.requestText, "requestText");
+  const requestText = optionalText3(raw.requestText, "requestText");
   return {
     mode: "prepare",
     target,
@@ -26223,7 +26767,7 @@ function normalizePurchaseRunContext(raw, mode) {
   }
   assertOnlyFields(raw, PURCHASE_FIELDS, "purchase context");
   const environment = normalizeVisaCommerceEnvironment(raw.environment);
-  const requestText = requiredText2(raw.requestText, "requestText");
+  const requestText = requiredText3(raw.requestText, "requestText");
   const programCode = optionalProgramCode(raw.program);
   const selection = requireObject(raw.selection, "selection");
   const expected = requireObject(raw.expected, "expected");
@@ -26234,14 +26778,14 @@ function normalizePurchaseRunContext(raw, mode) {
   if (isVisaProgramUrl(merchantUrl)) {
     throw validationError("selection.merchantUrl must be the actual merchant URL, not a Visa/VSRP URL");
   }
-  const productId2 = requiredText2(selection.productId, "selection.productId");
-  const productQuery = optionalText2(selection.productQuery, "selection.productQuery");
+  const productId2 = requiredText3(selection.productId, "selection.productId");
+  const productQuery = optionalText3(selection.productQuery, "selection.productQuery");
   const quantity = requiredPositiveInteger(selection.quantity, "selection.quantity");
-  const merchantId = optionalText2(selection.merchantId, "selection.merchantId");
+  const merchantId = optionalText3(selection.merchantId, "selection.merchantId");
   const endpoint = optionalHttpUrl(selection.endpoint, "selection.endpoint");
-  const channelType = optionalText2(selection.channelType, "selection.channelType")?.toLowerCase();
-  const storeId = optionalText2(selection.storeId, "selection.storeId");
-  const catalogQuery = optionalText2(selection.catalogQuery, "selection.catalogQuery");
+  const channelType = optionalText3(selection.channelType, "selection.channelType")?.toLowerCase();
+  const storeId = optionalText3(selection.storeId, "selection.storeId");
+  const catalogQuery = optionalText3(selection.catalogQuery, "selection.catalogQuery");
   const catalogEnvironment = optionalCatalogEnvironment(selection.catalogEnvironment);
   const catalogLanguage = optionalCatalogLanguage(selection.catalogLanguage);
   if (Boolean(channelType) !== Boolean(storeId)) {
@@ -26263,14 +26807,14 @@ function normalizePurchaseRunContext(raw, mode) {
     }
   }
   const buyer = normalizeCommerceBuyer(raw.buyer, mode === "catalog_purchase" && channelType === "eats365");
-  const merchantName = requiredText2(expected.merchantName, "expected.merchantName");
-  const itemTitle = requiredText2(expected.itemTitle, "expected.itemTitle");
+  const merchantName = requiredText3(expected.merchantName, "expected.merchantName");
+  const itemTitle = requiredText3(expected.itemTitle, "expected.itemTitle");
   const totalPrice = normalizeMajorAmount(expected.amount, "expected.amount");
-  const currency = requiredText2(expected.currency, "expected.currency").toUpperCase();
+  const currency = requiredText3(expected.currency, "expected.currency").toUpperCase();
   if (!CURRENCY_FORMAT2.test(currency)) {
     throw validationError("expected.currency must be a three-letter currency code");
   }
-  const availabilityText = mode === "catalog_purchase" ? requiredText2(expected.availability, "expected.availability") : optionalText2(expected.availability, "expected.availability");
+  const availabilityText = mode === "catalog_purchase" ? requiredText3(expected.availability, "expected.availability") : optionalText3(expected.availability, "expected.availability");
   const authorizedAvailability = availabilityText ? normalizeCatalogAvailability(availabilityText) : void 0;
   const fulfillmentType = mode === "catalog_purchase" ? normalizeFulfillmentType(raw.fulfillmentType) : optionalFulfillmentType(raw.fulfillmentType);
   if (typeof raw.digitalDeliveryExpected !== "boolean") {
@@ -26285,7 +26829,7 @@ function normalizePurchaseRunContext(raw, mode) {
   const instructionContext = normalizedInstruction.context;
   const merchantCategoryCode2 = normalizedInstruction.merchantCategoryCodes[0];
   const price = divideMajorAmount(totalPrice, quantity, currency);
-  const assertedCategory = optionalText2(raw.assertedCategory, "assertedCategory");
+  const assertedCategory = optionalText3(raw.assertedCategory, "assertedCategory");
   const shippingAddress = optionalObject2(raw.shippingAddress, "shippingAddress");
   if (fulfillmentType === "PHYSICAL_GOODS_REQUIRES_SHIPPING" && !shippingAddress) {
     throw validationError("shippingAddress is required when fulfillmentType is PHYSICAL_GOODS_REQUIRES_SHIPPING");
@@ -26374,10 +26918,10 @@ function normalizeCommerceBuyer(value, required) {
   }
   const buyer = requireObject(value, "buyer");
   assertOnlyFields(buyer, BUYER_FIELDS, "buyer");
-  const firstName = optionalText2(buyer.first_name, "buyer.first_name");
-  const lastName = optionalText2(buyer.last_name, "buyer.last_name");
-  const email = optionalText2(buyer.email, "buyer.email");
-  const phoneNumber = optionalText2(buyer.phone_number, "buyer.phone_number");
+  const firstName = optionalText3(buyer.first_name, "buyer.first_name");
+  const lastName = optionalText3(buyer.last_name, "buyer.last_name");
+  const email = optionalText3(buyer.email, "buyer.email");
+  const phoneNumber = optionalText3(buyer.phone_number, "buyer.phone_number");
   if (required && (!firstName || !lastName || !phoneNumber)) {
     throw validationError("Eats365 catalog purchase requires buyer first_name, last_name, and phone_number");
   }
@@ -26398,10 +26942,10 @@ function optionalProgramCode(value) {
   }
   const program2 = requireObject(value, "program");
   assertOnlyFields(program2, /* @__PURE__ */ new Set(["code"]), "program");
-  return requiredText2(program2.code, "program.code");
+  return requiredText3(program2.code, "program.code");
 }
 function normalizeFulfillmentType(value) {
-  const fulfillmentType = requiredText2(value, "fulfillmentType").toUpperCase();
+  const fulfillmentType = requiredText3(value, "fulfillmentType").toUpperCase();
   if (fulfillmentType !== "NO_SHIPPING_REQUIRED" && fulfillmentType !== "PHYSICAL_GOODS_REQUIRES_SHIPPING") {
     throw validationError("fulfillmentType must be NO_SHIPPING_REQUIRED or PHYSICAL_GOODS_REQUIRES_SHIPPING");
   }
@@ -26429,7 +26973,7 @@ function normalizeCatalogAvailability(value) {
   return normalized;
 }
 function optionalCatalogEnvironment(value) {
-  const environment = optionalText2(value, "selection.catalogEnvironment")?.toLowerCase();
+  const environment = optionalText3(value, "selection.catalogEnvironment")?.toLowerCase();
   if (!environment) {
     return void 0;
   }
@@ -26439,7 +26983,7 @@ function optionalCatalogEnvironment(value) {
   return environment === "uat" ? "sandbox" : environment;
 }
 function optionalCatalogLanguage(value) {
-  const language = optionalText2(value, "selection.catalogLanguage");
+  const language = optionalText3(value, "selection.catalogLanguage");
   if (!language) {
     return void 0;
   }
@@ -26528,7 +27072,7 @@ function normalizeJsonValue(value) {
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalizeJsonValue(value[key])]));
 }
 function normalizeVisaCommerceEnvironment(value) {
-  const environment = requiredText2(value, "environment").toLowerCase();
+  const environment = requiredText3(value, "environment").toLowerCase();
   if (environment !== "uat" && environment !== "sandbox" && environment !== "test" && environment !== "production") {
     throw validationError("environment must be uat, sandbox, test, or production");
   }
@@ -26594,14 +27138,14 @@ function requiredPositiveInteger(value, field) {
   }
   return value;
 }
-function requiredText2(value, field) {
-  const text = optionalText2(value, field);
+function requiredText3(value, field) {
+  const text = optionalText3(value, field);
   if (!text) {
     throw validationError(`${field} is required and cannot be blank`);
   }
   return text;
 }
-function optionalText2(value, field) {
+function optionalText3(value, field) {
   if (value === void 0 || value === null) {
     return void 0;
   }
@@ -26618,7 +27162,7 @@ function requiredHttpUrl(value, field) {
   return url;
 }
 function optionalHttpUrl(value, field) {
-  const text = optionalText2(value, field);
+  const text = optionalText3(value, field);
   if (!text) {
     return void 0;
   }
@@ -26798,13 +27342,13 @@ async function resolveExternalProduct(input, dependencies) {
     currency: parsed.currency,
     amountMinor: BigInt(item.unitPriceMinor),
     quantity: input.quantity,
-    merchantName: requiredText3(parsed.merchantName, "parsed merchant is missing name")
+    merchantName: requiredText4(parsed.merchantName, "parsed merchant is missing name")
   });
 }
 function resolveInternalProductDetail(payload, selectedProductId, input, internal) {
   const product = catalogProduct(payload);
-  const parentId = requiredText3(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
-  const parentTitle = requiredText3(product.title ?? product.name, "UCP Catalog product is missing title");
+  const parentId = requiredText4(product.id ?? product.productId ?? product.product_id, "UCP Catalog product is missing id");
+  const parentTitle = requiredText4(product.title ?? product.name, "UCP Catalog product is missing title");
   const variants = productVariants(product);
   let selected;
   if (variants.length === 0) {
@@ -26976,8 +27520,8 @@ function productVariants(product) {
 }
 function normalizeCandidate(product) {
   return {
-    productId: requiredText3(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
-    title: requiredText3(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
+    productId: requiredText4(product.id ?? product.itemId ?? product.item_id ?? product.productId ?? product.product_id ?? product.sku, "UCP Catalog product is missing id"),
+    title: requiredText4(product.title ?? product.name ?? product.display_name ?? product.description, "UCP Catalog product is missing title"),
     available: productAvailable(product)
   };
 }
@@ -27077,7 +27621,7 @@ function optionalMoney(value, source, fallbackCurrency) {
   }
   const price = requireRecord(value, `${source} must be an object`);
   const amountMinor = minorUnits(price.amount ?? price.value ?? price.minimum_unit_amount ?? price.minimumUnitAmount, `${source}.amount must be a non-negative minor-unit integer`);
-  const currency = requiredText3(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
+  const currency = requiredText4(price.currency ?? price.currencyCode ?? fallbackCurrency, `${source} is missing currency`).toUpperCase();
   return { amountMinor, currency };
 }
 function optionalMoneyRange(value, fallbackCurrency) {
@@ -27116,7 +27660,7 @@ function safeMinorUnits(value) {
   }
   return Number(value);
 }
-function requiredText3(value, message) {
+function requiredText4(value, message) {
   const text = normalizedText2(value);
   if (!text) {
     throw validationError(message);
@@ -27240,7 +27784,7 @@ async function discoverProvider(route, input, dependencies) {
         if (!product) {
           continue;
         }
-        const productId2 = requiredText4(product.product.id ?? product.product.productId ?? product.product.product_id, "provider Catalog product is missing id");
+        const productId2 = requiredText5(product.product.id ?? product.product.productId ?? product.product.product_id, "provider Catalog product is missing id");
         const fingerprint = JSON.stringify(product.product);
         const previous = seenProducts.get(productId2);
         if (previous === fingerprint) {
@@ -27298,7 +27842,7 @@ function providerCatalogPage(payload) {
   }
   const products = root.products.map((product) => requireRecord2(product, "provider Catalog contains an invalid product"));
   const pagination = root.pagination === void 0 ? {} : requireRecord2(root.pagination, "provider Catalog pagination must be an object");
-  const nextCursor = optionalText3(pagination.next_cursor ?? pagination.nextCursor ?? root.next_cursor ?? root.nextCursor);
+  const nextCursor = optionalText4(pagination.next_cursor ?? pagination.nextCursor ?? root.next_cursor ?? root.nextCursor);
   const rawHasNext = pagination.has_next_page ?? pagination.hasNextPage ?? root.has_next_page ?? root.hasNextPage;
   if (rawHasNext !== void 0 && typeof rawHasNext !== "boolean") {
     throw validationError("provider Catalog has_next_page must be a boolean");
@@ -27314,8 +27858,8 @@ function providerCatalogPage(payload) {
 }
 function orderableProviderProduct(rawProduct, route) {
   const product = structuredClone(rawProduct);
-  requiredText4(product.id ?? product.productId ?? product.product_id, "provider Catalog product is missing id");
-  requiredText4(product.title ?? product.name, "provider Catalog product is missing title");
+  requiredText5(product.id ?? product.productId ?? product.product_id, "provider Catalog product is missing id");
+  requiredText5(product.title ?? product.name, "provider Catalog product is missing title");
   let candidates;
   if (product.variants === void 0 || product.variants === null) {
     candidates = [product];
@@ -27328,8 +27872,8 @@ function orderableProviderProduct(rawProduct, route) {
   }
   const orderableItems = [];
   for (const candidate of candidates) {
-    const candidateId = requiredText4(candidate.id ?? candidate.productId ?? candidate.product_id, "provider Catalog variant is missing id");
-    const title = requiredText4(candidate.title ?? candidate.name, "provider Catalog variant is missing title");
+    const candidateId = requiredText5(candidate.id ?? candidate.productId ?? candidate.product_id, "provider Catalog variant is missing id");
+    const title = requiredText5(candidate.title ?? candidate.name, "provider Catalog variant is missing title");
     const availability = orderableAvailability(candidate);
     if (!availability) {
       continue;
@@ -27372,7 +27916,7 @@ function orderableAvailability(value) {
   if (availability.available !== true) {
     return void 0;
   }
-  const status = requiredText4(availability.status, "provider Catalog variant availability is missing status").toUpperCase();
+  const status = requiredText5(availability.status, "provider Catalog variant availability is missing status").toUpperCase();
   return ORDERABLE_AVAILABILITY.has(status) ? status : void 0;
 }
 function structuredPrice(value) {
@@ -27381,7 +27925,7 @@ function structuredPrice(value) {
   if (!(typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0) && !(typeof amount === "string" && /^\d+$/u.test(amount.trim()))) {
     throw validationError("orderable provider Catalog price amount must be non-negative minor units");
   }
-  const currency = requiredText4(price.currency ?? price.currencyCode ?? price.currency_code, "orderable provider Catalog price is missing currency").toUpperCase();
+  const currency = requiredText5(price.currency ?? price.currencyCode ?? price.currency_code, "orderable provider Catalog price is missing currency").toUpperCase();
   if (!CURRENCY_PATTERN.test(currency)) {
     throw validationError("orderable provider Catalog price currency must be a three-letter code");
   }
@@ -27420,14 +27964,14 @@ function normalizeInput2(input) {
     language
   };
 }
-function requiredText4(value, message) {
-  const text = optionalText3(value);
+function requiredText5(value, message) {
+  const text = optionalText4(value);
   if (!text) {
     throw validationError(message);
   }
   return text;
 }
-function optionalText3(value) {
+function optionalText4(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 function requireRecord2(value, message) {
@@ -27640,7 +28184,7 @@ function normalizeBenefitTokenResult(body, status = 200) {
     const expiresIn = positiveNumber2(pick(source, "expires_in", "expiresIn"));
     const refreshExpiresIn = positiveNumber2(pick(source, "refresh_expires_in", "refreshExpiresIn"));
     const email = optionalString3(source.email)?.trim();
-    const pendingInstructionId = optionalString3(pick(source, "pending_instruction_id", "pendingInstructionId"));
+    const pendingInstructionId2 = optionalString3(pick(source, "pending_instruction_id", "pendingInstructionId"));
     const oauthMode = parseBenefitOAuthMode(pick(source, "oauth_mode", "oauthMode"));
     const customerCreated = optionalBoolean(pick(source, "customer_created", "customerCreated"));
     const activationDriver = parseBenefitActivationDriver(pick(source, "activation_driver", "activationDriver"));
@@ -27658,7 +28202,7 @@ function normalizeBenefitTokenResult(body, status = 200) {
         customerId,
         agentClientId,
         visaRegistrationStatus,
-        ...pendingInstructionId ? { pendingInstructionId } : {},
+        ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
         ...oauthMode ? { oauthMode } : {},
         ...customerCreated !== void 0 ? { customerCreated } : {},
         ...activationDriver ? { activationDriver } : {},
@@ -27667,7 +28211,7 @@ function normalizeBenefitTokenResult(body, status = 200) {
       }
     };
   }
-  const normalized = normalizedStatus(pick(source, "error", "status", "state", "error_code", "errorCode", "message", "msg", "code"));
+  const normalized = normalizedStatus2(pick(source, "error", "status", "state", "error_code", "errorCode", "message", "msg", "code"));
   const interval = positiveNumber2(pick(source, "interval", "retry_after", "retryAfter"));
   if (normalized === "authorization_pending" || normalized === "pending") {
     return interval ? { status: "pending", interval } : { status: "pending" };
@@ -27708,7 +28252,7 @@ function normalizeVsraDeviceTokenResult(body) {
   if (apiToken) {
     return { status: "success", apiToken };
   }
-  const error = normalizedStatus(source.error ?? nestedData.error ?? source.code ?? source.status);
+  const error = normalizedStatus2(source.error ?? nestedData.error ?? source.code ?? source.status);
   const interval = positiveNumber2(source.interval ?? source.retry_after ?? source.retryAfter);
   if (error === "authorization_pending") {
     return interval ? { status: "pending", interval } : { status: "pending" };
@@ -27853,7 +28397,7 @@ function positiveNumber2(value) {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) && number > 0 ? number : void 0;
 }
-function normalizedStatus(value) {
+function normalizedStatus2(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/gu, "_");
 }
 function decodeRepeatedly(value) {
@@ -27999,7 +28543,7 @@ var LEGAL_TRANSITIONS = {
 function defaultVisaState() {
   return {
     fsmState: "IDLE",
-    activeMarket: "cn",
+    activeMarket: "hk",
     vsraTokens: {}
   };
 }
@@ -29255,7 +29799,7 @@ async function getVisaProgramDetail(options2) {
   return isDryRun5(response) ? response : requireVsraSuccess(response, "Visa Program detail");
 }
 function parseVisaMarket(value, storedConfig) {
-  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "cn");
+  return normalizeVisaMarket(value ?? normalizeStoredVisaState(storedConfig.visa)?.activeMarket ?? "hk");
 }
 function normalizeVisaLocale(value) {
   const locale = String(value ?? "zh-CN").trim().replaceAll("_", "-").toLowerCase();
@@ -29855,6 +30399,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
   assertCommerceEnvironment(context, commerceContext.environment, loginBaseUrl);
   const loginDependencies = createVisaBenefitLoginCliDependencies(context, commerceContext.environment);
   let preparedCardSetup;
+  let bindingResolution;
   return {
     inspectLogin: loginDependencies.inspectLogin,
     login: async (instructionContext) => {
@@ -29865,33 +30410,28 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
       };
     },
     refreshCards: async () => {
-      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
-      if (prepared.dryRun) {
-        throw apiError("card refresh unexpectedly produced a dry-run response");
+      try {
+        const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
+        if (prepared.dryRun) {
+          throw apiError("card refresh unexpectedly produced a dry-run response");
+        }
+        bindingResolution = { status: "ready", url: prepared.url };
+        preparedCardSetup = {
+          url: prepared.url,
+          cards: normalizeCards(prepared.data.paymentMethodsVoList)
+        };
+        return preparedCardSetup.cards;
+      } catch (error) {
+        bindingResolution = { status: "failed", error };
+        throw error;
       }
-      preparedCardSetup = {
-        url: prepared.url,
-        cards: normalizeCards(prepared.data.paymentMethodsVoList)
-      };
-      return preparedCardSetup.cards;
     },
-    prepareCardSetup: async () => {
-      if (preparedCardSetup) {
-        return preparedCardSetup;
-      }
-      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
-      if (prepared.dryRun) {
-        throw apiError("card setup unexpectedly produced a dry-run response");
-      }
-      return {
-        url: prepared.url,
-        cards: normalizeCards(prepared.data.paymentMethodsVoList)
-      };
-    },
+    preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
+      ...bindingResolution ? { bindingResolution } : {}
+    }),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
-    openUserAction: async (url, label) => {
-      const action = label === "card_setup" ? "card setup" : label === "vic_registration" ? "Visa VIC registration" : "Purchase Instruction authorization";
-      process.stderr.write(`Complete ${action} in your browser:
+    openUserAction: async (url) => {
+      process.stderr.write(`Complete Purchase Instruction authorization in your browser:
 ${url}
 `);
       return openPortalWithBrowserHandoff(context, url);
@@ -29921,7 +30461,7 @@ ${url}
         ...instructionContext.isRecurring ? { isRecurring: true } : {},
         ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
       });
-      const instructionId2 = optionalText4(detail.instructionId ?? detail.purchaseInstructionId);
+      const instructionId2 = optionalText5(detail.instructionId ?? detail.purchaseInstructionId);
       if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -29973,13 +30513,13 @@ ${event.url}
       });
       applyStoredConfig(context, storedConfig);
       const detail = isRecord26(result) ? result : { status: "unknown" };
-      const pendingInstructionId = optionalText4(detail.pendingInstructionId);
-      const oauthMode = optionalText4(detail.oauthMode);
+      const pendingInstructionId2 = optionalText5(detail.pendingInstructionId);
+      const oauthMode = optionalText5(detail.oauthMode);
       const customerCreated = optionalBoolean2(detail.customerCreated);
-      const activationDriver = optionalText4(detail.activationDriver);
+      const activationDriver = optionalText5(detail.activationDriver);
       return {
         ready: detail.status === "ready",
-        ...pendingInstructionId ? { pendingInstructionId } : {},
+        ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
         ...oauthMode ? { oauthMode } : {},
         ...customerCreated !== void 0 ? { customerCreated } : {},
         ...activationDriver ? { activationDriver } : {},
@@ -30305,10 +30845,10 @@ function verifyInternalProduct(payload, purchase, internalMerchantId, requireMer
 }
 function assertInternalCatalogMerchant(product, variant, internalMerchantId, frozenMerchantName) {
   const merchantIds = [
-    optionalText4(variant?.merchantId),
-    optionalText4(variant?.merchant_id),
-    optionalText4(product.merchantId),
-    optionalText4(product.merchant_id)
+    optionalText5(variant?.merchantId),
+    optionalText5(variant?.merchant_id),
+    optionalText5(product.merchantId),
+    optionalText5(product.merchant_id)
   ].filter((value) => value !== void 0);
   if (merchantIds.some((merchantId) => merchantId !== internalMerchantId)) {
     throw validationError("current Catalog merchant ID differs from the resolved internal merchant");
@@ -30327,7 +30867,7 @@ function internalCatalogMerchantName(value) {
   }
   const merchant = isRecord26(value.merchant) ? value.merchant : void 0;
   const seller = isRecord26(value.seller) ? value.seller : void 0;
-  return optionalText4(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
+  return optionalText5(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
 }
 function internalProductVariants(product) {
   if (product.variants === void 0 || product.variants === null) {
@@ -30572,7 +31112,7 @@ function normalizeCards(value) {
   }
   return value.map((card) => ({ ...card }));
 }
-function optionalText4(value) {
+function optionalText5(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function optionalBoolean2(value) {
@@ -30621,7 +31161,7 @@ function deepFreeze2(value) {
 
 // dist/visa/commerce-login.js
 var QUICK_INSTRUCTION_WAIT_SECONDS = 300;
-var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+var TERMINAL_INSTRUCTION_STATUSES2 = /* @__PURE__ */ new Set([
   "CANCELLED",
   "CANCELED",
   "EXPIRED",
@@ -30684,11 +31224,11 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
   if (!initialized.ready) {
     throw authError("visa init exited without status=ready");
   }
-  const pendingInstructionId = initialized.pendingInstructionId;
-  const quickActivationEligible = initialized.oauthMode === "REGISTER" && initialized.customerCreated === true && initialized.activationDriver === "PORTAL_AUTO_CARD_SETUP" && Boolean(pendingInstructionId);
-  const instruction = quickActivationEligible && pendingInstructionId ? await resolveCurrentQuickInstruction(pendingInstructionId, dependencies) : void 0;
+  const pendingInstructionId2 = initialized.pendingInstructionId;
+  const quickActivationEligible = initialized.oauthMode === "REGISTER" && initialized.customerCreated === true && initialized.activationDriver === "PORTAL_AUTO_CARD_SETUP" && Boolean(pendingInstructionId2);
+  const instruction = quickActivationEligible && pendingInstructionId2 ? await resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) : void 0;
   const instructionReady = instruction?.instructionReady ?? false;
-  const instructionTerminal = instruction ? instructionReady || isTerminalInstructionStatus(instruction.instructionStatus) : true;
+  const instructionTerminal = instruction ? instructionReady || isTerminalInstructionStatus2(instruction.instructionStatus) : true;
   return {
     command: "visa commerce-login",
     operation: "visa-commerce-login",
@@ -30702,7 +31242,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     instructionId: instruction?.instructionId ?? null,
     instructionStatus: instruction?.instructionStatus ?? null,
     instructionReady,
-    pendingInstructionId: instruction ? pendingInstructionId : null,
+    pendingInstructionId: instruction ? pendingInstructionId2 : null,
     ...instruction?.eventTypes.length ? { eventTypes: instruction.eventTypes } : {},
     ...instruction?.resumeCommand ? { resumeCommand: instruction.resumeCommand } : {},
     manualOpenUrl: initialized.browserLaunch?.status === "launched" ? null : initialized.manualOpenUrl ?? null,
@@ -30710,30 +31250,30 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     detail: initialized.detail
   };
 }
-async function resolveCurrentQuickInstruction(pendingInstructionId, dependencies) {
+async function resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) {
   let instruction;
   let timedOut = false;
   let eventTypes = [];
   let resumeCommand;
   try {
-    instruction = await dependencies.getInstruction(pendingInstructionId);
+    instruction = await dependencies.getInstruction(pendingInstructionId2);
   } catch {
   }
   if (instruction) {
-    assertExactInstruction(instruction, pendingInstructionId);
+    assertExactInstruction2(instruction, pendingInstructionId2);
   }
   const initialStatus = instruction ? instructionStatus(instruction) : void 0;
-  if (!instruction || initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus ?? "UNKNOWN")) {
-    const wait = await dependencies.waitForInstructionActivation(pendingInstructionId, QUICK_INSTRUCTION_WAIT_SECONDS);
+  if (!instruction || initialStatus !== "ACTIVE" && !isTerminalInstructionStatus2(initialStatus ?? "UNKNOWN")) {
+    const wait = await dependencies.waitForInstructionActivation(pendingInstructionId2, QUICK_INSTRUCTION_WAIT_SECONDS);
     timedOut = wait.timedOut;
     eventTypes = wait.eventTypes;
     resumeCommand = wait.resumeCommand;
-    instruction = await dependencies.getInstruction(pendingInstructionId);
-    assertExactInstruction(instruction, pendingInstructionId);
+    instruction = await dependencies.getInstruction(pendingInstructionId2);
+    assertExactInstruction2(instruction, pendingInstructionId2);
   }
   const status = instructionStatus(instruction);
   return {
-    instructionId: pendingInstructionId,
+    instructionId: pendingInstructionId2,
     instructionStatus: status,
     instructionReady: status === "ACTIVE",
     timedOut,
@@ -30741,22 +31281,22 @@ async function resolveCurrentQuickInstruction(pendingInstructionId, dependencies
     ...resumeCommand ? { resumeCommand } : {}
   };
 }
-function isTerminalInstructionStatus(status) {
-  return TERMINAL_INSTRUCTION_STATUSES.has(status);
+function isTerminalInstructionStatus2(status) {
+  return TERMINAL_INSTRUCTION_STATUSES2.has(status);
 }
-function assertExactInstruction(instruction, expectedInstructionId) {
+function assertExactInstruction2(instruction, expectedInstructionId) {
   if (!instruction) {
     throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
   }
-  const observedInstructionId = optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  const observedInstructionId = optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
   if (observedInstructionId !== expectedInstructionId) {
     throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
   }
 }
 function instructionStatus(instruction) {
-  return optionalText5(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
+  return optionalText6(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
 }
-function optionalText5(value) {
+function optionalText6(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 
@@ -31156,7 +31696,7 @@ async function runVisaCommerce(context, options2, dependencies) {
   } catch (error) {
     return workflowFailure("product_resolution", error);
   }
-  const cardResult = await ensureVisaCardReady(dependencies, void 0, maxWaitSeconds);
+  const cardResult = await ensureVisaCardReady(dependencies, context, maxWaitSeconds);
   if (!cardResult.ready) {
     return {
       command: "visa commerce-run",
@@ -31166,16 +31706,19 @@ async function runVisaCommerce(context, options2, dependencies) {
   }
   const card = cardResult.card;
   const paymentInstrumentId = card.paymentInstrumentId;
-  const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
-  if (!regular.instruction) {
-    return {
-      command: "visa commerce-run",
-      ...regular.result,
-      paymentInstrumentId,
-      card: safeCard(cardResult.card)
-    };
+  let instruction = cardResult.instruction;
+  if (!instruction) {
+    const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
+    if (!regular.instruction) {
+      return {
+        command: "visa commerce-run",
+        ...regular.result,
+        paymentInstrumentId,
+        card: safeCard(cardResult.card)
+      };
+    }
+    instruction = regular.instruction;
   }
-  const instruction = regular.instruction;
   try {
     resolvedPurchase = await dependencies.resolvePurchase(resolvedPurchase.purchaseContext);
   } catch (error) {
@@ -31327,12 +31870,12 @@ function buildDryRunPlan(context, options2) {
     steps: [
       {
         stage: "card",
-        effect: "reuse an enabled Visa or bind one; require same-card VIC readiness",
+        effect: "reuse a VIC-ready Visa, or create/reuse one no-card PENDING Instruction and wait for Portal-owned card binding/VIC",
         authority: "visaRegistrationSucceeded=true"
       },
       {
         stage: "instruction",
-        effect: "select the closest sufficient ACTIVE Instruction, exact-GET it, or create one exact regular Instruction",
+        effect: "use the exact Portal-activated PENDING Instruction, or select/create one regular Instruction for an already-ready card",
         amountLimit: context.purchaseContext.totalPrice
       },
       {
@@ -31354,68 +31897,32 @@ function buildDryRunPlan(context, options2) {
     ]
   };
 }
-async function ensureVisaCardReady(dependencies, requestedPaymentInstrumentId, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS) {
+async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS) {
   let cards;
   try {
     cards = await dependencies.refreshCards();
   } catch (error) {
+    if (purchaseContext) {
+      return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
+    }
     return {
       ready: false,
       ...workflowFailure("card_refresh", error)
     };
   }
-  let selection = selectVisaCard(cards, requestedPaymentInstrumentId);
+  const selection = selectVisaCard(cards);
   if (selection.action === "add") {
-    let setup;
-    let browserLaunch2;
-    try {
-      setup = await dependencies.prepareCardSetup();
-      browserLaunch2 = await dependencies.openUserAction(setup.url, "card_setup");
-    } catch (error) {
+    if (!purchaseContext) {
       return {
         ready: false,
-        ...workflowFailure("card_setup", error)
+        stage: "card",
+        status: "pending_instruction_required",
+        terminal: true,
+        userActionRequired: false,
+        reason: "visa_card_setup_requires_a_frozen_purchase_instruction_context"
       };
     }
-    let wait2;
-    try {
-      wait2 = await dependencies.waitForEvents({
-        type: "payment_method.added,payment_method.update,vic_device.binding_succeeded",
-        maxWaitSeconds
-      });
-    } catch (error) {
-      return {
-        ready: false,
-        ...workflowFailure("card_binding_wait", error, {
-          ...browserActionOutput(setup.url, browserLaunch2)
-        })
-      };
-    }
-    try {
-      cards = await dependencies.refreshCards();
-    } catch (error) {
-      return {
-        ready: false,
-        ...workflowFailure("card_post_binding_refresh", error, {
-          eventTypes: wait2.events.map((event) => event.eventType),
-          ...browserActionOutput(setup.url, browserLaunch2)
-        })
-      };
-    }
-    const observedPaymentInstrumentIds = wait2.events.filter((event) => event.eventType === "payment_method.added" || event.eventType === "payment_method.update" || event.eventType === "vic_device.binding_succeeded").map(eventPaymentInstrumentId).filter((value) => Boolean(value));
-    const boundVisaId = observedPaymentInstrumentIds.find((paymentInstrumentId2) => cards.some((card) => card.paymentInstrumentId === paymentInstrumentId2 && cardIsVisa(card)));
-    selection = selectVisaCard(cards, boundVisaId);
-    if (selection.action === "add") {
-      return {
-        ready: false,
-        stage: "card_binding",
-        status: wait2.timedOut ? "timeout" : "pending",
-        terminal: false,
-        userActionRequired: true,
-        ...browserActionOutput(setup.url, browserLaunch2),
-        ...wait2.resumeCommand ? { resumeCommand: wait2.resumeCommand } : {}
-      };
-    }
+    return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
   }
   if (selection.action === "select") {
     return {
@@ -31436,63 +31943,137 @@ async function ensureVisaCardReady(dependencies, requestedPaymentInstrumentId, m
       reason: selection.reason
     };
   }
-  if (cardVicReady(selection.card)) {
-    return { ready: true, card: selection.card };
-  }
-  const paymentInstrumentId = selection.card.paymentInstrumentId;
-  const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId);
-  let browserLaunch;
+  return { ready: true, card: selection.card };
+}
+async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSeconds) {
+  let pending;
   try {
-    browserLaunch = await dependencies.openUserAction(passkeyUrl, "vic_registration");
-  } catch (error) {
-    return {
-      ready: false,
-      ...workflowFailure("vic_authorization", error, {
-        paymentInstrumentId,
-        manualOpenUrl: passkeyUrl
-      })
-    };
-  }
-  let wait;
-  try {
-    wait = await dependencies.waitForEvents({
-      type: "payment_method.update,vic_device.binding_succeeded",
-      maxWaitSeconds,
-      expectedResource: { paymentInstrumentId }
+    pending = await dependencies.preparePendingInstruction({
+      instructionContext: context.instructionContext,
+      maxWaitSeconds
     });
   } catch (error) {
     return {
       ready: false,
-      ...workflowFailure("vic_wait", error, {
-        paymentInstrumentId,
-        ...browserActionOutput(passkeyUrl, browserLaunch)
-      })
+      ...workflowFailure("pending_instruction_prepare", error)
     };
   }
+  if (pending.state === "CARD_READY") {
+    let cards2;
+    try {
+      cards2 = await dependencies.refreshCards();
+    } catch (error) {
+      return {
+        ready: false,
+        ...workflowFailure("card_ready_race_refresh", error)
+      };
+    }
+    const selection = selectVisaCard(cards2);
+    if (selection.action === "use") {
+      return { ready: true, card: selection.card };
+    }
+    if (selection.action === "select") {
+      return {
+        ready: false,
+        stage: "card_selection",
+        status: "ambiguous",
+        terminal: true,
+        reason: "multiple_enabled_visa_cards_without_one_default",
+        cards: selection.cards.map(safeCard)
+      };
+    }
+    return {
+      ready: false,
+      stage: "card_verification",
+      status: "failed",
+      terminal: true,
+      reason: "pending_endpoint_reported_card_ready_but_refresh_found_no_vic_ready_visa",
+      pendingStatus: pending.instructionStatus,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
+  const pendingInstructionId2 = pending.instructionId;
+  const pendingResumeCommand = pending.resumeCommand;
+  if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
+    return {
+      ready: false,
+      stage: "instruction_activation",
+      status: pending.state === "TERMINAL" ? pending.instructionStatus.toLowerCase() : pending.timedOut ? "timeout" : "pending",
+      terminal: pending.state === "TERMINAL",
+      userActionRequired: pending.state === "PENDING",
+      instructionId: pendingInstructionId2 ?? null,
+      instructionStatus: pending.instructionStatus,
+      eventTypes: pending.eventTypes,
+      bindingLinkPresented: pending.bindingLinkPresented,
+      ...pendingResumeCommand ? {
+        resumeCommand: pendingResumeCommand,
+        resumeReadOnly: true
+      } : {},
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false,
+      ...pending.bindingLinkError ? { bindingLinkError: pending.bindingLinkError } : {},
+      ...pending.waitError ? { waitError: pending.waitError } : {},
+      ...pending.exactGetError ? { exactGetError: pending.exactGetError } : {}
+    };
+  }
+  const paymentInstrumentId = instructionPaymentInstrumentId(pending.instruction);
+  if (!paymentInstrumentId || !pendingInstructionMatchesContext(pending.instruction, paymentInstrumentId, context)) {
+    return {
+      ready: false,
+      stage: "instruction_verification",
+      status: "failed",
+      terminal: true,
+      reason: "activated_pending_instruction_failed_exact_context_verification",
+      instructionId: pendingInstructionId2,
+      paymentInstrumentId: paymentInstrumentId ?? null,
+      resumeCommand: pendingResumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
+  let cards;
   try {
     cards = await dependencies.refreshCards();
   } catch (error) {
     return {
       ready: false,
-      ...workflowFailure("vic_final_refresh", error, {
+      ...workflowFailure("card_post_activation_refresh", error, {
+        instructionId: pendingInstructionId2,
         paymentInstrumentId,
-        ...browserActionOutput(passkeyUrl, browserLaunch)
+        resumeCommand: pendingResumeCommand,
+        resumeReadOnly: true,
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
       })
     };
   }
-  const verified = cards.find((card) => card.paymentInstrumentId === paymentInstrumentId);
-  if (verified && cardIsVisa(verified) && cardVicReady(verified)) {
-    return { ready: true, card: verified };
+  const card = cards.find((candidate) => candidate.paymentInstrumentId === paymentInstrumentId);
+  if (!card || cardDisabled(card) || !cardIsVisa(card) || !cardVicReady(card)) {
+    return {
+      ready: false,
+      stage: "card_verification",
+      status: "failed",
+      terminal: true,
+      reason: "activated_pending_instruction_card_not_vic_ready",
+      instructionId: pendingInstructionId2,
+      paymentInstrumentId,
+      card: card ? safeCard(card) : null,
+      resumeCommand: pendingResumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
   }
   return {
-    ready: false,
-    stage: "vic_readiness",
-    status: wait.timedOut ? "timeout" : "pending",
-    terminal: false,
-    userActionRequired: true,
-    paymentInstrumentId,
-    ...browserActionOutput(passkeyUrl, browserLaunch),
-    ...wait.resumeCommand ? { resumeCommand: wait.resumeCommand } : {}
+    ready: true,
+    card,
+    instruction: {
+      instructionId: pendingInstructionId2,
+      source: "pending_activated",
+      detail: pending.instruction
+    }
   };
 }
 function selectVisaCard(cards, requestedPaymentInstrumentId) {
@@ -31502,22 +32083,24 @@ function selectVisaCard(cards, requestedPaymentInstrumentId) {
     if (!selected) {
       return { action: "unavailable", reason: "requested_payment_instrument_not_found" };
     }
-    return cardIsVisa(selected) ? { action: "use", card: selected } : { action: "unavailable", reason: "requested_payment_instrument_not_visa" };
+    return cardIsVisa(selected) && cardVicReady(selected) ? { action: "use", card: selected } : {
+      action: "unavailable",
+      reason: cardIsVisa(selected) ? "requested_payment_instrument_not_vic_ready" : "requested_payment_instrument_not_visa"
+    };
   }
   const visaCards = enabled.filter(cardIsVisa);
-  if (visaCards.length === 0) {
+  const readyCards = visaCards.filter(cardVicReady);
+  if (readyCards.length === 0) {
     return { action: "add" };
   }
-  const readyCards = visaCards.filter(cardVicReady);
-  const candidates = readyCards.length > 0 ? readyCards : visaCards;
-  const defaultCards = candidates.filter(cardDefault);
+  const defaultCards = readyCards.filter(cardDefault);
   if (defaultCards.length === 1) {
     return { action: "use", card: defaultCards[0] };
   }
-  if (candidates.length === 1) {
-    return { action: "use", card: candidates[0] };
+  if (readyCards.length === 1) {
+    return { action: "use", card: readyCards[0] };
   }
-  return { action: "select", cards: candidates };
+  return { action: "select", cards: readyCards };
 }
 async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
   let listed;
@@ -31709,7 +32292,7 @@ function activeInstructionCandidate(instruction, paymentInstrumentId, context, n
   const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
   const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
     const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText6(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText4(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText4(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText4(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+    if (!optionalText7(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText4(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText4(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText4(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
       return [];
     }
     return [{
@@ -31740,6 +32323,77 @@ function createdInstructionMatchesContext(instruction, paymentInstrumentId, cont
   const observedMandates = mandateArray(instruction);
   return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
 }
+function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context) {
+  const expected = context.instructionContext;
+  const nowMs = Date.now();
+  const instructionExpiryMs = parsedFutureTimestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time, nowMs);
+  const observedRecurring = normalizedBoolean(instruction.isRecurring ?? instruction.is_recurring);
+  if (instructionStatus2(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
+    return false;
+  }
+  const expectedMandates = expected.mandates;
+  const observedMandates = mandateArray(instruction);
+  if (observedMandates.length !== expectedMandates.length) {
+    return false;
+  }
+  const expectedFingerprints = expectedMandates.map((mandate) => pendingExpectedMandateFingerprint(mandate, expected.isRecurring === true));
+  const observedFingerprints = observedMandates.map((mandate) => pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs));
+  if (expectedFingerprints.some((value) => value === void 0) || observedFingerprints.some((value) => value === void 0)) {
+    return false;
+  }
+  const sortedExpected = expectedFingerprints.sort();
+  const sortedObserved = observedFingerprints.sort();
+  return sortedExpected.every((value, index) => value === sortedObserved[index]);
+}
+var PENDING_MANDATE_CONTEXT_FIELDS = /* @__PURE__ */ new Set([
+  "title",
+  "description",
+  "amountLimit",
+  "currencyCode",
+  "merchantCategory",
+  "merchantCategoryCode",
+  "preferredMerchantName",
+  "effectiveUntilTime",
+  "recurringFrequency",
+  "extra"
+]);
+function pendingExpectedMandateFingerprint(mandate, isRecurring) {
+  if (Object.keys(mandate).some((field) => !PENDING_MANDATE_CONTEXT_FIELDS.has(field))) {
+    return void 0;
+  }
+  const recurringFrequency = optionalNormalized(mandate.recurringFrequency);
+  if (isRecurring !== (recurringFrequency !== void 0) || !isStructuredMapOrAbsent(mandate.extra)) {
+    return void 0;
+  }
+  return stableJson({
+    title: exactText(mandate.title),
+    description: exactText(mandate.description),
+    amountLimit: comparableAmount2(mandate.amountLimit),
+    currencyCode: normalizedText4(mandate.currencyCode),
+    merchantCategoryCode: normalizedText4(mandate.merchantCategoryCode),
+    preferredMerchantName: optionalExactText(mandate.preferredMerchantName) ?? null,
+    merchantCategory: optionalExactText(mandate.merchantCategory) ?? null,
+    recurringFrequency: recurringFrequency ?? null,
+    extra: canonicalOptionalMap(mandate.extra, false)
+  });
+}
+function pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs) {
+  const mandateExpiryMs = parsedFutureTimestamp(mandate.effectiveUntilTime ?? mandate.effective_until_time, nowMs);
+  if (mandateExpiryMs === void 0 || mandateExpiryMs !== instructionExpiryMs || !zeroLike(mandate.reserveStatus ?? mandate.reserve_status) || !isStructuredMapOrAbsent(mandate.extra)) {
+    return void 0;
+  }
+  return stableJson({
+    title: exactText(mandate.title),
+    description: exactText(mandate.description),
+    amountLimit: comparableAmount2(mandate.amountLimit),
+    currencyCode: normalizedText4(mandate.currencyCode ?? mandate.currency),
+    merchantCategoryCode: normalizedText4(mandate.merchantCategoryCode ?? mandate.merchant_category_code),
+    preferredMerchantName: optionalExactText(mandate.preferredMerchantName ?? mandate.preferred_merchant_name) ?? null,
+    merchantCategory: optionalExactText(mandate.merchantCategory ?? mandate.merchant_category) ?? null,
+    recurringFrequency: optionalNormalized(mandate.recurringFrequency ?? mandate.recurring_frequency) ?? null,
+    extra: canonicalOptionalMap(mandate.extra, false)
+  });
+}
 function merchantScopeMatchesContext(candidate, context) {
   return context.instructionContext.mandates.some((expected) => optionalNormalized(candidate.preferredMerchantName ?? candidate.preferred_merchant_name) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory ?? candidate.merchant_category) === optionalNormalized(expected.merchantCategory));
 }
@@ -31769,19 +32423,16 @@ function mandateArray(instruction) {
   return [];
 }
 function instructionId(instruction) {
-  return optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+  return optionalText7(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
 }
 function instructionPaymentInstrumentId(instruction) {
-  return optionalText6(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+  return optionalText7(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
 }
 function instructionStatus2(instruction) {
   return normalizedText4(instruction.status ?? instruction.state);
 }
-function eventPaymentInstrumentId(event) {
-  return optionalText6(event.data.paymentInstrumentId ?? event.data.payment_instrument_id ?? event.resourceId);
-}
 function cardIsVisa(card) {
-  const brand = optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? optionalText6(card.brand) ?? optionalText6(card.network) ?? "";
+  const brand = optionalText7(card.cardScheme) ?? optionalText7(card.cardBrand) ?? optionalText7(card.brand) ?? optionalText7(card.network) ?? "";
   return brand.toUpperCase() === "VISA";
 }
 function cardVicReady(card) {
@@ -31796,8 +32447,8 @@ function cardDefault(card) {
 function safeCard(card) {
   return {
     paymentInstrumentId: card.paymentInstrumentId,
-    cardScheme: optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? null,
-    cardLastFour: optionalText6(card.cardLastFour) ?? optionalText6(card.card_last_four) ?? null,
+    cardScheme: optionalText7(card.cardScheme) ?? optionalText7(card.cardBrand) ?? null,
+    cardLastFour: optionalText7(card.cardLastFour) ?? optionalText7(card.card_last_four) ?? null,
     isDefault: cardDefault(card),
     visaRegistrationSucceeded: cardVicReady(card)
   };
@@ -31853,8 +32504,8 @@ function minorUnitsAmountText(value, currency) {
 }
 function instructionCreatedAtMs(instruction) {
   const values = [
-    optionalText6(instruction.createdAt),
-    optionalText6(instruction.createTime)
+    optionalText7(instruction.createdAt),
+    optionalText7(instruction.createTime)
   ].filter((value) => value !== void 0);
   if (values.length === 0) {
     return void 0;
@@ -31866,24 +32517,38 @@ function instructionCreatedAtMs(instruction) {
   return timestamps[0];
 }
 function optionalNormalized(value) {
-  return optionalText6(value)?.normalize("NFKC").toUpperCase();
+  return optionalText7(value)?.normalize("NFKC").toUpperCase();
+}
+function optionalExactText(value) {
+  return optionalText7(value)?.normalize("NFKC");
+}
+function exactText(value) {
+  return optionalExactText(value) ?? "";
 }
 function normalizedText4(value) {
   return optionalNormalized(value) ?? "";
 }
-function optionalText6(value) {
+function optionalText7(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function isFutureTimestamp(value, nowMs) {
-  const text = optionalText6(value);
+  const text = optionalText7(value);
   if (!text) {
     return false;
   }
   const parsed = parseTimestamp(text);
   return parsed !== void 0 && parsed > nowMs;
 }
+function parsedFutureTimestamp(value, nowMs) {
+  const text = optionalText7(value);
+  if (!text) {
+    return void 0;
+  }
+  const parsed = parseTimestamp(text);
+  return parsed !== void 0 && parsed > nowMs ? parsed : void 0;
+}
 function mandateIsUnexpired(mandate, instruction, nowMs) {
-  const mandateExpiry = optionalText6(mandate.effectiveUntilTime);
+  const mandateExpiry = optionalText7(mandate.effectiveUntilTime);
   return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
 }
 function parseTimestamp(value) {
@@ -31897,6 +32562,83 @@ function oneTimeInstruction(instruction) {
 }
 function zeroLike(value) {
   return value === 0 || value === "0" || value === false;
+}
+function normalizedBoolean(value) {
+  if (value === true || value === 1 || value === "1") {
+    return true;
+  }
+  if (value === false || value === 0 || value === "0" || normalizedText4(value) === "FALSE") {
+    return false;
+  }
+  if (normalizedText4(value) === "TRUE") {
+    return true;
+  }
+  return void 0;
+}
+function optionalStructuredMapEquals(expected, observed, dropNullObjectFields) {
+  if (!isStructuredMapOrAbsent(expected) || !isStructuredMapOrAbsent(observed)) {
+    return false;
+  }
+  return stableJson(canonicalOptionalMap(expected, dropNullObjectFields)) === stableJson(canonicalOptionalMap(observed, dropNullObjectFields));
+}
+function isStructuredMapOrAbsent(value) {
+  if (value === void 0 || value === null) {
+    return true;
+  }
+  if (isRecord28(value)) {
+    return true;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    return false;
+  }
+  try {
+    return isRecord28(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}
+function canonicalOptionalMap(value, dropNullObjectFields) {
+  const record = structuredMap(value);
+  if (!record) {
+    return null;
+  }
+  const canonical = canonicalStructuredValue(record, dropNullObjectFields);
+  return Object.keys(canonical).length === 0 ? null : canonical;
+}
+function structuredMap(value) {
+  if (isRecord28(value)) {
+    return value;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord28(parsed) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function canonicalStructuredValue(value, dropNullObjectFields) {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalStructuredValue(item, dropNullObjectFields));
+  }
+  if (isRecord28(value)) {
+    return Object.fromEntries(Object.keys(value).sort().flatMap((key) => {
+      const entry = value[key];
+      if (entry === void 0 || dropNullObjectFields && entry === null) {
+        return [];
+      }
+      return [[
+        key,
+        canonicalStructuredValue(entry, dropNullObjectFields)
+      ]];
+    }));
+  }
+  return typeof value === "string" ? value.normalize("NFKC") : value;
+}
+function stableJson(value) {
+  return JSON.stringify(value);
 }
 function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32047,8 +32789,8 @@ Options:
   --context <json>             Preparation or frozen purchase context JSON
   --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required for live purchase modes; forbidden for mode=prepare
-  --open                       Open required card, VIC, and Passkey pages
-  --no-open                    Print required browser URLs without opening them
+  --open                       Open regular Purchase Instruction authorization when required
+  --no-open                    Do not open regular Purchase Instruction authorization
   --wait-delivery              Wait for digital delivery even when context does not require it
   --max-wait <seconds>         Event and delivery wait bound, defaults to 900
   --dry-run                    Validate and print the no-side-effect execution plan
@@ -32107,21 +32849,33 @@ Context:
 Behavior:
   Validation of mode, environment, and the purchase guard happens before Token refresh or business
   network access. prepare target=login returns as soon as Benefit login is ready. prepare
-  target=visa_card_ready continues only through Card/VIC readiness.
+  target=visa_card_ready only verifies an already VIC-ready Visa. Without a frozen purchase
+  Instruction context it does not open or prompt card/VIC setup.
 
   mode=purchase and mode=catalog_purchase both require the separate commerce-login stage to be
-  ready, exact-revalidate the frozen selected product, then prepare or reuse one VIC-ready Visa
-  card. catalog_purchase does not perform or repeat Visa benefit discovery.
+  ready and exact-revalidate the frozen selected product. catalog_purchase does not perform or
+  repeat Visa benefit discovery. Both modes then reuse one VIC-ready Visa card. When none exists,
+  commerce-run
+  creates/reuses one no-card PENDING Instruction first, prints the existing Agent Portal card
+  binding link to stderr only after exact-ID Event Hub readiness and identity validation, without
+  opening it, and keeps waiting for activation of that exact ID.
+  Portal owns card binding, 3DS, and VIC. After activation, commerce-run exact-GETs the same
+  Instruction, refreshes cards, and requires the attached paymentInstrumentId to be a same-card
+  Visa with visaRegistrationSucceeded=true before continuing.
   It lists only that payment instrument's Instructions and considers ACTIVE candidates whose
   currency, MCC, merchant scope, Instruction expiry, Mandate expiry, and one-time reserve status
   still permit the actual total. It chooses the smallest amountLimit greater than or equal to the
   total, then the newest trusted createdAt/createTime. Missing or tied creation time fails closed.
   The chosen ID is exact-GET again and every condition is revalidated before Checkout.
 
+  For an already VIC-ready card, the regular flow remains unchanged.
   Historical PENDING or draft Instructions are never authorized by commerce-run. When no usable
   ACTIVE candidate exists, the CLI creates one regular Instruction for the exact actual price and
-  authorizes only that new ID. Restricted categories are refused deterministically before any
-  Instruction selection or creation.
+  authorizes only that new ID. The no-card PENDING flow is different:
+  CWallet returns the exact ID before the binding link is shown, supersedes safely on the server,
+  and activates that same ID after Portal card/VIC completion. Timeout returns only an exact
+  instruction get continuation; commerce-run does not create another Instruction or start Checkout.
+  Restricted categories are refused deterministically before any Instruction selection or creation.
 
   Before card or Instruction work, both purchase modes use internal-first merchant routing by
   default, exact-GET the current UCP Catalog product, and reject ID, title, price, currency,
@@ -32140,7 +32894,7 @@ Behavior:
 
 Examples:
   clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
-  clink visa commerce-run --context '{"mode":"prepare","target":"visa_card_ready","environment":"uat"}' --open
+  clink visa commerce-run --context '{"mode":"prepare","target":"visa_card_ready","environment":"uat"}'
   clink visa commerce-run --context-file purchase.json --dry-run --format pretty
   clink visa commerce-run --context-file purchase.json --confirm-purchase --open --format json
 `;
