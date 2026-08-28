@@ -66,6 +66,17 @@ function runWithMock(args, scenario, options = {}) {
   );
 }
 
+function versionAtLeast(version, minimum) {
+  const current = version.split('.').slice(0, 3).map(Number);
+  const required = minimum.split('.').slice(0, 3).map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] !== required[index]) {
+      return current[index] > required[index];
+    }
+  }
+  return true;
+}
+
 test('launchers and Visa Edition provenance are exact', async () => {
   assert.ok(((await stat(cli)).mode & 0o111) !== 0);
   assert.match(await readFile(cli, 'utf8'), /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
@@ -323,6 +334,10 @@ test('Program purchase mode accepts the frozen context without program.code', ()
 });
 
 test('Eats365 manual_item_facts revalidates complete frozen Catalog provenance', () => {
+  const pendingInstructionPrepare = versionAtLeast(
+    vendorPackage.version,
+    '0.2.41',
+  );
   const result = runWithMock([
     'visa',
     'commerce-run',
@@ -336,11 +351,18 @@ test('Eats365 manual_item_facts revalidates complete frozen Catalog provenance',
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.ok, true);
-  assert.equal(output.data.stage, 'card_refresh');
+  assert.equal(
+    output.data.stage,
+    pendingInstructionPrepare
+      ? 'pending_instruction_prepare'
+      : 'card_refresh',
+  );
   assert.equal(output.data.status, 'failed');
   assert.match(
     output.data.error.message,
-    /intentional card refresh stop after product resolution/iu,
+    pendingInstructionPrepare
+      ? /intentional pending instruction stop after product resolution/iu
+      : /intentional card refresh stop after product resolution/iu,
   );
 });
 
@@ -797,6 +819,11 @@ globalThis.fetch = async (input, init) => {
     }
     if (url.pathname === '/agent/cwallet/card/bindingLink') {
       throw new Error('intentional card refresh stop after product resolution');
+    }
+    if (url.pathname === '/agent/cwallet/instructions/pending') {
+      throw new Error(
+        'intentional pending instruction stop after product resolution',
+      );
     }
   }
 
