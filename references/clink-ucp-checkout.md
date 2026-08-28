@@ -263,9 +263,9 @@ Normalize the product total and mandate amount to the same currency scale. A UCP
 
 - same currency
 - product total equals the mandate's intended amount exactly when the mandate describes an exact purchase amount
-- product total is within an explicitly authorized cap only when the user or mandate text clearly authorizes a limit-style scope for this merchant/product
+- product total is less than or equal to an explicitly authorized cap only when the user or mandate text clearly authorizes a limit-style scope for this merchant/product
 
-For this product-order flow, prefer exact amount matches. Do not select a broad mandate merely because the backend might accept `amount < amountLimit`.
+For this product-order flow, prefer exact amount matches. An explicitly authorized cap is inclusive: `orderTotal <= amountLimit`, so equality MUST match after currency normalization — for example, HKD 576.00 is covered by an HKD 576.00 cap. Do not select a broad mandate merely because this numeric comparison passes; the mandate must also authorize the merchant/product semantics.
 
 For a pinned scheduled authorization, the limit-style scope is the per-run cap written into the mandate `description` at creation, and the order total must be within it. A recurring mandate's `amountLimit` is the cycle budget, not the per-order ceiling, so never treat `amountLimit` as the per-order cap. This does not relax the rule above for any other flow: a mandate that was not pinned by this schedule is still matched by the ordinary exact/authorized-cap rules.
 
