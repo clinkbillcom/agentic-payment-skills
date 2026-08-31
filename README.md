@@ -55,9 +55,8 @@ detail and activity link. A merchant commerce URL may then be checked through
 identity, price, currency, and availability may produce an order prompt.
 External-page resolution, no match, or incomplete facts produce activity-only
 presentation with no purchase call to action. UAT additionally recognizes only
-`https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d` as a
-CLI-owned alias for merchant `mcht_ftmse61a6az0`; no other path on that host
-inherits the mapping.
+`https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
+`mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
 
 Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
@@ -72,8 +71,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.41` vendors Visa CLI `0.2.42` from upstream commit
-`b19da5ac7291fa4fd7f1bf5048eaa9d9b7a965ff`. It uses Visa-only recommendation,
+Skill `0.1.42` vendors Visa CLI `0.2.43` from upstream commit
+`de1327a837d40f99db5e5a01e99f84e5fc7eed93`. It uses Visa-only recommendation,
 internal-UCP-gated Program ordering, Visa-miss broad Catalog fallback, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -105,7 +104,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.41`
+Skill version: `0.1.42`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

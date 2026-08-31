@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.42";
+var CLI_VERSION = "0.2.43";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -14531,7 +14531,7 @@ var MERCHANT_LIST_MAX_ATTEMPTS = 2;
 var MERCHANT_LIST_RETRY_DELAY_MS = 50;
 var UAT_EXACT_MERCHANT_URLS = /* @__PURE__ */ new Map([
   [
-    "https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d",
+    "https://vsrp.hk/p/o5s",
     "mcht_ftmse61a6az0"
   ]
 ]);

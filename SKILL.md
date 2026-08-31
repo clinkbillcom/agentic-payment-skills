@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.41. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.42. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.41"
+  version: "0.1.42"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -301,8 +301,7 @@ Visa/VSRP campaign URL.
 
 Only when the selected Program exposes one actual merchant commerce URL, or
 when its URL is exactly the UAT alias
-`https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d`, run the
-existing token-free product resolver:
+`https://vsrp.hk/p/o5s`, run the existing token-free product resolver:
 
 ```text
 <Skill Path>/bin/visa-cli visa product-search \
@@ -317,7 +316,7 @@ existing token-free product resolver:
 - Use the selected Program's authoritative merchant commerce URL unchanged.
   The one UAT alias above must also be passed unchanged; the bundled CLI maps
   only that exact offer path to `mcht_ftmse61a6az0`. Query/fragment tracking
-  state may vary, but another path on `visaselectrewardhk.com` is not an alias.
+  state may vary, but another path on `vsrp.hk` is not an alias.
   Never use any other Visa/VSRP campaign URL or a hardcoded brand URL.
 - Use `selectedProgram.title.trim()` unchanged as the query. Do not translate,
   summarize, or replace it with a generic product phrase.
