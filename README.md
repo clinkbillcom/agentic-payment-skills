@@ -57,6 +57,11 @@ External-page resolution, no match, or incomplete facts produce activity-only
 presentation with no purchase call to action. UAT additionally recognizes only
 `https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
 `mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
+For a verified Program purchase, a valid Program MCC remains authoritative.
+When it is missing, the Skill may classify one high-confidence MCC from the
+complete frozen merchant/product context. The exact UAT Wellcome gift-card
+route above uses MCC `5411`; malformed/conflicting Program MCCs and
+low-confidence or title-only guesses still stop before login.
 
 Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
@@ -71,7 +76,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.42` vendors Visa CLI `0.2.43` from upstream commit
+Skill `0.1.43` vendors Visa CLI `0.2.43` from upstream commit
 `de1327a837d40f99db5e5a01e99f84e5fc7eed93`. It uses Visa-only recommendation,
 internal-UCP-gated Program ordering, Visa-miss broad Catalog fallback, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -104,7 +109,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.42`
+Skill version: `0.1.43`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

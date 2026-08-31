@@ -49,6 +49,10 @@ Catalog 精确匹配，且身份、价格、币种、库存完整时，才能提
 解析、没有匹配或事实不完整时，只展示活动介绍和活动链接，不使用购买 CTA。
 UAT 额外只把 `https://vsrp.hk/p/o5s` 作为 CLI 内置 alias 映射到商户
 `mcht_ftmse61a6az0`；同一 host 的其他路径不继承该映射。
+已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
+时，允许从完整冻结的商户和商品上下文做一次高置信分类。上述 UAT 惠康礼品卡
+精确路由使用 MCC `5411`；Program MCC 格式错误或冲突、低置信分类和只看标题
+的猜测仍必须在登录前停止。
 
 Eats365 购买复验使用冻结门店和商品的精确端点，不再依赖广域搜索连续两次
 选中同一家门店。
@@ -63,7 +67,7 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.42` 已 vendor 上游提交
+Skill `0.1.43` 已 vendor 上游提交
 `de1327a837d40f99db5e5a01e99f84e5fc7eed93` 的 Visa CLI `0.2.43`。它支持
 纯 Visa 推荐、内部 UCP 命中后才提示 Program 下单、Visa 空结果 Catalog
 兜底、可选的旧版 `program.code`、完整 Eats365 `manual_item_facts` 复验和
@@ -92,7 +96,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.42`
+Skill 版本：`0.1.43`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

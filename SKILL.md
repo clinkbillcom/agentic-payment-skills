@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.42. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.43. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.42"
+  version: "0.1.43"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -362,9 +362,19 @@ Before login, require all of the following:
 3. Program and Catalog identify the same merchant and product.
 4. Catalog total and currency exactly equal the recommendation-backed purchase
    facts; missing or different price/currency stops the flow.
-5. The Program supplies one authoritative four-digit
-   `commerce.merchantCategoryCode`. Missing, invalid, or ambiguous MCC stops
-   before login; do not infer it from Catalog data or a local lookup table.
+5. Resolve one four-digit MCC with this strict priority:
+   - Use a valid Program-provided `commerce.merchantCategoryCode` unchanged.
+   - When the Program omits MCC, classify one only from the exact frozen
+     Program, merchant ID, merchant URL, merchant name, product title/source
+     title, category, and fulfillment context. The classification must be
+     high-confidence and must pass the Restricted Instruction Gate.
+   - For the exact UAT route `https://vsrp.hk/p/o5s`, merchant
+     `mcht_ftmse61a6az0`, and the verified Wellcome supermarket gift-card
+     product, use MCC `5411`.
+   - An invalid or conflicting Program MCC, title-only guess, broad
+     common-MCC fallback, or low-confidence classification stops before login.
+   Freeze the resolved MCC once and reuse it unchanged in login, Instruction,
+   purchase context, and Checkout.
 6. Every required product, fulfillment, and environment field is present.
 7. The complete purchase passes the Restricted Instruction Gate.
 
@@ -383,7 +393,7 @@ Instruction context:
         "description": "Purchase the selected Visa Program",
         "amountLimit": "<exact-program-price>",
         "currencyCode": "<program-currency>",
-        "merchantCategoryCode": "<four-digit-program-mcc>"
+        "merchantCategoryCode": "<resolved-four-digit-mcc>"
       }
     ]
   }
@@ -440,7 +450,7 @@ Build one frozen purchase context from the same Program and verified product:
         "description": "Purchase the selected Visa Program",
         "amountLimit": "<exact-program-price>",
         "currencyCode": "<program-currency>",
-        "merchantCategoryCode": "<four-digit-program-mcc>"
+        "merchantCategoryCode": "<resolved-four-digit-mcc>"
       }
     ]
   },

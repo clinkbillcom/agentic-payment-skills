@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.42');
+  assert.equal(packageJson.version, '0.1.43');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.42/u);
-  assert.match(skill, /version: "0\.1\.42"/u);
+  assert.match(skill, /Visa Skill 0\.1\.43/u);
+  assert.match(skill, /version: "0\.1\.43"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -433,6 +433,46 @@ test('new commerce-run contexts omit program.code in both purchase modes', () =>
   assert.match(
     skill,
     /New `mode=purchase` and `mode=catalog_purchase` contexts[\s\S]*omit[\s\S]*top-level `program`[\s\S]*`metadata\.programCode`/iu,
+  );
+});
+
+test('Visa Program MCC is authoritative-first with bounded inference', () => {
+  const section = skill.slice(
+    skill.indexOf('## Visa Purchase Fast Path'),
+    skill.indexOf('## Catalog Purchase Fast Path'),
+  );
+
+  assert.match(
+    section,
+    /Resolve one four-digit MCC with this strict priority[\s\S]*valid Program-provided `commerce\.merchantCategoryCode` unchanged/iu,
+  );
+  assert.match(
+    section,
+    /Program omits MCC[\s\S]*exact frozen[\s\S]*Program[\s\S]*merchant ID[\s\S]*merchant URL[\s\S]*product title\/source[\s\S]*fulfillment context[\s\S]*high-confidence/iu,
+  );
+  assert.match(
+    section,
+    /https:\/\/vsrp\.hk\/p\/o5s[\s\S]*mcht_ftmse61a6az0[\s\S]*Wellcome supermarket gift-card[\s\S]*MCC `5411`/iu,
+  );
+  assert.match(
+    section,
+    /invalid or conflicting Program MCC[\s\S]*title-only guess[\s\S]*broad[\s\S]*common-MCC fallback[\s\S]*low-confidence[\s\S]*stops before login/iu,
+  );
+  assert.match(
+    section,
+    /Freeze the resolved MCC once[\s\S]*login[\s\S]*Instruction[\s\S]*purchase context[\s\S]*Checkout/iu,
+  );
+  assert.match(
+    section,
+    /"merchantCategoryCode": "<resolved-four-digit-mcc>"/u,
+  );
+  assert.doesNotMatch(
+    section,
+    /Missing, invalid, or ambiguous MCC stops[\s\S]*do not infer it from Catalog data/iu,
+  );
+  assert.match(
+    agent,
+    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*vsrp\.hk\/p\/o5s[\s\S]*MCC 5411[\s\S]*Freeze the\s+resolved MCC/iu,
   );
 });
 
