@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.40');
+  assert.equal(packageJson.version, '0.1.41');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.40/u);
-  assert.match(skill, /version: "0\.1\.40"/u);
+  assert.match(skill, /Visa Skill 0\.1\.41/u);
+  assert.match(skill, /version: "0\.1\.41"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -266,7 +266,11 @@ test('selected Visa Benefit prompts ordering only after an internal UCP match', 
   );
   assert.match(
     selected,
-    /Never turn a Visa\/VSRP campaign URL into a merchant\s+commerce route/iu,
+    /Never infer a merchant route from an arbitrary[\s\S]*Visa\/VSRP campaign URL/iu,
+  );
+  assert.match(
+    selected,
+    /visaselectrewardhk\.com\/offer\/offer_1787552578_6a8be3422f29d[\s\S]*maps[\s\S]*exact offer path[\s\S]*mcht_ftmse61a6az0[\s\S]*another path[\s\S]*is not an alias/iu,
   );
   assert.match(
     selected,

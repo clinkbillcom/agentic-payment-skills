@@ -18,7 +18,10 @@ interface:
     bounded and non-exhaustive. When the user selects a Visa Benefit, bind one
     stable Program code, run visa detail, preserve the activity introduction
     and authoritative link, then run visa product-search only with an actual
-    merchant commerce URL. Invite ordering only for PRODUCT_VERIFIED plus
+    merchant commerce URL or the exact UAT alias
+    https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d.
+    The bundled CLI maps only that offer path to mcht_ftmse61a6az0; no other
+    path on the host is an alias. Invite ordering only for PRODUCT_VERIFIED plus
     CONTINUE_TO_COMMERCE_LOGIN with productResolution=internal-ucp-catalog and
     exact identity, price, currency, and availability. External-page
     resolution, no match, ambiguity, or incomplete facts must end with activity

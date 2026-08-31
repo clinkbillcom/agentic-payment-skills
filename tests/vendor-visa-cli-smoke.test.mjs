@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'visa-cli');
 const windowsCli = join(root, 'bin', 'visa-cli.cmd');
+const VISA_SELECT_REWARD_OFFER_URL =
+  'https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d';
 const vendorBundlePath = join(
   root,
   'vendor',
@@ -85,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.41');
+  assert.equal(vendorPackage.version, '0.2.42');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '86de0ff71bca0a24acd07ea9bd9236f45f684d7e',
+    'b19da5ac7291fa4fd7f1bf5048eaa9d9b7a965ff',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -250,7 +252,7 @@ test('selected Visa Benefit can resolve to an exact internal UCP product', () =>
     'visa',
     'product-search',
     '--merchant-url',
-    'https://provider.example/benefits/',
+    VISA_SELECT_REWARD_OFFER_URL,
     '--query',
     'Selected Visa Program',
     '--language',
@@ -260,13 +262,18 @@ test('selected Visa Benefit can resolve to an exact internal UCP product', () =>
     '--sandbox',
     '--format',
     'json',
-  ], 'internal-benefit-match');
+  ], 'visa-select-reward-internal-match');
 
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout).data;
   assert.equal(output.state, 'PRODUCT_VERIFIED');
   assert.equal(output.action, 'CONTINUE_TO_COMMERCE_LOGIN');
   assert.equal(output.productResolution, 'internal-ucp-catalog');
+  assert.equal(output.merchantId, 'mcht_ftmse61a6az0');
+  assert.equal(
+    output.endpoint,
+    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+  );
   assert.equal(output.product.itemId, 'benefit-product-1');
   assert.equal(output.product.currency, 'HKD');
   assert.equal(output.product.totalAmountMajor, '10');
@@ -803,34 +810,44 @@ globalThis.fetch = async (input, init) => {
     throw new Error('unexpected Visa-miss request: ' + url.href);
   }
 
-  if (
-    scenario === 'internal-benefit-match'
-    && url.pathname === '/agent/ucp/mcht_provider123/catalog/search'
-  ) {
-    if (init?.method !== 'POST') {
-      throw new Error('unexpected internal Catalog method: ' + init?.method);
+  if (scenario === 'visa-select-reward-internal-match') {
+    if (url.pathname.endsWith('/agent/ucp/merchants')) {
+      throw new Error('exact UAT offer alias must bypass merchant-list lookup');
     }
-    const body = JSON.parse(String(init.body));
     if (
-      body.query !== 'Selected Visa Program'
-      || body.pagination?.limit !== 1
+      url.pathname
+      === '/agent/ucp/mcht_ftmse61a6az0/catalog/search'
     ) {
-      throw new Error(
-        'unexpected internal Benefit search: ' + JSON.stringify(body),
-      );
+      if (init?.method !== 'POST') {
+        throw new Error('unexpected internal Catalog method: ' + init?.method);
+      }
+      const body = JSON.parse(String(init.body));
+      if (
+        body.query !== 'Selected Visa Program'
+        || body.pagination?.limit !== 1
+      ) {
+        throw new Error(
+          'unexpected internal Benefit search: ' + JSON.stringify(body),
+        );
+      }
+      return jsonResponse({
+        products: [{
+          id: 'benefit-product-1',
+          title: 'Selected Visa Program',
+          sourceTitle: 'Selected Visa Program',
+          url:
+            'https://vtravel.link2shops.com/yiyuan/'
+            + '?product_id=benefit-product-1',
+          price: { amount: 1000, currency: 'HKD' },
+          availability: { available: true, status: 'in_stock' },
+          seller: { name: 'Visa Benefit Catalog Merchant' },
+        }],
+        pagination: { has_next_page: false },
+      });
     }
-    return jsonResponse({
-      products: [{
-        id: 'benefit-product-1',
-        title: 'Selected Visa Program',
-        sourceTitle: 'Selected Visa Program',
-        url: 'https://provider.example/benefits/benefit-product-1',
-        price: { amount: 1000, currency: 'HKD' },
-        availability: { available: true, status: 'in_stock' },
-        seller: { name: 'Visa Benefit Catalog Provider' },
-      }],
-      pagination: { has_next_page: false },
-    });
+    throw new Error(
+      'unexpected Visa Select Reward request: ' + url.href,
+    );
   }
 
   if (url.pathname.endsWith('/agent/ucp/merchants')) {

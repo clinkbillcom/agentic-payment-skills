@@ -47,6 +47,10 @@ visa commerce-run
 提供的真实商户 commerce URL 执行 `visa product-search`。只有内部 UCP
 Catalog 精确匹配，且身份、价格、币种、库存完整时，才能提示下单。外部页面
 解析、没有匹配或事实不完整时，只展示活动介绍和活动链接，不使用购买 CTA。
+UAT 额外只把
+`https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d`
+作为 CLI 内置 alias 映射到商户 `mcht_ftmse61a6az0`；同一 host 的其他路径不
+继承该映射。
 
 Eats365 购买复验使用冻结门店和商品的精确端点，不再依赖广域搜索连续两次
 选中同一家门店。
@@ -61,8 +65,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.40` 已 vendor 上游提交
-`86de0ff71bca0a24acd07ea9bd9236f45f684d7e` 的 Visa CLI `0.2.41`。它支持
+Skill `0.1.41` 已 vendor 上游提交
+`b19da5ac7291fa4fd7f1bf5048eaa9d9b7a965ff` 的 Visa CLI `0.2.42`。它支持
 纯 Visa 推荐、内部 UCP 命中后才提示 Program 下单、Visa 空结果 Catalog
 兜底、可选的旧版 `program.code`、完整 Eats365 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -90,7 +94,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.40`
+Skill 版本：`0.1.41`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
