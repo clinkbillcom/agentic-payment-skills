@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.41";
+var CLI_VERSION = "0.2.42";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -14529,6 +14529,12 @@ var MERCHANT_LIST_TIMEOUT_MS = 15e3;
 var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
 var MERCHANT_LIST_MAX_ATTEMPTS = 2;
 var MERCHANT_LIST_RETRY_DELAY_MS = 50;
+var UAT_EXACT_MERCHANT_URLS = /* @__PURE__ */ new Map([
+  [
+    "https://visaselectrewardhk.com/offer/offer_1787552578_6a8be3422f29d",
+    "mcht_ftmse61a6az0"
+  ]
+]);
 var merchantListRequests = /* @__PURE__ */ new WeakMap();
 async function getInternalUcpMerchantList(options2 = {}) {
   return (await loadInternalUcpMerchantList(options2)).merchants;
@@ -14581,15 +14587,17 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  let merchantId;
-  if (options2.merchants) {
-    merchantId = options2.merchants.get(domainName);
-  } else {
-    let loaded = await loadInternalUcpMerchants(options2);
-    merchantId = loaded.merchants.get(domainName);
-    if (!merchantId && loaded.fromCache) {
-      loaded = await loadInternalUcpMerchants(options2, true);
+  let merchantId = exactMerchantUrlMerchantId(productUrl2, environment);
+  if (!merchantId) {
+    if (options2.merchants) {
+      merchantId = options2.merchants.get(domainName);
+    } else {
+      let loaded = await loadInternalUcpMerchants(options2);
       merchantId = loaded.merchants.get(domainName);
+      if (!merchantId && loaded.fromCache) {
+        loaded = await loadInternalUcpMerchants(options2, true);
+        merchantId = loaded.merchants.get(domainName);
+      }
     }
   }
   if (!merchantId) {
@@ -14811,6 +14819,17 @@ function cloneJsonValue(value, ancestors) {
 }
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
+}
+function exactMerchantUrlMerchantId(productUrl2, environment) {
+  if (environment !== "sandbox" || productUrl2.protocol !== "https:" || productUrl2.username || productUrl2.password || productUrl2.port) {
+    return void 0;
+  }
+  const domainName = canonicalDomain(productUrl2.hostname);
+  if (!domainName) {
+    return void 0;
+  }
+  const pathname = productUrl2.pathname.replace(/\/+$/u, "") || "/";
+  return UAT_EXACT_MERCHANT_URLS.get(`https://${domainName}${pathname}`);
 }
 function merchantMap(merchants, source) {
   const merchantIdsByDomain = /* @__PURE__ */ new Map();
