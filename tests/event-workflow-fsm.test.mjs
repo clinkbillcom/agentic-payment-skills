@@ -22,19 +22,19 @@ const instructionWaitSpec = {
   verifyCommand: 'clink instruction get --purchase-instruction-id ins_123 --format json',
 };
 
-const vicReadinessWaitSpec = {
+const strongAuthReadinessWaitSpec = {
   eventType: 'payment_method.update,vic_device.binding_succeeded',
-  purpose: 'VIC_READINESS',
+  purpose: 'STRONG_AUTH_READINESS',
   singleAttempt: true,
-  continuation: { vicReadinessWaitAttempted: true },
+  continuation: { strongAuthReadinessWaitAttempted: true },
   expectedResource: { paymentInstrumentId: 'pi_quick' },
   maxWaitSeconds: 900,
   verifyCommand: 'clink card binding-link --no-watch --no-open --format json',
 };
 
-test('VIC readiness turns every completed single poll into one authoritative refresh', () => {
+test('strong-auth readiness turns every completed single poll into one authoritative refresh', () => {
   assert.equal(
-    pollCommandForWaitSpec(vicReadinessWaitSpec),
+    pollCommandForWaitSpec(strongAuthReadinessWaitSpec),
     'clink events poll --type payment_method.update,vic_device.binding_succeeded --max-wait 900 --no-ack --format json',
   );
 
@@ -42,14 +42,21 @@ test('VIC readiness turns every completed single poll into one authoritative ref
     ready: true,
     events: [{
       eventType: 'payment_method.update',
-      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: false },
+      data: {
+        paymentInstrumentId: 'pi_quick',
+        strongAuthReady: false,
+        authProtocol: 'MASTERCARD',
+      },
     }],
-  }, vicReadinessWaitSpec);
-  assert.equal(notReady.domain, EventWorkflowDomain.VIC);
+  }, strongAuthReadinessWaitSpec);
+  assert.equal(notReady.domain, EventWorkflowDomain.STRONG_AUTH);
   assert.equal(notReady.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
   assert.equal(notReady.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
   assert.equal(notReady.reason, 'single_attempt_event_not_actionable');
-  assert.deepEqual(notReady.continuation, { vicReadinessWaitAttempted: true });
+  assert.deepEqual(
+    notReady.continuation,
+    { strongAuthReadinessWaitAttempted: true },
+  );
   assert.equal(notReady.pollCommand, undefined);
   assert.equal(notReady.resumeCommand, undefined);
 
@@ -57,9 +64,13 @@ test('VIC readiness turns every completed single poll into one authoritative ref
     ready: true,
     events: [{
       eventType: 'payment_method.update',
-      data: { paymentInstrumentId: 'pi_other', visaRegistrationSucceeded: true },
+      data: {
+        paymentInstrumentId: 'pi_other',
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
+      },
     }],
-  }, vicReadinessWaitSpec);
+  }, strongAuthReadinessWaitSpec);
   assert.equal(wrongCard.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
   assert.equal(wrongCard.reason, 'single_attempt_event_not_correlated');
   assert.equal(wrongCard.pollCommand, undefined);
@@ -67,23 +78,37 @@ test('VIC readiness turns every completed single poll into one authoritative ref
   for (const event of [
     {
       eventType: 'payment_method.update',
-      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+      data: {
+        paymentInstrumentId: 'pi_quick',
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
+      },
     },
     {
       eventType: 'vic_device.binding_succeeded',
-      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+      data: { paymentInstrumentId: 'pi_quick' },
     },
     {
       eventType: 'payment_method.updated',
-      data: { paymentInstrumentId: 'pi_quick', visaRegistrationSucceeded: true },
+      data: {
+        paymentInstrumentId: 'pi_quick',
+        strong_auth_ready: true,
+        auth_protocol: 'VISA',
+      },
     },
   ]) {
-    const ready = classifyEventPollObservation({ ready: true, events: [event] }, vicReadinessWaitSpec);
-    assert.equal(ready.domain, EventWorkflowDomain.VIC);
+    const ready = classifyEventPollObservation(
+      { ready: true, events: [event] },
+      strongAuthReadinessWaitSpec,
+    );
+    assert.equal(ready.domain, EventWorkflowDomain.STRONG_AUTH);
     assert.equal(ready.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
     assert.equal(ready.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
-    assert.equal(ready.verifyCommand, vicReadinessWaitSpec.verifyCommand);
-    assert.deepEqual(ready.continuation, { vicReadinessWaitAttempted: true });
+    assert.equal(ready.verifyCommand, strongAuthReadinessWaitSpec.verifyCommand);
+    assert.deepEqual(
+      ready.continuation,
+      { strongAuthReadinessWaitAttempted: true },
+    );
     assert.equal(ready.pollCommand, undefined);
   }
 
@@ -91,11 +116,14 @@ test('VIC readiness turns every completed single poll into one authoritative ref
     ready: false,
     timedOut: true,
     events: [],
-  }, vicReadinessWaitSpec);
+  }, strongAuthReadinessWaitSpec);
   assert.equal(timedOut.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
   assert.equal(timedOut.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
   assert.equal(timedOut.reason, 'single_attempt_event_poll_timeout');
-  assert.deepEqual(timedOut.continuation, { vicReadinessWaitAttempted: true });
+  assert.deepEqual(
+    timedOut.continuation,
+    { strongAuthReadinessWaitAttempted: true },
+  );
   assert.equal(timedOut.resumeCommand, undefined);
 });
 

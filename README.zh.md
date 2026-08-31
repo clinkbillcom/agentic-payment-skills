@@ -1,6 +1,6 @@
 # clink-payment-skill
 
-适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、VIC 授权、退款和风控规则操作。
+适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、Visa/Mastercard 强认证授权、退款和风控规则操作。
 
 ## 环境要求
 
@@ -67,15 +67,15 @@ https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行
-- VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
-- UCP 商品下单 —— 解析并冻结一个商品，判断履约方式；实物邮寄必须提供完整的标准收货地址；完成 Visa/VIC 授权后，先运行 `clink tool internal-ucp get-endpoint`。仅 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `get-rest-endpoint`；每个 provider（包括 `clinkbill` 和非 clinkbill）都必须解析出 canonical HTTPS endpoint，且其 origin 与当前成功的 wallet-status 证据完全同源。runtime 原子 claim 唯一的 `checkoutAttemptId` 后，才在冻结的 `CLINK_BASE_URL` 下以前台方式执行一次 `clink ucp-checkout run ... --confirm-purchase --format json`；只读 resume 继续保留该环境锁。仅数字交付追加 `--wait-delivery --max-wait 900`；Agent 不再手工串联 create、complete、事件轮询或交付轮询
+- 强认证代理授权准备（以 `strongAuthReady` 和 `authProtocol=VISA|MASTERCARD` 为准，复用/创建 instruction draft，并生成对应协议的 Passkey URL 由页面自动签名）
+- UCP 商品下单 —— 解析并冻结一个商品，判断履约方式；实物邮寄必须提供完整的标准收货地址；完成 Visa/Mastercard 强认证授权后，先运行 `clink tool internal-ucp get-endpoint`。仅 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `get-rest-endpoint`；每个 provider（包括 `clinkbill` 和非 clinkbill）都必须解析出 canonical HTTPS endpoint，且其 origin 与当前成功的 wallet-status 证据完全同源。runtime 原子 claim 唯一的 `checkoutAttemptId` 后，才在冻结的 `CLINK_BASE_URL` 下以前台方式执行一次 `clink ucp-checkout run ... --confirm-purchase --format json`；只读 resume 继续保留该环境锁。仅数字交付追加 `--wait-delivery --max-wait 900`；Agent 不再手工串联 create、complete、事件轮询或交付轮询
 - 退款提交与状态轮询
 - 风控规则查看与配置
-- 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
+- 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、强认证就绪/instruction 激活、3DS 后订单结果），而不是凭猜测或反复重试
 
 ## 必须由用户自己打开的页面
 
-这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
+这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa/Mastercard Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
 
 由于完成与否只由 webhook 事件证明，而不是由浏览器回报，用户可以在任意浏览器或设备上完成（包括手机），流程照样收敛。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
 

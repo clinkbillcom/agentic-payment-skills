@@ -1,10 +1,10 @@
 # Browser Page Handoff
 
-Read this before emitting any URL a person has to act on: OAuth device verification, card binding/setup/modify, Visa Passkey registration or signing, instruction update/cancel, a 3DS redirect, or a risk-rule link.
+Read this before emitting any URL a person has to act on: OAuth device verification, card binding/setup/modify, Visa or Mastercard Passkey registration/signing, instruction update/cancel, a 3DS redirect, or a risk-rule link.
 
 ## Why This Boundary Exists
 
-This skill is installed by many different host agents. Some drive a browser themselves — a built-in browser, a headless Chromium over CDP, a browser MCP server, computer-use, an embedded webview — and some habitually preview or unfurl any link they see. On merchant product pages that capability is exactly right and this skill depends on it. On Clink's own pages and on Visa's pages it breaks the flow, and for two of them it cannot possibly succeed:
+This skill is installed by many different host agents. Some drive a browser themselves — a built-in browser, a headless Chromium over CDP, a browser MCP server, computer-use, an embedded webview — and some habitually preview or unfurl any link they see. On merchant product pages that capability is exactly right and this skill depends on it. On Clink's own pages and on network-authentication pages it breaks the flow, and for two of them it cannot possibly succeed:
 
 - **Passkey pages (registration and signing).** WebAuthn requires a platform authenticator bound to the user's device keychain, scoped to the relying-party origin. An agent browser has none. The only way to make one "work" is a CDP virtual authenticator, which forges precisely the proof the page exists to collect. Even when a credential is created in an agent browser profile, it does not exist in the user's own browser, so later signing fails there.
 - **3DS challenge.** The issuer ACS fingerprints the device and scores automation; the one-time code reaches the user's phone. An agent browser gets soft-declined or stepped up.
@@ -36,7 +36,7 @@ Classify every URL with `classifyPageHandoff` from `lib/page-handoff.mjs` before
 | First card binding (`card binding-link`) | `CARD_BINDING` | `USER_DEVICE_ONLY` | `payment_method.added` |
 | Add a payment method (`card setup-link`) | `CARD_SETUP` | `USER_DEVICE_ONLY` | `payment_method.added` / `payment_method.update` |
 | Manage payment methods (`card modify-link`) | `CARD_MODIFY` | `USER_DEVICE_ONLY` | `payment_method.update` / `payment_method.default_change` |
-| Visa Passkey registration (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) | `VIC_PASSKEY_REGISTRATION` | `USER_DEVICE_ONLY` | `vic_device.binding_succeeded` / same-card `payment_method.update` with `visaRegistrationSucceeded=true` (`payment_method.updated` is a compatibility alias) |
+| Visa/Mastercard Passkey registration (`/passkey-auth/{paymentInstrumentId}?type=visa|mastercard`) | `STRONG_AUTH_PASSKEY_REGISTRATION` | `USER_DEVICE_ONLY` | canonical same-card `payment_method.update` with `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`; `vic_device.binding_succeeded` remains a Visa compatibility signal and still requires refresh |
 | Mandate signing (`instruction create` / `sign-url` `passkeyUrl`) | `INSTRUCTION_PASSKEY_SIGNING` | `USER_DEVICE_ONLY` | `purchase_instruction.activated` |
 | Authorization update/cancel page (`instruction update` / `cancel`) | `INSTRUCTION_AGENT_PAGE` | `USER_DEVICE_ONLY` | flow-specific |
 | 3DS challenge (`pay` exit 7 `redirectUrl`) | `THREE_DS_CHALLENGE` | `USER_DEVICE_ONLY`, single load | `agent_order.succeeded` / `agent_order.failed` |
@@ -57,7 +57,7 @@ Never satisfy a Passkey page with a CDP virtual authenticator, and never fabrica
 
 Pass `--open` on every `wallet init` invocation. Pass `--no-open` on every other link-producing command:
 
-`card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
+`card binding-link`, `card setup-link`, `card modify-link`, `card passkey-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
 
 `--no-open` is a global flag and overrides both `--open` and the stored `default-open-links`. It suppresses browser launch only; it does not touch the built-in event watch, which `--no-watch` controls separately and which must stay on.
 
@@ -92,7 +92,7 @@ The trusted card-setup `bindingUrl` returned by `wallet init` is not yet a hando
 
 `classifyPageHandoff` returns `SURFACE_BROWSER_HANDOFF_GAP` whenever `unattended: true` or `userReachable: false` meets a page a human must complete. Stop the run and report which authorization is missing. Do not emit the URL into an empty room and report the run as waiting.
 
-This is why VIC authorization is collected before a schedule exists (`references/clink-instruction.md`): a correctly prepared scheduled run never reaches a browser page at all. Reaching one means the pre-authorization step was skipped or its instruction is no longer usable.
+This is why strong-auth authorization is collected before a schedule exists (`references/clink-instruction.md`): a correctly prepared scheduled run never reaches a browser page at all. Reaching one means the pre-authorization step was skipped or its instruction is no longer usable.
 
 ## FSM Contract
 
