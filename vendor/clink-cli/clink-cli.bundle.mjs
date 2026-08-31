@@ -10617,7 +10617,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.43";
+var CLI_VERSION = "0.2.44";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
