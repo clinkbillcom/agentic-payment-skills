@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.43";
+var CLI_VERSION = "0.2.44";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -33013,6 +33013,7 @@ Filters:
 Options:
   --all                        Fetch all matching pages; cannot be combined with --limit/--page
   --include-provider-products  Also search registered directly-orderable benefit Catalogs
+  --related-queries <json>     Exactly three rewritten queries for parallel anonymous Visa search
   --personalized               Require VSRA Device Flow before recommending
   --anonymous                  Ignore any saved VSRA token
   --market <cn|hk|tw>          Issuing market
@@ -33026,6 +33027,12 @@ Behavior:
   Natural-language filters use the current server taxonomy. Explicit --all and broad requests such
   as "Visa\u6743\u76CA\u6709\u54EA\u4E9B" fetch pageSize 50 repeatedly, de-duplicate Programs, and stop at total, a
   short page, a repeated page, or the safety limit. Explicit --limit/--page keeps ordinary paging.
+
+  With --related-queries, pass a JSON array containing exactly three distinct rewrites of the
+  original query and also pass --anonymous. The CLI runs the original plus three rewrites as four
+  concurrent Visa recommendation requests, excludes fallback_all_offers rows, preserves query
+  priority, and de-duplicates the merged response.data.items by Program code. This mode cannot be
+  combined with --personalized or --include-provider-products.
 
   Without --include-provider-products, output is unchanged. With the flag, the command concurrently
   searches the existing Visa recommendation service and every provider identity configured for the
@@ -33148,6 +33155,10 @@ var VISA_OPTION_DEFINITIONS = [
     name: "include-provider-products",
     flags: "--include-provider-products"
   },
+  {
+    name: "related-queries",
+    flags: "--related-queries <json>"
+  },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
   { name: "context-file", flags: "--context-file <path>" },
@@ -33171,6 +33182,7 @@ var VISA_FLAG_NAMES = [
   "personalized",
   "anonymous",
   "include-provider-products",
+  "related-queries",
   "start",
   "resume",
   "region",
@@ -33497,6 +33509,10 @@ async function visaRecommend(context) {
   if (personalized && anonymous) {
     throw validationError("--personalized and --anonymous cannot be used together");
   }
+  const relatedQueries = parseRelatedRecommendationQueries(getStringFlag(context.args.flags, "related-queries"), query);
+  if (relatedQueries.length > 0 && !anonymous) {
+    throw validationError("--related-queries requires --anonymous");
+  }
   const filters = {};
   assignVisaFilter(filters, "region", getStringFlag(context.args.flags, "region"));
   assignVisaFilter(filters, "category", getStringFlag(context.args.flags, "category"));
@@ -33532,12 +33548,14 @@ async function visaRecommend(context) {
   if (includeProviderProducts && !query.normalize("NFKC").trim()) {
     throw validationError("--include-provider-products requires a non-blank recommendation query");
   }
-  const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
-  const recommendation = recommendVisaOffers({
+  if (relatedQueries.length > 0 && includeProviderProducts) {
+    throw validationError("--related-queries cannot be combined with --include-provider-products");
+  }
+  const runRecommendation = (recommendationQuery) => recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
     locale,
-    query,
+    query: recommendationQuery,
     filters,
     personalization: personalized ? "required" : anonymous ? "anonymous" : "auto",
     all,
@@ -33545,6 +33563,18 @@ async function visaRecommend(context) {
     dryRun: context.globalOptions.dryRun,
     onAuthorization: createVisaAuthorizationReporter(context)
   });
+  if (relatedQueries.length > 0) {
+    const queries = [query.normalize("NFKC").trim(), ...relatedQueries];
+    const expanded = await Promise.all(queries.map(async (recommendationQuery) => ({
+      query: recommendationQuery,
+      ...await runRecommendation(recommendationQuery)
+    })));
+    applyVisaStoredConfig(context, expanded[0]?.storedConfig ?? context.storedConfig);
+    printSuccess(mergeExpandedVisaRecommendations(queries[0], relatedQueries, expanded, all, context.globalOptions.dryRun), context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
+  const recommendation = runRecommendation(query);
   const [{ result, storedConfig }, providerResult] = await Promise.all([
     recommendation,
     providerDiscovery ?? Promise.resolve(void 0)
@@ -33599,8 +33629,10 @@ function validateVisaFlagScope(command, subcommand, flags) {
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
     }
-    if (!recommend && flags["include-provider-products"] !== void 0) {
-      throw validationError("--include-provider-products is only supported by visa recommend");
+    for (const name of ["include-provider-products", "related-queries"]) {
+      if (!recommend && flags[name] !== void 0) {
+        throw validationError(`--${name} is only supported by visa recommend`);
+      }
     }
     return;
   }
@@ -33727,6 +33759,132 @@ function parsePositiveIntFlag(value, message) {
     throw validationError(message);
   }
   return parsed;
+}
+function parseRelatedRecommendationQueries(rawValue, originalQuery) {
+  if (rawValue === void 0) {
+    return [];
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch {
+    throw validationError("--related-queries must be a JSON array of exactly three strings");
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 3) {
+    throw validationError("--related-queries must be a JSON array of exactly three strings");
+  }
+  const original = originalQuery.normalize("NFKC").trim();
+  if (!original) {
+    throw validationError("--related-queries requires a non-blank original recommendation query");
+  }
+  const seen = /* @__PURE__ */ new Set([comparableRecommendationQuery(original)]);
+  return parsed.map((value) => {
+    if (typeof value !== "string" || !value.normalize("NFKC").trim()) {
+      throw validationError("--related-queries must contain exactly three non-blank strings");
+    }
+    const query = value.normalize("NFKC").trim();
+    const comparable = comparableRecommendationQuery(query);
+    if (seen.has(comparable)) {
+      throw validationError("--related-queries and the original query must be distinct");
+    }
+    seen.add(comparable);
+    return query;
+  });
+}
+function comparableRecommendationQuery(value) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase();
+}
+function mergeExpandedVisaRecommendations(originalQuery, relatedQueries, runs, allOffersRequested, dryRun) {
+  const queryExpansion = {
+    originalQuery,
+    relatedQueries: [...relatedQueries],
+    requestCount: runs.length,
+    parallel: true,
+    dedupeKey: "program.code"
+  };
+  if (dryRun) {
+    return {
+      command: "visa recommend",
+      status: "dry_run",
+      sideEffects: false,
+      queryExpansion,
+      requests: runs.map(({ query, result }) => ({ query, plan: result }))
+    };
+  }
+  const mergedItems = [];
+  const seenPrograms = /* @__PURE__ */ new Set();
+  const sources = [];
+  let pagesFetched = 0;
+  for (const run of runs) {
+    const result = recommendationRecord(run.result);
+    const mode = recommendationString(result.recommendationMode);
+    const sourceItems = mode === "matching_offers" || mode === "all_offers_requested" ? recommendationItems(result) : [];
+    let includedOfferCount = 0;
+    for (const item of sourceItems) {
+      const code = recommendationProgramCode(item);
+      const key = code ? `code:${code}` : `row:${JSON.stringify(item)}`;
+      if (seenPrograms.has(key)) {
+        continue;
+      }
+      seenPrograms.add(key);
+      mergedItems.push(item);
+      includedOfferCount += 1;
+    }
+    const sourcePages = recommendationNumber(result.pagesFetched);
+    pagesFetched += sourcePages;
+    sources.push({
+      query: run.query,
+      recommendationMode: mode,
+      returnedOfferCount: recommendationNumber(result.returnedOfferCount),
+      pagesFetched: sourcePages,
+      includedOfferCount
+    });
+  }
+  const original = recommendationRecord(runs[0]?.result);
+  const response = recommendationRecord(original.response);
+  const data = recommendationRecord(response.data);
+  return {
+    ...original,
+    personalized: false,
+    allOffers: allOffersRequested,
+    pagesFetched,
+    recommendationMode: mergedItems.length > 0 ? allOffersRequested ? "all_offers_requested" : "matching_offers" : "no_matching_offers",
+    relaxedAxes: [],
+    returnedOfferCount: mergedItems.length,
+    response: {
+      ...response,
+      data: {
+        ...data,
+        total: mergedItems.length,
+        page: 1,
+        limit: mergedItems.length,
+        count: mergedItems.length,
+        items: mergedItems
+      }
+    },
+    queryExpansion: {
+      ...queryExpansion,
+      sources
+    }
+  };
+}
+function recommendationRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function recommendationItems(result) {
+  const response = recommendationRecord(result.response);
+  const data = recommendationRecord(response.data);
+  return Array.isArray(data.items) ? data.items : [];
+}
+function recommendationProgramCode(value) {
+  const code = recommendationRecord(value).code;
+  return typeof code === "string" && code.trim() ? code.trim() : void 0;
+}
+function recommendationString(value) {
+  return typeof value === "string" ? value : "unknown";
+}
+function recommendationNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 function recoverAfterWalletLogin(previous, next) {
   const visa = normalizeStoredVisaState(next.visa);
