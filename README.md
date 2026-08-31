@@ -25,7 +25,9 @@ visa commerce-run
 The lightweight shopping routes cover:
 
 - broad, category, and merchant-specific Visa Benefit queries through one
-  Visa-only `visa recommend` call with no initial UCP or Catalog request
+  Visa-only `visa recommend` aggregate: the original request plus three
+  constrained rewrites run as four parallel Visa requests, merged and
+  de-duplicated by Program code with no initial UCP or Catalog request
 - one all-channel UAT `catalog search` fallback when Visa returns no relevant
   Program; the bounded result can include Eats365 products such as coffee
 - selected-Benefit detail through `visa detail`, followed by one token-free
@@ -76,8 +78,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.43` vendors Visa CLI `0.2.43` from upstream commit
-`de1327a837d40f99db5e5a01e99f84e5fc7eed93`. It uses Visa-only recommendation,
+Skill `0.1.44` vendors Visa CLI `0.2.44` from upstream commit
+`70b7a98d532436672cdc905108ac2956b4b650d4`. It uses Visa-only recommendation,
 internal-UCP-gated Program ordering, Visa-miss broad Catalog fallback, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
@@ -109,7 +111,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.43`
+Skill version: `0.1.44`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

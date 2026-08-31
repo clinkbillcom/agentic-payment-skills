@@ -22,8 +22,9 @@ visa commerce-run
 
 轻量购物路由覆盖：
 
-- Visa 全量、品类和品牌权益查询，首轮只执行一次纯 Visa
-  `visa recommend`，不调用 UCP 或 Catalog
+- Visa 全量、品类和品牌权益查询，首轮用原始请求加 3 个保持硬约束的同义
+  query 执行一次 `visa recommend` 聚合；CLI 并行调用 4 次 Visa 接口并按
+  Program code 去重合并，不调用 UCP 或 Catalog
 - Visa 没有相关结果时，用原始请求执行一次 UAT 全渠道 `catalog search`
   兜底；这个有界结果可以包含 Eats365 咖啡等商品
 - 用户选中权益后，先用 `visa detail` 获取活动详情，再用
@@ -67,8 +68,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.43` 已 vendor 上游提交
-`de1327a837d40f99db5e5a01e99f84e5fc7eed93` 的 Visa CLI `0.2.43`。它支持
+Skill `0.1.44` 已 vendor 上游提交
+`70b7a98d532436672cdc905108ac2956b4b650d4` 的 Visa CLI `0.2.44`。它支持
 纯 Visa 推荐、内部 UCP 命中后才提示 Program 下单、Visa 空结果 Catalog
 兜底、可选的旧版 `program.code`、完整 Eats365 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -96,7 +97,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.43`
+Skill 版本：`0.1.44`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

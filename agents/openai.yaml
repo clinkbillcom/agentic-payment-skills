@@ -5,9 +5,16 @@ interface:
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Treat Hong
     Kong as --region hk unless the user explicitly says the card is HK-issued.
-    For a Visa Benefit request, run one Visa-only visa recommend and never add
-    --include-provider-products or call UCP/Catalog during that initial
-    recommendation. Independently filter Visa Programs by the original brand,
+    For a Visa Benefit request, preserve the original query and create exactly
+    three distinct same-language rewrites: synonym, merchant/category, and
+    product/Benefit oriented. Preserve every brand, merchant, product, category,
+    geography, eligibility, reward type, and other hard constraint. Never
+    broaden or translate the request. Run one visa recommend with
+    --related-queries containing the three rewrites plus --anonymous. The CLI
+    runs four parallel Visa requests and de-duplicates by Program code; never
+    issue four Agent-managed Shell calls. Never add --include-provider-products
+    or call UCP/Catalog during that aggregate recommendation. Independently
+    filter the merged Visa Programs by the original brand,
     category, geography, merchant, product, eligibility, dates, status, and
     channel constraints. If a relevant Program remains, present it without an
     initial Catalog call. If recommendationMode is fallback_all_offers or

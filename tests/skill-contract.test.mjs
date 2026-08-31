@@ -33,13 +33,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.43');
+  assert.equal(packageJson.version, '0.1.44');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.43/u);
-  assert.match(skill, /version: "0\.1\.43"/u);
+  assert.match(skill, /Visa Skill 0\.1\.44/u);
+  assert.match(skill, /version: "0\.1\.44"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -134,7 +134,7 @@ test('ordinary execution is reference-free and non-exploratory', () => {
   );
 });
 
-test('initial Visa discovery is Visa-only with language and environment locks', () => {
+test('initial Visa discovery expands four Visa-only queries with language and environment locks', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa-Only Benefit Discovery And Catalog Fallback'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -149,16 +149,32 @@ test('initial Visa discovery is Visa-only with language and environment locks', 
   assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
   assert.match(
     discovery,
-    /exactly one initial Visa-only call[\s\S]*visa recommend/iu,
+    /exactly one initial expanded[\s\S]*Visa-only aggregate call[\s\S]*visa recommend/iu,
   );
   assert.doesNotMatch(initialCommand, /--include-provider-products/u);
+  assert.match(
+    initialCommand,
+    /--related-queries[\s\S]*rewrite-1[\s\S]*rewrite-2[\s\S]*rewrite-3[\s\S]*--anonymous[\s\S]*--lang/iu,
+  );
+  assert.match(
+    discovery,
+    /exactly three distinct rewrites[\s\S]*synonym-oriented[\s\S]*merchant\/category-oriented[\s\S]*product\/Benefit-oriented/iu,
+  );
+  assert.match(
+    discovery,
+    /preserve the original brand[\s\S]*merchant[\s\S]*product[\s\S]*category[\s\S]*geography[\s\S]*eligibility[\s\S]*reward type[\s\S]*Do not broaden/iu,
+  );
+  assert.match(
+    discovery,
+    /Do not issue four Agent-managed Shell commands[\s\S]*four parallel Visa recommendation requests[\s\S]*fallback_all_offers[\s\S]*de-duplicates[\s\S]*Program code/iu,
+  );
   assert.match(
     discovery,
     /Never add `--include-provider-products`[\s\S]*do not issue `catalog search`[\s\S]*`ucp-catalog search`[\s\S]*merchant-list[\s\S]*only the Visa recommendation service/iu,
   );
   assert.match(
     discovery,
-    /never logs in[\s\S]*binds a card[\s\S]*creates an Instruction[\s\S]*prepares payment/iu,
+    /never\s+logs in[\s\S]*binds a card[\s\S]*creates an Instruction[\s\S]*prepares payment/iu,
   );
   assert.match(
     skill,
@@ -190,7 +206,7 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     allCommand,
-    /visa recommend[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
+    /visa recommend[\s\S]*--related-queries[\s\S]*--anonymous[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
   assert.match(
@@ -204,6 +220,10 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   assert.match(
     discovery,
     /stable code[\s\S]*title-only fuzzy matching is\s+insufficient/iu,
+  );
+  assert.match(
+    agent,
+    /create exactly[\s\S]*three distinct same-language rewrites[\s\S]*Preserve every brand[\s\S]*Never[\s\S]*broaden[\s\S]*--related-queries[\s\S]*four parallel Visa requests[\s\S]*de-duplicates by Program code/iu,
   );
 });
 

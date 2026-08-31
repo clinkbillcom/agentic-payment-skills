@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.43. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.44. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.43"
+  version: "0.1.44"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -160,9 +160,9 @@ numbers, routing categories, and workflow names are internal maintenance
 details. Never announce the classification or expose those labels in
 user-facing text; respond directly to the user's request.
 
-- Requests such as "What Visa Benefits can I use in Hong Kong?" use Visa-only
-  Benefit discovery. The initial recommendation call must not query UCP or any
-  Catalog provider.
+- Requests such as "What Visa Benefits can I use in Hong Kong?" use expanded
+  Visa-only Benefit discovery. The aggregate recommendation must not query UCP
+  or any Catalog provider.
 - Requests such as "Are there Visa household-goods coupons in Hong Kong?" use
   the same Visa-only discovery with the current category wording.
 - Requests such as "Are there Watsons coupons?" use the same Visa-only
@@ -201,18 +201,37 @@ inputs and authorization satisfy that contract.
 
 ## Visa-Only Benefit Discovery And Catalog Fallback
 
-Visa-related Benefit discovery must make exactly one initial Visa-only call:
+Visa-related Benefit discovery must make exactly one initial expanded
+Visa-only aggregate call. Preserve the user's original request unchanged, then
+create exactly three distinct rewrites in the locked user language:
+
+- one synonym-oriented rewrite
+- one merchant/category-oriented rewrite
+- one product/Benefit-oriented rewrite
+
+Every rewrite must preserve the original brand, merchant, product, category,
+geography, card/eligibility, reward type, quantity, and other hard constraints.
+Do not broaden the request, invent a merchant or product, remove a qualifier,
+translate to another language, or turn a specific request into general
+availability.
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --related-queries '["<rewrite-1>","<rewrite-2>","<rewrite-3>"]' \
+  --anonymous \
   --lang <language-tag> \
   --format json
 ```
 
-Never add `--include-provider-products`. During this initial recommendation,
+Do not issue four Agent-managed Shell commands. The one CLI aggregate runs the
+original plus three rewrites as four parallel Visa recommendation requests,
+excludes `fallback_all_offers` rows, preserves query priority, and de-duplicates
+the merged `response.data.items` by Program code. Read only that merged result.
+
+Never add `--include-provider-products`. During this aggregate recommendation,
 do not issue `catalog search`, `ucp-catalog search`, a merchant-list request,
-or another UCP command. The call uses only the Visa recommendation service and
-never logs in, binds a card, creates an Instruction, or prepares payment.
+or another UCP command. It uses only the Visa recommendation service and never
+logs in, binds a card, creates an Instruction, or prepares payment.
 
 For broad availability wording such as "What Visa Benefits can I use in Hong
 Kong?", always add `--all` because the required result is the complete regional
@@ -221,6 +240,8 @@ on natural language alone to widen the request:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  --related-queries '["<rewrite-1>","<rewrite-2>","<rewrite-3>"]' \
+  --anonymous \
   --all \
   --region hk \
   --lang <language-tag> \
@@ -230,9 +251,10 @@ on natural language alone to widen the request:
 Use `--region hk` when Hong Kong is the requested place of use. Do not add
 `--market hk` unless Hong Kong card issuance is explicit.
 
-For category-, merchant-, or product-specific Visa requests, run the same
-Visa-only command once with the current user request and add `--all` when the
-user asks for every matching Benefit.
+For category-, merchant-, or product-specific Visa requests, generate three
+new constrained rewrites and run the same expanded command once with the
+current user request. Add `--all` when the user asks for every matching
+Benefit. A follow-up query invalidates all prior rewrites and merged results.
 
 Treat returned Programs as Visa candidate rows, not as already-filtered display
 results. Retain only Programs that satisfy the original request's explicit
@@ -929,9 +951,10 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Visa discovery, independently filter Visa Programs by the original
-  query's hard constraints. A relevant Visa result suppresses initial Catalog
-  work; a Visa miss triggers the one broad Catalog fallback.
+- For Visa discovery, use only the CLI's four-query merged Program set, then
+  independently filter it by the original query's hard constraints. A relevant
+  Visa result suppresses initial Catalog work; a Visa miss triggers the one
+  broad Catalog fallback.
 - For a selected Visa Benefit, report an order option only after an exact
   internal UCP Catalog match. Otherwise report the Visa activity detail and
   authoritative link without a purchase call to action.
@@ -947,8 +970,9 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Initial Visa recommendation is Visa-only and never adds
-  `--include-provider-products` or calls UCP/Catalog.
+- Initial Visa recommendation is one Visa-only aggregate: original query plus
+  three constrained rewrites, four parallel Visa requests, Program-code
+  de-duplication, and no `--include-provider-products` or UCP/Catalog call.
 - Relevant Visa Programs are presented without an initial Catalog call.
 - A Visa miss triggers one all-channel UAT broad Catalog fallback with the
   original request; its bounded result window is never described as complete
