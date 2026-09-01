@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.52');
+  assert.equal(packageJson.version, '0.1.53');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.52/u);
-  assert.match(skill, /version: "0\.1\.52"/u);
+  assert.match(skill, /Visa Skill 0\.1\.53/u);
+  assert.match(skill, /version: "0\.1\.53"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -146,7 +146,7 @@ test('ordinary execution loads only the routed filter reference and stays non-ex
   );
 });
 
-test('initial Visa discovery uses one recommend-products aggregate', () => {
+test('initial Visa discovery runs one aggregate with parallel broad Catalog', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -165,16 +165,16 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
   assert.match(
     discovery,
-    /exactly one `visa recommend-products`[\s\S]*one Visa recommendation[\s\S]*concurrently tries[\s\S]*every returned Program/iu,
+    /exactly one `visa recommend-products`[\s\S]*unchanged original current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*every returned Program/iu,
   );
   assert.match(
     singleCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*<environment-flag>[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.match(
     aggregateCommand,
-    /exactly four genuinely different safe plans[\s\S]*recommend-products[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /exactly four genuinely different safe plans[\s\S]*recommend-products "<original-current-user-query>"[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*<environment-flag>[\s\S]*--lang/iu,
   );
   assert.match(
     discovery,
@@ -262,7 +262,7 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     allCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--include-broad-catalog[\s\S]*<environment-flag>[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(allCommand, /--filter-sets/u);
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
@@ -276,7 +276,7 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     discovery,
-    /matched Program[\s\S]*provenance only[\s\S]*must not be displayed[\s\S]*again as a Visa Benefit/iu,
+    /`products` is one unified list[\s\S]*Visa-linked[\s\S]*broad Catalog[\s\S]*Do not group or label[\s\S]*Preserve `catalogProvenance` internally[\s\S]*matched Program[\s\S]*must not be displayed again as a Benefit/iu,
   );
   assert.match(
     discovery,
@@ -285,6 +285,10 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   assert.match(
     discovery,
     /hard[\s\S]*constraints[\s\S]*preserve code, title, order, summary, dates, and URL/iu,
+  );
+  assert.match(
+    discovery,
+    /`broadCatalogSearch\.coverage=partial`[\s\S]*incomplete broad product[\s\S]*preserving linked products and Benefits/iu,
   );
   assert.match(
     agent,
@@ -338,7 +342,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
 });
 
-test('a Visa miss stops without broad Catalog fallback', () => {
+test('a Visa miss suppresses fallback rows but keeps parallel broad products', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -366,7 +370,7 @@ test('a Visa miss stops without broad Catalog fallback', () => {
   );
   assert.match(
     fallback,
-    /report no strict matching Visa Benefit or linked product[\s\S]*Do[\s\S]*not run broad `catalog search`/iu,
+    /Visa miss[\s\S]*do not display fallback Visa rows[\s\S]*Still present any products[\s\S]*parallel broad Catalog search/iu,
   );
   assert.match(
     agent,
@@ -379,6 +383,10 @@ test('a Visa miss stops without broad Catalog fallback', () => {
   assert.match(
     agent,
     /every other error stops/iu,
+  );
+  assert.match(
+    agent,
+    /no strict Visa match[\s\S]*still present[\s\S]*broad products/iu,
   );
   assert.doesNotMatch(fallback, /bin\/visa-cli catalog search/u);
 });

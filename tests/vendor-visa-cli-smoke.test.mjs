@@ -88,11 +88,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.48');
+  assert.equal(vendorPackage.version, '0.2.49');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '1fa57ba4c21c1e61da4b1413d80896cea14d1503',
+    'a2b1295aae5bd5e157d99001d26d1a10628785e3',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -149,6 +149,14 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
       new RegExp(`visa ${command}`, 'u'),
     );
   }
+
+  const aggregateHelp = run(['visa', 'recommend-products', '--help']);
+  assert.equal(aggregateHelp.status, 0, aggregateHelp.stderr);
+  assert.match(aggregateHelp.stdout, /--include-broad-catalog/u);
+  assert.match(
+    aggregateHelp.stdout,
+    /same\s+products collection without source grouping/iu,
+  );
 });
 
 test('Visa region persists HK/CN source selection for later recommendations', async () => {

@@ -31,6 +31,8 @@ The lightweight shopping routes cover:
   with explicit `--market` reserved for cross-source searches
 - one unified `products` collection plus unmatched `visaBenefits`; a Program
   represented by a product is not displayed twice
+- parallel all-channel Catalog search whose available products merge into that
+  same collection without source grouping
 - selected unmatched-Benefit detail through `visa detail`; no repeated
   product-search
 - an order invitation only for an exact `internal-ucp-catalog` match; otherwise
@@ -46,9 +48,9 @@ The lightweight shopping routes cover:
   VIC-ready and CWallet activates that exact Instruction
 
 Initial discovery never uses `--include-provider-products` or a merchant-list
-lookup. The aggregate attempts product resolution only for configured exact
-internal routes. A failed or unmatched resolution remains a Visa Benefit. This
-branch does not run broad Catalog fallback for a Visa Benefit request.
+lookup. It starts all-channel Catalog search in parallel with Visa
+recommendation. Linked and broad products share one products collection; a
+failed or unmatched Program resolution remains a Visa Benefit.
 
 Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
@@ -75,9 +77,10 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.52` vendors Visa CLI `0.2.48` from upstream commit
-`1fa57ba4c21c1e61da4b1413d80896cea14d1503`. It uses one-round Visa
-recommendation and exact configured internal product matching, optional
+Skill `0.1.53` vendors Visa CLI `0.2.49` from upstream commit
+`a2b1295aae5bd5e157d99001d26d1a10628785e3`. It uses one-round Visa
+recommendation, exact configured internal matching, and parallel broad Catalog,
+optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
 contexts. It also requires the aggregate missing-card flow to show rather than
@@ -107,7 +110,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.52`
+Skill version: `0.1.53`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

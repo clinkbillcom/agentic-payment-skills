@@ -24,18 +24,23 @@ interface:
     reward_type only when the user explicitly names the reward type;
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
-    recommend-products with --anonymous, the locked language, and the locked
-    sandbox/test flag. It recommends Visa Programs and concurrently checks each
-    one against configured exact internal UCP routes; never issue separate
+    recommend-products with the unchanged original current user query,
+    --include-broad-catalog, --anonymous, the locked language, and the locked
+    sandbox/test flag. It starts all-channel broad Catalog search in parallel
+    with Visa recommendation and checks each Program against configured exact
+    internal UCP routes; never issue separate
     recommend, detail, product-search, merchant-list, or external-page calls.
-    Read only products and visaBenefits. Present exact orderable products first.
-    A Program represented by a product must not also be displayed as a Benefit.
+    Read only products and visaBenefits. Products is one unified list: never
+    group or label Visa-linked and broad Catalog products by source. Preserve
+    catalogProvenance internally for purchase revalidation. A Program represented
+    by a product must not also be displayed as a Benefit.
     Independently filter unmatched visaBenefits by the original hard
     constraints. PRODUCT_SELECTION_REQUIRED, unavailable, external, and failed
     matches remain Benefits. Disclose partial productMatching coverage. If
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
-    survives semantic filtering, report no strict match; do not run broad
-    catalog search in this branch. Treat only structured ok=false,
+    survives semantic filtering, report no strict Visa match but still present
+    broad products. Disclose partial productMatching or broadCatalogSearch
+    coverage. Treat only structured ok=false,
     error.type=api_error, whose message starts exactly Visa recommendation
     relaxed explicitly requested filters: as the same no-strict-match result;
     every other error stops. Catalog price.amount and price_range amounts are minor

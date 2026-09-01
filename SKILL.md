@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.52. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.53. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.52"
+  version: "0.1.53"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -235,17 +235,19 @@ inputs and authorization satisfy that contract.
 ## Visa Benefit And Product Discovery
 
 Visa-related Benefit discovery must make exactly one `visa recommend-products`
-call. Read `references/visa-recommend-filters.md` and choose the smallest safe
-filter shape. The CLI performs one Visa recommendation and concurrently tries
-every returned Program against configured internal UCP merchant routes using
-the Program's authoritative URL and title.
+call with the unchanged original current user request and
+`--include-broad-catalog`. Read `references/visa-recommend-filters.md` and
+choose the smallest safe filter shape. The CLI starts broad all-channel Catalog
+search in parallel with Visa recommendation, then checks every returned Program
+against configured internal UCP merchant routes.
 
 Use one strict explicit-filter request by default:
 
 ```text
-<Skill Path>/bin/visa-cli visa recommend-products \
+<Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
   <individual-filter-flags> \
   --anonymous \
+  --include-broad-catalog \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -255,9 +257,10 @@ Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:
 
 ```text
-<Skill Path>/bin/visa-cli visa recommend-products \
+<Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
   --filter-sets '[<filter-1>,<filter-2>,<filter-3>,<filter-4>]' \
   --anonymous \
+  --include-broad-catalog \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -281,10 +284,11 @@ set. Also add `--all` for any other explicit all-Benefits request; do not rely
 on natural language alone to widen the request:
 
 ```text
-<Skill Path>/bin/visa-cli visa recommend-products \
+<Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
   <individual-filter-flags> \
   --anonymous \
   --all \
+  --include-broad-catalog \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -309,10 +313,11 @@ invalidates all prior filters and results.
 
 Read only the aggregate `products` and `visaBenefits` collections:
 
-- `products` contains exact `PRODUCT_VERIFIED` internal UCP matches. Present
-  the authoritative product title, major-unit price/currency, availability, and
-  merchant. A matched Program is provenance only and must not be displayed
-  again as a Visa Benefit.
+- `products` is one unified list containing exact Visa-linked internal UCP
+  matches and available broad Catalog candidates. Do not group or label
+  products by source. Present title, major-unit price/currency, availability,
+  and merchant. Preserve `catalogProvenance` internally for purchase
+  revalidation. A matched Program must not be displayed again as a Benefit.
 - `visaBenefits` contains Programs that did not resolve to an exact orderable
   product. Independently retain only rows satisfying the user's hard
   constraints and preserve code, title, order, summary, dates, and URL.
@@ -320,6 +325,8 @@ Read only the aggregate `products` and `visaBenefits` collections:
   failed resolution into products. It remains a Benefit.
 - If `productMatching.coverage=partial`, disclose that some product checks
   failed without hiding the retained Benefits.
+- If `broadCatalogSearch.coverage=partial`, disclose incomplete broad product
+  coverage while preserving linked products and Benefits.
 
 Treat `fallback_all_offers`, `no_matching_offers`, or zero Programs after the
 independent semantic filter as a Visa miss. Never display fallback Visa rows.
@@ -332,8 +339,8 @@ miss. This exact read-only response means no strict Program matched. Every
 other error stops; never turn a timeout, network, authentication, validation,
 or unrelated API error into Catalog fallback.
 
-For a Visa miss, report no strict matching Visa Benefit or linked product. Do
-not run broad `catalog search` in this branch.
+For a Visa miss, do not display fallback Visa rows. Still present any products
+returned by the parallel broad Catalog search.
 
 For count-only wording, return the authoritative Visa matching total. Do not
 silently replace a requested Visa Benefit count with a bounded Catalog count.
@@ -966,7 +973,8 @@ general workflow engine.
   explicit-filter request by default, or one four-set aggregate.
 - Every returned Program is checked only against configured exact internal UCP
   routes. Exact matches become products and are removed from visaBenefits.
-- No broad Catalog fallback runs in this branch.
+- Broad Catalog search runs in parallel and merges available candidates into
+  the same products list without source grouping.
 - Selecting a Visa Benefit fetches Visa detail first. Only an exact
   `internal-ucp-catalog` product match permits an order invitation.
 - Without an internal UCP match, present only the activity introduction, terms,
