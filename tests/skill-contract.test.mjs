@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.45');
+  assert.equal(packageJson.version, '0.1.46');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.45/u);
-  assert.match(skill, /version: "0\.1\.45"/u);
+  assert.match(skill, /Visa Skill 0\.1\.46/u);
+  assert.match(skill, /version: "0\.1\.46"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -190,7 +190,7 @@ test('initial Visa discovery uses four Agent-selected filter sets', () => {
   );
   assert.match(
     skill,
-    /visa recommend[\s\S]*do not accept[\s\S]*--sandbox[\s\S]*destination\s+`--region hk`[\s\S]*issuing `--market hk` only/iu,
+    /visa recommend[\s\S]*do not accept[\s\S]*--sandbox[\s\S]*destination[\s\S]*"region": \["hk"\][\s\S]*every `--filter-sets` object[\s\S]*outer `--region hk`[\s\S]*issuing `--market hk` only/iu,
   );
 });
 
@@ -205,7 +205,7 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   const allCommand = discovery.slice(
     discovery.indexOf('For broad availability wording'),
-    discovery.indexOf('Use `--region hk`'),
+    discovery.indexOf('For a Hong Kong destination'),
   );
 
   assert.match(
@@ -218,9 +218,14 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     allCommand,
-    /visa recommend[\s\S]*--filter-sets[\s\S]*--anonymous[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
+    /visa recommend[\s\S]*--filter-sets[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
   );
+  assert.doesNotMatch(allCommand, /\n\s*--region\b/u);
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
+  assert.match(
+    discovery,
+    /Hong Kong destination[\s\S]*"region": \["hk"\][\s\S]*every filter\s+object[\s\S]*never add an outer individual recommendation\s+filter flag/iu,
+  );
   assert.match(
     discovery,
     /Retain only Programs[\s\S]*brand[\s\S]*category[\s\S]*geography[\s\S]*eligibility[\s\S]*dates[\s\S]*channel[\s\S]*hard constraints/iu,
@@ -236,6 +241,10 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   assert.match(
     agent,
     /read only references\/visa-recommend-filters\.md[\s\S]*select exactly four[\s\S]*filter objects[\s\S]*--filter-sets[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*never infers filters from[\s\S]*query/iu,
+  );
+  assert.match(
+    agent,
+    /Hong\s+Kong destination[\s\S]*region \["hk"\][\s\S]*all four filter objects[\s\S]*Never\s+combine --filter-sets[\s\S]*outer individual recommendation filter flag/iu,
   );
 });
 
@@ -262,6 +271,10 @@ test('compact filter reference defines schema, selection priority, and intent bo
   assert.match(
     filterReference,
     /keyword[\s\S]*exact official title[\s\S]*Never put a conversational question/iu,
+  );
+  assert.match(
+    filterReference,
+    /every recommendation filter[\s\S]*inside these objects[\s\S]*never combine `--filter-sets`[\s\S]*outer individual\s+filter flag/iu,
   );
   assert.match(
     filterReference,

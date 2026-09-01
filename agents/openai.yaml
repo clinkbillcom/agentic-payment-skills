@@ -3,8 +3,10 @@ interface:
   short_description: "Payments, ordering, checkout, shopping, coupons, vouchers, benefits, and Visa commerce."
   default_prompt: >-
     Use the bundled visa-cli only. Lock one user language and one environment.
-    Visa recommend/detail/taxonomy never take --sandbox or --test. Treat Hong
-    Kong as --region hk unless the user explicitly says the card is HK-issued.
+    Visa recommend/detail/taxonomy never take --sandbox or --test. For a Hong
+    Kong destination, put region ["hk"] in all four filter objects. Never
+    combine --filter-sets with an outer individual recommendation filter flag.
+    Use --market hk only when the user explicitly says the card is HK-issued.
     Route explicit buy/order/checkout requests with no Visa, Benefit, coupon,
     voucher, discount, or offer signal directly to broad catalog search; for
     example, 我想下单咖啡 is Catalog. A Benefit signal such as 有咖啡的券吗,
