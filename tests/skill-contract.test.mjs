@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.52');
+  assert.equal(packageJson.version, '0.1.53');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.52/u);
-  assert.match(skill, /version: "0\.1\.52"/u);
+  assert.match(skill, /Visa Skill 0\.1\.53/u);
+  assert.match(skill, /version: "0\.1\.53"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -165,7 +165,7 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
   assert.match(
     discovery,
-    /exactly one `visa recommend-products`[\s\S]*one Visa recommendation[\s\S]*concurrently tries[\s\S]*every returned Program/iu,
+    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*performs one Visa recommendation[\s\S]*concurrently tries every[\s\S]*returned Program/iu,
   );
   assert.match(
     singleCommand,
@@ -182,7 +182,7 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   );
   assert.match(
     discovery,
-    /Read `references\/visa-recommend-filters\.md`/u,
+    /Read\s+`references\/visa-recommend-filters\.md`/u,
   );
   assert.match(
     discovery,
@@ -334,7 +334,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /我想下单咖啡[\s\S]*catalog search[\s\S]*有咖啡的券吗[\s\S]*visa recommend[\s\S]*Agent-selected filters/iu,
+    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*never calls[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type/iu,
   );
 });
 
@@ -411,38 +411,36 @@ test('unmatched Visa Benefit supports detail without another product search', ()
   );
 });
 
-test('direct shopping uses aggregate Catalog purchase', () => {
+test('direct shopping uses Visa discovery instead of Catalog-only routing', () => {
   const routing = skill.slice(
     skill.indexOf('## Intent Routing'),
-    skill.indexOf('## Visa-Only Benefit Discovery And Catalog Fallback'),
+    skill.indexOf('## Visa Benefit And Product Discovery'),
   );
   const catalogPurchase = skill.slice(
     skill.indexOf('## Catalog Purchase Fast Path'),
     skill.indexOf('### Visa Preparation'),
   );
-  const discoveryCommand = catalogPurchase.slice(
-    catalogPurchase.indexOf('Broad-Catalog discovery'),
-    catalogPurchase.indexOf('Before login'),
-  );
 
   assert.match(
     routing,
-    /explicit buy\/order\/checkout request[\s\S]*no Visa[\s\S]*coupon[\s\S]*offer signal[\s\S]*我想下单咖啡[\s\S]*broad Catalog shopping/iu,
+    /Every product, category, or merchant discovery[\s\S]*buy\/order\/checkout request[\s\S]*even\s+without[\s\S]*Visa[\s\S]*我想下单咖啡[\s\S]*same one-round aggregate/iu,
   );
   assert.match(
     routing,
-    /有咖啡的券吗[\s\S]*Visa 咖啡优惠券[\s\S]*有哪些咖啡权益[\s\S]*Visa Benefit discovery/iu,
+    /我想下单咖啡[\s\S]*有咖啡的券吗[\s\S]*Visa 咖啡优惠券[\s\S]*有哪些咖啡权益[\s\S]*taxonomy filters differ/iu,
   );
   assert.match(
-    discoveryCommand,
-    /bin\/visa-cli catalog search[\s\S]*--query "<original-current-user-query>"[\s\S]*--language <language-tag>[\s\S]*"address_region":"HK"/iu,
+    routing,
+    /Never route initial shopping discovery directly to `catalog search`[\s\S]*no broad Catalog discovery/iu,
   );
-  assert.doesNotMatch(discoveryCommand, /address_country/iu);
+  assert.match(
+    catalogPurchase,
+    /Initial shopping discovery never calls `catalog search`[\s\S]*does\s+not produce broad Catalog candidates[\s\S]*Do not run another discovery command/iu,
+  );
   assert.doesNotMatch(
-    discoveryCommand,
-    /^<Skill Path>\/bin\/visa-cli visa recommend|^\s*--include-provider-products/mu,
+    catalogPurchase,
+    /<Skill Path>\/bin\/visa-cli catalog search[\s\S]*--query/iu,
   );
-  assert.match(catalogPurchase, /bounded and non-exhaustive/iu);
   assert.match(
     skill,
     /Catalog Money[\s\S]*price\.amount[\s\S]*price_range\.\*\.amount[\s\S]*minor[\s\S]*100 USD[\s\S]*USD 1\.00[\s\S]*2600 HKD[\s\S]*HKD 26\.00/iu,
@@ -457,7 +455,7 @@ test('direct shopping uses aggregate Catalog purchase', () => {
   );
   assert.match(
     catalogPurchase,
-    /direct broad-Catalog shopping[\s\S]*ordinary Catalog shopping[\s\S]*must not inherit Visa Program eligibility/iu,
+    /exact non-Program product[\s\S]*another\s+authoritative Catalog capability[\s\S]*ordinary Catalog shopping[\s\S]*must not[\s\S]*inherit Visa Program eligibility/iu,
   );
   assert.match(
     catalogPurchase,
@@ -465,7 +463,7 @@ test('direct shopping uses aggregate Catalog purchase', () => {
   );
   assert.match(
     catalogPurchase,
-    /direct-shopping internal merchant[\s\S]*selected `merchant_id`[\s\S]*`ucp-catalog product`[\s\S]*Do not purchase directly from a broad-search display row/iu,
+    /internal merchant[\s\S]*selected `merchant_id`[\s\S]*`ucp-catalog product`[\s\S]*Do not purchase directly from a broad-search display row/iu,
   );
   assert.match(
     catalogPurchase,

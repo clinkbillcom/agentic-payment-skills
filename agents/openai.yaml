@@ -12,12 +12,13 @@ interface:
     --region <destination>; explicit market wins. Never run visa region get/set
     as a search preflight. Other or multi-value destinations do not update the
     saved source.
-    Route explicit buy/order/checkout requests with no Visa, Benefit, coupon,
-    voucher, discount, or offer signal directly to broad catalog search; for
-    example, 我想下单咖啡 is Catalog. A Benefit signal such as 有咖啡的券吗,
-    Visa 咖啡优惠券, or 有哪些咖啡权益 is Visa discovery. For Visa discovery,
-    read only references/visa-recommend-filters.md and choose the smallest safe
-    filter shape. Use one strict explicit-filter call by default. Use
+    Route every product, category, or merchant discovery and every explicit
+    buy/order/checkout request through exactly one visa recommend-products,
+    even without a Visa, Benefit, coupon, voucher, discount, or offer signal.
+    我想下单咖啡, 有咖啡的券吗, Visa 咖啡优惠券, and 有哪些咖啡权益 all use
+    this aggregate. Never call catalog search for initial shopping discovery in
+    this branch. Read only references/visa-recommend-filters.md and choose the
+    smallest safe filter shape. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve
     recall. Preserve every explicit brand, merchant, product, category,
     geography, eligibility, reward type, and other hard constraint. Set

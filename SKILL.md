@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.52. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.53. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.52"
+  version: "0.1.53"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -197,13 +197,14 @@ user-facing text; respond directly to the user's request.
   the same Visa-only discovery with the current category wording.
 - Requests such as "Are there Watsons coupons?" use the same Visa-only
   discovery with the current brand or product wording.
-- An explicit buy/order/checkout request with no Visa, Benefit, coupon, voucher,
-  discount, or offer signal, such as "我想下单咖啡", uses broad Catalog shopping.
-  Do not call `visa recommend` merely because this Skill can access Visa
-  Benefits.
-- A discovery request with a Benefit signal, such as "有咖啡的券吗",
-  "Visa 咖啡优惠券", or "有哪些咖啡权益", uses Visa Benefit discovery even
-  though the requested subject is also a purchasable product.
+- Every product, category, or merchant discovery and every explicit
+  buy/order/checkout request uses Visa Benefit and product discovery, even
+  without a Visa, Benefit, coupon, voucher, discount, or offer signal.
+  "我想下单咖啡", "有咖啡的券吗", "Visa 咖啡优惠券", and
+  "有哪些咖啡权益" all use the same one-round aggregate; only their selected
+  taxonomy filters differ.
+- Never route initial shopping discovery directly to `catalog search`. This
+  branch intentionally has no broad Catalog discovery.
 
 Use Program aggregation after the one-round result contains an exact orderable
 product selected by the user:
@@ -213,15 +214,15 @@ visa recommend-products -> ask to order ->
 visa commerce-login -> visa commerce-run
 ```
 
-Use Catalog Purchase aggregation for an exact product selected from direct
-broad-Catalog shopping:
+Use Catalog Purchase aggregation only for an exact non-Program product already
+supplied by another authoritative Catalog capability:
 
 ```text
-catalog search -> commerce-login ->
+authoritative Catalog product -> commerce-login ->
 visa commerce-run mode=catalog_purchase
 ```
 
-Direct Catalog products are ordinary Catalog products. Never attach Visa
+Non-Program Catalog products are ordinary Catalog products. Never attach Visa
 Program eligibility, campaign terms, or Benefit claims to them.
 
 New `mode=purchase` and `mode=catalog_purchase` contexts must omit both the
@@ -234,11 +235,12 @@ inputs and authorization satisfy that contract.
 
 ## Visa Benefit And Product Discovery
 
-Visa-related Benefit discovery must make exactly one `visa recommend-products`
-call. Read `references/visa-recommend-filters.md` and choose the smallest safe
-filter shape. The CLI performs one Visa recommendation and concurrently tries
-every returned Program against configured internal UCP merchant routes using
-the Program's authoritative URL and title.
+All initial shopping discovery, including explicit buy/order/checkout requests,
+must make exactly one `visa recommend-products` call. Read
+`references/visa-recommend-filters.md` and choose the smallest safe filter
+shape. The CLI performs one Visa recommendation and concurrently tries every
+returned Program against configured internal UCP merchant routes using the
+Program's authoritative URL and title.
 
 Use one strict explicit-filter request by default:
 
@@ -302,10 +304,12 @@ wording such as "优惠", "benefit", "offer", or "礼遇" selects no
 `reward_type`. Never fan out inferred reward types. If only one safe plan
 remains, use the single explicit-filter call.
 
-For category-, merchant-, or product-specific Visa requests, choose one strict
-plan by default and use four-set aggregation only for four meaningful variants.
-Add `--all` when the user asks for every matching Benefit. A follow-up query
-invalidates all prior filters and results.
+For category-, merchant-, or product-specific shopping requests, choose one
+strict plan by default and use four-set aggregation only for four meaningful
+variants. For "我想下单咖啡", select the high-confidence
+`dining_cafe_bakery` category and do not invent a `reward_type`. Add `--all`
+when the user asks for every matching Benefit. A follow-up query invalidates all
+prior filters and results.
 
 Read only the aggregate `products` and `visaBenefits` collections:
 
@@ -515,26 +519,14 @@ reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 
 ## Catalog Purchase Fast Path
 
-Use this path for an exact product selected from direct broad-Catalog shopping.
-It is ordinary Catalog shopping and must not inherit Visa Program eligibility,
-campaign terms, or Benefit claims.
+Use this path only for an exact non-Program product already supplied by another
+authoritative Catalog capability. It is ordinary Catalog shopping and must not
+inherit Visa Program eligibility, campaign terms, or Benefit claims.
 
-Broad-Catalog discovery is anonymous. Direct shopping must not call
-`visa recommend-products`:
-
-```text
-<Skill Path>/bin/visa-cli catalog search \
-  --query "<original-current-user-query>" \
-  --language <language-tag> \
-  --context '{"address_region":"HK"}' \
-  <environment-flag> \
-  --format json
-```
-
-Use the locked geography instead of hardcoding `HK` when the user selected
-another market. Broad Catalog results are bounded and non-exhaustive; say so.
-Agent-rank only products that satisfy the user's actual product, brand,
-geography, channel, and other hard constraints.
+Initial shopping discovery never calls `catalog search` in this branch and does
+not produce broad Catalog candidates. Do not run another discovery command
+here. When another authorized capability supplies a bounded broad Catalog
+candidate, retain its frozen provenance and disclose incomplete coverage.
 
 Before login, resolve the selected item to one authoritative orderable product.
 For a direct-shopping internal merchant, use the selected `merchant_id`,
@@ -831,16 +823,16 @@ general workflow engine.
 
 ### CAP-CATALOG: General Catalog Discovery
 
-- Search anonymously with `catalog search` when no merchant is known, or
+- Use `catalog search` only when the user explicitly requests that standalone
+  Catalog capability or a non-initial workflow already requires it. Use
   `ucp-catalog search/product` when the merchant is authoritative.
 - Pass the locked `--language` and search environment. Discovery never starts
   wallet setup and never authorizes purchase.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. Apply Catalog Money before presenting
   a price. A later purchase must freeze one exact selected product.
-- Visa-related Benefit requests use Visa-only discovery. A Visa miss or direct
-  shopping request uses broad Catalog discovery and, after an exact selection,
-  the Catalog Purchase Fast Path.
+- All initial product and Benefit discovery uses `visa recommend-products`.
+  A Visa miss stops without broad Catalog fallback in this branch.
 
 ### CAP-PAY: Direct Or Session Pay
 
@@ -971,11 +963,11 @@ general workflow engine.
   `internal-ucp-catalog` product match permits an order invitation.
 - Without an internal UCP match, present only the activity introduction, terms,
   and authoritative activity link, with no purchase-inducing next step.
-- Direct shopping skips Visa recommendation and starts with broad Catalog
-  discovery.
+- Direct shopping uses the same Visa recommendation and configured exact
+  product matching as Benefit wording; it never starts with `catalog search`.
 - A matched Visa Program purchase uses the three purchase aggregates in Program
   mode after `visa detail` and internal product verification.
-- Direct and Visa-fallback Catalog purchase use login plus
+- A separately authoritative non-Program Catalog purchase uses login plus
   `mode=catalog_purchase`, never atomic UCP.
 - For a Program purchase, the Program and internal UCP Catalog product identity
   plus recommendation-backed purchase amount/currency must agree.

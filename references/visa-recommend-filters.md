@@ -87,7 +87,8 @@ returned code.
 
 ## Intent Boundary
 
-- Explicit purchase with no Visa/Benefit/coupon signal, such as
-  `我想下单咖啡`, uses broad `catalog search`.
-- A Benefit signal such as `有咖啡的券吗`, `Visa 咖啡优惠券`, or
-  `有哪些咖啡权益` uses `visa recommend` with Agent-selected filters.
+- Purchase and Benefit wording both use `visa recommend-products`; initial
+  discovery never calls `catalog search`.
+- `我想下单咖啡`: use `type=benefit`, `category=dining_cafe_bakery`, and no
+  `reward_type`.
+- Benefit wording uses the same aggregate with explicit constraints preserved.
