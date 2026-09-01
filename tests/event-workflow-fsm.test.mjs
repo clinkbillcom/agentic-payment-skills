@@ -60,6 +60,34 @@ test('strong-auth readiness turns every completed single poll into one authorita
   assert.equal(notReady.pollCommand, undefined);
   assert.equal(notReady.resumeCommand, undefined);
 
+  for (const data of [
+    { paymentInstrumentId: 'pi_quick', authProtocol: 'VISA' },
+    { paymentInstrumentId: 'pi_quick', strongAuthReady: false, authProtocol: 'AMEX' },
+    {
+      paymentInstrumentId: 'pi_quick',
+      strongAuthReady: false,
+      authProtocol: 'VISA',
+      auth_protocol: 'MASTERCARD',
+    },
+    { paymentInstrumentId: 'pi_quick', strongAuthReady: true, authProtocol: 'AMEX' },
+    {
+      paymentInstrumentId: 'pi_quick',
+      strongAuthReady: true,
+      authProtocol: 'VISA',
+      auth_protocol: 'MASTERCARD',
+    },
+    { paymentInstrumentId: 'pi_quick', strongAuthReady: 'true', authProtocol: 'VISA' },
+  ]) {
+    const nonActionable = classifyEventPollObservation({
+      ready: true,
+      events: [{ eventType: 'payment_method.update', data }],
+    }, strongAuthReadinessWaitSpec);
+    assert.equal(nonActionable.state, EventWorkflowState.EVENT_STATUS_VERIFY_REQUIRED);
+    assert.equal(nonActionable.action, EventWorkflowAction.VERIFY_RESOURCE_STATUS);
+    assert.equal(nonActionable.reason, 'single_attempt_event_not_actionable');
+    assert.equal(nonActionable.pollCommand, undefined);
+  }
+
   const wrongCard = classifyEventPollObservation({
     ready: true,
     events: [{

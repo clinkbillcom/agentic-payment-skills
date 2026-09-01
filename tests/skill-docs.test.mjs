@@ -159,7 +159,10 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(authorizationSourceRow[1], /UPSTREAM_MERCHANT_WORKFLOW/u);
   assert.match(skill, /strongAuthReady=true/u);
   assert.match(skill, /authProtocol=VISA\|MASTERCARD/u);
-  assert.match(skill, /strongAuthReady=false` bypasses instruction matching/u);
+  assert.match(skill, /`strongAuthReady=false` bypasses instruction matching/u);
+  assert.match(skill, /absent readiness field means capability unavailable and also bypasses/u);
+  assert.match(skill, /When readiness is false, ignore an unknown\/conflicting protocol/u);
+  assert.match(skill, /Non-Boolean\/conflicting readiness/u);
   assert.match(skill, /Brand-based routing is incorrect/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
@@ -180,6 +183,13 @@ test('payment reference documents the protocol-neutral strong-auth resolver', ()
   assert.match(paymentRefund, /authProtocol=VISA\|MASTERCARD/u);
   assert.match(paymentRefund, /Card brand is display data/u);
   assert.match(paymentRefund, /AUTHORIZATION_ERROR/u);
+  assert.match(paymentRefund, /readiness field is absent during backend rollout/u);
+  assert.match(paymentRefund, /absent readiness field is the compatibility bypass above, not an error/u);
+  assert.match(paymentRefund, /ignore unknown\/conflicting protocol values unless readiness is true/u);
+  assert.match(ucpCheckout, /If readiness is absent, it omits both capability fields/u);
+  assert.match(ucpCheckout, /unknown\/conflicting protocol is omitted rather than blocking ordinary checkout/u);
+  assert.match(walletConfig, /readiness absent during backend rollout, bypasses instruction matching/u);
+  assert.match(instruction, /absent readiness field during backend rollout/u);
 });
 
 test('shipped docs and strong-auth runtime reject legacy registration capability fields', () => {

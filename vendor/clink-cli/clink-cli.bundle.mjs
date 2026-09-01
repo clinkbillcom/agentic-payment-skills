@@ -11062,7 +11062,7 @@ function normalizeStrongAuthProtocol(value) {
   const normalized = value.trim().toUpperCase();
   return SUPPORTED_STRONG_AUTH_PROTOCOLS.has(normalized) ? normalized : void 0;
 }
-function paymentMethodAuthProtocol(method, paymentInstrumentId, required = false) {
+function paymentMethodAuthProtocol(method, paymentInstrumentId, required = false, tolerateInvalid = false) {
   const rawValues = [method?.authProtocol, method?.auth_protocol].filter((value) => value !== void 0);
   if (rawValues.length === 0) {
     if (required) {
@@ -11072,9 +11072,15 @@ function paymentMethodAuthProtocol(method, paymentInstrumentId, required = false
   }
   const protocols = rawValues.map(normalizeStrongAuthProtocol);
   if (protocols.some((value) => value === void 0)) {
+    if (tolerateInvalid) {
+      return void 0;
+    }
     throw validationError(`payment method ${paymentInstrumentId} has invalid authProtocol; expected VISA or MASTERCARD`);
   }
   if (new Set(protocols).size !== 1) {
+    if (tolerateInvalid) {
+      return void 0;
+    }
     throw validationError(`payment method ${paymentInstrumentId} has conflicting authProtocol aliases`);
   }
   return protocols[0];
@@ -24850,7 +24856,12 @@ function toUcpCheckoutCardContext(method) {
   const paymentInstrumentId = typeof method.paymentInstrumentId === "string" && method.paymentInstrumentId.trim() ? method.paymentInstrumentId.trim() : "unknown";
   const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
   const strongAuthReady = paymentMethodStrongAuthReady(method, paymentInstrumentId);
-  const authProtocol = paymentMethodAuthProtocol(method, paymentInstrumentId);
+  let authProtocol;
+  if (strongAuthReady === true) {
+    authProtocol = paymentMethodAuthProtocol(method, paymentInstrumentId);
+  } else if (strongAuthReady === false) {
+    authProtocol = paymentMethodAuthProtocol(method, paymentInstrumentId, false, true);
+  }
   if (strongAuthReady === true && !authProtocol) {
     throw validationError(`payment method ${paymentInstrumentId} requires authProtocol when strongAuthReady is true`);
   }

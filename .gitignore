@@ -1,6 +1,7 @@
 .omx/
 /dist/
 tests/*
+!tests/strong-auth.test.mjs
 !tests/catalog-discovery-fsm.test.mjs
 !tests/fsm-action-coverage.test.mjs
 !tests/page-handoff.test.mjs

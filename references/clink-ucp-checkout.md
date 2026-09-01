@@ -214,15 +214,15 @@ clink card binding-link --no-watch --no-open --format json
 
 Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Freeze this exact `paymentInstrumentId` into the aggregate command. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
 
-When UCP completion builds its `PAYMENT_GATEWAY` credential, the CLI forwards this contract as `strong_auth_ready` and `auth_protocol`. It no longer emits a Visa-only registration boolean. A ready card without `VISA` or `MASTERCARD` protocol evidence is invalid.
+When UCP completion builds its `PAYMENT_GATEWAY` credential, the CLI forwards a present Boolean readiness as `strong_auth_ready` and preserves `auth_protocol` when it resolves to `VISA` or `MASTERCARD`. If readiness is absent, it omits both capability fields. When readiness is false, an unknown/conflicting protocol is omitted rather than blocking ordinary checkout. A ready card without exactly one supported protocol is invalid. The CLI no longer emits a network-specific registration boolean.
 
 ## Step 2: Authorization Gate And Candidate Instructions
 
 After `parse-item` and item selection freeze the product facts, run the authorization capability gate against the refreshed selected/default card. The new payment-method fields are the only authority; do not route from card brand or legacy network-specific registration booleans.
 
-- If the selected/default card has `strongAuthReady=false`, skip instruction and mandate matching.
+- If the selected/default card has `strongAuthReady=false`, or the readiness field is absent during backend rollout, skip instruction and mandate matching. Ignore unknown/conflicting protocol values on this bypass branch.
 - If it has `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`, list candidate instructions before creating or checking out.
-- If `strongAuthReady` is missing/non-Boolean/conflicting, or a ready card has a missing/unsupported/conflicting protocol, stop and surface an authorization error rather than guessing.
+- If `strongAuthReady` is non-Boolean/conflicting, or a ready card has a missing/unsupported/conflicting protocol, stop and surface an authorization error rather than guessing.
 
 ```bash
 clink instruction list \
@@ -328,7 +328,7 @@ Call `classifyUcpCheckoutRunExecution` with the frozen product, route, payment i
 - `productSelectionFrozen=true`
 - `fulfillmentAndAddressReady=true`
 - `paymentInstrumentReady=true`
-- `authorizationGatePassed=true` after either the authoritative `strongAuthReady=false` bypass or an exact ACTIVE Instruction match for `authProtocol=VISA|MASTERCARD`
+- `authorizationGatePassed=true` after the `strongAuthReady=false`/absent-readiness compatibility bypass or an exact ACTIVE Instruction match for `authProtocol=VISA|MASTERCARD`
 - `restrictedCategoryGatePassed=true`
 - `checkoutRouteResolved=true`
 - `checkoutExecutionClaimed=false` on the pre-claim classification

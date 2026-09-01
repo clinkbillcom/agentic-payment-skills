@@ -2390,6 +2390,76 @@ test('vendored UCP credential forwards the new strong-auth contract for Masterca
   }
 });
 
+test('vendored UCP credential tolerates unavailable or unusable non-ready protocols', async () => {
+  const cases = [
+    {
+      name: 'supported_not_ready',
+      method: { strongAuthReady: false, authProtocol: ' mastercard ' },
+      expectedCapability: { strong_auth_ready: false, auth_protocol: 'MASTERCARD' },
+    },
+    {
+      name: 'unknown_not_ready',
+      method: { strongAuthReady: false, authProtocol: 'AMEX' },
+      expectedCapability: { strong_auth_ready: false },
+    },
+    {
+      name: 'conflicting_not_ready',
+      method: {
+        strongAuthReady: false,
+        authProtocol: 'VISA',
+        auth_protocol: 'MASTERCARD',
+      },
+      expectedCapability: { strong_auth_ready: false },
+    },
+    {
+      name: 'readiness_unavailable',
+      method: { authProtocol: 'AMEX' },
+      expectedCapability: {},
+    },
+    {
+      name: 'readiness_unavailable_supported_protocol',
+      method: { authProtocol: 'VISA' },
+      expectedCapability: {},
+    },
+  ];
+
+  for (const scenario of cases) {
+    const home = await mkdtemp(join(tmpdir(), `clink-ucp-${scenario.name}-`));
+    try {
+      const paymentInstrumentId = `pi_${scenario.name}`;
+      const configDir = join(home, '.clink-cli');
+      await mkdir(configDir, { recursive: true });
+      await writeFile(join(configDir, 'config.json'), JSON.stringify({
+        baseUrl: 'https://uat-api.clinkbill.com',
+        customerId: 'cust_contract',
+        paymentMethods: [{ paymentInstrumentId, ...scenario.method }],
+      }));
+      const execution = await runBundleAsync([
+        'ucp-checkout', 'complete',
+        '--checkout-id', 'checkout_contract',
+        '--payment-instrument-id', paymentInstrumentId,
+        '--dry-run',
+        '--format', 'json',
+      ], {
+        HOME: home,
+        CLINK_BASE_URL: 'https://uat-api.clinkbill.com',
+        CLINK_CUSTOMER_ID: 'cust_contract',
+        CLINK_CUSTOMER_API_KEY: 'test_contract_key',
+      });
+      assert.equal(execution.status, 0, execution.stderr);
+      const result = JSON.parse(execution.stdout);
+      const credential = result.data.request.body.payment.instruments[0].credential;
+      assert.deepEqual(credential, {
+        type: 'PAYMENT_GATEWAY',
+        token: paymentInstrumentId,
+        ...scenario.expectedCapability,
+      });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  }
+});
+
 test('vendored UCP credential rejects ready cards without a supported authProtocol', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-ucp-invalid-strong-auth-'));
   try {
@@ -2418,6 +2488,78 @@ test('vendored UCP credential rejects ready cards without a supported authProtoc
     assert.equal(execution.status, 2, execution.stdout);
     assert.match(execution.stderr, /requires authProtocol when strongAuthReady is true/u);
   } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored UCP refresh honors a backend snapshot with rollout-time readiness omitted', async () => {
+  const requestPaths = [];
+  let completeBody;
+  const server = createServer(async (request, response) => {
+    requestPaths.push(request.url);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    if (request.url === '/agent/cwallet/card/bindingLink') {
+      response.end(JSON.stringify({
+        code: 200,
+        data: {
+          paymentMethodsVoList: [{
+            paymentInstrumentId: 'pi_refresh_rollout',
+            authProtocol: 'AMEX',
+          }],
+        },
+      }));
+      return;
+    }
+    if (request.url === '/agent/ucp/external/checkout-sessions/checkout_contract/complete') {
+      completeBody = await readRequestJson(request);
+      response.end(JSON.stringify({ code: 200, data: { status: 'completed' } }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ code: 404, message: 'not found' }));
+  });
+  const address = await listen(server);
+  const home = await mkdtemp(join(tmpdir(), 'clink-ucp-refresh-rollout-'));
+
+  try {
+    const baseUrl = `https://127.0.0.1:${address.port}`;
+    const configDir = join(home, '.clink-cli');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'config.json'), JSON.stringify({
+      baseUrl,
+      customerId: 'cust_refresh_rollout',
+      customerApiKey: 'csk_refresh_rollout',
+      paymentMethods: [{
+        paymentInstrumentId: 'pi_refresh_rollout',
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
+      }],
+    }));
+
+    const execution = await runBundleAsync([
+      'ucp-checkout', 'complete',
+      '--checkout-id', 'checkout_contract',
+      '--payment-instrument-id', 'pi_refresh_rollout',
+      '--format', 'json',
+    ], {
+      HOME: home,
+      CLINK_BASE_URL: baseUrl,
+      CLINK_CUSTOMER_ID: undefined,
+      CLINK_CUSTOMER_API_KEY: undefined,
+    });
+
+    assert.equal(execution.status, 0, execution.stderr);
+    assert.deepEqual(requestPaths, [
+      '/agent/cwallet/card/bindingLink',
+      '/agent/ucp/external/checkout-sessions/checkout_contract/complete',
+      '/agent/cwallet/card/bindingLink',
+    ]);
+    assert.deepEqual(completeBody.payment.instruments[0].credential, {
+      type: 'PAYMENT_GATEWAY',
+      token: 'pi_refresh_rollout',
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
     await rm(home, { recursive: true, force: true });
   }
 });

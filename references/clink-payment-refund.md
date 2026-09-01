@@ -81,11 +81,11 @@ Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs`
 
 Resolver branches:
 
-- `AUTHORIZATION_BYPASSED`: the selected/default card has authoritative `strongAuthReady=false`. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`.
+- `AUTHORIZATION_BYPASSED`: the selected/default card has `strongAuthReady=false`, or the readiness field is absent during backend rollout. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`; ignore unknown/conflicting protocol values unless readiness is true.
 - `AUTHORIZATION_LIST_REQUIRED`: the selected/default card has `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`. List ACTIVE instructions before pay. Card brand is display data and does not choose this branch.
 - `AUTHORIZATION_MATCHED`: pass the matched `instruction_id` and `mandate_id` to `clink pay`.
 - `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Run the restricted-category gate described below; only a clean result may start the instruction creation workflow. Stop the current pay attempt until activation.
-- `AUTHORIZATION_ERROR`: `strongAuthReady` is missing/non-Boolean/conflicting, or a ready card has a missing/unsupported/conflicting `authProtocol`. Stop instead of guessing from scheme or a legacy registration field.
+- `AUTHORIZATION_ERROR`: `strongAuthReady` is non-Boolean/conflicting, or a ready card has a missing/unsupported/conflicting `authProtocol`. Stop instead of guessing from scheme or a legacy registration field. A genuinely absent readiness field is the compatibility bypass above, not an error.
 
 For the strong-auth-ready Visa or Mastercard branch, run:
 
