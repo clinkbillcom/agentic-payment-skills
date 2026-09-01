@@ -91,5 +91,6 @@ returned code.
   --include-broad-catalog`; initial discovery never calls standalone
   `catalog search`.
 - `我想下单咖啡`: use `type=benefit`, `category=dining_cafe_bakery`, no
-  `reward_type`, and preserve the original query for broad Catalog.
+  `reward_type`; keep the original query and add broad queries
+  `["美式咖啡","拿铁咖啡","咖啡饮品"]`.
 - Benefit wording uses the same aggregate with explicit constraints preserved.

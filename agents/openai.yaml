@@ -27,10 +27,12 @@ interface:
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
     recommend-products with the unchanged original current user query,
-    --include-broad-catalog, --anonymous, the locked language, and the locked
-    sandbox/test flag. It starts all-channel broad Catalog search in parallel
-    with Visa recommendation and checks each Program against configured exact
-    internal UCP routes; never issue separate
+    --include-broad-catalog, and up to three product-only --broad-queries.
+    For 我想下单咖啡 use 美式咖啡, 拿铁咖啡, and 咖啡饮品; never invent a
+    merchant or brand. Also pass --anonymous, the locked language, and the
+    locked sandbox/test flag. Broad variants run in parallel inside that one
+    command and never multiply Visa requests. It checks each Program against
+    configured exact internal UCP routes; never issue separate
     recommend, detail, product-search, merchant-list, or external-page calls.
     Read only products and visaBenefits. Products is one unified list: never
     group or label Visa-linked and broad Catalog products by source. Preserve
@@ -42,9 +44,10 @@ interface:
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
     survives semantic filtering, report no strict Visa match but still present
     broad products. Disclose partial productMatching or broadCatalogSearch
-    coverage. Treat only structured ok=false,
-    error.type=api_error, whose message starts exactly Visa recommendation
-    relaxed explicitly requested filters: as the same no-strict-match result;
+    coverage. Explicit Visa filter relaxation must return ok=true,
+    recommendationMode=no_matching_offers, and
+    strictMatchFailure.code=relaxed_explicit_filters while retaining broad
+    products. A legacy ok=false relaxation error is incompatible and stops;
     every other error stops. Catalog price.amount and price_range amounts are minor
     units: convert with ISO currency fraction digits before display or freeze.
     Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100

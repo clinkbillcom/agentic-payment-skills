@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.54');
+  assert.equal(packageJson.version, '0.1.55');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.54/u);
-  assert.match(skill, /version: "0\.1\.54"/u);
+  assert.match(skill, /Visa Skill 0\.1\.55/u);
+  assert.match(skill, /version: "0\.1\.55"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -169,16 +169,16 @@ test('initial Visa discovery runs one aggregate with parallel broad Catalog', ()
   );
   assert.match(
     singleCommand,
-    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*product-query-1[\s\S]*product-query-2[\s\S]*product-query-3[\s\S]*<environment-flag>[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.match(
     aggregateCommand,
-    /exactly four genuinely different safe plans[\s\S]*recommend-products "<original-current-user-query>"[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /exactly four genuinely different safe plans[\s\S]*recommend-products "<original-current-user-query>"[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*<environment-flag>[\s\S]*--lang/iu,
   );
   assert.match(
     discovery,
-    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code/iu,
+    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code[\s\S]*Broad query variants[\s\S]*same CLI\s+command[\s\S]*never multiply Visa requests/iu,
   );
   assert.match(
     discovery,
@@ -338,7 +338,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type[\s\S]*original query/iu,
+    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type[\s\S]*美式咖啡[\s\S]*拿铁咖啡[\s\S]*咖啡饮品/iu,
   );
 });
 
@@ -358,11 +358,11 @@ test('a Visa miss suppresses fallback rows but keeps parallel broad products', (
   );
   assert.match(
     fallback,
-    /structured `ok=false`[\s\S]*`error\.type=api_error`[\s\S]*Visa recommendation relaxed explicitly requested filters:[\s\S]*same Visa\s+miss/iu,
+    /Visa relaxes[\s\S]*compatible CLI[\s\S]*`ok=true`[\s\S]*`recommendationMode=no_matching_offers`[\s\S]*`strictMatchFailure\.code=relaxed_explicit_filters`[\s\S]*broad products remain/iu,
   );
   assert.match(
     fallback,
-    /Every\s+other error stops[\s\S]*timeout[\s\S]*network[\s\S]*authentication[\s\S]*validation[\s\S]*unrelated API error/iu,
+    /legacy `ok=false` relaxation error[\s\S]*incompatible[\s\S]*discarded broad results[\s\S]*Every other[\s\S]*error also stops/iu,
   );
   assert.match(
     fallback,
@@ -374,11 +374,11 @@ test('a Visa miss suppresses fallback rows but keeps parallel broad products', (
   );
   assert.match(
     agent,
-    /structured ok=false[\s\S]*error\.type=api_error/iu,
+    /Explicit Visa filter relaxation[\s\S]*ok=true[\s\S]*recommendationMode=no_matching_offers[\s\S]*strictMatchFailure\.code=relaxed_explicit_filters[\s\S]*retaining broad\s+products/iu,
   );
   assert.match(
     agent,
-    /message starts exactly Visa recommendation[\s\S]*relaxed explicitly requested filters:/iu,
+    /legacy ok=false relaxation error[\s\S]*incompatible[\s\S]*stops/iu,
   );
   assert.match(
     agent,

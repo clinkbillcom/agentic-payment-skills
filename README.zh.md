@@ -66,8 +66,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.54` 已 vendor 上游提交
-`a2b1295aae5bd5e157d99001d26d1a10628785e3` 的 Visa CLI `0.2.49`。它支持
+Skill `0.1.55` 已 vendor 上游提交
+`cda1bb7e43aeba41774a0d56650ebb1a9b170d92` 的 Visa CLI `0.2.50`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -95,7 +95,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.54`
+Skill 版本：`0.1.55`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

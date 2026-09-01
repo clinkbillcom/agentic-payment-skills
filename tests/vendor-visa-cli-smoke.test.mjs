@@ -88,11 +88,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.49');
+  assert.equal(vendorPackage.version, '0.2.50');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'a2b1295aae5bd5e157d99001d26d1a10628785e3',
+    'cda1bb7e43aeba41774a0d56650ebb1a9b170d92',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -153,6 +153,8 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   const aggregateHelp = run(['visa', 'recommend-products', '--help']);
   assert.equal(aggregateHelp.status, 0, aggregateHelp.stderr);
   assert.match(aggregateHelp.stdout, /--include-broad-catalog/u);
+  assert.match(aggregateHelp.stdout, /--broad-queries <json>/u);
+  assert.match(aggregateHelp.stdout, /strictMatchFailure/u);
   assert.match(
     aggregateHelp.stdout,
     /same\s+products collection without source grouping/iu,

@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.54. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.55. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.54"
+  version: "0.1.55"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -243,6 +243,12 @@ choose the smallest safe filter shape. The CLI starts broad all-channel Catalog
 search in parallel with Visa recommendation, then checks every returned Program
 against configured internal UCP merchant routes.
 
+For product or category discovery, add up to three distinct product-only broad
+queries with `--broad-queries`. They improve Catalog recall only: they do not
+change Visa filters or create additional Visa requests. For "我想下单咖啡",
+use `["美式咖啡","拿铁咖啡","咖啡饮品"]`. Omit merchant or brand names the
+user did not provide.
+
 Use one strict explicit-filter request by default:
 
 ```text
@@ -250,6 +256,7 @@ Use one strict explicit-filter request by default:
   <individual-filter-flags> \
   --anonymous \
   --include-broad-catalog \
+  --broad-queries '["<product-query-1>","<product-query-2>","<product-query-3>"]' \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -263,6 +270,7 @@ aggregate call:
   --filter-sets '[<filter-1>,<filter-2>,<filter-3>,<filter-4>]' \
   --anonymous \
   --include-broad-catalog \
+  --broad-queries '["<product-query-1>","<product-query-2>","<product-query-3>"]' \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -272,7 +280,8 @@ Never duplicate filters, invent soft constraints, fan out reward types, or
 issue multiple Agent-managed Shell commands to reach a count. The four-set
 aggregate validates one taxonomy snapshot, runs four parallel Visa requests,
 excludes `fallback_all_offers` rows, preserves filter-set priority, and
-de-duplicates by Program code.
+de-duplicates by Program code. Broad query variants run inside that same CLI
+command and never multiply Visa requests.
 
 Never add `--include-provider-products` or issue another Agent-managed
 recommend/product-search command. The aggregate uses only configured exact
@@ -291,6 +300,7 @@ on natural language alone to widen the request:
   --anonymous \
   --all \
   --include-broad-catalog \
+  --broad-queries '["<product-query-1>","<product-query-2>","<product-query-3>"]' \
   <environment-flag> \
   --lang <language-tag> \
   --format json
@@ -335,13 +345,12 @@ Read only the aggregate `products` and `visaBenefits` collections:
 Treat `fallback_all_offers`, `no_matching_offers`, or zero Programs after the
 independent semantic filter as a Visa miss. Never display fallback Visa rows.
 
-The CLI may instead fail closed before aggregation when Visa relaxed an
-explicitly requested taxonomy axis. Treat only structured `ok=false`,
-`error.type=api_error`, with a message starting exactly
-`Visa recommendation relaxed explicitly requested filters:` as the same Visa
-miss. This exact read-only response means no strict Program matched. Every
-other error stops; never turn a timeout, network, authentication, validation,
-or unrelated API error into Catalog fallback.
+When Visa relaxes an explicitly requested taxonomy axis, a compatible CLI
+returns `ok=true`, `recommendationMode=no_matching_offers`, and
+`strictMatchFailure.code=relaxed_explicit_filters`; Visa rows stay empty while
+successful broad products remain. A legacy `ok=false` relaxation error is
+incompatible because it may have discarded broad results, so stop. Every other
+error also stops.
 
 For a Visa miss, do not display fallback Visa rows. Still present any products
 returned by the parallel broad Catalog search.
