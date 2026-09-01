@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.46. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.47. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.46"
+  version: "0.1.47"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -274,8 +274,18 @@ insufficient.
 
 Treat `fallback_all_offers`, `no_matching_offers`, or zero Programs after the
 independent semantic filter as a Visa miss. Never display, rank, count,
-recommend, or purchase fallback Visa rows. Instead, make exactly one
-all-channel broad Catalog fallback with the original current user request:
+recommend, or purchase fallback Visa rows.
+
+The CLI may instead fail closed before aggregation when Visa relaxed an
+explicitly requested taxonomy axis. Treat only structured `ok=false`,
+`error.type=api_error`, with a message starting exactly
+`Visa recommendation relaxed explicitly requested filters:` as the same Visa
+miss. This exact read-only response means no strict Program matched. Every
+other error stops; never turn a timeout, network, authentication, validation,
+or unrelated API error into Catalog fallback.
+
+For a Visa miss, make exactly one all-channel broad Catalog fallback with the
+original current user request:
 
 ```text
 <Skill Path>/bin/visa-cli catalog search \

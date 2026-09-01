@@ -25,9 +25,12 @@ interface:
     initial Catalog call. If recommendationMode is fallback_all_offers or
     no_matching_offers, or no Program survives semantic filtering, ignore the
     fallback Visa rows and run one all-channel UAT catalog search with the
-    original query, language, and geography. Omit --channel-type unless the
-    user explicitly restricts it so Eats365 can participate. Broad Catalog is
-    bounded and non-exhaustive. When the user selects a Visa Benefit, bind one
+    original query, language, and geography. Also treat only structured
+    ok=false, error.type=api_error, whose message starts exactly Visa
+    recommendation relaxed explicitly requested filters: as this Visa miss;
+    every other error stops. Omit --channel-type unless the user explicitly
+    restricts it so Eats365 can participate. Broad Catalog is bounded and
+    non-exhaustive. When the user selects a Visa Benefit, bind one
     stable Program code, run visa detail, preserve the activity introduction
     and authoritative link, then run visa product-search only with an actual
     merchant commerce URL or the exact UAT alias

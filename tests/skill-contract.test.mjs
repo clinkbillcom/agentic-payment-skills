@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.46');
+  assert.equal(packageJson.version, '0.1.47');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.46/u);
-  assert.match(skill, /version: "0\.1\.46"/u);
+  assert.match(skill, /Visa Skill 0\.1\.47/u);
+  assert.match(skill, /version: "0\.1\.47"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -298,11 +298,23 @@ test('a Visa miss falls back once to all-channel UAT Catalog search', () => {
   );
   assert.match(
     fallback,
+    /structured `ok=false`[\s\S]*`error\.type=api_error`[\s\S]*Visa recommendation relaxed explicitly requested filters:[\s\S]*same Visa\s+miss/iu,
+  );
+  assert.match(
+    fallback,
+    /Every\s+other error stops[\s\S]*timeout[\s\S]*network[\s\S]*authentication[\s\S]*validation[\s\S]*unrelated API error/iu,
+  );
+  assert.match(
+    fallback,
     /Never display, rank, count,[\s\S]*fallback Visa rows/iu,
   );
   assert.match(
     fallback,
     /exactly one[\s\S]*all-channel broad Catalog fallback[\s\S]*original current user request/iu,
+  );
+  assert.match(
+    agent,
+    /ok=false[\s\S]*error\.type=api_error[\s\S]*message starts exactly Visa\s+recommendation relaxed explicitly requested filters:[\s\S]*every other error stops/iu,
   );
   assert.match(
     fallback,
