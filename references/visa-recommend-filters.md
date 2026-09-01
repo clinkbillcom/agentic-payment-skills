@@ -2,6 +2,12 @@
 
 Read this only when building Agent-selected filters for `visa recommend`.
 
+## Source Region
+
+- Explicit HK/CN Benefit-library intent: run `visa region set <hk|cn>`.
+- Otherwise run `visa region get`; missing config defaults to HK.
+- Source endpoint region is not taxonomy `region[]`, which is destination use.
+
 ## Output
 
 Build one strict JSON object first. Allowed fields:

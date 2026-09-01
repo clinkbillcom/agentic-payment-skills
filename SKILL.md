@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.48. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.49. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.48"
+  version: "0.1.49"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -63,12 +63,23 @@ Never let an installed UAT or test Skill silently default to production.
 Authenticated commands must agree with the current wallet environment.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
-`--sandbox` or `--test`; do not add either flag. Their issuing market,
-destination region, and language select the Visa source independently from the
-Clink Catalog environment. "Benefits usable in Hong Kong" means destination
-`"region": ["hk"]` in every `--filter-sets` object; an outer `--region hk` is
-only for non-aggregate explicit-filter calls. Use issuing `--market hk` only
-when the user explicitly says their card is Hong Kong-issued.
+`--sandbox` or `--test`; do not add either flag.
+
+### Benefit Source Region
+
+Before Benefit discovery, resolve the HK/CN source endpoint:
+
+- Explicit "HK/Hong Kong region benefits" or "CN/Mainland China region
+  benefits" runs `visa region set <hk|cn> --format json`; this updates
+  `~/.clink-cli/config.json`.
+- With no explicit source region, run `visa region get --format json`. Missing
+  config initializes to `hk`; later searches reuse the saved value.
+- Run `visa recommend` without `--market` after resolution. Its
+  `sourceRegion` and `sourceEndpoint` must match the saved selection.
+
+Source region chooses the independent HK/CN backend. Taxonomy `--region`
+instead means where a Benefit is usable: "go to Hong Kong" may add destination
+`--region hk` without changing the saved source region.
 
 ### Catalog Money
 

@@ -29,10 +29,12 @@ const vendorPackage = JSON.parse(
 );
 const vendorBundle = await readFile(vendorBundlePath);
 const mockPreloadPath = await createMockPreload();
+const defaultHome = await mkdtemp(join(tmpdir(), 'visa-skill-default-home-'));
 const readyHome = await createReadyVisaHome();
 
 test.after(async () => {
   await Promise.all([
+    rm(defaultHome, { force: true, recursive: true }),
     rm(readyHome, { force: true, recursive: true }),
     rm(dirname(mockPreloadPath), { force: true, recursive: true }),
   ]);
@@ -44,7 +46,7 @@ function run(args, options = {}) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      HOME: options.home ?? join(root, '.test-home-does-not-exist'),
+      HOME: options.home ?? defaultHome,
       ...options.env,
     },
   });
@@ -59,7 +61,7 @@ function runWithMock(args, scenario, options = {}) {
       encoding: 'utf8',
       env: {
         ...process.env,
-        HOME: options.home ?? join(root, '.test-home-does-not-exist'),
+        HOME: options.home ?? defaultHome,
         VISA_SKILL_SMOKE_SCENARIO: scenario,
         ...options.env,
       },
@@ -86,11 +88,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.45');
+  assert.equal(vendorPackage.version, '0.2.46');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'd8952341e5d4699d4010c4216cb1975a9d7f5577',
+    '0cec342c2c6d4006116f1b6b7fc6dccc890709bd',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -129,8 +131,9 @@ test('Visa Edition exposes all fourteen Base Commands', () => {
   }
 });
 
-test('Visa discovery and the three aggregate commands remain available', () => {
+test('Visa region, discovery, and aggregate commands remain available', () => {
   for (const command of [
+    'region',
     'recommend',
     'detail',
     'taxonomy',
@@ -144,6 +147,72 @@ test('Visa discovery and the three aggregate commands remain available', () => {
       `${result.stdout}\n${result.stderr}`,
       new RegExp(`visa ${command}`, 'u'),
     );
+  }
+});
+
+test('Visa region persists HK/CN source selection for later recommendations', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'visa-skill-region-home-'));
+  const env = {
+    VSRA_BASE_URL: '',
+    VSRA_ENV: 'production',
+    VSRA_CN_BASE_URL: '',
+    VSRA_HK_BASE_URL: '',
+  };
+  try {
+    const initial = run(['visa', 'region', 'get', '--format', 'json'], {
+      home,
+      env,
+    });
+    assert.equal(initial.status, 0, initial.stderr);
+    const initialData = JSON.parse(initial.stdout).data;
+    assert.equal(initialData.region, 'hk');
+    assert.equal(
+      initialData.sourceEndpoint,
+      'https://vsra.visaselectrewardhk.com',
+    );
+
+    const selected = run(['visa', 'region', 'set', 'cn', '--format', 'json'], {
+      home,
+      env,
+    });
+    assert.equal(selected.status, 0, selected.stderr);
+    const selectedData = JSON.parse(selected.stdout).data;
+    assert.equal(selectedData.region, 'cn');
+    assert.equal(selectedData.sourceEndpoint, 'https://vsra.offerpluscn.com');
+
+    const config = JSON.parse(
+      await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
+    );
+    assert.equal(config.visa.activeMarket, 'cn');
+
+    const recommendation = run([
+      'visa',
+      'recommend',
+      '中国权益',
+      '--type',
+      'benefit',
+      '--anonymous',
+      '--dry-run',
+      '--format',
+      'json',
+    ], { home, env });
+    assert.equal(recommendation.status, 0, recommendation.stderr);
+    const recommendationData = JSON.parse(recommendation.stdout).data;
+    assert.equal(recommendationData.sourceRegion, 'cn');
+    assert.equal(
+      recommendationData.sourceEndpoint,
+      'https://vsra.offerpluscn.com',
+    );
+    assert.equal(
+      new URL(recommendationData.request.url).host,
+      'vsra.offerpluscn.com',
+    );
+
+    const unsupported = run(['visa', 'region', 'set', 'tw'], { home, env });
+    assert.equal(unsupported.status, 2, unsupported.stderr);
+    assert.match(unsupported.stderr, /Visa region must be hk or cn/u);
+  } finally {
+    await rm(home, { force: true, recursive: true });
   }
 });
 
