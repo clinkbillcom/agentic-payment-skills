@@ -2207,11 +2207,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.44');
+  assert.equal(vendorPackage.version, '0.2.45');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '70b7a98d532436672cdc905108ac2956b4b650d4',
+    'd8952341e5d4699d4010c4216cb1975a9d7f5577',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);
