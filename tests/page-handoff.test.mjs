@@ -26,11 +26,11 @@ test('every declared kind has a contract and every contract is declared', () => 
   assert.deepEqual([...contracted].filter((k) => !declared.has(k)), []);
 });
 
-test('non-OAuth Clink and Visa pages that need a person route to the user own device', () => {
+test('non-OAuth Clink strong-auth pages that need a person route to the user own device', () => {
   for (const kind of [
     PageHandoffKind.CARD_SETUP,
     PageHandoffKind.CARD_MODIFY,
-    PageHandoffKind.VIC_PASSKEY_REGISTRATION,
+    PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
     PageHandoffKind.INSTRUCTION_PASSKEY_SIGNING,
     PageHandoffKind.INSTRUCTION_AGENT_PAGE,
     PageHandoffKind.THREE_DS_CHALLENGE,
@@ -253,7 +253,7 @@ test('an unattended run still browses merchant pages', () => {
 });
 
 // An unlabeled URL is the dangerous default. If it fell through to "agent may open it", every
-// hand-built Clink or Visa URL would be one missing argument away from being automated.
+// hand-built Clink or card-network URL would be one missing argument away from being automated.
 test('an unlabeled URL is an error, never agent-openable', () => {
   for (const request of [
     {},
@@ -270,10 +270,12 @@ test('an unlabeled URL is an error, never agent-openable', () => {
 });
 
 test('the two URL shapes this skill hand-builds are recognized from the string alone', () => {
-  assert.equal(
-    resolvePageHandoffKind('https://agent.clinkbill.com/passkey-auth/pi_123?type=visa'),
-    PageHandoffKind.VIC_PASSKEY_REGISTRATION,
-  );
+  for (const protocol of ['visa', 'mastercard']) {
+    assert.equal(
+      resolvePageHandoffKind(`https://agent.clinkbill.com/passkey-auth/pi_123?type=${protocol}`),
+      PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
+    );
+  }
   assert.equal(
     resolvePageHandoffKind('https://auth.example.test/device?user_code=ABCD-EFGH#f=1'),
     PageHandoffKind.OAUTH_DEVICE_VERIFICATION,
@@ -285,9 +287,9 @@ test('the two URL shapes this skill hand-builds are recognized from the string a
 
 test('a bare Passkey URL classifies without being told its kind', () => {
   const result = classifyPageHandoff({
-    url: 'https://agent.clinkbill.com/passkey-auth/pi_123?type=visa',
+    url: 'https://agent.clinkbill.com/passkey-auth/pi_123?type=mastercard',
   });
-  assert.equal(result.kind, PageHandoffKind.VIC_PASSKEY_REGISTRATION);
+  assert.equal(result.kind, PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION);
   assert.equal(result.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
   assert.match(result.doNotAutomateReason, /virtual authenticator/u);
   assert.equal(result.watch, 'events-poll', 'the hand-built registration URL has no built-in watch');
@@ -324,7 +326,9 @@ test('completion events match the flows that prove them', () => {
     ['purchase_instruction.activated'],
   );
   assert.deepEqual(
-    classifyPageHandoff({ kind: PageHandoffKind.VIC_PASSKEY_REGISTRATION }).completionEvents,
+    classifyPageHandoff({
+      kind: PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
+    }).completionEvents,
     ['vic_device.binding_succeeded', 'payment_method.update'],
   );
   assert.deepEqual(
@@ -368,6 +372,7 @@ test('wallet init requires --open and every other link command requires --no-ope
     'card binding-link',
     'card setup-link',
     'card modify-link',
+    'card passkey-link',
     'risk link',
     'instruction create',
     'instruction sign-url',

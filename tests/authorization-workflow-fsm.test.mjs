@@ -24,67 +24,100 @@ test('authorization resolver refreshes payment instruments before deciding', () 
   assert.equal(result.reason, 'payment_instrument_refresh_required');
 });
 
-test('authorization resolver bypasses instruction matching for a non-Visa default card', () => {
+test('authorization resolver bypasses instruction matching when strong auth is not ready', () => {
   const result = classifyPaymentAuthorizationResolver({
     paymentMethodsVoList: [
       {
         paymentInstrumentId: 'pi_mc',
         brand: 'Mastercard',
         isDefault: true,
+        strongAuthReady: false,
+        authProtocol: 'MASTERCARD',
       },
     ],
   });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
   assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'payment_instrument_not_visa_bypass_authorization');
+  assert.equal(result.reason, 'payment_instrument_strong_auth_not_ready_bypass_authorization');
   assert.equal(result.paymentInstrumentId, 'pi_mc');
+  assert.equal(result.strongAuthReady, false);
+  assert.equal(result.authProtocol, 'MASTERCARD');
 });
 
-test('authorization resolver bypasses instruction matching for Visa when VIC is not enabled', () => {
+test('authorization resolver bypasses while the readiness field is unavailable during rollout', () => {
   const result = classifyPaymentAuthorizationResolver({
+    unattended: true,
     paymentMethodsVoList: [
       {
         paymentInstrumentId: 'pi_visa',
         cardBrand: 'VISA',
         isDefault: true,
-        visaRegistrationSucceeded: false,
+        authProtocol: 'VISA',
       },
     ],
   });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
   assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'visa_vic_not_enabled_bypass_authorization');
+  assert.equal(
+    result.reason,
+    'payment_instrument_strong_auth_capability_unavailable_bypass_authorization',
+  );
   assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.strongAuthReady, undefined);
+  assert.equal(result.authProtocol, undefined);
 });
 
-test('authorization resolver lists active instructions for Visa with VIC enabled', () => {
+test('authorization resolver ignores unusable protocols while strong auth is explicitly not ready', () => {
+  for (const card of [
+    { paymentInstrumentId: 'pi_unknown_protocol', strongAuthReady: false, authProtocol: 'AMEX' },
+    {
+      paymentInstrumentId: 'pi_conflicting_protocol',
+      strongAuthReady: false,
+      authProtocol: 'VISA',
+      auth_protocol: 'MASTERCARD',
+    },
+    { paymentInstrumentId: 'pi_non_string_protocol', strongAuthReady: false, authProtocol: 1 },
+  ]) {
+    const result = classifyPaymentAuthorizationResolver({ paymentMethodsVoList: [card] });
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+    assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+    assert.equal(result.reason, 'payment_instrument_strong_auth_not_ready_bypass_authorization');
+    assert.equal(result.strongAuthReady, false);
+    assert.equal(result.authProtocol, undefined);
+  }
+});
+
+test('authorization resolver lists active instructions for a strong-auth-ready Visa card', () => {
   const result = classifyPaymentAuthorizationResolver({
     paymentMethodsVoList: [
       {
         paymentInstrumentId: 'pi_visa',
         network: 'visa',
         isDefault: true,
-        visaRegistrationSucceeded: true,
+        strongAuthReady: true,
+        authProtocol: 'VISA',
       },
     ],
   });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
   assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
-  assert.equal(result.reason, 'visa_vic_ready_list_authorizations');
+  assert.equal(result.reason, 'strong_auth_ready_list_authorizations');
   assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.authProtocol, 'VISA');
 });
 
-test('authorization resolver returns matched instruction and mandate for Visa with VIC enabled', () => {
+test('authorization resolver returns a matched instruction for strong-auth-ready Mastercard', () => {
   const result = classifyPaymentAuthorizationResolver({
     paymentMethodsVoList: [
       {
-        paymentInstrumentId: 'pi_visa',
-        brand: 'Visa',
+        paymentInstrumentId: 'pi_mc',
+        brand: 'Mastercard',
         isDefault: true,
-        visaRegistrationSucceeded: true,
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
       },
     ],
     selected: {
@@ -96,19 +129,40 @@ test('authorization resolver returns matched instruction and mandate for Visa wi
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_MATCHED);
   assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITH_AUTHORIZATION);
   assert.equal(result.reason, 'authorization_matched');
-  assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.paymentInstrumentId, 'pi_mc');
+  assert.equal(result.authProtocol, 'MASTERCARD');
   assert.equal(result.instructionId, 'ins_123');
   assert.equal(result.mandateId, 'mandate_123');
 });
 
-test('authorization resolver starts a draft after Visa VIC list has no match', () => {
+test('authorization resolver routes by authProtocol rather than the display brand', () => {
   const result = classifyPaymentAuthorizationResolver({
     paymentMethodsVoList: [
       {
-        paymentInstrumentId: 'pi_visa',
-        brand: 'Visa',
+        paymentInstrumentId: 'pi_protocol_authoritative',
+        cardBrand: 'Legacy display label',
         isDefault: true,
-        vicReady: true,
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
+      },
+    ],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
+  assert.equal(result.paymentInstrumentId, 'pi_protocol_authoritative');
+  assert.equal(result.authProtocol, 'MASTERCARD');
+});
+
+test('authorization resolver starts a draft after the strong-auth list has no match', () => {
+  const result = classifyPaymentAuthorizationResolver({
+    paymentMethodsVoList: [
+      {
+        paymentInstrumentId: 'pi_mc',
+        brand: 'Mastercard',
+        isDefault: true,
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
       },
     ],
     authorizationListChecked: true,
@@ -117,7 +171,59 @@ test('authorization resolver starts a draft after Visa VIC list has no match', (
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_DRAFT_REQUIRED);
   assert.equal(result.action, AuthorizationWorkflowAction.START_AUTHORIZATION_DRAFT_AND_WAIT);
   assert.equal(result.reason, 'no_matching_authorization');
-  assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.paymentInstrumentId, 'pi_mc');
+});
+
+test('authorization resolver rejects inconsistent or unsupported strong-auth capability data', () => {
+  for (const [card, reason] of [
+    [
+      { paymentInstrumentId: 'pi_no_protocol', strongAuthReady: true },
+      'payment_instrument_auth_protocol_required_when_strong_auth_ready',
+    ],
+    [
+      { paymentInstrumentId: 'pi_bad_protocol', strongAuthReady: true, authProtocol: 'AMEX' },
+      'payment_instrument_auth_protocol_invalid',
+    ],
+    [
+      { paymentInstrumentId: 'pi_bad_boolean', strongAuthReady: 'true', authProtocol: 'VISA' },
+      'payment_instrument_strong_auth_ready_invalid',
+    ],
+    [
+      { paymentInstrumentId: 'pi_false_string', strongAuthReady: 'false', authProtocol: 'VISA' },
+      'payment_instrument_strong_auth_ready_invalid',
+    ],
+    [
+      { paymentInstrumentId: 'pi_numeric_boolean', strongAuthReady: 0, authProtocol: 'VISA' },
+      'payment_instrument_strong_auth_ready_invalid',
+    ],
+    [
+      { paymentInstrumentId: 'pi_null_boolean', strongAuthReady: null, authProtocol: 'VISA' },
+      'payment_instrument_strong_auth_ready_invalid',
+    ],
+    [
+      {
+        paymentInstrumentId: 'pi_conflict',
+        strongAuthReady: true,
+        strong_auth_ready: false,
+        authProtocol: 'VISA',
+      },
+      'payment_instrument_strong_auth_ready_conflict',
+    ],
+    [
+      {
+        paymentInstrumentId: 'pi_protocol_conflict',
+        strongAuthReady: true,
+        authProtocol: 'VISA',
+        auth_protocol: 'MASTERCARD',
+      },
+      'payment_instrument_auth_protocol_conflict',
+    ],
+  ]) {
+    const result = classifyPaymentAuthorizationResolver({ paymentMethodsVoList: [card] });
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ERROR);
+    assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+    assert.equal(result.reason, reason);
+  }
 });
 
 test('authorization draft observation sends the Passkey URL under the built-in watch', () => {
@@ -470,7 +576,8 @@ test('quick activation verification requires ACTIVE to belong to the newly bound
     paymentMethodsVoList: [{
       paymentInstrumentId: 'pi_expected',
       cardScheme: 'Visa',
-      visaRegistrationSucceeded: true,
+      strongAuthReady: true,
+      authProtocol: 'VISA',
     }],
   });
 
@@ -549,46 +656,132 @@ test('quick instruction gate fails closed when the exact card is still absent af
   assert.equal(result.reason, 'quick_instruction_payment_instrument_not_found_after_refresh');
 });
 
-test('quick instruction gate sends a non-Visa card through the regular resolver', () => {
+test('quick instruction gate sends a card without a strong-auth protocol through the regular resolver', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_1',
+    paymentInstrumentId: 'pi_other',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_other',
+      cardScheme: 'Other',
+      strongAuthReady: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(result.reason, 'payment_instrument_strong_auth_not_ready_bypass_authorization');
+  assert.equal(
+    result.quickInstructionFallbackReason,
+    'new_payment_instrument_strong_auth_not_supported',
+  );
+});
+
+test('quick instruction gate does not wait when readiness is unavailable even with a supported protocol', () => {
+  const result = classifyQuickInstructionActivationGate({
+    pendingInstructionId: 'ins_quick_rollout',
+    paymentInstrumentId: 'pi_rollout',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_rollout',
+      cardScheme: 'Visa',
+      authProtocol: 'VISA',
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(
+    result.reason,
+    'payment_instrument_strong_auth_capability_unavailable_bypass_authorization',
+  );
+  assert.equal(
+    result.quickInstructionFallbackReason,
+    'new_payment_instrument_strong_auth_not_supported',
+  );
+  assert.equal(result.pollCommand, undefined);
+  assert.equal(result.verifyCommand, undefined);
+});
+
+test('quick instruction gate ignores unusable protocols while readiness is false', () => {
+  for (const card of [
+    { paymentInstrumentId: 'pi_unknown', strongAuthReady: false, authProtocol: 'AMEX' },
+    {
+      paymentInstrumentId: 'pi_conflict',
+      strongAuthReady: false,
+      authProtocol: 'VISA',
+      auth_protocol: 'MASTERCARD',
+    },
+  ]) {
+    const result = classifyQuickInstructionActivationGate({
+      pendingInstructionId: 'ins_quick_unsupported',
+      paymentInstrumentId: card.paymentInstrumentId,
+      paymentMethodsVoList: [card],
+    });
+
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
+    assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+    assert.equal(
+      result.quickInstructionFallbackReason,
+      'new_payment_instrument_strong_auth_not_supported',
+    );
+    assert.equal(result.pollCommand, undefined);
+    assert.equal(result.verifyCommand, undefined);
+  }
+});
+
+test('quick instruction gate keeps ready-card protocol validation strict', () => {
+  for (const card of [
+    { paymentInstrumentId: 'pi_missing', strongAuthReady: true },
+    { paymentInstrumentId: 'pi_unknown', strongAuthReady: true, authProtocol: 'AMEX' },
+    { paymentInstrumentId: 'pi_bad_readiness', strongAuthReady: 'true', authProtocol: 'VISA' },
+    {
+      paymentInstrumentId: 'pi_conflict',
+      strongAuthReady: true,
+      authProtocol: 'VISA',
+      auth_protocol: 'MASTERCARD',
+    },
+  ]) {
+    const result = classifyQuickInstructionActivationGate({
+      pendingInstructionId: 'ins_quick_invalid',
+      paymentInstrumentId: card.paymentInstrumentId,
+      paymentMethodsVoList: [card],
+    });
+
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ERROR);
+    assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+    assert.equal(result.pollCommand, undefined);
+    assert.equal(result.verifyCommand, undefined);
+  }
+});
+
+test('quick instruction gate waits for same-card Mastercard readiness before checking the pending id', () => {
   const result = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
     paymentInstrumentId: 'pi_mc',
     paymentMethodsVoList: [{
       paymentInstrumentId: 'pi_mc',
       cardScheme: 'Mastercard',
-      visaRegistrationSucceeded: false,
+      strongAuthReady: false,
+      authProtocol: 'MASTERCARD',
     }],
   });
 
-  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
-  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'payment_instrument_not_visa_bypass_authorization');
-  assert.equal(result.quickInstructionFallbackReason, 'new_payment_instrument_not_visa');
-});
-
-test('quick instruction gate waits for same-card VIC readiness before checking the pending id', () => {
-  const result = classifyQuickInstructionActivationGate({
-    pendingInstructionId: 'ins_quick_1',
-    paymentInstrumentId: 'pi_visa',
-    paymentMethodsVoList: [{
-      paymentInstrumentId: 'pi_visa',
-      cardScheme: 'Visa',
-      visaRegistrationSucceeded: false,
-    }],
-  });
-
-  assert.equal(result.state, AuthorizationWorkflowState.VIC_READINESS_WAIT_REQUIRED);
-  assert.equal(result.action, AuthorizationWorkflowAction.WAIT_VIC_READINESS);
-  assert.equal(result.reason, 'quick_instruction_vic_readiness_pending');
+  assert.equal(result.state, AuthorizationWorkflowState.STRONG_AUTH_READINESS_WAIT_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.WAIT_STRONG_AUTH_READINESS);
+  assert.equal(result.reason, 'quick_instruction_strong_auth_readiness_pending');
   assert.equal(result.instructionId, 'ins_quick_1');
-  assert.deepEqual(result.expectedResource, { paymentInstrumentId: 'pi_visa' });
+  assert.equal(result.authProtocol, 'MASTERCARD');
+  assert.deepEqual(result.expectedResource, { paymentInstrumentId: 'pi_mc' });
   assert.equal(
     result.waitSpec.eventType,
     'payment_method.update,vic_device.binding_succeeded',
   );
-  assert.equal(result.waitSpec.purpose, 'VIC_READINESS');
+  assert.equal(result.waitSpec.purpose, 'STRONG_AUTH_READINESS');
+  assert.equal(result.waitSpec.authProtocol, 'MASTERCARD');
   assert.equal(result.waitSpec.singleAttempt, true);
-  assert.deepEqual(result.waitSpec.continuation, { vicReadinessWaitAttempted: true });
+  assert.deepEqual(
+    result.waitSpec.continuation,
+    { strongAuthReadinessWaitAttempted: true },
+  );
   assert.equal(result.waitSpec.maxWaitSeconds, 900);
   assert.equal(
     result.pollCommand,
@@ -597,14 +790,15 @@ test('quick instruction gate waits for same-card VIC readiness before checking t
   assert.equal(result.waitSpec.verifyCommand, result.refreshCommand);
 });
 
-test('quick instruction gate performs only one bounded VIC wait after any poll outcome', () => {
+test('quick instruction gate performs only one bounded strong-auth wait after any poll outcome', () => {
   const initial = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
-    paymentInstrumentId: 'pi_visa',
+    paymentInstrumentId: 'pi_mc',
     paymentMethodsVoList: [{
-      paymentInstrumentId: 'pi_visa',
-      cardScheme: 'Visa',
-      visaRegistrationSucceeded: false,
+      paymentInstrumentId: 'pi_mc',
+      cardScheme: 'Mastercard',
+      strongAuthReady: false,
+      authProtocol: 'MASTERCARD',
     }],
   });
   const pollResult = classifyEventPollObservation({
@@ -614,49 +808,55 @@ test('quick instruction gate performs only one bounded VIC wait after any poll o
   }, initial.waitSpec);
   const result = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
-    paymentInstrumentId: 'pi_visa',
+    paymentInstrumentId: 'pi_mc',
     ...pollResult.continuation,
     paymentMethodsVoList: [{
-      paymentInstrumentId: 'pi_visa',
-      cardScheme: 'Visa',
-      visaRegistrationSucceeded: false,
+      paymentInstrumentId: 'pi_mc',
+      cardScheme: 'Mastercard',
+      strongAuthReady: false,
+      authProtocol: 'MASTERCARD',
     }],
   });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
   assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'visa_vic_not_enabled_bypass_authorization');
+  assert.equal(result.reason, 'payment_instrument_strong_auth_not_ready_bypass_authorization');
   assert.equal(
     result.quickInstructionFallbackReason,
-    'vic_readiness_not_observed_after_bounded_wait',
+    'strong_auth_readiness_not_observed_after_bounded_wait',
   );
   assert.equal(result.pollCommand, undefined);
 });
 
-test('quick instruction gate keeps the original VIC timeout marker as a compatibility alias', () => {
+test('quick instruction gate accepts the snake-case strong-auth continuation marker', () => {
   const result = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
-    paymentInstrumentId: 'pi_visa',
-    vic_readiness_wait_timed_out: true,
+    paymentInstrumentId: 'pi_mc',
+    strong_auth_readiness_wait_attempted: true,
     paymentMethodsVoList: [{
-      paymentInstrumentId: 'pi_visa',
-      cardScheme: 'Visa',
-      visaRegistrationSucceeded: false,
+      paymentInstrumentId: 'pi_mc',
+      cardScheme: 'Mastercard',
+      strongAuthReady: false,
+      authProtocol: 'MASTERCARD',
     }],
   });
 
   assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.quickInstructionFallbackReason, 'vic_readiness_not_observed_after_bounded_wait');
+  assert.equal(
+    result.quickInstructionFallbackReason,
+    'strong_auth_readiness_not_observed_after_bounded_wait',
+  );
 });
 
-test('quick instruction gate verifies the exact instruction and VIC-ready card', () => {
+test('quick instruction gate verifies the exact instruction and strong-auth-ready Mastercard', () => {
   const result = classifyQuickInstructionActivationGate({
     pending_instruction_id: 'ins_quick_2',
-    payment_instrument_id: 'pi_visa',
+    payment_instrument_id: 'pi_mc',
     payment_methods_vo_list: [{
-      payment_instrument_id: 'pi_visa',
-      card_scheme: 'VISA',
-      visa_registration_succeeded: true,
+      payment_instrument_id: 'pi_mc',
+      card_scheme: 'MASTERCARD',
+      strong_auth_ready: true,
+      auth_protocol: 'MASTERCARD',
     }],
   });
 
@@ -665,7 +865,8 @@ test('quick instruction gate verifies the exact instruction and VIC-ready card',
   assert.equal(result.terminal, false);
   assert.equal(result.reason, 'quick_instruction_pending_verification');
   assert.equal(result.instructionId, 'ins_quick_2');
-  assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.paymentInstrumentId, 'pi_mc');
+  assert.equal(result.authProtocol, 'MASTERCARD');
   assert.equal(
     result.verifyCommand,
     'clink instruction get --purchase-instruction-id ins_quick_2 --format json',
@@ -677,7 +878,7 @@ test('quick instruction gate verifies the exact instruction and VIC-ready card',
   assert.deepEqual(result.expectedResource, {
     instructionId: 'ins_quick_2',
     purchaseInstructionId: 'ins_quick_2',
-    paymentInstrumentId: 'pi_visa',
+    paymentInstrumentId: 'pi_mc',
   });
   assert.equal(result.waitSpec.eventType, 'purchase_instruction.activated');
   assert.equal(result.waitSpec.purpose, 'QUICK_INSTRUCTION_ACTIVATION');
@@ -693,7 +894,8 @@ test('quick activation gets one bounded poll and final pending verification retu
     paymentMethodsVoList: [{
       paymentInstrumentId: 'pi_visa',
       cardScheme: 'Visa',
-      visaRegistrationSucceeded: true,
+      strongAuthReady: true,
+      authProtocol: 'VISA',
     }],
   });
   const pending = {
@@ -748,13 +950,14 @@ test('quick instruction gate sends a missing pending id through the regular reso
     paymentMethodsVoList: [{
       paymentInstrumentId: 'pi_visa',
       cardScheme: 'Visa',
-      visaRegistrationSucceeded: true,
+      strongAuthReady: true,
+      authProtocol: 'VISA',
     }],
   });
 
   assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_LIST_REQUIRED);
   assert.equal(result.action, AuthorizationWorkflowAction.LIST_AUTHORIZATIONS);
-  assert.equal(result.reason, 'visa_vic_ready_list_authorizations');
+  assert.equal(result.reason, 'strong_auth_ready_list_authorizations');
   assert.equal(result.quickInstructionFallbackReason, 'pending_instruction_id_unavailable');
   assert.equal(result.verifyCommand, undefined);
   assert.equal(result.pollCommand, undefined);
@@ -1058,21 +1261,22 @@ test('a scheduled run stops on any pinned-authorization gap', () => {
 // Asking for a Passkey during an unattended run strands the schedule waiting on a signature that
 // will never arrive, so the resolver has to stop instead of drafting.
 test('the resolver surfaces a gap instead of drafting when nobody is present', () => {
-  const visaVicCard = {
+  const strongAuthCard = {
     paymentMethodsVoList: [
       {
-        paymentInstrumentId: 'pi_visa',
-        cardBrand: 'VISA',
+        paymentInstrumentId: 'pi_mc',
+        cardBrand: 'MASTERCARD',
         isDefault: true,
-        visaRegistrationSucceeded: true,
+        strongAuthReady: true,
+        authProtocol: 'MASTERCARD',
       },
     ],
   };
 
   for (const input of [
-    { ...visaVicCard, unattended: true },
-    { ...visaVicCard, unattended: true, authorizationListChecked: true },
-    { ...visaVicCard, unattended: true, selected: { instructionId: 'ins_weekly' } },
+    { ...strongAuthCard, unattended: true },
+    { ...strongAuthCard, unattended: true, authorizationListChecked: true },
+    { ...strongAuthCard, unattended: true, selected: { instructionId: 'ins_weekly' } },
   ]) {
     const result = classifyPaymentAuthorizationResolver(input);
 
@@ -1082,7 +1286,7 @@ test('the resolver surfaces a gap instead of drafting when nobody is present', (
   }
 
   const pinned = classifyPaymentAuthorizationResolver({
-    ...visaVicCard,
+    ...strongAuthCard,
     unattended: true,
     selected: { instructionId: 'ins_weekly', mandateId: 'm_weekly' },
   });

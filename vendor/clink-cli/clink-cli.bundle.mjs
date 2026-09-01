@@ -11054,9 +11054,61 @@ function resolveDashboardBaseUrl(apiBaseUrl) {
   }
   return DASHBOARD_BASE_URLS.production;
 }
-function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, email) {
+var SUPPORTED_STRONG_AUTH_PROTOCOLS = /* @__PURE__ */ new Set(["VISA", "MASTERCARD"]);
+function normalizeStrongAuthProtocol(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  const normalized = value.trim().toUpperCase();
+  return SUPPORTED_STRONG_AUTH_PROTOCOLS.has(normalized) ? normalized : void 0;
+}
+function paymentMethodAuthProtocol(method, paymentInstrumentId, required = false, tolerateInvalid = false) {
+  const rawValues = [method?.authProtocol, method?.auth_protocol].filter((value) => value !== void 0);
+  if (rawValues.length === 0) {
+    if (required) {
+      throw validationError(`payment method ${paymentInstrumentId} has no supported authProtocol; expected VISA or MASTERCARD`);
+    }
+    return void 0;
+  }
+  const protocols = rawValues.map(normalizeStrongAuthProtocol);
+  if (protocols.some((value) => value === void 0)) {
+    if (tolerateInvalid) {
+      return void 0;
+    }
+    throw validationError(`payment method ${paymentInstrumentId} has invalid authProtocol; expected VISA or MASTERCARD`);
+  }
+  if (new Set(protocols).size !== 1) {
+    if (tolerateInvalid) {
+      return void 0;
+    }
+    throw validationError(`payment method ${paymentInstrumentId} has conflicting authProtocol aliases`);
+  }
+  return protocols[0];
+}
+function paymentMethodStrongAuthReady(method, paymentInstrumentId) {
+  const values = [method?.strongAuthReady, method?.strong_auth_ready].filter((value) => value !== void 0);
+  if (values.length === 0) {
+    return void 0;
+  }
+  if (values.some((value) => typeof value !== "boolean")) {
+    throw validationError(`payment method ${paymentInstrumentId} has invalid strongAuthReady; expected Boolean`);
+  }
+  if (new Set(values).size !== 1) {
+    throw validationError(`payment method ${paymentInstrumentId} has conflicting strongAuthReady aliases`);
+  }
+  return values[0];
+}
+function requirePaymentMethodAuthProtocol(storedConfig, paymentInstrumentId) {
+  const methods = Array.isArray(storedConfig?.paymentMethods) ? storedConfig.paymentMethods : [];
+  const method = methods.find((item) => item?.paymentInstrumentId === paymentInstrumentId);
+  if (!method) {
+    throw validationError(`payment method ${paymentInstrumentId} is not cached; refresh with card binding-link before creating a Passkey URL`);
+  }
+  return paymentMethodAuthProtocol(method, paymentInstrumentId, true);
+}
+function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, authProtocol, instructionId, email) {
   const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
-  url.searchParams.set("type", "visa");
+  url.searchParams.set("type", authProtocol.toLowerCase());
   if (instructionId) {
     url.searchParams.set("instructionId", instructionId);
   }
@@ -12847,7 +12899,7 @@ Quick Instruction:
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
   A successful token response reports pendingInstructionId; null means no usable Quick ID was
   returned and does not prove whether creation was skipped or failed.
-  A PENDING instruction activates after VIC card binding completes and emits
+  A PENDING instruction activates after strong-auth card setup completes and emits
   purchase_instruction.activated; it does not appear in \`instruction list --valid-only\` first.
 
 Payment Methods:
@@ -12916,7 +12968,7 @@ Subcommands:
   binding-link   Fetch raw binding link and refresh cached payment methods
   setup-link     Fetch payment method setup link and refresh cached payment methods
   modify-link    Fetch payment method modify link and refresh cached payment methods
-  passkey-link   Open Visa card Passkey registration through Browser Handoff
+  passkey-link   Print protocol-specific card Passkey registration through Browser Handoff
   list           List cached payment methods from local config
   get            Get cached payment method detail from local config
 `;
@@ -12998,17 +13050,18 @@ Usage:
   clink card passkey-link --payment-instrument-id <id> [--open] [options]
 
 Required Arguments:
-  --payment-instrument-id <id> Payment instrument ID for the Visa card
+  --payment-instrument-id <id> Payment instrument ID whose cached authProtocol is VISA or MASTERCARD
 
 Options:
   --customer-api-key <key>     Legacy API key override for never-OAuth wallets only
   --timeout <ms>               Browser Handoff request timeout in milliseconds
-  --open                       Open the Visa Passkey page in the browser
+  --open                       Open the protocol-specific Passkey page in the browser
   --dry-run                    Print the link without opening the browser
 ${OUTPUT_OPTIONS}
 
 Notes:
-  Builds the Visa card Passkey URL locally without creating an Instruction.
+  Builds the card Passkey URL locally from cached authProtocol without creating an Instruction.
+  Refresh first with card binding-link; supported protocols are VISA and MASTERCARD.
   With --open and Agent OAuth, first completes a one-time loopback Browser Handoff so the Portal
   receives a browser session before navigating to the Passkey page.
   After Passkey registration, refresh the card through clink card binding-link --no-watch.
@@ -13105,9 +13158,9 @@ Arguments:
   --currency <currency>        Charge currency for direct charge mode, for example USD
   --session-id <id>            Checkout session ID for session mode
   --payment-instrument-id <id> Payment instrument to charge; optional for ALIPAY
-  --instruction-id <id>          VIC purchase instruction ID sent as instruction_id
+  --instruction-id <id>          Strong-auth purchase instruction ID sent as instruction_id
   --purchase-instruction-id <id> Backward-compatible alias for --instruction-id
-  --mandate-id <id>              VIC mandate ID sent as mandate_id
+  --mandate-id <id>              Strong-auth mandate ID sent as mandate_id
   --shipping-address <json>      UCP Postal Address JSON object sent as shippingaddress
   --products <json>              Product list JSON array for aiAgentInstructionBo.products
 
@@ -13125,11 +13178,11 @@ Notes:
   An explicit payment instrument for ALIPAY or those other types is validated against the refreshed
   list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
   Refresh cached payment methods with clink card binding-link when needed.
-  For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
+  For a strong-auth-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
   For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
   street_address, extended_address, address_locality, address_region, address_country,
   postal_code, first_name, last_name, and phone_number.
-  For product-level VIC credential context, pass --products as a JSON array with productId,
+  For product-level strong-auth credential context, pass --products as a JSON array with productId,
   productName, productUrl, quantity, unitPrice, currencyCode, and optional extra.
   Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
   A status 5 payment with a PNG QR response returns customerAction.type=QR_CODE_REQUIRED,
@@ -13866,7 +13919,7 @@ Notes:
   backend sign/update/cancel APIs itself \u2014 those require a Passkey authResult produced in the
   browser, so sign-url/update/cancel only print the agent page URL for the user to complete there.
   Agent page URL environment mirrors the environment saved by wallet init or an explicit API base.
-  Only valid for Visa cards whose card data has visaRegistrationSucceeded = true.
+  Valid only when refreshed card data has strongAuthReady=true and authProtocol=VISA or MASTERCARD.
   Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
   When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
   Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
@@ -13894,7 +13947,7 @@ Usage:
     (--mandates <json> | --mandates-file <path>) [options]
 
 Required Arguments:
-  --payment-instrument-id <id> Payment instrument ID for the Visa card
+  --payment-instrument-id <id> Payment instrument ID with VISA or MASTERCARD strong-auth protocol
   --title <title>              Instruction title
   --mandates <json>            Mandate JSON array; amount and currency live on each mandate
   --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
@@ -13944,7 +13997,7 @@ Usage:
   clink instruction sign-url --payment-instrument-id <id> --purchase-instruction-id <id> [options]
 
 Required Arguments:
-  --payment-instrument-id <id>    Payment instrument ID for the Visa card
+  --payment-instrument-id <id>    Payment instrument ID with VISA or MASTERCARD strong-auth protocol
   --purchase-instruction-id <id>  Purchase instruction ID to authorize
 
 Options:
@@ -14065,7 +14118,7 @@ Options:
                                event, fetch this order before ACK without re-reading checkout
   --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
                                --ucp-order-id is unavailable
-  --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
+  --payment-instrument-id <id> Match typed card/strong-auth events to one exact payment instrument
   --next-token <token>         Continue a timed-out Checkout poll from Event Hub's opaque cursor
   --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
   --event-only                 ACK and return the exact succeeded event without UCP order lookup
@@ -19155,6 +19208,7 @@ function createTipAuthorizationApi(input, overrides = {}) {
       return unwrapResponse(result, "invalid instruction list response");
     },
     createInstruction: async (draft) => {
+      const authProtocol = requirePaymentMethodAuthProtocol(input.storedConfig, draft.paymentInstrumentId);
       const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
         baseUrl: runtimeConfig2.baseUrl,
         method: "POST",
@@ -19172,7 +19226,7 @@ function createTipAuthorizationApi(input, overrides = {}) {
       const runtimeConfig = await getRuntimeConfig();
       return {
         instructionId,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId, runtimeConfig.email)
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, authProtocol, instructionId, runtimeConfig.email)
       };
     },
     waitForActivation: async (instructionId) => {
@@ -23461,7 +23515,8 @@ async function cardRedirectLink(context, targetPath, label) {
 }
 async function cardPasskeyLink(context) {
   const paymentInstrumentId = requireStringFlag(context.args.flags, "missing --payment-instrument-id", "payment-instrument-id");
-  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, void 0, context.runtimeConfig.email);
+  const authProtocol = requirePaymentMethodAuthProtocol(context.storedConfig, paymentInstrumentId);
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, authProtocol, void 0, context.runtimeConfig.email);
   const browserLaunch = await openPortalWithBrowserHandoff(context, url);
   printSuccess({
     url,
@@ -24783,12 +24838,13 @@ async function resolveUcpCheckoutCardContext(context, paymentMethodApi, paymentI
   if (context.globalOptions.dryRun) {
     return toUcpCheckoutCardContext(findPaymentMethodById(cached, paymentInstrumentId));
   }
+  let refreshedMethods = [];
   try {
-    const refreshedMethods = await paymentMethodApi.refreshPaymentMethods();
-    return toUcpCheckoutCardContext(findPaymentMethodById(refreshedMethods, paymentInstrumentId) ?? findPaymentMethodById(cached, paymentInstrumentId));
+    refreshedMethods = await paymentMethodApi.refreshPaymentMethods();
   } catch {
-    return toUcpCheckoutCardContext(findPaymentMethodById(cached, paymentInstrumentId));
+    refreshedMethods = [];
   }
+  return toUcpCheckoutCardContext(findPaymentMethodById(refreshedMethods, paymentInstrumentId) ?? findPaymentMethodById(cached, paymentInstrumentId));
 }
 function findPaymentMethodById(items, paymentInstrumentId) {
   return items.find((item) => item.paymentInstrumentId === paymentInstrumentId);
@@ -24797,10 +24853,22 @@ function toUcpCheckoutCardContext(method) {
   if (!method) {
     return {};
   }
+  const paymentInstrumentId = typeof method.paymentInstrumentId === "string" && method.paymentInstrumentId.trim() ? method.paymentInstrumentId.trim() : "unknown";
   const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
+  const strongAuthReady = paymentMethodStrongAuthReady(method, paymentInstrumentId);
+  let authProtocol;
+  if (strongAuthReady === true) {
+    authProtocol = paymentMethodAuthProtocol(method, paymentInstrumentId);
+  } else if (strongAuthReady === false) {
+    authProtocol = paymentMethodAuthProtocol(method, paymentInstrumentId, false, true);
+  }
+  if (strongAuthReady === true && !authProtocol) {
+    throw validationError(`payment method ${paymentInstrumentId} requires authProtocol when strongAuthReady is true`);
+  }
   return {
     ...typeof brand === "string" && brand.trim() ? { cardScheme: brand.trim() } : {},
-    ...typeof method.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: method.visaRegistrationSucceeded } : {}
+    ...strongAuthReady === void 0 ? {} : { strongAuthReady },
+    ...authProtocol ? { authProtocol } : {}
   };
 }
 function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card) {
@@ -24816,7 +24884,8 @@ function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card) {
             type: "PAYMENT_GATEWAY",
             token: paymentInstrumentId,
             ...card.cardScheme ? { card_scheme: card.cardScheme } : {},
-            ...card.visaRegistrationSucceeded === void 0 ? {} : { visa_registration_succeeded: card.visaRegistrationSucceeded }
+            ...card.strongAuthReady === void 0 ? {} : { strong_auth_ready: card.strongAuthReady },
+            ...card.authProtocol ? { auth_protocol: card.authProtocol } : {}
           }
         }
       ]
@@ -25047,6 +25116,7 @@ function requireJsonArrayFlag(flags, name) {
 async function instructionCreate(context) {
   const agentBaseUrl = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
   const body = await instructionBody(context);
+  const requestedAuthProtocol = requirePaymentMethodAuthProtocol(context.storedConfig, body.paymentInstrumentId);
   const staleEventCutoffMs = Date.now();
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
@@ -25066,7 +25136,8 @@ async function instructionCreate(context) {
   const instructionId = asRequiredString(data.instructionId, "missing instructionId in instruction create response");
   const paymentInstrumentId = asOptionalString(data.paymentInstrumentId) ?? body.paymentInstrumentId;
   const mandateIds = extractMandateIds(data);
-  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId, context.runtimeConfig.email);
+  const authProtocol = paymentInstrumentId === body.paymentInstrumentId ? requestedAuthProtocol : requirePaymentMethodAuthProtocol(context.storedConfig, paymentInstrumentId);
+  const passkeyUrl = buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, authProtocol, instructionId, context.runtimeConfig.email);
   await openPortalWithBrowserHandoff(context, passkeyUrl);
   printSuccess({
     ...data,
@@ -25134,7 +25205,8 @@ async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
   const instructionId = requireStringFlag(flags, "missing --purchase-instruction-id", "purchase-instruction-id");
-  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId, context.runtimeConfig.email);
+  const authProtocol = requirePaymentMethodAuthProtocol(context.storedConfig, paymentInstrumentId);
+  const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, authProtocol, instructionId, context.runtimeConfig.email);
   const staleEventCutoffMs = Date.now();
   const browserLaunch = await openPortalWithBrowserHandoff(context, url);
   printSuccess({

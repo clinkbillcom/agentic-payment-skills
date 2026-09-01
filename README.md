@@ -1,6 +1,6 @@
 # clink-payment-skill
 
-A Claude Code skill for Clink payment operations — wallet, card, payment, public-skill listing/tipping/installation, VIC agentic authorization, refund, and risk rules via `clink`.
+A Claude Code skill for Clink payment operations — wallet, card, payment, public-skill listing/tipping/installation, Visa/Mastercard strong-auth agentic authorization, refund, and risk rules via `clink`.
 
 ## Requirements
 
@@ -67,15 +67,15 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 - Tippable skill discovery with `clink skills list --all --tippable`, rendered as exactly Number, publisher, and Skill name with headers matching the user's language
 - Explicitly authorized USD tips with `clink skills tip` by publisher/name without a version, or by resolving a Number from the same-context list displayed within two hours; synchronous agent-pay success is payment success, while optional `account-created` / `account-reloaded` events only enrich the result
 - Explicitly authorized public Skill installs with `clink skills install publisher/name[@version]`: omit version for latest, use `@version` for an exact release, or resolve a Number from the newest same-context two-hour list and confirm the frozen publisher/name/version before installation
-- VIC agentic authorization preparation (Visa readiness check, instruction reuse/create draft, Passkey URL for page-driven signing)
-- UCP checkout for product orders — parse and freeze one item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/VIC authorization, then use `clink tool internal-ucp get-endpoint`. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `get-rest-endpoint`; every provider, including `clinkbill` and non-clinkbill providers, must resolve to a canonical HTTPS endpoint whose origin exactly matches successful current wallet-status evidence. After the runtime atomically claims one unique `checkoutAttemptId`, execute one foreground `clink ucp-checkout run ... --confirm-purchase --format json` under the frozen `CLINK_BASE_URL`; read-only resumes retain that environment lock. Digital delivery alone adds `--wait-delivery --max-wait 900`; the agent never manually chains create, complete, event polling, or delivery polling
+- Strong-auth agentic authorization preparation (`strongAuthReady` plus `authProtocol=VISA|MASTERCARD`, instruction reuse/create draft, protocol-specific Passkey URL for page-driven signing)
+- UCP checkout for product orders — parse and freeze one item, classify fulfillment, require a complete standard shipping address for shipped physical goods, resolve Visa/Mastercard strong-auth authorization, then use `clink tool internal-ucp get-endpoint`. Only `NOT_IN_INTERNAL_UCP_LIST` falls back to `get-rest-endpoint`; every provider, including `clinkbill` and non-clinkbill providers, must resolve to a canonical HTTPS endpoint whose origin exactly matches successful current wallet-status evidence. After the runtime atomically claims one unique `checkoutAttemptId`, execute one foreground `clink ucp-checkout run ... --confirm-purchase --format json` under the frozen `CLINK_BASE_URL`; read-only resumes retain that environment lock. Digital delivery alone adds `--wait-delivery --max-wait 900`; the agent never manually chains create, complete, event polling, or delivery polling
 - Refund submission and polling
 - Risk rule configuration
-- Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, VIC activation, post-3DS order) via the CLI's built-in link watch or `clink events poll`, instead of guessing or busy-retrying
+- Event-driven async completion — waits for Clink event-hub webhooks (card binding, refund result, strong-auth readiness/instruction activation, post-3DS order) via the CLI's built-in link watch or `clink events poll`, instead of guessing or busy-retrying
 
 ## Pages The User Must Open Themselves
 
-Different agents install this skill, and some drive a browser of their own. OAuth device verification, card binding/setup/modify, Visa Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser — not opened, navigated, previewed, screenshotted, or filled by an agent browser, headless browser, browser MCP, computer-use, or embedded webview. Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's own platform authenticator. Merchant product pages are the opposite case and remain agent work.
+Different agents install this skill, and some drive a browser of their own. OAuth device verification, card binding/setup/modify, Visa/Mastercard Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser — not opened, navigated, previewed, screenshotted, or filled by an agent browser, headless browser, browser MCP, computer-use, or embedded webview. Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's own platform authenticator. Merchant product pages are the opposite case and remain agent work.
 
 Because completion is proven by a webhook event rather than by anything the browser reports, the user may finish on any browser or device — including a phone — and the flow still converges. `references/clink-browser-handoff.md` holds the per-page contract, and `lib/page-handoff.mjs` classifies each URL before it is sent.
 
