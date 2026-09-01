@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'visa-cli');
 const windowsCli = join(root, 'bin', 'visa-cli.cmd');
+const VISA_SELECT_REWARD_OFFER_URL = 'https://vsrp.hk/p/o5s';
 const vendorBundlePath = join(
   root,
   'vendor',
@@ -85,11 +86,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.44');
+  assert.equal(vendorPackage.version, '0.2.45');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '70b7a98d532436672cdc905108ac2956b4b650d4',
+    'd8952341e5d4699d4010c4216cb1975a9d7f5577',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -157,18 +158,39 @@ test('public Skill listing requires the real --all contract', () => {
   assert.match(missingAll.stderr, /skills list requires --all/u);
 });
 
-test('joined Visa recommendation returns both candidate collections without merchant-list discovery', () => {
+test('Visa-only recommendation never calls UCP or Catalog', () => {
+  const filterSets = [
+    { region: ['hk'], category: ['dining_cafe_bakery'], type: 'benefit' },
+    {
+      region: ['hk'],
+      category: ['dining_cafe_bakery'],
+      reward_type: ['coupon'],
+      type: 'benefit',
+    },
+    {
+      region: ['hk'],
+      category: ['dining_cafe_bakery'],
+      purpose: ['local'],
+      type: 'benefit',
+    },
+    {
+      region: ['hk'],
+      keyword: 'Visa coffee benefit',
+      type: 'benefit',
+    },
+  ];
   const result = runWithMock([
     'visa',
     'recommend',
-    '香港有没有屈臣氏券',
+    '香港有没有咖啡权益',
+    '--filter-sets',
+    JSON.stringify(filterSets),
     '--lang',
     'zh-HK',
     '--anonymous',
-    '--include-provider-products',
     '--format',
     'json',
-  ], 'joined-provider', {
+  ], 'visa-only', {
     env: {
       VSRA_BASE_URL: 'https://vsra.example.test',
       CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
@@ -177,28 +199,33 @@ test('joined Visa recommendation returns both candidate collections without merc
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout).data;
 
-  assert.deepEqual(output.resultSections, {
-    visaOffers: 'response.data.items',
-    providerProducts: 'providerProducts',
-    relationship: 'independent_dynamic_sets',
-  });
-  assert.deepEqual(output.response.data.items, [{ code: 'P_DYNAMIC' }]);
-  assert.equal(output.providerProducts.length, 2);
-  assert.equal(output.providerProducts[0].directlyOrderable, true);
-  assert.equal(
-    output.providerProducts[0].providerIdentity.merchantId,
-    'mcht_ftmse61a6az0',
-  );
-  assert.equal(output.providerProductSearch.pagesFetched, 2);
-  assert.equal(output.providerProductSearch.programMatching, 'not_performed');
-  assert.equal(output.aggregateCoverage, 'complete');
+  assert.equal(output.recommendationMode, 'matching_offers');
+  assert.equal(output.filterSelection.requestCount, 4);
+  assert.equal(output.filterSelection.parallel, true);
+  assert.equal(output.filterSelection.dedupeKey, 'program.code');
+  assert.deepEqual(output.filterSelection.filterSets, filterSets);
+  assert.deepEqual(output.response.data.items, [{
+    code: 'P_VISA_ONLY',
+    title: 'Visa coffee benefit',
+  }]);
+  assert.equal('providerProducts' in output, false);
+  assert.equal('resultSections' in output, false);
 });
 
 test('broad Visa availability explicitly requests every Program page', () => {
+  const filterSets = [
+    { region: ['hk'] },
+    { region: ['hk'], type: 'benefit' },
+    { region: ['hk'], purpose: ['local'] },
+    { region: ['hk'], card_level: ['all'] },
+  ];
   const result = run([
     'visa',
     'recommend',
     '我想知道香港有哪些 visa权益可以用',
+    '--filter-sets',
+    JSON.stringify(filterSets),
+    '--anonymous',
     '--all',
     '--lang',
     'zh-HK',
@@ -207,31 +234,89 @@ test('broad Visa availability explicitly requests every Program page', () => {
     'json',
   ]);
   assert.equal(result.status, 0, result.stderr);
-  const request = JSON.parse(result.stdout).data.request;
-  assert.match(request.url, /limit=50/u);
-  assert.match(request.url, /page=1/u);
-  assert.match(request.url, /region%5B%5D=hk/u);
-  assert.equal(request.headers['X-Locale'], 'zh-HK');
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.requests.length, 4);
+  assert.equal(output.filterSelection.requestCount, 4);
+  for (const { plan } of output.requests) {
+    assert.match(plan.request.url, /limit=50/u);
+    assert.match(plan.request.url, /page=1/u);
+    assert.match(plan.request.url, /region%5B%5D=hk/u);
+    assert.equal(plan.request.headers['X-Locale'], 'zh-HK');
+  }
 });
 
-test('Coffee broad discovery stays outside joined Visa recommendation', () => {
-  const result = runWithMock([
+test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee', () => {
+  const recommendation = runWithMock([
+    'visa',
+    'recommend',
+    '咖啡优惠',
+    '--filter-sets',
+    '[{"region":["hk"],"category":["dining_cafe_bakery"]},{"region":["hk"],"category":["dining_cafe_bakery"],"reward_type":["coupon"]},{"region":["hk"],"category":["dining_cafe_bakery"],"purpose":["local"]},{"region":["hk"],"keyword":"咖啡优惠"}]',
+    '--lang',
+    'zh-HK',
+    '--anonymous',
+    '--format',
+    'json',
+  ], 'visa-miss-catalog', {
+    env: {
+      VSRA_BASE_URL: 'https://vsra.example.test',
+      CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+    },
+  });
+  assert.equal(recommendation.status, 0, recommendation.stderr);
+  const recommendationData = JSON.parse(recommendation.stdout).data;
+  assert.equal(recommendationData.recommendationMode, 'no_matching_offers');
+  assert.equal(recommendationData.returnedOfferCount, 0);
+
+  const catalog = runWithMock([
     'catalog',
     'search',
     '--query',
-    'XX coffee',
+    '咖啡优惠',
     '--language',
     'zh-HK',
-    '--channel-type',
-    'eats365',
+    '--context',
+    '{"address_region":"HK"}',
     '--sandbox',
     '--format',
     'json',
-  ], 'coffee-broad-only');
-  assert.equal(result.status, 0, result.stderr);
-  const output = JSON.parse(result.stdout);
+  ], 'visa-miss-catalog');
+  assert.equal(catalog.status, 0, catalog.stderr);
+  const output = JSON.parse(catalog.stdout);
   assert.match(JSON.stringify(output), /10210949/u);
   assert.match(JSON.stringify(output), /Americano/u);
+});
+
+test('selected Visa Benefit can resolve to an exact internal UCP product', () => {
+  const result = runWithMock([
+    'visa',
+    'product-search',
+    '--merchant-url',
+    VISA_SELECT_REWARD_OFFER_URL,
+    '--query',
+    'Selected Visa Program',
+    '--language',
+    'zh-HK',
+    '--limit',
+    '1',
+    '--sandbox',
+    '--format',
+    'json',
+  ], 'visa-select-reward-internal-match');
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.state, 'PRODUCT_VERIFIED');
+  assert.equal(output.action, 'CONTINUE_TO_COMMERCE_LOGIN');
+  assert.equal(output.productResolution, 'internal-ucp-catalog');
+  assert.equal(output.merchantId, 'mcht_ftmse61a6az0');
+  assert.equal(
+    output.endpoint,
+    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+  );
+  assert.equal(output.product.itemId, 'benefit-product-1');
+  assert.equal(output.product.currency, 'HKD');
+  assert.equal(output.product.totalAmountMajor, '10');
 });
 
 test('Catalog purchase mode is executable with the complete frozen contract', () => {
@@ -284,12 +369,12 @@ test('Catalog purchase mode is executable with the complete frozen contract', ()
   assert.equal(plan.purchase.fulfillmentType, 'NO_SHIPPING_REQUIRED');
 });
 
-test('joined provider product enters aggregate catalog_purchase without Program metadata', () => {
+test('internal Catalog voucher enters catalog_purchase without Program metadata', () => {
   const result = run([
     'visa',
     'commerce-run',
     '--context',
-    JSON.stringify(providerCatalogPurchaseContext()),
+    JSON.stringify(catalogVoucherPurchaseContext()),
     '--confirm-purchase',
     '--dry-run',
     '--format',
@@ -516,7 +601,7 @@ function programPurchaseContext() {
   };
 }
 
-function providerCatalogPurchaseContext() {
+function catalogVoucherPurchaseContext() {
   return {
     mode: 'catalog_purchase',
     environment: 'uat',
@@ -678,25 +763,6 @@ function jsonResponse(body) {
   });
 }
 
-function providerPage(productId, hasNextPage, nextCursor) {
-  return {
-    products: [{
-      id: productId,
-      title: 'Provider product ' + productId,
-      variants: [{
-        id: productId,
-        title: 'Provider product ' + productId,
-        price: { amount: 100, currency: 'USD' },
-        availability: { available: true, status: 'in_stock' },
-      }],
-    }],
-    pagination: {
-      has_next_page: hasNextPage,
-      ...(nextCursor ? { next_cursor: nextCursor } : {}),
-    },
-  };
-}
-
 function coffeeCatalogResponse() {
   return {
     groups: [{
@@ -726,9 +792,9 @@ function coffeeCatalogResponse() {
 
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
-  if (scenario === 'joined-provider') {
-    if (url.pathname.endsWith('/agent/ucp/merchants')) {
-      throw new Error('joined recommendation must not request merchant-list');
+  if (scenario === 'visa-only') {
+    if (url.pathname.includes('/agent/ucp/')) {
+      throw new Error('Visa-only recommendation must not request UCP');
     }
     if (url.pathname.endsWith('/taxonomy')) {
       return jsonResponse({ success: true, data: {} });
@@ -741,46 +807,86 @@ globalThis.fetch = async (input, init) => {
           page: 1,
           limit: 10,
           count: 1,
-          items: [{ code: 'P_DYNAMIC' }],
+          items: [{
+            code: 'P_VISA_ONLY',
+            title: 'Visa coffee benefit',
+          }],
         },
       });
     }
-    if (url.pathname.endsWith('/catalog/search')) {
-      const body = JSON.parse(String(init?.body));
-      if (
-        body.query !== '香港有没有屈臣氏券'
-        || body.context?.language !== 'zh-Hant'
-        || body.pagination?.limit !== 100
-      ) {
-        throw new Error(
-          'unexpected joined provider request: ' + JSON.stringify(body),
-        );
-      }
-      return body.pagination.cursor
-        ? jsonResponse(providerPage('provider_product_2', false))
-        : jsonResponse(
-          providerPage('provider_product_1', true, 'provider_cursor_2'),
-        );
-    }
-    throw new Error('unexpected joined request: ' + url.href);
+    throw new Error('unexpected Visa-only request: ' + url.href);
   }
 
-  if (scenario === 'coffee-broad-only') {
+  if (scenario === 'visa-miss-catalog') {
+    if (url.pathname.endsWith('/taxonomy')) {
+      return jsonResponse({ success: true, data: {} });
+    }
+    if (url.pathname.endsWith('/programs/recommend')) {
+      return jsonResponse({
+        success: true,
+        data: {
+          total: 0,
+          page: 1,
+          limit: 10,
+          count: 0,
+          items: [],
+        },
+      });
+    }
     if (url.pathname === '/agent/ucp/extra/catalog/search') {
       const body = JSON.parse(String(init?.body));
       if (
-        body.query !== 'XX coffee'
-        || body.channel_type !== 'eats365'
+        body.query !== '咖啡优惠'
         || body.context?.language !== 'zh-Hant'
+        || body.context?.address_region !== 'HK'
+        || body.channel_type !== undefined
       ) {
         throw new Error(
-          'unexpected Coffee broad request: ' + JSON.stringify(body),
+          'unexpected Visa-miss Catalog request: ' + JSON.stringify(body),
         );
       }
       return jsonResponse(coffeeCatalogResponse());
     }
+    throw new Error('unexpected Visa-miss request: ' + url.href);
+  }
+
+  if (scenario === 'visa-select-reward-internal-match') {
+    if (url.pathname.endsWith('/agent/ucp/merchants')) {
+      throw new Error('exact UAT offer alias must bypass merchant-list lookup');
+    }
+    if (
+      url.pathname
+      === '/agent/ucp/mcht_ftmse61a6az0/catalog/search'
+    ) {
+      if (init?.method !== 'POST') {
+        throw new Error('unexpected internal Catalog method: ' + init?.method);
+      }
+      const body = JSON.parse(String(init.body));
+      if (
+        body.query !== 'Selected Visa Program'
+        || body.pagination?.limit !== 1
+      ) {
+        throw new Error(
+          'unexpected internal Benefit search: ' + JSON.stringify(body),
+        );
+      }
+      return jsonResponse({
+        products: [{
+          id: 'benefit-product-1',
+          title: 'Selected Visa Program',
+          sourceTitle: 'Selected Visa Program',
+          url:
+            'https://vtravel.link2shops.com/yiyuan/'
+            + '?product_id=benefit-product-1',
+          price: { amount: 1000, currency: 'HKD' },
+          availability: { available: true, status: 'in_stock' },
+          seller: { name: 'Visa Benefit Catalog Merchant' },
+        }],
+        pagination: { has_next_page: false },
+      });
+    }
     throw new Error(
-      'Coffee broad discovery must not enter joined Visa routes: ' + url.href,
+      'unexpected Visa Select Reward request: ' + url.href,
     );
   }
 

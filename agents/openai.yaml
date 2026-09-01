@@ -5,37 +5,58 @@ interface:
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Treat Hong
     Kong as --region hk unless the user explicitly says the card is HK-issued.
-    For broad, category, or merchant-specific Visa Benefit shopping, run one
-    visa recommend with --include-provider-products. The CLI is the sole
-    authority for the provider registry, provider identity, route, and cursor
-    pagination. Never issue a second initial Catalog or merchant-list command.
-    Read the Visa Offer and providerProducts/directlyOrderable collections as
-    authoritative candidate groups. Independently filter both by the original
-    query's brand, category, geography, product, merchant, and other hard
-    constraints. Do not display unrelated provider products, but never change
-    their CLI-returned directlyOrderable fact. Organize relevant results without
-    a fixed display template or count. Every provider item has productType
-    VISA_PROVIDER_PRODUCT; preserve PROGRAM_PROVIDER_MATCH only when the CLI
-    proves it and never force it. Missing or ambiguous CLI provider identity
-    fails closed. All provider and direct Catalog shopping use commerce-login
-    then commerce-run
-    mode=catalog_purchase. Separate voucher face value from structured purchase
-    price/currency. For Eats365,
-    manual_item_facts is a normal result: freeze channel, store, original query,
-    Catalog environment/language, product, title, price, currency, availability,
-    and URL from one broad-Catalog snapshot. Classify MCC and fulfillment from
-    the exact context; coffee and quick-service food use high-confidence MCC
-    5814, NO_SHIPPING_REQUIRED, and digitalDeliveryExpected=false. Registered
-    digital coupons use digitalDeliveryExpected=true. Ask when classification
-    confidence is low. Never send program.code in purchase or catalog_purchase
-    contexts. If no eligible VIC-ready Visa card exists, commerce-login creates
-    or reuses one exact no-card PENDING Instruction. It may return a Bind Card
-    link for the user, but never opens it automatically and never ends after
-    showing it. Keep the same CLI process in the foreground while the user
-    clicks that link or binds in an existing Agent Portal. Continue only after
-    the same card has visaRegistrationSucceeded=true and CWallet activates that
-    exact Instruction. Timeout permits only the exact read-only continuation,
-    never a new Instruction or payment retry. Keep all deterministic payment
-    steps inside the CLI, never rerun commerce-run after possible Checkout
-    creation, and do not read references or use runtime --help during ordinary
-    execution.
+    Route explicit buy/order/checkout requests with no Visa, Benefit, coupon,
+    voucher, discount, or offer signal directly to broad catalog search; for
+    example, 我想下单咖啡 is Catalog. A Benefit signal such as 有咖啡的券吗,
+    Visa 咖啡优惠券, or 有哪些咖啡权益 is Visa discovery. For Visa discovery,
+    read only references/visa-recommend-filters.md and select exactly four
+    filter objects. Preserve every explicit brand, merchant, product, category,
+    geography, eligibility, reward type, and other hard constraint in all four
+    sets. Run one visa recommend with --filter-sets plus --anonymous. The CLI
+    validates all sets against one taxonomy snapshot, runs four parallel Visa
+    requests, and de-duplicates by Program code; it never infers filters from
+    the query. Never issue four Agent-managed Shell calls, add
+    --include-provider-products, or call UCP/Catalog during that aggregate
+    recommendation. Independently filter the merged Visa Programs by the original brand,
+    category, geography, merchant, product, eligibility, dates, status, and
+    channel constraints. If a relevant Program remains, present it without an
+    initial Catalog call. If recommendationMode is fallback_all_offers or
+    no_matching_offers, or no Program survives semantic filtering, ignore the
+    fallback Visa rows and run one all-channel UAT catalog search with the
+    original query, language, and geography. Omit --channel-type unless the
+    user explicitly restricts it so Eats365 can participate. Broad Catalog is
+    bounded and non-exhaustive. When the user selects a Visa Benefit, bind one
+    stable Program code, run visa detail, preserve the activity introduction
+    and authoritative link, then run visa product-search only with an actual
+    merchant commerce URL or the exact UAT alias
+    https://vsrp.hk/p/o5s.
+    The bundled CLI maps only that offer path to mcht_ftmse61a6az0; no other
+    path on the host is an alias. Invite ordering only for PRODUCT_VERIFIED plus
+    CONTINUE_TO_COMMERCE_LOGIN with productResolution=internal-ucp-catalog and
+    exact identity, price, currency, and availability. External-page
+    resolution, no match, ambiguity, or incomplete facts must end with activity
+    details and the activity link only, without buy/order/checkout language.
+    Wait for an explicit purchase reply before commerce-login. For Visa Program
+    purchases, use a valid Program merchantCategoryCode first. If it is absent,
+    classify MCC only from the complete frozen merchant/product context with
+    high confidence. The exact vsrp.hk/p/o5s plus mcht_ftmse61a6az0 Wellcome
+    supermarket gift-card route uses MCC 5411. Invalid/conflicting Program MCC,
+    low confidence, or title-only guessing stops before login. Freeze the
+    resolved MCC and reuse it unchanged. Direct shopping
+    and Visa-miss Catalog products use commerce-login then commerce-run
+    mode=catalog_purchase. For Eats365, manual_item_facts is a normal result:
+    freeze channel, store, product, title, price, currency, availability, and
+    URL from one broad-Catalog snapshot. Coffee and quick-service food use
+    high-confidence MCC 5814, NO_SHIPPING_REQUIRED, and
+    digitalDeliveryExpected=false. Ask when MCC or fulfillment confidence is
+    low. Never send program.code in purchase or catalog_purchase contexts. If
+    no eligible VIC-ready Visa card exists, commerce-login creates or reuses
+    one exact no-card PENDING Instruction. It may return a Bind Card link for
+    the user, but never opens it automatically and never ends after showing it.
+    Keep the same CLI process in the foreground while the user clicks that link
+    or binds in an existing Agent Portal. Continue only after the same card has
+    visaRegistrationSucceeded=true and CWallet activates that exact
+    Instruction. Timeout permits only the exact read-only continuation, never
+    a new Instruction or payment retry. Keep all deterministic payment steps
+    inside the CLI, never rerun commerce-run after possible Checkout creation,
+    and do not read references or use runtime --help during ordinary execution.

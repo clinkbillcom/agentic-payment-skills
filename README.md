@@ -24,44 +24,47 @@ visa commerce-run
 
 The lightweight shopping routes cover:
 
-- broad, category, and merchant-specific Visa Benefit queries joined with
-  every registered Visa Benefit Catalog provider through one
-  `visa recommend --include-provider-products` aggregate
-- constant `VISA_PROVIDER_PRODUCT` typing for every registered provider
-  product, with `PROGRAM_PROVIDER_MATCH` only as an optional proven relation
-  label and
-  `VISA_PROGRAM_ONLY` for unmatched Program rows
-- the existing Program purchase path through `product-search`,
-  `commerce-login`, and `commerce-run`
-- broad non-Visa Catalog discovery for direct shopping requests
-- a provider/platform Catalog purchase contract using `commerce-login`
+- broad, category, and merchant-specific Visa Benefit queries through one
+  Visa-only `visa recommend` aggregate: four Agent-selected filter sets run as
+  parallel Visa requests, merged and de-duplicated by Program code with no
+  query inference or initial UCP/Catalog request
+- one all-channel UAT `catalog search` fallback when Visa returns no relevant
+  Program; the bounded result can include Eats365 products such as coffee
+- selected-Benefit detail through `visa detail`, followed by one token-free
+  `product-search` check against internal UCP
+- an order invitation only for an exact `internal-ucp-catalog` match; otherwise
+  the response ends with the Visa activity introduction and authoritative link
+- the existing matched Program purchase path through `commerce-login` and
+  `commerce-run`
+- broad Catalog discovery for direct shopping requests
+- a Catalog purchase contract using `commerce-login`
   followed by `commerce-run` with `mode=catalog_purchase`
 - one aggregate missing-card contract: create or reuse an exact no-card
   `PENDING` Instruction, optionally show but never auto-open the Bind Card link,
   keep the CLI in the foreground, and continue only after the same card is
   VIC-ready and CWallet activates that exact Instruction
 
-The CLI is the sole authority for the Visa Benefit Catalog provider registry
-and provider identity. Visa-related Benefit discovery makes one joined CLI
-call; the CLI traverses and paginates providers internally. The Skill never
-copies provider entries or assembles those results with a second Catalog or
-merchant-list request.
+Initial Visa discovery never uses `--include-provider-products`. The Agent
+filters only the returned Visa Programs against the original request. When no
+relevant Visa Program remains, it runs one anonymous broad Catalog search with
+the same query, language, geography, and UAT environment. Broad Catalog search
+checks every channel when the user did not constrain one, but it is a bounded,
+non-exhaustive result window rather than a complete inventory export.
 
-The Skill reads the joined Visa Offer and directly orderable provider-product
-collections as authoritative candidate groups. The Agent independently filters
-both by the original query's brand, category, geography, product, merchant, and
-other hard constraints. Relevant orderable products take presentation priority;
-Visa Offers are shown only when no relevant orderable product remains. The
-user-facing answer does not expose the internal collection distinction and has no fixed
-display template or count. An unrelated provider product is not shown, but its
-CLI-returned `directlyOrderable` fact is not changed. Provider products keep
-`VISA_PROVIDER_PRODUCT`; `PROGRAM_PROVIDER_MATCH` is preserved only when the
-CLI proves the relation.
+After the user selects a Visa Benefit, the Skill fetches its authoritative Visa
+detail and activity link. A merchant commerce URL may then be checked through
+`visa product-search`. Only an exact internal UCP Catalog match with complete
+identity, price, currency, and availability may produce an order prompt.
+External-page resolution, no match, or incomplete facts produce activity-only
+presentation with no purchase call to action. UAT additionally recognizes only
+`https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
+`mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
+For a verified Program purchase, a valid Program MCC remains authoritative.
+When it is missing, the Skill may classify one high-confidence MCC from the
+complete frozen merchant/product context. The exact UAT Wellcome gift-card
+route above uses MCC `5411`; malformed/conflicting Program MCCs and
+low-confidence or title-only guesses still stop before login.
 
-Joined orderable products expose normalized purchase facts: a localized display
-title, provider `sourceTitle`, minor-unit audit amount, major-unit purchase
-amount, currency, and availability. Purchase contexts use `sourceTitle` and the
-major-unit amount directly, without reinterpreting raw Catalog fields.
 Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
 Only `channelType` and `storeId` are required platform route fields;
@@ -69,16 +72,16 @@ query, duplicate environment, and language metadata are optional.
 Eats365 buyer name and E.164 phone are collected before login; the CLI injects
 the wallet email and forwards buyer data only to Checkout.
 
-Visa Program, provider, and other Catalog purchases remain CLI-aggregated. The
+Visa Program and other Catalog purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
 operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.39` vendors Visa CLI `0.2.44` from upstream commit
-`70b7a98d532436672cdc905108ac2956b4b650d4`. It supports joined Visa Offer and
-provider-product discovery, optional legacy
-`program.code`, complete Eats365 `manual_item_facts` revalidation, and
+Skill `0.1.45` vendors Visa CLI `0.2.45` from upstream commit
+`d8952341e5d4699d4010c4216cb1975a9d7f5577`. It uses Visa-only recommendation,
+internal-UCP-gated Program ordering, Visa-miss broad Catalog fallback, optional
+legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
 contexts. It also requires the aggregate missing-card flow to show rather than
 auto-open a Bind Card link, remain in the foreground after showing it, wait on
@@ -108,7 +111,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.39`
+Skill version: `0.1.45`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
