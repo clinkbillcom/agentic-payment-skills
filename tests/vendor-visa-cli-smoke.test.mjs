@@ -86,11 +86,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.44');
+  assert.equal(vendorPackage.version, '0.2.45');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '70b7a98d532436672cdc905108ac2956b4b650d4',
+    'd8952341e5d4699d4010c4216cb1975a9d7f5577',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -159,17 +159,32 @@ test('public Skill listing requires the real --all contract', () => {
 });
 
 test('Visa-only recommendation never calls UCP or Catalog', () => {
-  const relatedQueries = [
-    '香港咖啡 Visa 优惠',
-    '香港咖啡商户权益',
-    '香港咖啡折扣礼遇',
+  const filterSets = [
+    { region: ['hk'], category: ['dining_cafe_bakery'], type: 'benefit' },
+    {
+      region: ['hk'],
+      category: ['dining_cafe_bakery'],
+      reward_type: ['coupon'],
+      type: 'benefit',
+    },
+    {
+      region: ['hk'],
+      category: ['dining_cafe_bakery'],
+      purpose: ['local'],
+      type: 'benefit',
+    },
+    {
+      region: ['hk'],
+      keyword: 'Visa coffee benefit',
+      type: 'benefit',
+    },
   ];
   const result = runWithMock([
     'visa',
     'recommend',
     '香港有没有咖啡权益',
-    '--related-queries',
-    JSON.stringify(relatedQueries),
+    '--filter-sets',
+    JSON.stringify(filterSets),
     '--lang',
     'zh-HK',
     '--anonymous',
@@ -185,10 +200,10 @@ test('Visa-only recommendation never calls UCP or Catalog', () => {
   const output = JSON.parse(result.stdout).data;
 
   assert.equal(output.recommendationMode, 'matching_offers');
-  assert.equal(output.queryExpansion.requestCount, 4);
-  assert.equal(output.queryExpansion.parallel, true);
-  assert.equal(output.queryExpansion.dedupeKey, 'program.code');
-  assert.deepEqual(output.queryExpansion.relatedQueries, relatedQueries);
+  assert.equal(output.filterSelection.requestCount, 4);
+  assert.equal(output.filterSelection.parallel, true);
+  assert.equal(output.filterSelection.dedupeKey, 'program.code');
+  assert.deepEqual(output.filterSelection.filterSets, filterSets);
   assert.deepEqual(output.response.data.items, [{
     code: 'P_VISA_ONLY',
     title: 'Visa coffee benefit',
@@ -198,17 +213,18 @@ test('Visa-only recommendation never calls UCP or Catalog', () => {
 });
 
 test('broad Visa availability explicitly requests every Program page', () => {
-  const relatedQueries = [
-    '香港 Visa 可用权益',
-    '香港 Visa 卡优惠礼遇',
-    '香港 Visa 本地福利',
+  const filterSets = [
+    { region: ['hk'] },
+    { region: ['hk'], type: 'benefit' },
+    { region: ['hk'], purpose: ['local'] },
+    { region: ['hk'], card_level: ['all'] },
   ];
   const result = run([
     'visa',
     'recommend',
     '我想知道香港有哪些 visa权益可以用',
-    '--related-queries',
-    JSON.stringify(relatedQueries),
+    '--filter-sets',
+    JSON.stringify(filterSets),
     '--anonymous',
     '--all',
     '--lang',
@@ -220,7 +236,7 @@ test('broad Visa availability explicitly requests every Program page', () => {
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout).data;
   assert.equal(output.requests.length, 4);
-  assert.equal(output.queryExpansion.requestCount, 4);
+  assert.equal(output.filterSelection.requestCount, 4);
   for (const { plan } of output.requests) {
     assert.match(plan.request.url, /limit=50/u);
     assert.match(plan.request.url, /page=1/u);
@@ -234,8 +250,8 @@ test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee'
     'visa',
     'recommend',
     '咖啡优惠',
-    '--related-queries',
-    '["咖啡折扣","咖啡商户优惠","咖啡 Visa 礼遇"]',
+    '--filter-sets',
+    '[{"region":["hk"],"category":["dining_cafe_bakery"]},{"region":["hk"],"category":["dining_cafe_bakery"],"reward_type":["coupon"]},{"region":["hk"],"category":["dining_cafe_bakery"],"purpose":["local"]},{"region":["hk"],"keyword":"咖啡优惠"}]',
     '--lang',
     'zh-HK',
     '--anonymous',

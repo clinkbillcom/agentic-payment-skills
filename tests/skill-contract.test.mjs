@@ -10,11 +10,15 @@ const skill = await readFile(skillPath, 'utf8');
 const readme = await readFile(join(root, 'README.md'), 'utf8');
 const readmeZh = await readFile(join(root, 'README.zh.md'), 'utf8');
 const agent = await readFile(join(root, 'agents', 'openai.yaml'), 'utf8');
+const filterReference = await readFile(
+  join(root, 'references', 'visa-recommend-filters.md'),
+  'utf8',
+);
 const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const vendorPackage = JSON.parse(
   await readFile(join(root, 'vendor', 'visa-cli', 'package.json'), 'utf8'),
 );
-const documents = [skill, readme, readmeZh, agent];
+const documents = [skill, readme, readmeZh, agent, filterReference];
 const combined = documents.join('\n');
 
 async function walk(directory) {
@@ -33,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.44');
+  assert.equal(packageJson.version, '0.1.45');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.44/u);
-  assert.match(skill, /version: "0\.1\.44"/u);
+  assert.match(skill, /Visa Skill 0\.1\.45/u);
+  assert.match(skill, /version: "0\.1\.45"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -105,10 +109,18 @@ test('Skill stays within the runtime prompt budget', async () => {
   );
 });
 
-test('old workflow runtime, references, scripts, and docs are absent', async () => {
-  for (const directory of ['lib', 'scripts', 'references', 'docs']) {
+test('old workflow runtime, scripts, and docs are absent and filter reference is focused', async () => {
+  for (const directory of ['lib', 'scripts', 'docs']) {
     await assert.rejects(stat(join(root, directory)));
   }
+  assert.deepEqual(
+    (await walk(join(root, 'references'))).map((path) => relative(root, path)),
+    ['references/visa-recommend-filters.md'],
+  );
+  assert.ok(
+    (await stat(join(root, 'references', 'visa-recommend-filters.md'))).size
+      <= 4 * 1024,
+  );
 
   const runtimeFiles = (await walk(root))
     .map((path) => relative(root, path))
@@ -122,10 +134,10 @@ test('old workflow runtime, references, scripts, and docs are absent', async () 
   assert.doesNotMatch(trackedContract, /^## Action Matrix$/mu);
 });
 
-test('ordinary execution is reference-free and non-exploratory', () => {
+test('ordinary execution loads only the routed filter reference and stays non-exploratory', () => {
   assert.match(
     skill,
-    /do not read reference files[\s\S]*invoke runtime `--help`[\s\S]*fixed `sleep`/iu,
+    /For Visa Benefit discovery, read only[\s\S]*visa-recommend-filters\.md[\s\S]*Otherwise do\s+not read reference files[\s\S]*invoke runtime[\s\S]*`--help`[\s\S]*fixed `sleep`/iu,
   );
   assert.match(skill, /shortest matching CLI capability/iu);
   assert.match(
@@ -134,7 +146,7 @@ test('ordinary execution is reference-free and non-exploratory', () => {
   );
 });
 
-test('initial Visa discovery expands four Visa-only queries with language and environment locks', () => {
+test('initial Visa discovery uses four Agent-selected filter sets', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa-Only Benefit Discovery And Catalog Fallback'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -149,24 +161,24 @@ test('initial Visa discovery expands four Visa-only queries with language and en
   assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
   assert.match(
     discovery,
-    /exactly one initial expanded[\s\S]*Visa-only aggregate call[\s\S]*visa recommend/iu,
+    /exactly one Agent-selected-filter[\s\S]*aggregate call[\s\S]*visa recommend/iu,
   );
   assert.doesNotMatch(initialCommand, /--include-provider-products/u);
   assert.match(
     initialCommand,
-    /--related-queries[\s\S]*rewrite-1[\s\S]*rewrite-2[\s\S]*rewrite-3[\s\S]*--anonymous[\s\S]*--lang/iu,
+    /--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
   );
   assert.match(
     discovery,
-    /exactly three distinct rewrites[\s\S]*synonym-oriented[\s\S]*merchant\/category-oriented[\s\S]*product\/Benefit-oriented/iu,
+    /read `references\/visa-recommend-filters\.md`[\s\S]*create exactly four filter objects/iu,
   );
   assert.match(
     discovery,
-    /preserve the original brand[\s\S]*merchant[\s\S]*product[\s\S]*category[\s\S]*geography[\s\S]*eligibility[\s\S]*reward type[\s\S]*Do not broaden/iu,
+    /Agent owns filter selection[\s\S]*CLI validates taxonomy codes[\s\S]*never\s+derives filters from the query/iu,
   );
   assert.match(
     discovery,
-    /Do not issue four Agent-managed Shell commands[\s\S]*four parallel Visa recommendation requests[\s\S]*fallback_all_offers[\s\S]*de-duplicates[\s\S]*Program code/iu,
+    /Do not issue four Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*fallback_all_offers[\s\S]*de-duplicates[\s\S]*Program code/iu,
   );
   assert.match(
     discovery,
@@ -198,7 +210,7 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
 
   assert.match(
     routing,
-    /What Visa Benefits can I use in Hong Kong[\s\S]*Visa-only[\s\S]*must not query UCP/iu,
+    /What Visa Benefits can I use in Hong Kong[\s\S]*Agent-selected-filter Visa Benefit discovery[\s\S]*must not query UCP/iu,
   );
   assert.match(
     discovery,
@@ -206,7 +218,7 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     allCommand,
-    /visa recommend[\s\S]*--related-queries[\s\S]*--anonymous[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
+    /visa recommend[\s\S]*--filter-sets[\s\S]*--anonymous[\s\S]*--all[\s\S]*--region hk[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
   assert.match(
@@ -223,7 +235,37 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     agent,
-    /create exactly[\s\S]*three distinct same-language rewrites[\s\S]*Preserve every brand[\s\S]*Never[\s\S]*broaden[\s\S]*--related-queries[\s\S]*four parallel Visa requests[\s\S]*de-duplicates by Program code/iu,
+    /read only references\/visa-recommend-filters\.md[\s\S]*select exactly four[\s\S]*filter objects[\s\S]*--filter-sets[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*never infers filters from[\s\S]*query/iu,
+  );
+});
+
+test('compact filter reference defines schema, selection priority, and intent boundary', () => {
+  for (const field of [
+    'type',
+    'keyword',
+    'limit',
+    'page',
+    'region',
+    'category',
+    'purpose',
+    'reward_type',
+    'attribute',
+    'card_level',
+    'card_issuer',
+  ]) {
+    assert.match(filterReference, new RegExp(`"${field}"`, 'u'));
+  }
+  assert.match(
+    filterReference,
+    /Create exactly four JSON objects[\s\S]*Set 1 is strict[\s\S]*Sets 2-4[\s\S]*Never remove an explicit hard\s+constraint/iu,
+  );
+  assert.match(
+    filterReference,
+    /keyword[\s\S]*exact official title[\s\S]*Never put a conversational question/iu,
+  );
+  assert.match(
+    filterReference,
+    /我想下单咖啡[\s\S]*catalog search[\s\S]*有咖啡的券吗[\s\S]*visa recommend --filter-sets/iu,
   );
 });
 
@@ -326,7 +368,11 @@ test('direct and Visa-fallback shopping use aggregate Catalog purchase', () => {
 
   assert.match(
     routing,
-    /Direct shopping requests without Visa wording[\s\S]*Buy me an XX coffee[\s\S]*broad Catalog shopping/iu,
+    /explicit buy\/order\/checkout request[\s\S]*no Visa[\s\S]*coupon[\s\S]*offer signal[\s\S]*我想下单咖啡[\s\S]*broad Catalog shopping/iu,
+  );
+  assert.match(
+    routing,
+    /有咖啡的券吗[\s\S]*Visa 咖啡优惠券[\s\S]*有哪些咖啡权益[\s\S]*Visa Benefit discovery/iu,
   );
   assert.match(
     discoveryCommand,
