@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.45";
+var CLI_VERSION = "0.2.44";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -29682,8 +29682,8 @@ async function recommendVisaOffers(options2) {
   }
   const baseUrl = resolveVsraBaseUrl(options2.market);
   let storedConfig = normalizeVisaConfig(options2.storedConfig);
-  let taxonomyPayload = options2.taxonomyPayload ?? {};
-  if (!options2.dryRun && options2.taxonomyPayload === void 0) {
+  let taxonomyPayload = {};
+  if (!options2.dryRun) {
     const taxonomyResponse = await requestVsraTaxonomy({
       baseUrl,
       locale: options2.locale,
@@ -29696,9 +29696,9 @@ async function recommendVisaOffers(options2) {
     taxonomyPayload = requireVsraSuccess(taxonomyResponse, "Visa taxonomy");
   }
   const taxonomy = buildVisaTaxonomyIndex(taxonomyPayload);
-  const naturalFilters = options2.inferNaturalFilters === false ? {} : mapNaturalLanguageFilters(options2.query, taxonomy, options2.market);
+  const naturalFilters = mapNaturalLanguageFilters(options2.query, taxonomy, options2.market);
   let filters = mergeRecommendationFilters(naturalFilters, options2.filters, taxonomy);
-  const fetchAll = options2.all || options2.inferNaturalFilters !== false && shouldFetchAllOffers(options2.query, false, filters, options2.filters.limit !== void 0 || options2.filters.page !== void 0);
+  const fetchAll = options2.all || shouldFetchAllOffers(options2.query, false, filters, options2.filters.limit !== void 0 || options2.filters.page !== void 0);
   if (fetchAll) {
     filters = { ...filters, limit: ALL_OFFERS_PAGE_SIZE, page: 1 };
   }
@@ -33013,7 +33013,7 @@ Filters:
 Options:
   --all                        Fetch all matching pages; cannot be combined with --limit/--page
   --include-provider-products  Also search registered directly-orderable benefit Catalogs
-  --filter-sets <json>         Exactly four Agent-selected filter objects for parallel Visa search
+  --related-queries <json>     Exactly three rewritten queries for parallel anonymous Visa search
   --personalized               Require VSRA Device Flow before recommending
   --anonymous                  Ignore any saved VSRA token
   --market <cn|hk|tw>          Issuing market
@@ -33028,14 +33028,11 @@ Behavior:
   as "Visa\u6743\u76CA\u6709\u54EA\u4E9B" fetch pageSize 50 repeatedly, de-duplicate Programs, and stop at total, a
   short page, a repeated page, or the safety limit. Explicit --limit/--page keeps ordinary paging.
 
-  With --filter-sets, pass a JSON array containing exactly four Agent-selected filter objects and
-  also pass --anonymous. Allowed fields are type, keyword, limit, page, region, category, purpose,
-  reward_type, attribute, card_level, and card_issuer. The CLI validates every filter against one
-  taxonomy snapshot, runs four concurrent Visa recommendation requests, excludes
-  fallback_all_offers rows, preserves filter-set priority, and de-duplicates the merged
-  response.data.items by Program code. The original natural-language query is audit context only
-  and is never converted into filters or sent to Visa. This mode cannot be combined with
-  personalized mode, provider aggregation, or individual recommendation filter flags.
+  With --related-queries, pass a JSON array containing exactly three distinct rewrites of the
+  original query and also pass --anonymous. The CLI runs the original plus three rewrites as four
+  concurrent Visa recommendation requests, excludes fallback_all_offers rows, preserves query
+  priority, and de-duplicates the merged response.data.items by Program code. This mode cannot be
+  combined with --personalized or --include-provider-products.
 
   Without --include-provider-products, output is unchanged. With the flag, the command concurrently
   searches the existing Visa recommendation service and every provider identity configured for the
@@ -33159,8 +33156,8 @@ var VISA_OPTION_DEFINITIONS = [
     flags: "--include-provider-products"
   },
   {
-    name: "filter-sets",
-    flags: "--filter-sets <json>"
+    name: "related-queries",
+    flags: "--related-queries <json>"
   },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
@@ -33185,7 +33182,7 @@ var VISA_FLAG_NAMES = [
   "personalized",
   "anonymous",
   "include-provider-products",
-  "filter-sets",
+  "related-queries",
   "start",
   "resume",
   "region",
@@ -33198,19 +33195,6 @@ var VISA_FLAG_NAMES = [
   "keyword",
   "context-file",
   "selected-product-id"
-];
-var VISA_RECOMMEND_FILTER_FLAG_NAMES = [
-  "region",
-  "category",
-  "purpose",
-  "reward-type",
-  "attribute",
-  "card-level",
-  "card-issuer",
-  "type",
-  "keyword",
-  "limit",
-  "page"
 ];
 var VISA_OAUTH_SCOPE = [
   ...OAUTH_DEFAULT_SCOPE.split(/\s+/u).filter((scope) => scope !== "offline_access"),
@@ -33525,9 +33509,9 @@ async function visaRecommend(context) {
   if (personalized && anonymous) {
     throw validationError("--personalized and --anonymous cannot be used together");
   }
-  const filterSets = parseRecommendationFilterSets(getStringFlag(context.args.flags, "filter-sets"));
-  if (filterSets.length > 0 && !anonymous) {
-    throw validationError("--filter-sets requires --anonymous");
+  const relatedQueries = parseRelatedRecommendationQueries(getStringFlag(context.args.flags, "related-queries"), query);
+  if (relatedQueries.length > 0 && !anonymous) {
+    throw validationError("--related-queries requires --anonymous");
   }
   const filters = {};
   assignVisaFilter(filters, "region", getStringFlag(context.args.flags, "region"));
@@ -33564,50 +33548,33 @@ async function visaRecommend(context) {
   if (includeProviderProducts && !query.normalize("NFKC").trim()) {
     throw validationError("--include-provider-products requires a non-blank recommendation query");
   }
-  if (filterSets.length > 0 && includeProviderProducts) {
-    throw validationError("--filter-sets cannot be combined with --include-provider-products");
+  if (relatedQueries.length > 0 && includeProviderProducts) {
+    throw validationError("--related-queries cannot be combined with --include-provider-products");
   }
-  if (filterSets.length > 0 && VISA_RECOMMEND_FILTER_FLAG_NAMES.some((name) => context.args.flags[name] !== void 0)) {
-    throw validationError("--filter-sets cannot be combined with individual recommendation filter flags");
-  }
-  if (filterSets.length > 0 && all && filterSets.some((filterSet) => filterSet.limit !== void 0 || filterSet.page !== void 0)) {
-    throw validationError("--all cannot be combined with limit or page inside --filter-sets");
-  }
-  if (filterSets.length === 0 && !all && Object.keys(filters).length === 0) {
-    throw validationError("visa recommend requires explicit filters, --all, or --filter-sets; natural-language filter inference is handled by the Agent");
-  }
-  const runRecommendation = (recommendationFilters, taxonomyPayload) => recommendVisaOffers({
+  const runRecommendation = (recommendationQuery) => recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
     locale,
-    query,
-    filters: recommendationFilters,
+    query: recommendationQuery,
+    filters,
     personalization: personalized ? "required" : anonymous ? "anonymous" : "auto",
     all,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun,
-    onAuthorization: createVisaAuthorizationReporter(context),
-    inferNaturalFilters: false,
-    ...taxonomyPayload !== void 0 ? { taxonomyPayload } : {}
+    onAuthorization: createVisaAuthorizationReporter(context)
   });
-  if (filterSets.length > 0) {
-    const taxonomyPayload = context.globalOptions.dryRun ? void 0 : await getVisaTaxonomy({
-      market,
-      locale,
-      timeoutMs: context.globalOptions.timeoutMs,
-      dryRun: false
-    });
-    const expanded = await Promise.all(filterSets.map(async (filterSet, index) => ({
-      index,
-      filters: filterSet,
-      ...await runRecommendation(filterSet, taxonomyPayload)
+  if (relatedQueries.length > 0) {
+    const queries = [query.normalize("NFKC").trim(), ...relatedQueries];
+    const expanded = await Promise.all(queries.map(async (recommendationQuery) => ({
+      query: recommendationQuery,
+      ...await runRecommendation(recommendationQuery)
     })));
     applyVisaStoredConfig(context, expanded[0]?.storedConfig ?? context.storedConfig);
-    printSuccess(mergeAgentSelectedVisaRecommendations(query.normalize("NFKC").trim(), filterSets, expanded, all, context.globalOptions.dryRun), context.globalOptions.format);
+    printSuccess(mergeExpandedVisaRecommendations(queries[0], relatedQueries, expanded, all, context.globalOptions.dryRun), context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
-  const recommendation = runRecommendation(filters);
+  const recommendation = runRecommendation(query);
   const [{ result, storedConfig }, providerResult] = await Promise.all([
     recommendation,
     providerDiscovery ?? Promise.resolve(void 0)
@@ -33662,7 +33629,7 @@ function validateVisaFlagScope(command, subcommand, flags) {
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
     }
-    for (const name of ["include-provider-products", "filter-sets"]) {
+    for (const name of ["include-provider-products", "related-queries"]) {
       if (!recommend && flags[name] !== void 0) {
         throw validationError(`--${name} is only supported by visa recommend`);
       }
@@ -33793,7 +33760,7 @@ function parsePositiveIntFlag(value, message) {
   }
   return parsed;
 }
-function parseRecommendationFilterSets(rawValue) {
+function parseRelatedRecommendationQueries(rawValue, originalQuery) {
   if (rawValue === void 0) {
     return [];
   }
@@ -33801,98 +33768,47 @@ function parseRecommendationFilterSets(rawValue) {
   try {
     parsed = JSON.parse(rawValue);
   } catch {
-    throw validationError("--filter-sets must be a JSON array of exactly four filter objects");
+    throw validationError("--related-queries must be a JSON array of exactly three strings");
   }
-  if (!Array.isArray(parsed) || parsed.length !== 4) {
-    throw validationError("--filter-sets must be a JSON array of exactly four filter objects");
+  if (!Array.isArray(parsed) || parsed.length !== 3) {
+    throw validationError("--related-queries must be a JSON array of exactly three strings");
   }
-  return parsed.map((value, index) => normalizeAgentFilterSet(value, index));
+  const original = originalQuery.normalize("NFKC").trim();
+  if (!original) {
+    throw validationError("--related-queries requires a non-blank original recommendation query");
+  }
+  const seen = /* @__PURE__ */ new Set([comparableRecommendationQuery(original)]);
+  return parsed.map((value) => {
+    if (typeof value !== "string" || !value.normalize("NFKC").trim()) {
+      throw validationError("--related-queries must contain exactly three non-blank strings");
+    }
+    const query = value.normalize("NFKC").trim();
+    const comparable = comparableRecommendationQuery(query);
+    if (seen.has(comparable)) {
+      throw validationError("--related-queries and the original query must be distinct");
+    }
+    seen.add(comparable);
+    return query;
+  });
 }
-function normalizeAgentFilterSet(value, index) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw validationError(`--filter-sets[${index}] must be a JSON object`);
-  }
-  const source = value;
-  const axes = [
-    "region",
-    "category",
-    "purpose",
-    "reward_type",
-    "attribute",
-    "card_level",
-    "card_issuer"
-  ];
-  const allowed = /* @__PURE__ */ new Set([
-    ...axes,
-    "type",
-    "keyword",
-    "limit",
-    "page"
-  ]);
-  const unknown = Object.keys(source).find((key) => !allowed.has(key));
-  if (unknown) {
-    throw validationError(`--filter-sets[${index}] contains unsupported field: ${unknown}`);
-  }
-  const filters = {};
-  for (const axis of axes) {
-    const rawValues = source[axis];
-    if (rawValues === void 0) {
-      continue;
-    }
-    if (!Array.isArray(rawValues) || rawValues.length === 0) {
-      throw validationError(`--filter-sets[${index}].${axis} must be a non-empty string array`);
-    }
-    const normalized = rawValues.map((rawValue) => {
-      if (typeof rawValue !== "string" || !rawValue.normalize("NFKC").trim()) {
-        throw validationError(`--filter-sets[${index}].${axis} must contain non-blank strings`);
-      }
-      return rawValue.normalize("NFKC").trim();
-    });
-    Object.assign(filters, { [axis]: [...new Set(normalized)] });
-  }
-  if (source.type !== void 0) {
-    if (source.type !== "reward" && source.type !== "benefit") {
-      throw validationError(`--filter-sets[${index}].type must be reward or benefit`);
-    }
-    filters.type = source.type;
-  }
-  if (source.keyword !== void 0) {
-    if (typeof source.keyword !== "string" || !source.keyword.normalize("NFKC").trim()) {
-      throw validationError(`--filter-sets[${index}].keyword must be a non-blank string`);
-    }
-    filters.keyword = source.keyword.normalize("NFKC").trim();
-  }
-  for (const field of ["limit", "page"]) {
-    const rawNumber = source[field];
-    if (rawNumber === void 0) {
-      continue;
-    }
-    if (typeof rawNumber !== "number" || !Number.isInteger(rawNumber) || rawNumber < 1 || field === "limit" && rawNumber > 50) {
-      throw validationError(`--filter-sets[${index}].${field} must be ` + (field === "limit" ? "an integer between 1 and 50" : "a positive integer"));
-    }
-    filters[field] = rawNumber;
-  }
-  return filters;
+function comparableRecommendationQuery(value) {
+  return value.normalize("NFKC").trim().toLocaleLowerCase();
 }
-function mergeAgentSelectedVisaRecommendations(originalQuery, filterSets, runs, allOffersRequested, dryRun) {
-  const filterSelection = {
+function mergeExpandedVisaRecommendations(originalQuery, relatedQueries, runs, allOffersRequested, dryRun) {
+  const queryExpansion = {
     originalQuery,
+    relatedQueries: [...relatedQueries],
     requestCount: runs.length,
     parallel: true,
-    dedupeKey: "program.code",
-    filterSets
+    dedupeKey: "program.code"
   };
   if (dryRun) {
     return {
       command: "visa recommend",
       status: "dry_run",
       sideEffects: false,
-      filterSelection,
-      requests: runs.map(({ index, filters, result }) => ({
-        index,
-        filters,
-        plan: result
-      }))
+      queryExpansion,
+      requests: runs.map(({ query, result }) => ({ query, plan: result }))
     };
   }
   const mergedItems = [];
@@ -33917,8 +33833,7 @@ function mergeAgentSelectedVisaRecommendations(originalQuery, filterSets, runs, 
     const sourcePages = recommendationNumber(result.pagesFetched);
     pagesFetched += sourcePages;
     sources.push({
-      index: run.index,
-      filters: run.filters,
+      query: run.query,
       recommendationMode: mode,
       returnedOfferCount: recommendationNumber(result.returnedOfferCount),
       pagesFetched: sourcePages,
@@ -33944,12 +33859,11 @@ function mergeAgentSelectedVisaRecommendations(originalQuery, filterSets, runs, 
         page: 1,
         limit: mergedItems.length,
         count: mergedItems.length,
-        relaxed_axes: null,
         items: mergedItems
       }
     },
-    filterSelection: {
-      ...filterSelection,
+    queryExpansion: {
+      ...queryExpansion,
       sources
     }
   };
