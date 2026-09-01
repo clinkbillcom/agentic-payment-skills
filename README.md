@@ -25,15 +25,14 @@ visa commerce-run
 The lightweight shopping routes cover:
 
 - broad, category, and merchant-specific Visa Benefit queries through one
-  Visa-only `visa recommend` call: one strict explicit-filter request by
-  default, or four genuinely distinct Agent-selected sets in one parallel
-  aggregate, with no query inference or initial UCP/Catalog request
+  `visa recommend-products` call, which immediately checks every returned
+  Program against configured exact internal UCP routes
 - automatic HK/CN source persistence from a unique `visa recommend --region`,
   with explicit `--market` reserved for cross-source searches
-- one all-channel UAT `catalog search` fallback when Visa returns no relevant
-  Program; the bounded result can include Eats365 products such as coffee
-- selected-Benefit detail through `visa detail`, followed by one token-free
-  `product-search` check against internal UCP
+- one unified `products` collection plus unmatched `visaBenefits`; a Program
+  represented by a product is not displayed twice
+- selected unmatched-Benefit detail through `visa detail`; no repeated
+  product-search
 - an order invitation only for an exact `internal-ucp-catalog` match; otherwise
   the response ends with the Visa activity introduction and authoritative link
 - the existing matched Program purchase path through `commerce-login` and
@@ -46,19 +45,15 @@ The lightweight shopping routes cover:
   keep the CLI in the foreground, and continue only after the same card is
   VIC-ready and CWallet activates that exact Instruction
 
-Initial Visa discovery never uses `--include-provider-products`. The Agent
-filters only the returned Visa Programs against the original request. When no
-relevant Visa Program remains, it runs one anonymous broad Catalog search with
-the same query, language, geography, and UAT environment. Broad Catalog search
-checks every channel when the user did not constrain one, but it is a bounded,
-non-exhaustive result window rather than a complete inventory export.
+Initial discovery never uses `--include-provider-products` or a merchant-list
+lookup. The aggregate attempts product resolution only for configured exact
+internal routes. A failed or unmatched resolution remains a Visa Benefit. This
+branch does not run broad Catalog fallback for a Visa Benefit request.
 
-After the user selects a Visa Benefit, the Skill fetches its authoritative Visa
-detail and activity link. A merchant commerce URL may then be checked through
-`visa product-search`. Only an exact internal UCP Catalog match with complete
-identity, price, currency, and availability may produce an order prompt.
-External-page resolution, no match, or incomplete facts produce activity-only
-presentation with no purchase call to action. UAT additionally recognizes only
+Exact orderable matches are already normalized in `products`, with
+major-unit price, currency, availability, merchant identity, and matched
+Program provenance. Unmatched Benefits can later use `visa detail`, but the
+Skill does not rerun product-search. UAT recognizes only
 `https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
 `mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
 For a verified Program purchase, a valid Program MCC remains authoritative.
@@ -80,9 +75,9 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.51` vendors Visa CLI `0.2.47` from upstream commit
-`207e6d092cf4f9fc38ca9ccac8fd9a2ec9aed83a`. It uses Visa-only recommendation,
-internal-UCP-gated Program ordering, Visa-miss broad Catalog fallback, optional
+Skill `0.1.52` vendors Visa CLI `0.2.48` from upstream commit
+`1fa57ba4c21c1e61da4b1413d80896cea14d1503`. It uses one-round Visa
+recommendation and exact configured internal product matching, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
 contexts. It also requires the aggregate missing-card flow to show rather than
@@ -90,9 +85,8 @@ auto-open a Bind Card link, remain in the foreground after showing it, wait on
 one exact PENDING Instruction, and continue only after same-card
 `visaRegistrationSucceeded=true` plus exact-Instruction `ACTIVE`.
 
-The vendored bundle and its provenance are intentionally unchanged in this
-branch. They may be refreshed only through the official `clink-cli`
-synchronization flow. Until a synchronized CLI implements the required
+The vendored bundle was refreshed through the official `clink-cli`
+synchronization flow. If another distribution does not implement the required
 missing-card contract, the installation is incompatible and must stop instead
 of opening a card/VIC page, returning after a link, falling back to Program
 mode, or decomposing the purchase into atomic commands.
@@ -113,7 +107,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.51`
+Skill version: `0.1.52`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

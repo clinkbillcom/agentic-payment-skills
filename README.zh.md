@@ -22,15 +22,12 @@ visa commerce-run
 
 轻量购物路由覆盖：
 
-- Visa 全量、品类和品牌权益查询，默认由 Agent 选择 1 组严格 filters；
-  只有存在 4 组真正不同的安全方案时才执行一次并行 `visa recommend` 聚合；
-  CLI 不再从 query 推断，首轮也不调用 UCP/Catalog
+- Visa 全量、品类和品牌权益通过一次 `visa recommend-products` 查询；
+  CLI 会立即把每条 Program 与已配置的精确内部 UCP 路由做商品匹配
 - 唯一 `visa recommend --region hk|cn` 会自动选择并保存对应来源；
   只有跨来源查询才额外使用 `--market`
-- Visa 没有相关结果时，用原始请求执行一次 UAT 全渠道 `catalog search`
-  兜底；这个有界结果可以包含 Eats365 咖啡等商品
-- 用户选中权益后，先用 `visa detail` 获取活动详情，再用
-  `product-search` 对内部 UCP 做一次免登录匹配
+- 最终统一返回可下单商品和未匹配 Visa 权益；已匹配成商品的权益不重复展示
+- 用户选择未匹配权益后可用 `visa detail` 查看详情，但不重复 product-search
 - 只有精确 `internal-ucp-catalog` 命中才提示是否下单；未命中时只展示
   Visa 活动介绍与权威活动链接，不追加购买引导
 - 命中的 Program 购买继续走 `commerce-login`、`commerce-run`
@@ -41,15 +38,12 @@ visa commerce-run
   Bind Card 链接但绝不自动打开；CLI 保持前台等待；只有同一张卡完成 VIC 且
   CWallet 自动激活该精确 Instruction 后才继续
 
-首轮 Visa 查询绝不使用 `--include-provider-products`。Agent 只按照原始请求
-过滤 Visa Program。没有相关 Visa Program 时，才使用相同 query、语言、
-地理范围和 UAT 环境执行一次匿名 Catalog 广域搜索。用户未限制 channel 时
-会搜索所有可用渠道，但返回窗口有界且不可分页，不能描述为完整库存导出。
+首轮不使用 `--include-provider-products` 或 merchant-list，只对已配置的精确
+内部路由做商品解析。失败或未匹配的 Program 继续保留为 Visa 权益。本分支的
+Visa 权益请求不做广域 Catalog 兜底。
 
-用户选中 Visa 权益后，Skill 先读取 Visa 权威详情和活动链接，再用 Program
-提供的真实商户 commerce URL 执行 `visa product-search`。只有内部 UCP
-Catalog 精确匹配，且身份、价格、币种、库存完整时，才能提示下单。外部页面
-解析、没有匹配或事实不完整时，只展示活动介绍和活动链接，不使用购买 CTA。
+可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
+商户身份。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
 UAT 额外只把 `https://vsrp.hk/p/o5s` 作为 CLI 内置 alias 映射到商户
 `mcht_ftmse61a6az0`；同一 host 的其他路径不继承该映射。
 已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
@@ -70,17 +64,17 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.51` 已 vendor 上游提交
-`207e6d092cf4f9fc38ca9ccac8fd9a2ec9aed83a` 的 Visa CLI `0.2.47`。它支持
-纯 Visa 推荐、内部 UCP 命中后才提示 Program 下单、Visa 空结果 Catalog
-兜底、可选的旧版 `program.code`、完整 Eats365 `manual_item_facts` 复验和
+Skill `0.1.52` 已 vendor 上游提交
+`1fa57ba4c21c1e61da4b1413d80896cea14d1503` 的 Visa CLI `0.2.48`。它支持
+一轮 Visa 推荐与内部商品匹配、可选的旧版 `program.code`、完整 Eats365
+`manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
 聚合缺卡流程只提示、不自动打开 Bind Card 链接，提示后继续前台等待同一条
 PENDING Instruction，并且只在同卡 `visaRegistrationSucceeded=true` 且该
 精确 Instruction 为 `ACTIVE` 后继续。
 
-本分支有意不修改 vendored bundle 及其来源信息。vendor 只能通过
-`clink-cli` 官方同步流程刷新。在同步后的 CLI 实现上述合同前，当前安装应视为
+本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
+合同，当前安装应视为
 不兼容并停止，不能自动打开绑卡/VIC 页面、不能提示链接后结束、不能回退到
 Program mode，也不能拆成原子命令执行购买。
 
@@ -99,7 +93,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.51`
+Skill 版本：`0.1.52`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
