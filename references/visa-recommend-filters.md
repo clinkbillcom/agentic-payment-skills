@@ -23,7 +23,9 @@ Create exactly four JSON objects. Allowed fields:
 ```
 
 Array fields must contain taxonomy codes. Omit unknown fields; never invent a
-code. With `--all`, omit `limit` and `page`.
+code. With `--all`, omit `limit` and `page`. Put every recommendation filter
+inside these objects; never combine `--filter-sets` with an outer individual
+filter flag such as `--region`.
 
 ## Selection Rules
 
@@ -38,7 +40,8 @@ code. With `--all`, omit `limit` and `page`.
    Never put a conversational question or paraphrase in `keyword`.
 5. Use `type=benefit` for card benefits/coupons. Use `type=reward` only for
    enrollment/cashback campaigns. Omit `type` when both are requested.
-6. `--market` selects the issuing-market data source; `region[]` selects where
+6. `--market` is not a recommendation filter: it selects the issuing-market
+   data source and may remain outside `--filter-sets`. `region[]` selects where
    the Benefit is usable. They are not interchangeable.
 
 ## Common Codes

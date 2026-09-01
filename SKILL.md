@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.45. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.46. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.45"
+  version: "0.1.46"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -66,8 +66,9 @@ Authenticated commands must agree with the current wallet environment.
 `--sandbox` or `--test`; do not add either flag. Their issuing market,
 destination region, and language select the Visa source independently from the
 Clink Catalog environment. "Benefits usable in Hong Kong" means destination
-`--region hk`; use issuing `--market hk` only when the user explicitly says
-their card is Hong Kong-issued.
+`"region": ["hk"]` in every `--filter-sets` object; an outer `--region hk` is
+only for non-aggregate explicit-filter calls. Use issuing `--market hk` only
+when the user explicitly says their card is Hong Kong-issued.
 
 ### Authorization And Input
 
@@ -242,13 +243,15 @@ on natural language alone to widen the request:
   --filter-sets '[<filter-1>,<filter-2>,<filter-3>,<filter-4>]' \
   --anonymous \
   --all \
-  --region hk \
   --lang <language-tag> \
   --format json
 ```
 
-Use `--region hk` when Hong Kong is the requested place of use. Do not add
-`--market hk` unless Hong Kong card issuance is explicit.
+For a Hong Kong destination, include `"region": ["hk"]` in every filter
+object. With `--filter-sets`, never add an outer individual recommendation
+filter flag such as `--region`; the CLI rejects mixed filter ownership.
+`--market hk` remains a source selector and is used only when Hong Kong card
+issuance is explicit.
 
 For category-, merchant-, or product-specific Visa requests, select four new
 filter sets and run the same aggregate once with the current user request. Add
