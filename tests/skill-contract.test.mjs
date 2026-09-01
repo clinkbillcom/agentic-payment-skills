@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.47');
+  assert.equal(packageJson.version, '0.1.48');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.47/u);
-  assert.match(skill, /version: "0\.1\.47"/u);
+  assert.match(skill, /Visa Skill 0\.1\.48/u);
+  assert.match(skill, /version: "0\.1\.48"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -146,13 +146,17 @@ test('ordinary execution loads only the routed filter reference and stays non-ex
   );
 });
 
-test('initial Visa discovery uses four Agent-selected filter sets', () => {
+test('initial Visa discovery chooses one strict request or one four-set aggregate', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa-Only Benefit Discovery And Catalog Fallback'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
   );
-  const initialCommand = discovery.slice(
-    discovery.indexOf('<Skill Path>/bin/visa-cli visa recommend'),
+  const singleCommand = discovery.slice(
+    discovery.indexOf('Use one strict explicit-filter request by default'),
+    discovery.indexOf('Only when exactly four'),
+  );
+  const aggregateCommand = discovery.slice(
+    discovery.indexOf('Only when exactly four'),
     discovery.indexOf('Never add `--include-provider-products`'),
   );
 
@@ -161,24 +165,32 @@ test('initial Visa discovery uses four Agent-selected filter sets', () => {
   assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
   assert.match(
     discovery,
-    /exactly one Agent-selected-filter[\s\S]*aggregate call[\s\S]*visa recommend/iu,
-  );
-  assert.doesNotMatch(initialCommand, /--include-provider-products/u);
-  assert.match(
-    initialCommand,
-    /--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
+    /exactly one initial Visa-only CLI\s+call[\s\S]*smallest safe filter shape/iu,
   );
   assert.match(
-    discovery,
-    /read `references\/visa-recommend-filters\.md`[\s\S]*create exactly four filter objects/iu,
+    singleCommand,
+    /visa recommend[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--lang/iu,
   );
+  assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.match(
-    discovery,
-    /Agent owns filter selection[\s\S]*CLI validates taxonomy codes[\s\S]*never\s+derives filters from the query/iu,
+    aggregateCommand,
+    /exactly four genuinely different safe plans[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
   );
   assert.match(
     discovery,
-    /Do not issue four Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*fallback_all_offers[\s\S]*de-duplicates[\s\S]*Program code/iu,
+    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code/iu,
+  );
+  assert.match(
+    discovery,
+    /Read `references\/visa-recommend-filters\.md`/u,
+  );
+  assert.match(
+    discovery,
+    /Agent owns[\s\S]*filter selection/iu,
+  );
+  assert.match(
+    discovery,
+    /CLI validates taxonomy codes[\s\S]*never derives filters[\s\S]*from the query/iu,
   );
   assert.match(
     discovery,
@@ -190,7 +202,15 @@ test('initial Visa discovery uses four Agent-selected filter sets', () => {
   );
   assert.match(
     skill,
-    /visa recommend[\s\S]*do not accept[\s\S]*--sandbox[\s\S]*destination[\s\S]*"region": \["hk"\][\s\S]*every `--filter-sets` object[\s\S]*outer `--region hk`[\s\S]*issuing `--market hk` only/iu,
+    /visa recommend[\s\S]*do not accept[\s\S]*--sandbox/iu,
+  );
+  assert.match(
+    discovery,
+    /Hong Kong destination[\s\S]*`--region hk`[\s\S]*single-filter call[\s\S]*four-set aggregate[\s\S]*"region": \["hk"\][\s\S]*outer `--region`/iu,
+  );
+  assert.match(
+    skill,
+    /`--market hk`[\s\S]*only when[\s\S]*Hong Kong card[\s\S]*issuance is explicit/iu,
   );
 });
 
@@ -218,13 +238,13 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     allCommand,
-    /visa recommend[\s\S]*--filter-sets[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
+    /visa recommend[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
   );
-  assert.doesNotMatch(allCommand, /\n\s*--region\b/u);
+  assert.doesNotMatch(allCommand, /--filter-sets/u);
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
   assert.match(
     discovery,
-    /Hong Kong destination[\s\S]*"region": \["hk"\][\s\S]*every filter\s+object[\s\S]*never add an outer individual recommendation\s+filter flag/iu,
+    /Hong Kong destination[\s\S]*`--region hk`[\s\S]*single-filter call[\s\S]*four-set aggregate mode[\s\S]*"region": \["hk"\][\s\S]*never add an outer `--region`/iu,
   );
   assert.match(
     discovery,
@@ -240,11 +260,11 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     agent,
-    /read only references\/visa-recommend-filters\.md[\s\S]*select exactly four[\s\S]*filter objects[\s\S]*--filter-sets[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*never infers filters from[\s\S]*query/iu,
+    /read only references\/visa-recommend-filters\.md[\s\S]*smallest safe[\s\S]*one strict explicit-filter call by default[\s\S]*--filter-sets only when exactly four genuinely different safe plans[\s\S]*Never fan out reward types[\s\S]*exactly one visa recommend/iu,
   );
   assert.match(
     agent,
-    /Hong\s+Kong destination[\s\S]*region \["hk"\][\s\S]*all four filter objects[\s\S]*Never\s+combine --filter-sets[\s\S]*outer individual recommendation filter flag/iu,
+    /Hong\s+Kong destination[\s\S]*--region hk[\s\S]*single-filter call[\s\S]*four-set[\s\S]*region \["hk"\][\s\S]*never add outer[\s\S]*filter flags/iu,
   );
 });
 
@@ -266,7 +286,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /Create exactly four JSON objects[\s\S]*Set 1 is strict[\s\S]*Sets 2-4[\s\S]*Never remove an explicit hard\s+constraint/iu,
+    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Never issue multiple Agent-managed/iu,
   );
   assert.match(
     filterReference,
@@ -274,11 +294,19 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /every recommendation filter[\s\S]*inside these objects[\s\S]*never combine `--filter-sets`[\s\S]*outer individual\s+filter flag/iu,
+    /all recommendation filters[\s\S]*inside those objects[\s\S]*never combine them[\s\S]*outer individual filter flags/iu,
   );
   assert.match(
     filterReference,
-    /我想下单咖啡[\s\S]*catalog search[\s\S]*有咖啡的券吗[\s\S]*visa recommend --filter-sets/iu,
+    /Prefer one strict plan[\s\S]*If fewer than four safe variants exist[\s\S]*use one strict[\s\S]*never repeat or pad/iu,
+  );
+  assert.match(
+    filterReference,
+    /reward_type[\s\S]*explicitly names one[\s\S]*优惠[\s\S]*selects no reward type[\s\S]*Never fan[\s\S]*discount[\s\S]*coupon[\s\S]*cashback[\s\S]*privilege[\s\S]*single strict plan/iu,
+  );
+  assert.match(
+    filterReference,
+    /我想下单咖啡[\s\S]*catalog search[\s\S]*有咖啡的券吗[\s\S]*visa recommend[\s\S]*Agent-selected filters/iu,
   );
 });
 
@@ -409,6 +437,18 @@ test('direct and Visa-fallback shopping use aggregate Catalog purchase', () => {
     /^<Skill Path>\/bin\/visa-cli visa recommend|^\s*--include-provider-products/mu,
   );
   assert.match(catalogPurchase, /bounded and non-exhaustive/iu);
+  assert.match(
+    skill,
+    /Catalog Money[\s\S]*price\.amount[\s\S]*price_range\.\*\.amount[\s\S]*minor[\s\S]*100 USD[\s\S]*USD 1\.00[\s\S]*2600 HKD[\s\S]*HKD 26\.00/iu,
+  );
+  assert.match(
+    skill,
+    /denomination in a product title[\s\S]*HKD 100 Gift Card[\s\S]*face value `HKD 100`[\s\S]*purchase price `USD 1\.00`[\s\S]*never[\s\S]*`USD 100`/iu,
+  );
+  assert.match(
+    agent,
+    /Catalog price\.amount[\s\S]*minor\s+units[\s\S]*amount=100 USD is USD 1\.00[\s\S]*title denomination[\s\S]*separate/iu,
+  );
   assert.match(
     catalogPurchase,
     /direct broad-Catalog shopping[\s\S]*Visa-no-match Catalog fallback[\s\S]*ordinary Catalog shopping[\s\S]*must not inherit Visa Program eligibility/iu,

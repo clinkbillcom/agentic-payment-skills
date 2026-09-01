@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.47. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.48. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.47"
+  version: "0.1.48"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -69,6 +69,19 @@ Clink Catalog environment. "Benefits usable in Hong Kong" means destination
 `"region": ["hk"]` in every `--filter-sets` object; an outer `--region hk` is
 only for non-aggregate explicit-filter calls. Use issuing `--market hk` only
 when the user explicitly says their card is Hong Kong-issued.
+
+### Catalog Money
+
+Raw Catalog `price.amount` and `price_range.*.amount` integers are minor
+currency units. Convert them with the currency's ISO fraction digits before
+display or purchase: `100 USD` minor units is `USD 1.00`, and `2600 HKD` is
+`HKD 26.00`. Prefer authoritative `unitPriceMajor` or `totalAmountMajor` when
+the CLI already returns it, while preserving the corresponding minor value.
+
+A denomination in a product title is product identity, not the purchase price.
+For example, an `HKD 100 Gift Card` with Catalog `price.amount=100` and
+`currency=USD` has face value `HKD 100` and purchase price `USD 1.00`; never
+display it as `USD 100` or rewrite the title denomination.
 
 ### Authorization And Input
 
@@ -208,11 +221,24 @@ inputs and authorization satisfy that contract.
 
 ## Visa-Only Benefit Discovery And Catalog Fallback
 
-Visa-related Benefit discovery must make exactly one Agent-selected-filter
-aggregate call. Read `references/visa-recommend-filters.md`, preserve the
-original request only as audit context, and create exactly four filter objects.
-The Agent owns filter selection; the CLI validates taxonomy codes but never
-derives filters from the query.
+Visa-related Benefit discovery must make exactly one initial Visa-only CLI
+call. Read `references/visa-recommend-filters.md`, preserve the original request
+only as audit context, and choose the smallest safe filter shape. The Agent owns
+filter selection; the CLI validates taxonomy codes but never derives filters
+from the query.
+
+Use one strict explicit-filter request by default:
+
+```text
+<Skill Path>/bin/visa-cli visa recommend "<original request>" \
+  <individual-filter-flags> \
+  --anonymous \
+  --lang <language-tag> \
+  --format json
+```
+
+Only when exactly four genuinely different safe plans improve recall, use one
+aggregate call:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
@@ -222,13 +248,13 @@ derives filters from the query.
   --format json
 ```
 
-Do not issue four Agent-managed Shell commands. The one CLI aggregate validates
-all four sets against one taxonomy snapshot, runs four parallel Visa
-recommendation requests, excludes `fallback_all_offers` rows, preserves
-filter-set priority, and de-duplicates the merged `response.data.items` by
-Program code. Read only that merged result.
+Never duplicate filters, invent soft constraints, fan out reward types, or
+issue multiple Agent-managed Shell commands to reach a count. The four-set
+aggregate validates one taxonomy snapshot, runs four parallel Visa requests,
+excludes `fallback_all_offers` rows, preserves filter-set priority, and
+de-duplicates by Program code.
 
-Never add `--include-provider-products`. During this aggregate recommendation,
+Never add `--include-provider-products`. During the initial Visa recommendation,
 do not issue `catalog search`, `ucp-catalog search`, a merchant-list request,
 or another UCP command. It uses only the Visa recommendation service and never
 logs in, binds a card, creates an Instruction, or prepares payment.
@@ -240,23 +266,29 @@ on natural language alone to widen the request:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend "<original request>" \
-  --filter-sets '[<filter-1>,<filter-2>,<filter-3>,<filter-4>]' \
+  <individual-filter-flags> \
   --anonymous \
   --all \
   --lang <language-tag> \
   --format json
 ```
 
-For a Hong Kong destination, include `"region": ["hk"]` in every filter
-object. With `--filter-sets`, never add an outer individual recommendation
-filter flag such as `--region`; the CLI rejects mixed filter ownership.
+For a Hong Kong destination, use `--region hk` in a single-filter call. In
+four-set aggregate mode, include `"region": ["hk"]` in every filter object and
+never add an outer `--region`; the CLI rejects mixed filter ownership.
 `--market hk` remains a source selector and is used only when Hong Kong card
 issuance is explicit.
 
-For category-, merchant-, or product-specific Visa requests, select four new
-filter sets and run the same aggregate once with the current user request. Add
-`--all` when the user asks for every matching Benefit. A follow-up query
-invalidates all prior filter sets and merged results.
+Set `reward_type` only when the user explicitly asks for a coupon, cashback,
+discount, points, privilege, gift, or another exact reward type. Generic
+wording such as "优惠", "benefit", "offer", or "礼遇" selects no
+`reward_type`. Never fan out inferred reward types. If only one safe plan
+remains, use the single explicit-filter call.
+
+For category-, merchant-, or product-specific Visa requests, choose one strict
+plan by default and use four-set aggregation only for four meaningful variants.
+Add `--all` when the user asks for every matching Benefit. A follow-up query
+invalidates all prior filters and results.
 
 Treat returned Programs as Visa candidate rows, not as already-filtered display
 results. Retain only Programs that satisfy the original request's explicit
@@ -854,8 +886,8 @@ general workflow engine.
 - Pass the locked `--language` and search environment. Discovery never starts
   wallet setup and never authorizes purchase.
 - Present returned identity, merchant, price, currency, availability, channel,
-  and location facts without invention. A later purchase must freeze one exact
-  selected product.
+  and location facts without invention. Apply Catalog Money before presenting
+  a price. A later purchase must freeze one exact selected product.
 - Visa-related Benefit requests use Visa-only discovery. A Visa miss or direct
   shopping request uses broad Catalog discovery and, after an exact selection,
   the Catalog Purchase Fast Path.
@@ -963,10 +995,10 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Visa discovery, use only the CLI's four-filter-set merged Program set, then
-  independently filter it by the original query's hard constraints. A relevant
-  Visa result suppresses initial Catalog work; a Visa miss triggers the one
-  broad Catalog fallback.
+- For Visa discovery, use only the CLI's single explicit-filter result or
+  four-filter-set merged Program result, then independently filter it by the
+  original query's hard constraints. A relevant Visa result suppresses initial
+  Catalog work; a Visa miss triggers the one broad Catalog fallback.
 - For a selected Visa Benefit, report an order option only after an exact
   internal UCP Catalog match. Otherwise report the Visa activity detail and
   authoritative link without a purchase call to action.
@@ -982,9 +1014,10 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Initial Visa recommendation is one Visa-only aggregate: four Agent-selected
-  filter sets, four parallel Visa requests, Program-code de-duplication, and no
-  query inference, `--include-provider-products`, or UCP/Catalog call.
+- Initial Visa recommendation is one Visa-only CLI call: one strict
+  explicit-filter request by default, or one four-set parallel aggregate only
+  for four meaningful variants. It performs no query inference,
+  `--include-provider-products`, or UCP/Catalog call.
 - Relevant Visa Programs are presented without an initial Catalog call.
 - A Visa miss triggers one all-channel UAT broad Catalog fallback with the
   original request; its bounded result window is never described as complete

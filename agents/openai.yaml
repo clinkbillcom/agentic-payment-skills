@@ -4,20 +4,25 @@ interface:
   default_prompt: >-
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. For a Hong
-    Kong destination, put region ["hk"] in all four filter objects. Never
-    combine --filter-sets with an outer individual recommendation filter flag.
-    Use --market hk only when the user explicitly says the card is HK-issued.
+    Kong destination, use --region hk in a single-filter call; in four-set
+    aggregate mode put region ["hk"] in every object and never add outer
+    individual filter flags. Use --market hk only when the user explicitly says
+    the card is HK-issued.
     Route explicit buy/order/checkout requests with no Visa, Benefit, coupon,
     voucher, discount, or offer signal directly to broad catalog search; for
     example, 我想下单咖啡 is Catalog. A Benefit signal such as 有咖啡的券吗,
     Visa 咖啡优惠券, or 有哪些咖啡权益 is Visa discovery. For Visa discovery,
-    read only references/visa-recommend-filters.md and select exactly four
-    filter objects. Preserve every explicit brand, merchant, product, category,
-    geography, eligibility, reward type, and other hard constraint in all four
-    sets. Run one visa recommend with --filter-sets plus --anonymous. The CLI
-    validates all sets against one taxonomy snapshot, runs four parallel Visa
-    requests, and de-duplicates by Program code; it never infers filters from
-    the query. Never issue four Agent-managed Shell calls, add
+    read only references/visa-recommend-filters.md and choose the smallest safe
+    filter shape. Use one strict explicit-filter call by default. Use
+    --filter-sets only when exactly four genuinely different safe plans improve
+    recall. Preserve every explicit brand, merchant, product, category,
+    geography, eligibility, reward type, and other hard constraint. Set
+    reward_type only when the user explicitly names the reward type;
+    generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
+    or duplicate filters to reach a count. Run exactly one visa recommend with
+    --anonymous. The CLI never infers filters from the query; four-set mode
+    validates one taxonomy snapshot, runs in parallel, and de-duplicates by
+    Program code. Never issue multiple Agent-managed Shell calls, add
     --include-provider-products, or call UCP/Catalog during that aggregate
     recommendation. Independently filter the merged Visa Programs by the original brand,
     category, geography, merchant, product, eligibility, dates, status, and
@@ -30,7 +35,10 @@ interface:
     recommendation relaxed explicitly requested filters: as this Visa miss;
     every other error stops. Omit --channel-type unless the user explicitly
     restricts it so Eats365 can participate. Broad Catalog is bounded and
-    non-exhaustive. When the user selects a Visa Benefit, bind one
+    non-exhaustive. Catalog price.amount and price_range amounts are minor
+    units: convert with ISO currency fraction digits before display or freeze.
+    Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100
+    separate from the USD purchase price. When the user selects a Visa Benefit, bind one
     stable Program code, run visa detail, preserve the activity introduction
     and authoritative link, then run visa product-search only with an actual
     merchant commerce URL or the exact UAT alias

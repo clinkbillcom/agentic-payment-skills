@@ -1,10 +1,10 @@
 # Visa Recommend Filters
 
-Read this only when building `visa recommend --filter-sets`.
+Read this only when building Agent-selected filters for `visa recommend`.
 
 ## Output
 
-Create exactly four JSON objects. Allowed fields:
+Build one strict JSON object first. Allowed fields:
 
 ```json
 {
@@ -23,24 +23,37 @@ Create exactly four JSON objects. Allowed fields:
 ```
 
 Array fields must contain taxonomy codes. Omit unknown fields; never invent a
-code. With `--all`, omit `limit` and `page`. Put every recommendation filter
-inside these objects; never combine `--filter-sets` with an outer individual
-filter flag such as `--region`.
+code. With `--all`, omit `limit` and `page`.
+
+## Call Shape
+
+- One safe plan is the default. Map it to individual CLI flags, for example
+  `type -> --type`, `region -> --region`, `reward_type -> --reward-type`,
+  `card_level -> --card-level`, and `card_issuer -> --card-issuer`.
+- Use `--filter-sets` only when exactly four genuinely different safe plans
+  improve recall. Put all recommendation filters inside those objects and
+  never combine them with outer individual filter flags.
+- Never issue multiple Agent-managed `visa recommend` commands.
 
 ## Selection Rules
 
-1. Repeat every explicit user constraint in all four sets: market/region,
+1. Preserve every explicit user constraint in every chosen plan: market/region,
    merchant, brand, product, category, eligibility, card level/issuer, reward
    type, channel, and purpose.
-2. Set 1 is strict: all high-confidence filters.
-3. Sets 2-4 may vary only inferred soft filters. Never remove an explicit hard
-   constraint. If no safe variation exists, repeat the strict set.
+2. Prefer one strict plan containing all high-confidence filters.
+3. Four-set mode may vary only inferred soft filters. Never remove an explicit
+   hard constraint. If fewer than four safe variants exist, use one strict
+   plan; never repeat or pad filters to reach four.
 4. `keyword` is strict text matching. Use it only for an exact official title
    or exact merchant phrase already present in current authoritative context.
    Never put a conversational question or paraphrase in `keyword`.
 5. Use `type=benefit` for card benefits/coupons. Use `type=reward` only for
    enrollment/cashback campaigns. Omit `type` when both are requested.
-6. `--market` is not a recommendation filter: it selects the issuing-market
+6. Set `reward_type` only when the user explicitly names one. Generic
+   `优惠`, `benefit`, `offer`, or `礼遇` selects no reward type. Never fan
+   out `discount`, `coupon`, `cashback`, or `privilege` merely to create four
+   sets; use the single strict plan instead.
+7. `--market` is not a recommendation filter: it selects the issuing-market
    data source and may remain outside `--filter-sets`. `region[]` selects where
    the Benefit is usable. They are not interchangeable.
 
@@ -69,4 +82,4 @@ returned code.
 - Explicit purchase with no Visa/Benefit/coupon signal, such as
   `我想下单咖啡`, uses broad `catalog search`.
 - A Benefit signal such as `有咖啡的券吗`, `Visa 咖啡优惠券`, or
-  `有哪些咖啡权益` uses `visa recommend --filter-sets`.
+  `有哪些咖啡权益` uses `visa recommend` with Agent-selected filters.
