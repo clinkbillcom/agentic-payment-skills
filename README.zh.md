@@ -22,7 +22,7 @@ visa commerce-run
 
 轻量购物路由覆盖：
 
-- Visa 全量、品类和品牌权益通过一次 `visa recommend-products` 查询；
+- 商品、品类、商户、下单和 Visa 权益请求都通过一次 `visa recommend-products` 查询；
   CLI 会立即把每条 Program 与已配置的精确内部 UCP 路由做商品匹配
 - 唯一 `visa recommend --region hk|cn` 会自动选择并保存对应来源；
   只有跨来源查询才额外使用 `--market`
@@ -32,7 +32,8 @@ visa commerce-run
 - 只有精确 `internal-ucp-catalog` 命中才提示是否下单；未命中时只展示
   Visa 活动介绍与权威活动链接，不追加购买引导
 - 命中的 Program 购买继续走 `commerce-login`、`commerce-run`
-- 非 Visa 的直接购物请求先做 Catalog 广域搜索
+- 直接购物也通过同一次 Visa 推荐并行 Catalog 广域搜索，不再存在 Catalog-only
+  首轮路由
 - Catalog 商品使用 `commerce-login` 后接
   `commerce-run mode=catalog_purchase` 的聚合购买合同
 - 聚合缺卡合同：创建或复用一条精确的无卡 `PENDING` Instruction；可以提示
@@ -65,7 +66,7 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.53` 已 vendor 上游提交
+Skill `0.1.54` 已 vendor 上游提交
 `a2b1295aae5bd5e157d99001d26d1a10628785e3` 的 Visa CLI `0.2.49`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
@@ -94,7 +95,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.53`
+Skill 版本：`0.1.54`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
