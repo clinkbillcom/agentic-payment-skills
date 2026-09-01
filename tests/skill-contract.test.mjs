@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.49');
+  assert.equal(packageJson.version, '0.1.51');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.49/u);
-  assert.match(skill, /version: "0\.1\.49"/u);
+  assert.match(skill, /Visa Skill 0\.1\.51/u);
+  assert.match(skill, /version: "0\.1\.51"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -206,7 +206,7 @@ test('initial Visa discovery chooses one strict request or one four-set aggregat
   );
 });
 
-test('Benefit source region persists HK or CN independently from destination', () => {
+test('Benefit source region resolves inside recommend without a preflight', () => {
   const sourceRegion = skill.slice(
     skill.indexOf('### Benefit Source Region'),
     skill.indexOf('### Catalog Money'),
@@ -214,27 +214,35 @@ test('Benefit source region persists HK or CN independently from destination', (
 
   assert.match(
     sourceRegion,
-    /Explicit[\s\S]*HK\/Hong Kong region benefits[\s\S]*CN\/Mainland China region[\s\S]*visa region set <hk\|cn>/iu,
+    /unique taxonomy `--region hk`[\s\S]*`--region cn`[\s\S]*selects that[\s\S]*endpoint[\s\S]*persists it as the next default/iu,
   );
   assert.match(
     sourceRegion,
-    /no explicit source region[\s\S]*visa region get[\s\S]*Missing\s+config initializes to `hk`[\s\S]*reuse the saved value/iu,
+    /no HK\/CN region[\s\S]*omit `--market`[\s\S]*saved value[\s\S]*initializes missing config to `hk`/iu,
   );
   assert.match(
     sourceRegion,
-    /visa recommend[\s\S]*without `--market`[\s\S]*sourceRegion[\s\S]*sourceEndpoint[\s\S]*saved selection/iu,
+    /source and destination are explicitly different[\s\S]*`--market <source>`[\s\S]*`--region <destination>`[\s\S]*Explicit market[\s\S]*wins/iu,
   );
   assert.match(
     sourceRegion,
-    /Source region[\s\S]*HK\/CN backend[\s\S]*Taxonomy `--region`[\s\S]*where a Benefit is usable[\s\S]*go to Hong Kong[\s\S]*without changing/iu,
+    /Never run `visa region get` or `visa region set` as a search preflight[\s\S]*only when the user separately asks/iu,
+  );
+  assert.match(
+    sourceRegion,
+    /returned `sourceRegion`[\s\S]*`sourceEndpoint`[\s\S]*match the selection/iu,
+  );
+  assert.match(
+    sourceRegion,
+    /Taxonomy `--region`[\s\S]*where a Benefit is usable[\s\S]*unique HK\/CN value[\s\S]*next source default[\s\S]*other or multi-value destinations do not/iu,
   );
   assert.match(
     agent,
-    /resolve the HK\/CN source endpoint[\s\S]*visa region set hk\|cn[\s\S]*visa region get[\s\S]*initializes to hk[\s\S]*recommend without --market[\s\S]*sourceRegion\/sourceEndpoint/iu,
+    /unique[\s\S]*--region hk[\s\S]*--region cn[\s\S]*selects that endpoint[\s\S]*persists[\s\S]*no HK\/CN region[\s\S]*saved config[\s\S]*explicitly different[\s\S]*--market <source>[\s\S]*explicit market wins[\s\S]*Never run visa region get\/set/iu,
   );
   assert.match(
     filterReference,
-    /Source Region[\s\S]*visa region set <hk\|cn>[\s\S]*visa region get[\s\S]*defaults to HK[\s\S]*not taxonomy `region\[\]`/iu,
+    /Source Region[\s\S]*region\[\]=hk\|cn[\s\S]*persists it[\s\S]*saved config\/default HK[\s\S]*explicit `--market` wins[\s\S]*Never call `visa region get\/set`[\s\S]*multi-value destinations do not update/iu,
   );
 });
 
@@ -288,7 +296,7 @@ test('broad Visa availability fetches every Benefit without initial Catalog work
   );
   assert.match(
     agent,
-    /Source region is independent from destination taxonomy --region[\s\S]*travel to Hong Kong[\s\S]*--region hk[\s\S]*without changing the saved source/iu,
+    /Other or[\s\S]*multi-value destinations do not update the[\s\S]*saved source/iu,
   );
 });
 

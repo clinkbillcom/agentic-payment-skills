@@ -4,12 +4,14 @@ interface:
   default_prompt: >-
     Use the bundled visa-cli only. Lock one user language and one environment.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Before Visa
-    discovery, resolve the HK/CN source endpoint. Explicit HK/Hong Kong region
-    benefits or CN/Mainland China region benefits runs visa region set hk|cn;
-    otherwise run visa region get. Missing config initializes to hk. Then run
-    visa recommend without --market and require its sourceRegion/sourceEndpoint
-    to match. Source region is independent from destination taxonomy --region:
-    travel to Hong Kong may add --region hk without changing the saved source.
+    discovery, resolve and remember HK/CN in the recommend call. A unique
+    --region hk or --region cn automatically selects that endpoint and persists
+    it as the next default. With no HK/CN region, omit --market so recommend
+    uses saved config and defaults missing config to hk. When source and
+    destination are explicitly different, pass both --market <source> and
+    --region <destination>; explicit market wins. Never run visa region get/set
+    as a search preflight. Other or multi-value destinations do not update the
+    saved source.
     Route explicit buy/order/checkout requests with no Visa, Benefit, coupon,
     voucher, discount, or offer signal directly to broad catalog search; for
     example, 我想下单咖啡 is Catalog. A Benefit signal such as 有咖啡的券吗,

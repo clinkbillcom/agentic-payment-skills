@@ -4,9 +4,11 @@ Read this only when building Agent-selected filters for `visa recommend`.
 
 ## Source Region
 
-- Explicit HK/CN Benefit-library intent: run `visa region set <hk|cn>`.
-- Otherwise run `visa region get`; missing config defaults to HK.
-- Source endpoint region is not taxonomy `region[]`, which is destination use.
+- A unique `region[]=hk|cn` selects that endpoint and persists it.
+- With no HK/CN region, saved config/default HK is used.
+- Cross-source search: explicit `--market` wins over destination `region[]`.
+- Never call `visa region get/set` before a search; those are standalone only.
+- Other or multi-value destinations do not update the saved source.
 
 ## Output
 

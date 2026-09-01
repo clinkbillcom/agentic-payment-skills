@@ -88,11 +88,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.46');
+  assert.equal(vendorPackage.version, '0.2.47');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '0cec342c2c6d4006116f1b6b7fc6dccc890709bd',
+    '207e6d092cf4f9fc38ca9ccac8fd9a2ec9aed83a',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -207,6 +207,54 @@ test('Visa region persists HK/CN source selection for later recommendations', as
       new URL(recommendationData.request.url).host,
       'vsra.offerpluscn.com',
     );
+
+    const hkSearch = runWithMock([
+      'visa',
+      'recommend',
+      'visa 香港超市有什么优惠',
+      '--type',
+      'benefit',
+      '--region',
+      'hk',
+      '--category',
+      'shopping_supermarket',
+      '--purpose',
+      'local',
+      '--anonymous',
+      '--format',
+      'json',
+    ], 'visa-only', {
+      home,
+      env: {
+        ...env,
+        VSRA_BASE_URL: 'https://vsra.example.test',
+        CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+      },
+    });
+    assert.equal(hkSearch.status, 0, hkSearch.stderr);
+    const hkSearchData = JSON.parse(hkSearch.stdout).data;
+    assert.equal(hkSearchData.sourceRegion, 'hk');
+    assert.equal(hkSearchData.sourceRegionReason, 'destination_region');
+    const updatedConfig = JSON.parse(
+      await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
+    );
+    assert.equal(updatedConfig.visa.activeMarket, 'hk');
+
+    const remembered = run([
+      'visa',
+      'recommend',
+      'Visa权益',
+      '--type',
+      'benefit',
+      '--anonymous',
+      '--dry-run',
+      '--format',
+      'json',
+    ], { home, env });
+    assert.equal(remembered.status, 0, remembered.stderr);
+    const rememberedData = JSON.parse(remembered.stdout).data;
+    assert.equal(rememberedData.sourceRegion, 'hk');
+    assert.equal(rememberedData.sourceRegionReason, 'saved_or_default');
 
     const unsupported = run(['visa', 'region', 'set', 'tw'], { home, env });
     assert.equal(unsupported.status, 2, unsupported.stderr);

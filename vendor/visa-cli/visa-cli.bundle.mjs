@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.46";
+var CLI_VERSION = "0.2.47";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -33066,9 +33066,11 @@ Behavior:
   and is never converted into filters or sent to Visa. This mode cannot be combined with
   personalized mode, provider aggregation, or individual recommendation filter flags.
 
-  A live recommend persists its selected --market as visa.activeMarket. When --market is omitted,
-  the command uses the saved value and initializes missing config to hk. Output includes
-  sourceRegion and sourceEndpoint. Source market is distinct from the destination --region filter.
+  A live recommend selects its source by explicit --market first, otherwise by one unambiguous
+  destination filter of --region hk or --region cn, otherwise by saved config/default hk. The
+  selected HK/CN source is persisted as visa.activeMarket. Output includes sourceRegion,
+  sourceEndpoint, and sourceRegionReason. Other or multi-value destination regions do not change
+  the saved source.
 
   Without --include-provider-products, output is unchanged. With the flag, the command concurrently
   searches the existing Visa recommendation service and every provider identity configured for the
@@ -33600,7 +33602,7 @@ async function visaRegion(context) {
   return EXIT_CODES.OK;
 }
 async function visaRecommend(context) {
-  const market = parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig);
+  const explicitMarket = getStringFlag(context.args.flags, "market");
   const locale = normalizeVisaLocale(getStringFlag(context.args.flags, "lang"));
   const query = getStringFlag(context.args.flags, "query") ?? context.args.positionals.slice(2).join(" ");
   const personalized = getBooleanFlag(context.args.flags, "personalized");
@@ -33659,6 +33661,9 @@ async function visaRecommend(context) {
   if (filterSets.length === 0 && !all && Object.keys(filters).length === 0) {
     throw validationError("visa recommend requires explicit filters, --all, or --filter-sets; natural-language filter inference is handled by the Agent");
   }
+  const inferredRegion = inferVisaBenefitSourceRegion(filters, filterSets);
+  const sourceRegionReason = explicitMarket !== void 0 ? "explicit_market" : inferredRegion !== void 0 ? "destination_region" : "saved_or_default";
+  const market = parseVisaMarket(explicitMarket ?? inferredRegion, context.storedConfig);
   const sourceEndpoint = resolveVsraBaseUrl(market);
   const savedMarket = normalizeStoredVisaState(context.storedConfig.visa)?.activeMarket;
   if (!context.globalOptions.dryRun && (context.storedConfig.visa === void 0 || savedMarket !== market)) {
@@ -33691,7 +33696,7 @@ async function visaRecommend(context) {
       ...await runRecommendation(filterSet, taxonomyPayload)
     })));
     applyVisaStoredConfig(context, expanded[0]?.storedConfig ?? context.storedConfig);
-    printSuccess(withVisaSourceRegion(mergeAgentSelectedVisaRecommendations(query.normalize("NFKC").trim(), filterSets, expanded, all, context.globalOptions.dryRun), market, sourceEndpoint), context.globalOptions.format);
+    printSuccess(withVisaSourceRegion(mergeAgentSelectedVisaRecommendations(query.normalize("NFKC").trim(), filterSets, expanded, all, context.globalOptions.dryRun), market, sourceEndpoint, sourceRegionReason), context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   const providerDiscovery = includeProviderProducts ? discoverProviderProducts(context, query, locale) : void 0;
@@ -33701,7 +33706,7 @@ async function visaRecommend(context) {
     providerDiscovery ?? Promise.resolve(void 0)
   ]);
   applyVisaStoredConfig(context, storedConfig);
-  printSuccess(withVisaSourceRegion(providerResult ? joinVisaRecommendationWithProviderProducts(result, providerResult) : result, market, sourceEndpoint), context.globalOptions.format);
+  printSuccess(withVisaSourceRegion(providerResult ? joinVisaRecommendationWithProviderProducts(result, providerResult) : result, market, sourceEndpoint, sourceRegionReason), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function visaDetail(context) {
@@ -33871,13 +33876,29 @@ function applyVisaStoredConfig(context, storedConfig) {
   context.runtimeConfig = resolveRuntimeConfig(storedConfig, context.args.flags);
   context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
 }
-function withVisaSourceRegion(result, region, sourceEndpoint) {
+function withVisaSourceRegion(result, region, sourceEndpoint, sourceRegionReason) {
   return {
     ...result,
     sourceRegion: region,
     market: region,
-    sourceEndpoint
+    sourceEndpoint,
+    sourceRegionReason
   };
+}
+function inferVisaBenefitSourceRegion(filters, filterSets) {
+  if (filterSets.length === 0) {
+    return singleSourceRegion(filters.region);
+  }
+  const regions = filterSets.map((filterSet) => singleSourceRegion(filterSet.region));
+  const first = regions[0];
+  return first !== void 0 && regions.every((region) => region === first) ? first : void 0;
+}
+function singleSourceRegion(regions) {
+  if (regions?.length !== 1) {
+    return void 0;
+  }
+  const region = regions[0]?.trim().toLowerCase();
+  return region === "hk" || region === "cn" ? region : void 0;
 }
 function parseVisaBenefitRegion(value) {
   const region = String(value ?? "").trim().toLowerCase();
