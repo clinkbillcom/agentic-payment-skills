@@ -28,6 +28,8 @@ visa commerce-run
   只有跨来源查询才额外使用 `--market`
 - 最终统一返回可下单商品和未匹配 Visa 权益；已匹配成商品的权益不重复展示
 - 全渠道 Catalog 与 Visa 推荐并行，广域商品合并进同一个商品列表且不按来源分组
+- 广域内部商品缺少商品 URL 时，只有精确商户 ID 命中当前环境锁定的 provider
+  registry 才保留，并使用 registry 返回的商户 URL 和 endpoint 做精确商品复验
 - 用户选择未匹配权益后可用 `visa detail` 查看详情，但不重复 product-search
 - 只有精确 `internal-ucp-catalog` 命中才提示是否下单；未命中时只展示
   Visa 活动介绍与权威活动链接，不追加购买引导
@@ -56,6 +58,11 @@ UAT 额外只把 `https://vsrp.hk/p/o5s` 作为 CLI 内置 alias 映射到商户
 精确路由使用 MCC `5411`；Program MCC 格式错误或冲突、低置信分类和只看标题
 的猜测仍必须在登录前停止。
 
+对于命中 registry 的无商品 URL 广域商品，Skill 会保留 CLI 返回的精确商品 ID
+和 provider provenance，绝不构造 URL；购买必须通过
+`mode=catalog_purchase` 调用已注册 Catalog 商品接口精确复验，未注册的无 URL
+商品继续丢弃。
+
 Eats365 购买复验使用冻结门店和商品的精确端点，不再依赖广域搜索连续两次
 选中同一家门店。
 平台路由只必填 `channelType` 和 `storeId`；query、重复环境和语言字段均为
@@ -69,8 +76,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.58` 已 vendor 上游提交
-`cda1bb7e43aeba41774a0d56650ebb1a9b170d92` 的 Visa CLI `0.2.50`。它支持
+Skill `0.1.59` 已 vendor 上游提交
+`2acae4d98e6a328ca6d34489e3dd9d6612a73ae2` 的 Visa CLI `0.2.51`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -98,7 +105,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.58`
+Skill 版本：`0.1.59`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

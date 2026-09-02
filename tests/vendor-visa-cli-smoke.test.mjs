@@ -88,11 +88,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.50');
+  assert.equal(vendorPackage.version, '0.2.51');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'cda1bb7e43aeba41774a0d56650ebb1a9b170d92',
+    '2acae4d98e6a328ca6d34489e3dd9d6612a73ae2',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -158,6 +158,10 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   assert.match(
     aggregateHelp.stdout,
     /same\s+products collection without source grouping/iu,
+  );
+  assert.match(
+    aggregateHelp.stdout,
+    /available internal product without an item URL[\s\S]*merchantId exactly matches[\s\S]*provider registry[\s\S]*authoritative merchant URL and endpoint/iu,
   );
 });
 
@@ -413,6 +417,56 @@ test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee'
   const output = JSON.parse(catalog.stdout);
   assert.match(JSON.stringify(output), /10210949/u);
   assert.match(JSON.stringify(output), /Americano/u);
+});
+
+test('aggregate retains only registered URL-less internal broad products', () => {
+  const result = runWithMock([
+    'visa',
+    'recommend-products',
+    'Watsons 屈臣氏',
+    '--region',
+    'hk',
+    '--anonymous',
+    '--lang',
+    'zh-HK',
+    '--sandbox',
+    '--include-broad-catalog',
+    '--format',
+    'json',
+  ], 'registered-broad-without-url', {
+    env: {
+      VSRA_BASE_URL: 'https://vsra.example.test',
+      CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.returnedProductCount, 1);
+  assert.equal(output.broadCatalogSearch.returnedProductCount, 1);
+  assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
+  assert.equal(
+    output.products[0].endpoint,
+    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+  );
+  assert.equal(output.products[0].product.itemId, 'watsons-100');
+  assert.equal(
+    output.products[0].product.productUrl,
+    'https://vtravel.link2shops.com/yiyuan/',
+  );
+  assert.equal(output.products[0].product.unitPriceMajor, '1');
+  assert.equal(
+    output.products[0].catalogProvenance.providerKey,
+    'visa_benefit_catalog',
+  );
+  assert.equal(
+    output.products[0].catalogProvenance.registryVersion,
+    '2026-08-27.1',
+  );
+  assert.equal(
+    output.products[0].catalogProvenance.merchantUrl,
+    'https://vtravel.link2shops.com/yiyuan/',
+  );
 });
 
 test('selected Visa Benefit can resolve to an exact internal UCP product', () => {
@@ -918,6 +972,37 @@ function coffeeCatalogResponse() {
   };
 }
 
+function registeredCatalogResponse() {
+  const product = (id, title) => ({
+    id,
+    title,
+    price_range: {
+      min: { amount: 100, currency: 'USD' },
+      max: { amount: 100, currency: 'USD' },
+    },
+    variants: [{
+      id,
+      title,
+      price: { amount: 100, currency: 'USD' },
+      availability: { available: true, status: 'in_stock' },
+    }],
+  });
+  return {
+    groups: [{
+      channel_type: ['fu', 'hui'].join(''),
+      merchant_id: 'mcht_ftmse61a6az0',
+      name: 'mcht_ftmse61a6az0',
+      products: [product('watsons-100', 'Watsons HKD 100 Gift Card')],
+    }, {
+      channel_type: ['fu', 'hui'].join(''),
+      merchant_id: 'mcht_unknown',
+      name: 'Unknown internal merchant',
+      products: [product('unknown-100', 'Unknown Gift Card')],
+    }],
+    total_products: 2,
+  };
+}
+
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
   if (scenario === 'visa-only') {
@@ -976,6 +1061,37 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse(coffeeCatalogResponse());
     }
     throw new Error('unexpected Visa-miss request: ' + url.href);
+  }
+
+  if (scenario === 'registered-broad-without-url') {
+    if (url.pathname.endsWith('/taxonomy')) {
+      return jsonResponse({ success: true, data: {} });
+    }
+    if (url.pathname.endsWith('/programs/recommend')) {
+      return jsonResponse({
+        success: true,
+        data: {
+          total: 0,
+          page: 1,
+          limit: 10,
+          count: 0,
+          relaxed_axes: null,
+          items: [],
+        },
+      });
+    }
+    if (url.pathname === '/agent/ucp/extra/catalog/search') {
+      const body = JSON.parse(String(init?.body));
+      if (body.query !== 'Watsons 屈臣氏') {
+        throw new Error(
+          'unexpected registered Catalog request: ' + JSON.stringify(body),
+        );
+      }
+      return jsonResponse(registeredCatalogResponse());
+    }
+    throw new Error(
+      'unexpected registered broad request: ' + url.href,
+    );
   }
 
   if (scenario === 'visa-select-reward-internal-match') {

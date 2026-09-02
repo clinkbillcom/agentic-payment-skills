@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.58');
+  assert.equal(packageJson.version, '0.1.59');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.58/u);
-  assert.match(skill, /version: "0\.1\.58"/u);
+  assert.match(skill, /Visa Skill 0\.1\.59/u);
+  assert.match(skill, /version: "0\.1\.59"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -326,6 +326,21 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     discovery,
+    /internal broad candidate[\s\S]*item URL[\s\S]*environment-locked provider registry[\s\S]*Never invent a URL[\s\S]*unregistered URL-less candidate/iu,
+  );
+  for (const field of [
+    'merchantId',
+    'merchantUrl',
+    'endpoint',
+    'providerKey',
+    'registryVersion',
+    'product.itemId',
+    'catalogProvenance',
+  ]) {
+    assert.match(discovery, new RegExp(`\`${field.replace('.', '\\.')}\``, 'u'));
+  }
+  assert.match(
+    discovery,
     /`matchedPrograms` array[\s\S]*purchase provenance only[\s\S]*Never use it[\s\S]*Benefit title[\s\S]*Offer URL[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
   );
   assert.match(
@@ -351,6 +366,25 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   assert.match(
     agent,
     /matchedPrograms is purchase provenance only[\s\S]*never reconstruct a Benefit[\s\S]*visaBenefits is the only source[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
+  );
+  assert.match(
+    agent,
+    /URL-less internal broad product[\s\S]*locked provider registry[\s\S]*never invent a URL/iu,
+  );
+  for (const field of [
+    'merchantId',
+    'merchantUrl',
+    'endpoint',
+    'productId',
+    'providerKey',
+    'registryVersion',
+    'catalogProvenance',
+  ]) {
+    assert.match(agent, new RegExp(field, 'u'));
+  }
+  assert.match(
+    agent,
+    /selected registered product[\s\S]*mode=catalog_purchase[\s\S]*exact-revalidate[\s\S]*Catalog[\s\S]*product API[\s\S]*drift stops/iu,
   );
   assert.match(
     agent,
@@ -534,6 +568,10 @@ test('direct shopping uses combined Visa and broad Catalog discovery', () => {
   assert.match(
     catalogPurchase,
     /direct-shopping internal merchant[\s\S]*selected `merchant_id`[\s\S]*`ucp-catalog product`[\s\S]*Do not purchase directly from a broad-search display row/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /registered URL-less internal candidate[\s\S]*CLI-returned[\s\S]*`merchantId`[\s\S]*registry `merchantUrl`[\s\S]*`endpoint`[\s\S]*`productId`[\s\S]*never[\s\S]*invent an item URL[\s\S]*mode=catalog_purchase[\s\S]*bypass the[\s\S]*merchant list[\s\S]*exact-revalidate[\s\S]*Catalog product API[\s\S]*drift stops/iu,
   );
   assert.match(
     catalogPurchase,

@@ -33,6 +33,9 @@ The lightweight shopping routes cover:
   represented by a product is not displayed twice
 - parallel all-channel Catalog search whose available products merge into that
   same collection without source grouping
+- URL-less internal broad products retained only when their exact merchant ID
+  matches the environment-locked provider registry; the registry supplies the
+  merchant URL and endpoint used for exact product revalidation
 - selected unmatched-Benefit detail through `visa detail`; no repeated
   product-search
 - an order invitation only for an exact `internal-ucp-catalog` match; otherwise
@@ -68,6 +71,12 @@ complete frozen merchant/product context. The exact UAT Wellcome gift-card
 route above uses MCC `5411`; malformed/conflicting Program MCCs and
 low-confidence or title-only guesses still stop before login.
 
+For a registered URL-less broad product, the Skill preserves the exact returned
+product ID and provider-registry provenance, never invents an item URL, and
+requires `mode=catalog_purchase` to revalidate through the registered Catalog
+product API before any purchase mutation. Unregistered URL-less rows remain
+excluded.
+
 Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
 Only `channelType` and `storeId` are required platform route fields;
@@ -81,8 +90,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.58` vendors Visa CLI `0.2.50` from upstream commit
-`cda1bb7e43aeba41774a0d56650ebb1a9b170d92`. It uses one-round Visa
+Skill `0.1.59` vendors Visa CLI `0.2.51` from upstream commit
+`2acae4d98e6a328ca6d34489e3dd9d6612a73ae2`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -114,7 +123,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.58`
+Skill version: `0.1.59`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

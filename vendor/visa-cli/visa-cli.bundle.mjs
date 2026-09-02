@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.50";
+var CLI_VERSION = "0.2.51";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -33186,7 +33186,9 @@ Behavior:
   starts in parallel with Visa recommendation. --broad-queries accepts a JSON array of up to three
   additional product queries; all one-to-four broad requests run concurrently and de-duplicate into
   the same products collection without source grouping. catalogProvenance is retained only for exact
-  purchase revalidation. If Visa relaxes an explicitly requested filter, Visa becomes a strict
+  purchase revalidation. An available internal product without an item URL is retained only when its
+  merchantId exactly matches the environment-locked provider registry; the registry supplies the
+  authoritative merchant URL and endpoint for exact product revalidation. If Visa relaxes an explicitly requested filter, Visa becomes a strict
   no-match with strictMatchFailure while successful broad products are still returned. A failed
   broad request reports partial coverage without hiding successful queries.
 `;
@@ -33860,6 +33862,7 @@ async function visaRecommendProducts(context) {
   const offers = recommendationItems(recommendation);
   const environment = visaBenefitCatalogEnvironment(context);
   const language = catalogLanguageForVisaLocale(execution.locale);
+  const registeredProviderRoutes = visaBenefitCatalogProviderRoutes(environment, API_BASE_URLS[environment]);
   const [resolutions, broadCatalogRuns] = await Promise.all([
     Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language))),
     broadCatalogPromise
@@ -33890,7 +33893,7 @@ async function visaRecommendProducts(context) {
   }
   const broadProductsByKey = /* @__PURE__ */ new Map();
   const broadQueryResults = (broadCatalogRuns ?? []).map((run) => {
-    const products = run.result ? normalizeBroadCatalogProducts(run.result, run.query) : [];
+    const products = run.result ? normalizeBroadCatalogProducts(run.result, run.query, registeredProviderRoutes) : [];
     for (const product of products) {
       const key = broadCatalogProductKey(product);
       if (!broadProductsByKey.has(key)) {
@@ -34082,7 +34085,7 @@ function parseBroadCatalogQueries(primaryQuery, rawRelatedQueries) {
   }
   return [...new Set(queries)];
 }
-function normalizeBroadCatalogProducts(payload, query) {
+function normalizeBroadCatalogProducts(payload, query, registeredProviderRoutes = []) {
   const root = recommendationRecord(payload);
   if (!Array.isArray(root.groups)) {
     return [];
@@ -34094,6 +34097,7 @@ function normalizeBroadCatalogProducts(payload, query) {
     const merchantId = recommendationOptionalString(group.merchant_id ?? group.merchantId);
     const merchantName = recommendationOptionalString(group.name ?? group.merchant_name ?? group.merchantName);
     const storeId = recommendationOptionalString(group.store_id ?? group.storeId);
+    const registeredProvider = merchantId ? registeredProviderRoutes.find((route) => route.merchantId === merchantId) : void 0;
     if (!channelType || !Array.isArray(group.products)) {
       continue;
     }
@@ -34104,8 +34108,9 @@ function normalizeBroadCatalogProducts(payload, query) {
         const itemId = recommendationOptionalString(candidate.id ?? candidate.itemId ?? candidate.item_id ?? product.id);
         const title = recommendationOptionalString(candidate.title ?? candidate.name ?? product.title ?? product.name);
         const productUrl2 = recommendationOptionalString(candidate.url ?? candidate.itemUrl ?? candidate.item_url ?? product.url ?? product.itemUrl ?? product.item_url);
+        const purchaseUrl = productUrl2 ?? registeredProvider?.merchantUrl;
         const money = broadCatalogMoney(candidate.price) ?? exactBroadCatalogRange(product.price_range ?? product.priceRange);
-        if (!itemId || !title || !productUrl2 || !money || !broadCatalogAvailable(candidate, product)) {
+        if (!itemId || !title || !purchaseUrl || !money || !broadCatalogAvailable(candidate, product)) {
           continue;
         }
         const resolvedMerchantName = recommendationOptionalString(recommendationRecord(candidate.seller).name ?? candidate.merchant_name ?? product.merchant_name ?? merchantName);
@@ -34114,11 +34119,12 @@ function normalizeBroadCatalogProducts(payload, query) {
           action: "SELECT_PRODUCT_TO_ORDER",
           productResolution: "broad-catalog",
           ...merchantId ? { merchantId } : {},
+          ...registeredProvider ? { endpoint: registeredProvider.endpoint } : {},
           product: {
             itemId,
             title,
             sourceTitle: title,
-            productUrl: productUrl2,
+            productUrl: purchaseUrl,
             currency: money.currency,
             unitPriceMajor: minorUnitsMajorAmount(money.amountMinor, money.currency),
             unitPriceMinor: Number(money.amountMinor),
@@ -34126,14 +34132,22 @@ function normalizeBroadCatalogProducts(payload, query) {
             totalAmountMajor: minorUnitsMajorAmount(money.amountMinor, money.currency),
             totalAmountMinor: Number(money.amountMinor),
             availability: "in_stock",
-            ...resolvedMerchantName ? { merchantName: resolvedMerchantName } : {}
+            ...registeredProvider?.merchantName ?? resolvedMerchantName ? {
+              merchantName: registeredProvider?.merchantName ?? resolvedMerchantName
+            } : {}
           },
           matchedPrograms: [],
           catalogProvenance: {
             query,
             channelType,
             ...merchantId ? { merchantId } : {},
-            ...storeId ? { storeId } : {}
+            ...storeId ? { storeId } : {},
+            ...registeredProvider ? {
+              providerKey: registeredProvider.providerKey,
+              registryVersion: registeredProvider.registryVersion,
+              merchantUrl: registeredProvider.merchantUrl,
+              endpoint: registeredProvider.endpoint
+            } : {}
           }
         });
       }

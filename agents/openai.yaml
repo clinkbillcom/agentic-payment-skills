@@ -45,6 +45,12 @@ interface:
     group or label Visa-linked and broad Catalog products by source. Preserve
     catalogProvenance internally for purchase revalidation. A Program represented
     by a product must not also be displayed as a Benefit.
+    A URL-less internal broad product is valid only when its exact merchantId
+    matches the locked provider registry. Preserve the CLI-returned merchantUrl,
+    endpoint, productId, providerKey, registryVersion, and catalogProvenance;
+    never invent a URL. A selected registered product must use
+    mode=catalog_purchase and exact-revalidate through that provider's Catalog
+    product API before mutation; any route or product drift stops.
     matchedPrograms is purchase provenance only: never reconstruct a Benefit
     title, activity description, Offer URL, eligibility, terms, or CTA from it.
     visaBenefits is the only source of user-facing Benefit rows. If

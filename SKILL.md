@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.58. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.59. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.58"
+  version: "0.1.59"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -332,6 +332,11 @@ Read only the aggregate `products` and `visaBenefits` collections:
   products by source. Present title, major-unit price/currency, availability,
   and merchant. Preserve `catalogProvenance` internally for purchase
   revalidation. A matched Program must not be displayed again as a Benefit.
+- An internal broad candidate may omit its item URL only when its exact
+  `merchantId` matches the environment-locked provider registry. Preserve the
+  CLI-returned registry `merchantUrl`, `endpoint`, `providerKey`,
+  `registryVersion`, exact `product.itemId`, and complete `catalogProvenance`.
+  Never invent a URL; discard an unregistered URL-less candidate.
 - A nonempty `matchedPrograms` array is purchase provenance only. Never use it
   to reconstruct a user-facing Benefit title, activity description, Offer URL,
   eligibility, terms, or Benefit call to action. If `returnedProductCount>0`
@@ -556,6 +561,12 @@ hard constraints.
 Before login, resolve the selected item to one authoritative orderable product.
 For a direct-shopping internal merchant, use the selected `merchant_id`,
 `ucp-catalog product`, and the normal authoritative merchant-route resolution.
+For a registered URL-less internal candidate, freeze the exact CLI-returned
+`merchantId`, registry `merchantUrl` and `endpoint`, and `productId`; never
+invent an item URL. `commerce-run mode=catalog_purchase` must bypass the
+merchant list and exact-revalidate that product through the registered
+provider's Catalog product API before any purchase mutation. Registry,
+endpoint, or product drift stops.
 Do not purchase directly from a broad-search display row when the exact product
 detail has not been resolved. Never accept a route from a Visa Program,
 campaign URL, product title, hostname familiarity, or caller input.
