@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.55');
+  assert.equal(packageJson.version, '0.1.56');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.55/u);
-  assert.match(skill, /version: "0\.1\.55"/u);
+  assert.match(skill, /Visa Skill 0\.1\.56/u);
+  assert.match(skill, /version: "0\.1\.56"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -142,6 +142,10 @@ test('ordinary execution loads only the routed filter reference and stays non-ex
   assert.match(skill, /shortest matching CLI capability/iu);
   assert.match(
     skill,
+    /resolved Skill Path is authoritative[\s\S]*Execute its launcher directly[\s\S]*Never[\s\S]*`ls`[\s\S]*`stat`[\s\S]*`find`[\s\S]*`which`[\s\S]*`test -x`[\s\S]*list `bin\/`[\s\S]*If direct execution fails/iu,
+  );
+  assert.match(
+    skill,
     /does not claim complete\s+behavioral equivalence[\s\S]*former Agent-side orchestration/iu,
   );
 });
@@ -164,7 +168,7 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   assert.match(skill, /\ben\b[\s\S]*zh-CN[\s\S]*zh-TW[\s\S]*zh-HK/u);
   assert.match(
     skill,
-    /Distribution And Purchase Environment[\s\S]*anonymous discovery[\s\S]*installed distribution/iu,
+    /Distribution And Purchase Environment[\s\S]*bundled launcher already pins[\s\S]*Anonymous discovery invokes it directly/iu,
   );
   assert.match(
     discovery,
@@ -172,13 +176,15 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   );
   assert.match(
     singleCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
+  assert.doesNotMatch(singleCommand, /<environment-flag>|--sandbox|--test/u);
   assert.match(
     aggregateCommand,
-    /exactly four genuinely different safe plans[\s\S]*recommend-products[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /exactly four genuinely different safe plans[\s\S]*recommend-products[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
   );
+  assert.doesNotMatch(aggregateCommand, /<environment-flag>|--sandbox|--test/u);
   assert.match(
     discovery,
     /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code/iu,
@@ -197,7 +203,7 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   );
   assert.match(
     skill,
-    /visa recommend-products[\s\S]*does because it resolves[\s\S]*internal products/iu,
+    /visa recommend-products[\s\S]*also omit them[\s\S]*rely[\s\S]*bundled launcher/iu,
   );
 });
 
@@ -217,11 +223,11 @@ test('anonymous discovery never preflights wallet environment', () => {
 
   assert.match(
     environment,
-    /distribution lock, not a wallet preflight[\s\S]*never run `wallet status`[\s\S]*`wallet init`[\s\S]*`visa status`[\s\S]*`config get`[\s\S]*Never read wallet state/iu,
+    /bundled launcher already pins[\s\S]*Anonymous discovery invokes it directly[\s\S]*omits `--sandbox`\/`--test`[\s\S]*never[\s\S]*determine, inspect, infer, or override[\s\S]*run any shell or authentication preflight/iu,
   );
   assert.match(
     environment,
-    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated purchase[\s\S]*wallet and purchase environments agree/iu,
+    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated\s+purchase[\s\S]*wallet and purchase environments agree/iu,
   );
   assert.match(
     wallet,
@@ -233,7 +239,7 @@ test('anonymous discovery never preflights wallet environment', () => {
   );
   assert.match(
     agent,
-    /anonymous[\s\S]*search environment directly from the installed[\s\S]*Never run wallet status\/init[\s\S]*visa status[\s\S]*config get[\s\S]*before discovery[\s\S]*Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit purchase authorization/iu,
+    /resolved Skill Path and launcher are[\s\S]*authoritative[\s\S]*Execute it directly[\s\S]*never run ls[\s\S]*stat[\s\S]*find[\s\S]*which[\s\S]*test -x[\s\S]*launcher already pins[\s\S]*anonymous[\s\S]*omits --sandbox\/--test[\s\S]*Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit purchase authorization/iu,
   );
 });
 
@@ -301,10 +307,11 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     allCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*<environment-flag>[\s\S]*--lang/iu,
+    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(allCommand, /--filter-sets/u);
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
+  assert.doesNotMatch(allCommand, /<environment-flag>|--sandbox|--test/u);
   assert.match(
     discovery,
     /Hong Kong destination[\s\S]*`--region hk`[\s\S]*single-filter call[\s\S]*four-set aggregate mode[\s\S]*"region": \["hk"\][\s\S]*never add an outer `--region`/iu,

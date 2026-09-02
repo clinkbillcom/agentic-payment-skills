@@ -50,8 +50,8 @@ Initial discovery never uses `--include-provider-products` or a merchant-list
 lookup. The aggregate attempts product resolution only for configured exact
 internal routes. A failed or unmatched resolution remains a Visa Benefit. This
 branch does not run broad Catalog fallback for a Visa Benefit request.
-Anonymous discovery takes its search environment from the installed
-distribution and never runs a wallet/authentication environment preflight.
+Anonymous discovery executes the installed launcher directly, omits environment
+flags, and never probes files, distribution, wallet, or authentication state.
 
 Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
@@ -79,7 +79,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.55` vendors Visa CLI `0.2.48` from upstream commit
+Skill `0.1.56` vendors Visa CLI `0.2.48` from upstream commit
 `1fa57ba4c21c1e61da4b1413d80896cea14d1503`. It uses one-round Visa
 recommendation and exact configured internal product matching, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -111,7 +111,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.55`
+Skill version: `0.1.56`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.55. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.56. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.55"
+  version: "0.1.56"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -17,6 +17,11 @@ Use only this Skill's bundled launcher:
 <Skill Path>/bin/visa-cli
 <Skill Path>\bin\visa-cli.cmd
 ```
+
+The resolved Skill Path is authoritative. Execute its launcher directly. Never
+probe it with `ls`, `stat`, `find`, `which`, `test -x`, `cat`, or `grep`; never
+list `bin/`, read the wrapper/package/config, or inspect process environment.
+If direct execution fails, report that launcher error.
 
 Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
 Edition: it includes every Base Command plus Visa discovery and the CLI-owned
@@ -49,31 +54,19 @@ authoritative Program, merchant, product, and Skill names exactly as returned.
 
 ### Distribution And Purchase Environment
 
-For anonymous discovery, select the search environment directly from the
-installed distribution:
+The bundled launcher already pins the distribution search environment.
+Anonymous discovery invokes it directly and omits `--sandbox`/`--test`; never
+determine, inspect, infer, or override that environment at runtime. Do not read
+files, wrapper/package/config, wallet state, or process environment, and do not
+run any shell or authentication preflight.
 
-- a sandbox/UAT distribution uses `--sandbox` for public Catalog,
-  `visa product-search`, and `visa recommend-products` commands and
-  `"environment": "uat"` in contexts
-- a test distribution uses `--test` for public Catalog,
-  `visa product-search`, and `visa recommend-products` commands and
-  `"environment": "test"`
-- production uses no search environment flag and `"environment": "production"`
-
-This is a distribution lock, not a wallet preflight. Before anonymous
-`visa recommend-products`, Benefit detail/taxonomy, or Catalog/product search,
-never run `wallet status`, `wallet init`, `visa status`, `config get`, card
-commands, or any authentication check. Never read wallet state to choose the
-search environment.
-
-The installed distribution wins when the user omits the environment. Never let
-an installed UAT or test Skill silently default to production. Only after the
-user selects an exact product and authorizes an authenticated purchase may the
-Skill verify that wallet and purchase environments agree.
+Only after the user selects an exact product and authorizes an authenticated
+purchase may the Skill verify that wallet and purchase environments agree and
+write the verified environment into purchase contexts.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
-`--sandbox` or `--test`; `visa recommend-products` does because it resolves
-internal products after recommendation.
+`--sandbox` or `--test`. For `visa recommend-products`, also omit them and rely
+on the bundled launcher.
 
 ### Benefit Source Region
 
@@ -258,7 +251,6 @@ Use one strict explicit-filter request by default:
 <Skill Path>/bin/visa-cli visa recommend-products \
   <individual-filter-flags> \
   --anonymous \
-  <environment-flag> \
   --lang <language-tag> \
   --format json
 ```
@@ -270,7 +262,6 @@ aggregate call:
 <Skill Path>/bin/visa-cli visa recommend-products \
   --filter-sets '[<filter-1>,<filter-2>,<filter-3>,<filter-4>]' \
   --anonymous \
-  <environment-flag> \
   --lang <language-tag> \
   --format json
 ```
@@ -297,7 +288,6 @@ on natural language alone to widen the request:
   <individual-filter-flags> \
   --anonymous \
   --all \
-  <environment-flag> \
   --lang <language-tag> \
   --format json
 ```
@@ -844,9 +834,9 @@ general workflow engine.
 - Use `catalog search` only when the user explicitly requests that standalone
   Catalog capability or a non-initial workflow already requires it. Use
   `ucp-catalog search/product` when the merchant is authoritative.
-- Pass the locked `--language` and distribution search environment. Discovery
-  never reads wallet status/config, starts wallet setup, logs in, or authorizes
-  purchase.
+- Pass the locked `--language`; the launcher owns the search environment.
+  Discovery never reads files, wallet status/config, starts wallet setup, logs
+  in, or authorizes purchase.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. Apply Catalog Money before presenting
   a price. A later purchase must freeze one exact selected product.
@@ -975,8 +965,8 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
-- Anonymous discovery uses the installed distribution environment directly and
-  never reads or validates wallet environment.
+- Anonymous discovery invokes the bundled launcher directly, omits environment
+  flags, and never determines or validates distribution/wallet environment.
 - Initial discovery is one `visa recommend-products` call: one strict
   explicit-filter request by default, or one four-set aggregate.
 - Every returned Program is checked only against configured exact internal UCP

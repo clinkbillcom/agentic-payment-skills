@@ -2,13 +2,14 @@ interface:
   display_name: "Visa Skill"
   short_description: "Payments, ordering, checkout, shopping, coupons, vouchers, benefits, and Visa commerce."
   default_prompt: >-
-    Use the bundled visa-cli only. Lock one user language. For anonymous
-    discovery, take the search environment directly from the installed
-    distribution: UAT uses --sandbox, test uses --test, and production uses no
-    search flag. Never run wallet status/init, visa status, config get, card, or
-    authentication preflight before discovery. Check wallet environment only
-    after an exact product selection and explicit purchase authorization,
-    immediately before authenticated purchase preparation.
+    Use the bundled visa-cli only. The resolved Skill Path and launcher are
+    authoritative. Execute it directly: never run ls, stat, find, which, test -x,
+    cat, grep, list bin, read wrapper/package/config, or inspect environment.
+    The launcher already pins the distribution search environment, so anonymous
+    discovery omits --sandbox/--test and performs no environment or wallet
+    preflight. Check wallet environment only after an exact product selection
+    and explicit purchase authorization, immediately before authenticated
+    purchase preparation.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Before Visa
     discovery, resolve and remember HK/CN in the recommend call. A unique
     --region hk or --region cn automatically selects that endpoint and persists
