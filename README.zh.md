@@ -42,6 +42,7 @@ visa commerce-run
 首轮不使用 `--include-provider-products` 或 merchant-list，只对已配置的精确
 内部路由做商品解析。失败或未匹配的 Program 继续保留为 Visa 权益。本分支的
 Visa 权益请求不做广域 Catalog 兜底。
+匿名发现直接使用安装发行版的搜索环境，不执行 wallet 或认证环境预检查。
 
 可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
 商户身份。商品中的 matched Program 仅作购买 provenance；只有 `visaBenefits`
@@ -66,7 +67,7 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.54` 已 vendor 上游提交
+Skill `0.1.55` 已 vendor 上游提交
 `1fa57ba4c21c1e61da4b1413d80896cea14d1503` 的 Visa CLI `0.2.48`。它支持
 一轮 Visa 推荐与内部商品匹配、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
@@ -95,7 +96,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.54`
+Skill 版本：`0.1.55`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

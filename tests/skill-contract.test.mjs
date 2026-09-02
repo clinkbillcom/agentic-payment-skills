@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.54');
+  assert.equal(packageJson.version, '0.1.55');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.54/u);
-  assert.match(skill, /version: "0\.1\.54"/u);
+  assert.match(skill, /Visa Skill 0\.1\.55/u);
+  assert.match(skill, /version: "0\.1\.55"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -162,7 +162,10 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
 
   assert.match(skill, /Lock one language for the whole run/iu);
   assert.match(skill, /\ben\b[\s\S]*zh-CN[\s\S]*zh-TW[\s\S]*zh-HK/u);
-  assert.match(skill, /Lock one environment[\s\S]*never mix environments/iu);
+  assert.match(
+    skill,
+    /Distribution And Purchase Environment[\s\S]*anonymous discovery[\s\S]*installed distribution/iu,
+  );
   assert.match(
     discovery,
     /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*performs one Visa recommendation[\s\S]*concurrently tries every[\s\S]*returned Program/iu,
@@ -195,6 +198,42 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   assert.match(
     skill,
     /visa recommend-products[\s\S]*does because it resolves[\s\S]*internal products/iu,
+  );
+});
+
+test('anonymous discovery never preflights wallet environment', () => {
+  const environment = skill.slice(
+    skill.indexOf('### Distribution And Purchase Environment'),
+    skill.indexOf('### Benefit Source Region'),
+  );
+  const discovery = skill.slice(
+    skill.indexOf('## Visa Benefit And Product Discovery'),
+    skill.indexOf('### Selected Visa Benefit Resolution'),
+  );
+  const wallet = skill.slice(
+    skill.indexOf('### CAP-WALLET:'),
+    skill.indexOf('### CAP-CARD:'),
+  );
+
+  assert.match(
+    environment,
+    /distribution lock, not a wallet preflight[\s\S]*never run `wallet status`[\s\S]*`wallet init`[\s\S]*`visa status`[\s\S]*`config get`[\s\S]*Never read wallet state/iu,
+  );
+  assert.match(
+    environment,
+    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated purchase[\s\S]*wallet and purchase environments agree/iu,
+  );
+  assert.match(
+    wallet,
+    /wallet status[\s\S]*explicit wallet request[\s\S]*after[\s\S]*exact product selection[\s\S]*Never use it to preflight anonymous discovery/iu,
+  );
+  assert.doesNotMatch(
+    discovery,
+    /wallet status|wallet init|visa status|config get|authentication preflight/iu,
+  );
+  assert.match(
+    agent,
+    /anonymous[\s\S]*search environment directly from the installed[\s\S]*Never run wallet status\/init[\s\S]*visa status[\s\S]*config get[\s\S]*before discovery[\s\S]*Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit purchase authorization/iu,
   );
 });
 

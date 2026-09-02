@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.54. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.55. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.54"
+  version: "0.1.55"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -47,9 +47,10 @@ search as `--language <language-tag>`. Use the same language for guidance,
 questions, errors, browser status, summaries, and the final answer. Preserve
 authoritative Program, merchant, product, and Skill names exactly as returned.
 
-### Environment Lock
+### Distribution And Purchase Environment
 
-Lock one environment before the first command and never mix environments:
+For anonymous discovery, select the search environment directly from the
+installed distribution:
 
 - a sandbox/UAT distribution uses `--sandbox` for public Catalog,
   `visa product-search`, and `visa recommend-products` commands and
@@ -59,9 +60,16 @@ Lock one environment before the first command and never mix environments:
   `"environment": "test"`
 - production uses no search environment flag and `"environment": "production"`
 
-The installed distribution lock wins when the user omits the environment.
-Never let an installed UAT or test Skill silently default to production.
-Authenticated commands must agree with the current wallet environment.
+This is a distribution lock, not a wallet preflight. Before anonymous
+`visa recommend-products`, Benefit detail/taxonomy, or Catalog/product search,
+never run `wallet status`, `wallet init`, `visa status`, `config get`, card
+commands, or any authentication check. Never read wallet state to choose the
+search environment.
+
+The installed distribution wins when the user omits the environment. Never let
+an installed UAT or test Skill silently default to production. Only after the
+user selects an exact product and authorizes an authenticated purchase may the
+Skill verify that wallet and purchase environments agree.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
 `--sandbox` or `--test`; `visa recommend-products` does because it resolves
@@ -80,6 +88,8 @@ Resolve and remember the HK/CN source inside the Benefit search itself:
 - Never run `visa region get` or `visa region set` as a search preflight. Use
   them only when the user separately asks to inspect or change the default
   without performing a Benefit search.
+- Benefit source region is independent of wallet environment and never requires
+  a wallet preflight.
 - Require returned `sourceRegion` and `sourceEndpoint` to match the selection.
 
 Taxonomy `--region` still means where a Benefit is usable. A unique HK/CN value
@@ -800,7 +810,9 @@ general workflow engine.
 
 ### CAP-WALLET: Wallet And Config
 
-- Use `wallet status --format json` for readiness and environment.
+- Use `wallet status --format json` only for an explicit wallet request or after
+  an exact product selection when an authenticated operation is about to begin.
+  Never use it to preflight anonymous discovery.
 - Use `wallet init --email <email> --open --format json` only for an explicit
   setup, login, re-login, or authenticated operation that needs a wallet. Keep
   that one process alive while OAuth completes.
@@ -832,8 +844,9 @@ general workflow engine.
 - Use `catalog search` only when the user explicitly requests that standalone
   Catalog capability or a non-initial workflow already requires it. Use
   `ucp-catalog search/product` when the merchant is authoritative.
-- Pass the locked `--language` and search environment. Discovery never starts
-  wallet setup and never authorizes purchase.
+- Pass the locked `--language` and distribution search environment. Discovery
+  never reads wallet status/config, starts wallet setup, logs in, or authorizes
+  purchase.
 - Present returned identity, merchant, price, currency, availability, channel,
   and location facts without invention. Apply Catalog Money before presenting
   a price. A later purchase must freeze one exact selected product.
@@ -962,6 +975,8 @@ general workflow engine.
 ## Safety Summary
 
 - Visa query does not log in.
+- Anonymous discovery uses the installed distribution environment directly and
+  never reads or validates wallet environment.
 - Initial discovery is one `visa recommend-products` call: one strict
   explicit-filter request by default, or one four-set aggregate.
 - Every returned Program is checked only against configured exact internal UCP
