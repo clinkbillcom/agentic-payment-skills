@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.55');
+  assert.equal(packageJson.version, '0.1.56');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.55/u);
-  assert.match(skill, /version: "0\.1\.55"/u);
+  assert.match(skill, /Visa Skill 0\.1\.56/u);
+  assert.match(skill, /version: "0\.1\.56"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -280,7 +280,15 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     discovery,
+    /`matchedPrograms` array[\s\S]*purchase provenance only[\s\S]*Never use it[\s\S]*Benefit title[\s\S]*Offer URL[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
+  );
+  assert.match(
+    discovery,
     /`visaBenefits` contains Programs[\s\S]*did not resolve/iu,
+  );
+  assert.match(
+    discovery,
+    /`visaBenefits` is the only source[\s\S]*user-facing Benefit rows[\s\S]*empty[\s\S]*display no Benefit[\s\S]*`matchedPrograms`/iu,
   );
   assert.match(
     discovery,
@@ -293,6 +301,10 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   assert.match(
     agent,
     /read only\s+references\/visa-recommend-filters\.md[\s\S]*smallest safe[\s\S]*one strict explicit-filter call by default[\s\S]*--filter-sets only when exactly four genuinely different safe plans[\s\S]*Run exactly one visa[\s\S]*recommend-products/iu,
+  );
+  assert.match(
+    agent,
+    /matchedPrograms is purchase provenance only[\s\S]*never reconstruct a Benefit[\s\S]*visaBenefits is the only source[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
   );
   assert.match(
     agent,
@@ -318,7 +330,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Never issue multiple Agent-managed/iu,
+    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Run one `visa recommend-products`[\s\S]*never run `visa recommend`/iu,
+  );
+  assert.match(
+    filterReference,
+    /one `visa recommend-products` aggregate[\s\S]*never use[\s\S]*`visa recommend` for initial discovery/iu,
   );
   assert.match(
     filterReference,

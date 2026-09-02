@@ -55,8 +55,9 @@ failed or unmatched Program resolution remains a Visa Benefit.
 
 Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
-Program provenance. Unmatched Benefits can later use `visa detail`, but the
-Skill does not rerun product-search. UAT recognizes only
+Program provenance. That provenance is never a display source: only
+`visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
+use `visa detail`, but the Skill does not rerun product-search. UAT recognizes only
 `https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
 `mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
 For a verified Program purchase, a valid Program MCC remains authoritative.
@@ -78,7 +79,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.55` vendors Visa CLI `0.2.50` from upstream commit
+Skill `0.1.56` vendors Visa CLI `0.2.50` from upstream commit
 `cda1bb7e43aeba41774a0d56650ebb1a9b170d92`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
@@ -111,7 +112,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.55`
+Skill version: `0.1.56`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

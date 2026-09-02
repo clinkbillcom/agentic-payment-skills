@@ -45,7 +45,8 @@ visa commerce-run
 Program 继续保留为 Visa 权益。
 
 可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
-商户身份。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
+商户身份。商品中的 matched Program 仅作购买 provenance；只有 `visaBenefits`
+可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
 UAT 额外只把 `https://vsrp.hk/p/o5s` 作为 CLI 内置 alias 映射到商户
 `mcht_ftmse61a6az0`；同一 host 的其他路径不继承该映射。
 已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
@@ -66,7 +67,7 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.55` 已 vendor 上游提交
+Skill `0.1.56` 已 vendor 上游提交
 `cda1bb7e43aeba41774a0d56650ebb1a9b170d92` 的 Visa CLI `0.2.50`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
@@ -95,7 +96,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.55`
+Skill 版本：`0.1.56`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

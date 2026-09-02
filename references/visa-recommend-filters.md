@@ -1,6 +1,7 @@
-# Visa Recommend Filters
+# Recommend-Products Filters
 
-Read this only when building Agent-selected filters for `visa recommend`.
+Use this only for one `visa recommend-products` aggregate; never use
+`visa recommend` for initial discovery.
 
 ## Source Region
 
@@ -41,7 +42,7 @@ code. With `--all`, omit `limit` and `page`.
 - Use `--filter-sets` only when exactly four genuinely different safe plans
   improve recall. Put all recommendation filters inside those objects and
   never combine them with outer individual filter flags.
-- Never issue multiple Agent-managed `visa recommend` commands.
+- Run one `visa recommend-products`; never run `visa recommend`.
 
 ## Selection Rules
 

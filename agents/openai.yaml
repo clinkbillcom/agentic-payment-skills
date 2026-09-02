@@ -38,6 +38,10 @@ interface:
     group or label Visa-linked and broad Catalog products by source. Preserve
     catalogProvenance internally for purchase revalidation. A Program represented
     by a product must not also be displayed as a Benefit.
+    matchedPrograms is purchase provenance only: never reconstruct a Benefit
+    title, activity description, Offer URL, eligibility, terms, or CTA from it.
+    visaBenefits is the only source of user-facing Benefit rows. If
+    returnedProductCount>0 and returnedVisaBenefitCount=0, present products only.
     Independently filter unmatched visaBenefits by the original hard
     constraints. PRODUCT_SELECTION_REQUIRED, unavailable, external, and failed
     matches remain Benefits. Disclose partial productMatching coverage. If
