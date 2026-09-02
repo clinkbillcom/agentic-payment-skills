@@ -53,8 +53,9 @@ branch does not run broad Catalog fallback for a Visa Benefit request.
 
 Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
-Program provenance. Unmatched Benefits can later use `visa detail`, but the
-Skill does not rerun product-search. UAT recognizes only
+Program provenance. That provenance is never a display source: only
+`visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
+use `visa detail`, but the Skill does not rerun product-search. UAT recognizes only
 `https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
 `mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
 For a verified Program purchase, a valid Program MCC remains authoritative.
@@ -76,7 +77,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.53` vendors Visa CLI `0.2.48` from upstream commit
+Skill `0.1.54` vendors Visa CLI `0.2.48` from upstream commit
 `1fa57ba4c21c1e61da4b1413d80896cea14d1503`. It uses one-round Visa
 recommendation and exact configured internal product matching, optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -108,7 +109,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.53`
+Skill version: `0.1.54`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

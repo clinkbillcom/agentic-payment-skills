@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.53. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.54. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.53"
+  version: "0.1.54"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -317,9 +317,15 @@ Read only the aggregate `products` and `visaBenefits` collections:
   the authoritative product title, major-unit price/currency, availability, and
   merchant. A matched Program is provenance only and must not be displayed
   again as a Visa Benefit.
+- A nonempty `matchedPrograms` array is purchase provenance only. Never use it
+  to reconstruct a user-facing Benefit title, activity description, Offer URL,
+  eligibility, terms, or Benefit call to action. If `returnedProductCount>0`
+  and `returnedVisaBenefitCount=0`, present products only.
 - `visaBenefits` contains Programs that did not resolve to an exact orderable
   product. Independently retain only rows satisfying the user's hard
   constraints and preserve code, title, order, summary, dates, and URL.
+- `visaBenefits` is the only source for user-facing Benefit rows. If it is
+  empty, display no Benefit even when a product has `matchedPrograms`.
 - Do not merge a `PRODUCT_SELECTION_REQUIRED`, unavailable, external-page, or
   failed resolution into products. It remains a Benefit.
 - If `productMatching.coverage=partial`, disclose that some product checks
@@ -939,6 +945,8 @@ general workflow engine.
   read-only continuation.
 - For Visa discovery, use only `visa recommend-products` output. Display
   products and unmatched visaBenefits; never display a matched Program twice.
+- Never derive a Benefit presentation from `products[*].matchedPrograms`. When
+  an exact product replaced its Program, display only that product.
 - For a selected Visa Benefit, report an order option only after an exact
   internal UCP Catalog match. Otherwise report the Visa activity detail and
   authoritative link without a purchase call to action.
