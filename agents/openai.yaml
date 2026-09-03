@@ -20,32 +20,45 @@ interface:
     as a search preflight. Other or multi-value destinations do not update the
     saved source.
     Route every product, category, or merchant discovery and every explicit
-    buy/order/checkout request through exactly one visa recommend-products,
-    even without a Visa, Benefit, coupon, voucher, discount, or offer signal.
-    我想下单咖啡, 有咖啡的券吗, Visa 咖啡优惠券, and 有哪些咖啡权益 all use
-    this aggregate. Never call catalog search for initial shopping discovery in
-    this branch. Read only references/visa-recommend-filters.md and choose the
-    smallest safe filter shape. Use one strict explicit-filter call by default. Use
+    buy/order/checkout request through exactly one visa recommend-products with
+    --include-broad-catalog, even without a Visa, Benefit, coupon, voucher,
+    discount, or offer signal. 我想下单咖啡, 有咖啡的券吗, Visa 咖啡优惠券,
+    and 有哪些咖啡权益 all use this aggregate. Never call standalone catalog
+    search for initial shopping discovery. Read only
+    references/visa-recommend-filters.md and choose the smallest safe filter
+    shape. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve
     recall. Preserve every explicit brand, merchant, product, category,
     geography, eligibility, reward type, and other hard constraint. Set
     reward_type only when the user explicitly names the reward type;
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
-    recommend-products with --anonymous, the locked language, and the locked
-    sandbox/test flag. It recommends Visa Programs, anonymously loads the
-    selected environment merchant list once, and routes a Program only when its
-    exact code equals merchant ext.visa_program_id. Offer URLs never select a
-    merchant. Never issue separate recommend, detail, product-search,
-    merchant-list, or external-page calls.
+    recommend-products with the unchanged original current user query,
+    --include-broad-catalog, and up to three product-only --broad-queries.
+    For 我想下单咖啡 use 美式咖啡, 拿铁咖啡, and 咖啡饮品; never invent a
+    merchant or brand. Also pass --anonymous, the locked language, and the
+    locked sandbox/test flag. Broad variants run in parallel inside that one
+    command and never multiply Visa requests. It anonymously loads the selected
+    environment merchant list once and routes a Program only when its exact code
+    equals merchant ext.visa_program_id. Offer URLs never select a merchant.
+    Never issue separate recommend, detail, product-search, merchant-list, or
+    external-page calls.
     Read only products and visaBenefits. After independent hard-constraint
     filtering, always present nonempty exact orderable products first, then
     relevant visaBenefits. If only products remain, show products only and do
     not mention missing Benefits, Offers, coupons, or discounts. If only
     visaBenefits remain, show Benefits only and do not mention missing or
     unorderable products. Only when both filtered collections are empty, give
-    one concise no-results answer. A Program represented by a product must not
-    also be displayed as a Benefit.
+    one concise no-results answer. Products is one unified list: never group or
+    label Visa-linked and broad Catalog products by source. Preserve
+    catalogProvenance internally for purchase revalidation. A Program represented
+    by a product must not also be displayed as a Benefit.
+    A URL-less internal broad product is valid only when its exact merchantId
+    matches the locked provider registry. Preserve the CLI-returned merchantUrl,
+    endpoint, productId, providerKey, registryVersion, and catalogProvenance;
+    never invent a URL. A selected registered product must use
+    mode=catalog_purchase and exact-revalidate through that provider's Catalog
+    product API before mutation; any route or product drift stops.
     matchedPrograms is purchase provenance only: never reconstruct a Benefit
     title, activity description, Offer URL, eligibility, terms, or CTA from it.
     visaBenefits is the only source of user-facing Benefit rows. If
@@ -54,11 +67,13 @@ interface:
     constraints. PRODUCT_SELECTION_REQUIRED, unavailable, external, and failed
     matches remain Benefits. Disclose partial productMatching coverage. If
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
-    survives semantic filtering, suppress fallback rows and apply the same
-    result-presentation rules; do not run broad catalog search in this branch.
-    Treat only structured ok=false,
-    error.type=api_error, whose message starts exactly Visa recommendation
-    relaxed explicitly requested filters: as the same no-strict-match result;
+    survives semantic filtering, suppress fallback Visa rows and apply the same
+    result-presentation rules. Never announce a Visa miss while products
+    remain. Disclose partial productMatching or broadCatalogSearch
+    coverage. Explicit Visa filter relaxation must return ok=true,
+    recommendationMode=no_matching_offers, and
+    strictMatchFailure.code=relaxed_explicit_filters while retaining broad
+    products. A legacy ok=false relaxation error is incompatible and stops;
     every other error stops. Catalog price.amount and price_range amounts are minor
     units: convert with ISO currency fraction digits before display or freeze.
     Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100

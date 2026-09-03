@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.49";
+var CLI_VERSION = "0.2.52";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -24349,6 +24349,33 @@ async function searchCommandUcpCatalogPage(context, input) {
   assertPublicCatalogApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
 }
+async function searchCommandCatalog(context, input) {
+  const result = await requestJson({
+    baseUrl: input.baseUrl,
+    method: "POST",
+    path: EXTRA_CATALOG_SEARCH_PATH,
+    acceptLanguage: input.language,
+    headers: {
+      "Request-Id": randomUUID4(),
+      "UCP-Agent": DEFAULT_UCP_AGENT
+    },
+    body: {
+      query: input.query,
+      context: {
+        ...input.context,
+        language: input.language
+      },
+      ...input.channelType ? { channel_type: input.channelType } : {}
+    },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun3(result)) {
+    throw apiError("Catalog search unexpectedly produced a dry-run response");
+  }
+  assertPublicCatalogApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
+}
 async function getCommandCatalogProduct(context, input) {
   const result = await requestJson({
     baseUrl: input.baseUrl,
@@ -29734,9 +29761,17 @@ async function recommendVisaOffers(options2) {
     return { result: fetched.response, storedConfig };
   }
   const responseBody = requireVsraSuccess(fetched.response, "Visa recommendation");
-  requireExplicitRecommendationFiltersPreserved(responseBody, options2.filters);
-  const response = enrichRecommendationCommerce(fetched.aggregatedResponse ?? responseBody);
-  const recommendation = describeRecommendationResult(response, fetchAll);
+  const violatedAxes = explicitRecommendationFilterViolations(responseBody, options2.filters);
+  if (violatedAxes.length > 0 && options2.explicitFilterRelaxation !== "no_match") {
+    throw apiError(`Visa recommendation relaxed explicitly requested filters: ${violatedAxes.join(", ")}`);
+  }
+  const recommendationResponse = violatedAxes.length > 0 ? replaceResponseItems(fetched.aggregatedResponse ?? responseBody, []) : fetched.aggregatedResponse ?? responseBody;
+  const response = enrichRecommendationCommerce(recommendationResponse);
+  const recommendation = violatedAxes.length > 0 ? {
+    recommendationMode: "no_matching_offers",
+    relaxedAxes: violatedAxes,
+    returnedOfferCount: 0
+  } : describeRecommendationResult(response, fetchAll);
   return {
     result: {
       personalized: Boolean(apiToken),
@@ -29744,6 +29779,12 @@ async function recommendVisaOffers(options2) {
       allOffers: fetchAll,
       pagesFetched: fetched.pagesFetched,
       ...recommendation,
+      ...violatedAxes.length > 0 ? {
+        strictMatchFailure: {
+          code: "relaxed_explicit_filters",
+          axes: violatedAxes
+        }
+      } : {},
       response
     },
     storedConfig
@@ -29760,17 +29801,14 @@ function describeRecommendationResult(response, allOffersRequested) {
     returnedOfferCount
   };
 }
-function requireExplicitRecommendationFiltersPreserved(body, explicitFilters) {
+function explicitRecommendationFilterViolations(body, explicitFilters) {
   const data = responseDataRecord(body);
   const relaxedAxes = recommendationRelaxedAxes(data);
   if (relaxedAxes.length === 0) {
-    return;
+    return [];
   }
   const relaxed = new Set(relaxedAxes);
-  const violatedAxes = VISA_FILTER_AXES.filter((axis) => (explicitFilters[axis]?.length ?? 0) > 0 && relaxed.has(axis));
-  if (violatedAxes.length > 0) {
-    throw apiError(`Visa recommendation relaxed explicitly requested filters: ${violatedAxes.join(", ")}`);
-  }
+  return VISA_FILTER_AXES.filter((axis) => (explicitFilters[axis]?.length ?? 0) > 0 && relaxed.has(axis));
 }
 function recommendationRelaxedAxes(data) {
   return arrayValue(data.relaxed_axes).filter((value) => typeof value === "string").map((value) => value.trim().toLowerCase()).filter(Boolean);
@@ -33110,6 +33148,8 @@ Options:
   --lang <locale>              zh-CN, zh-TW, zh-HK, or en
   --sandbox                    Resolve products against sandbox/UAT Catalog
   --test                       Resolve products against test Catalog
+  --include-broad-catalog      Also search all Catalog channels with the original query
+  --broad-queries <json>       Up to three additional broad Catalog queries
   --timeout <ms>               Request timeout in milliseconds
   --dry-run                    Print the recommendation plan without product requests
 ${OUTPUT_OPTIONS2}
@@ -33124,6 +33164,16 @@ Behavior:
   the Benefits and marks productMatching.coverage partial. Unconfigured Visa campaign pages are never
   parsed externally. This command does not log in, create an Instruction or Checkout, or initiate
   payment.
+
+  With --include-broad-catalog, the original positional query is required. Broad Catalog search
+  starts in parallel with Visa recommendation. --broad-queries accepts a JSON array of up to three
+  additional product queries; all one-to-four broad requests run concurrently and de-duplicate into
+  the same products collection without source grouping. catalogProvenance is retained only for exact
+  purchase revalidation. An available internal product without an item URL is retained only when its
+  merchantId exactly matches the environment-locked provider registry; the registry supplies the
+  authoritative merchant URL and endpoint for exact product revalidation. If Visa relaxes an explicitly requested filter, Visa becomes a strict
+  no-match with strictMatchFailure while successful broad products are still returned. A failed
+  broad request reports partial coverage without hiding successful queries.
 `;
 var VISA_DETAIL_HELP = `clink visa detail
 
@@ -33256,6 +33306,14 @@ var VISA_OPTION_DEFINITIONS = [
     name: "filter-sets",
     flags: "--filter-sets <json>"
   },
+  {
+    name: "include-broad-catalog",
+    flags: "--include-broad-catalog"
+  },
+  {
+    name: "broad-queries",
+    flags: "--broad-queries <json>"
+  },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
   { name: "context-file", flags: "--context-file <path>" },
@@ -33280,6 +33338,8 @@ var VISA_FLAG_NAMES = [
   "anonymous",
   "include-provider-products",
   "filter-sets",
+  "include-broad-catalog",
+  "broad-queries",
   "start",
   "resume",
   "region",
@@ -33665,7 +33725,7 @@ async function visaRecommend(context) {
   printSuccess(execution.result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
-async function executeVisaRecommendation(context) {
+async function executeVisaRecommendation(context, options2 = {}) {
   const explicitMarket = getStringFlag(context.args.flags, "market");
   const locale = normalizeVisaLocale(getStringFlag(context.args.flags, "lang"));
   const query = getStringFlag(context.args.flags, "query") ?? context.args.positionals.slice(2).join(" ");
@@ -33745,6 +33805,7 @@ async function executeVisaRecommendation(context) {
     dryRun: context.globalOptions.dryRun,
     onAuthorization: createVisaAuthorizationReporter(context),
     inferNaturalFilters: false,
+    ...options2.explicitFilterRelaxation !== void 0 ? { explicitFilterRelaxation: options2.explicitFilterRelaxation } : {},
     ...taxonomyPayload !== void 0 ? { taxonomyPayload } : {}
   });
   if (filterSets.length > 0) {
@@ -33782,7 +33843,19 @@ async function executeVisaRecommendation(context) {
   };
 }
 async function visaRecommendProducts(context) {
-  const execution = await executeVisaRecommendation(context);
+  const includeBroadCatalog = getBooleanFlag(context.args.flags, "include-broad-catalog");
+  const broadQuery = getStringFlag(context.args.flags, "query") ?? context.args.positionals.slice(2).join(" ");
+  if (includeBroadCatalog && !broadQuery.normalize("NFKC").trim()) {
+    throw validationError("--include-broad-catalog requires the original non-blank search query");
+  }
+  const broadQueries = includeBroadCatalog ? parseBroadCatalogQueries(broadQuery, getStringFlag(context.args.flags, "broad-queries")) : [];
+  if (!includeBroadCatalog && context.args.flags["broad-queries"] !== void 0) {
+    throw validationError("--broad-queries requires --include-broad-catalog");
+  }
+  const broadCatalogPromise = includeBroadCatalog && !context.globalOptions.dryRun ? Promise.all(broadQueries.map((query) => runBroadCatalogSearch(context, query, normalizeVisaLocale(getStringFlag(context.args.flags, "lang"))))) : Promise.resolve(void 0);
+  const execution = await executeVisaRecommendation(context, {
+    explicitFilterRelaxation: includeBroadCatalog ? "no_match" : "error"
+  });
   if (context.globalOptions.dryRun) {
     printSuccess({
       ...execution.result,
@@ -33793,7 +33866,16 @@ async function visaRecommendProducts(context) {
         status: "dry_run",
         coverage: "not_executed",
         reason: "recommendation results are required before product matching"
-      }
+      },
+      ...includeBroadCatalog ? {
+        broadCatalogSearch: {
+          status: "dry_run",
+          query: broadQueries[0],
+          queries: broadQueries,
+          requestCount: broadQueries.length,
+          coverage: "not_executed"
+        }
+      } : {}
     }, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
@@ -33801,7 +33883,11 @@ async function visaRecommendProducts(context) {
   const offers = recommendationItems(recommendation);
   const environment = visaBenefitCatalogEnvironment(context);
   const language = catalogLanguageForVisaLocale(execution.locale);
-  const productResolution = await resolveVisaOfferProducts(context, offers, environment, language);
+  const registeredProviderRoutes = visaBenefitCatalogProviderRoutes(environment, API_BASE_URLS[environment]);
+  const [productResolution, broadCatalogRuns] = await Promise.all([
+    resolveVisaOfferProducts(context, offers, environment, language),
+    broadCatalogPromise
+  ]);
   const resolutions = productResolution.resolutions;
   const matchedIndexes = /* @__PURE__ */ new Set();
   const productsByKey = /* @__PURE__ */ new Map();
@@ -33833,6 +33919,29 @@ async function visaRecommendProducts(context) {
     matchedOfferCount += 1;
     mergeMatchedProduct(productsByKey, resolution.productResult, resolution.program);
   }
+  const broadProductsByKey = /* @__PURE__ */ new Map();
+  const broadQueryResults = (broadCatalogRuns ?? []).map((run) => {
+    const products = run.result ? normalizeBroadCatalogProducts(run.result, run.query, registeredProviderRoutes) : [];
+    for (const product of products) {
+      const key = broadCatalogProductKey(product);
+      if (!broadProductsByKey.has(key)) {
+        broadProductsByKey.set(key, product);
+      }
+    }
+    return {
+      query: run.query,
+      coverage: run.failure ? "partial" : "complete",
+      returnedProductCount: products.length,
+      ...run.failure ? { failure: run.failure } : {}
+    };
+  });
+  const broadProducts = [...broadProductsByKey.values()];
+  for (const broadProduct of broadProducts) {
+    const key = broadCatalogProductKey(broadProduct);
+    if (!productsByKey.has(key)) {
+      productsByKey.set(key, broadProduct);
+    }
+  }
   const visaBenefits = offers.filter((_offer, index) => !matchedIndexes.has(index));
   const recommendationMetadata = { ...recommendation };
   delete recommendationMetadata.response;
@@ -33854,7 +33963,19 @@ async function visaRecommendProducts(context) {
       unmatchedOfferCount: visaBenefits.length,
       failedOfferCount: failures.length,
       failures
-    }
+    },
+    ...broadCatalogRuns ? {
+      broadCatalogSearch: {
+        status: "completed",
+        query: broadQueries[0],
+        queries: broadQueries,
+        requestCount: broadQueries.length,
+        coverage: broadCatalogRuns.some(({ failure }) => failure) ? "partial" : "complete",
+        returnedProductCount: broadProducts.length,
+        queryResults: broadQueryResults,
+        ...broadCatalogRuns.length === 1 && broadCatalogRuns[0]?.failure ? { failure: broadCatalogRuns[0].failure } : {}
+      }
+    } : {}
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -33949,6 +34070,184 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
     };
   }
 }
+async function runBroadCatalogSearch(context, rawQuery, locale) {
+  const query = rawQuery.normalize("NFKC").trim();
+  const environment = visaBenefitCatalogEnvironment(context);
+  const baseUrl = API_BASE_URLS[environment];
+  const catalogContext = {
+    ...context,
+    runtimeConfig: {
+      baseUrl,
+      defaultOpenLinks: false
+    },
+    authorizationIdentity: runtimeAuthorizationIdentity({
+      baseUrl,
+      defaultOpenLinks: false
+    })
+  };
+  try {
+    return {
+      query,
+      result: await searchCommandCatalog(catalogContext, {
+        baseUrl,
+        query,
+        language: catalogLanguageForVisaLocale(locale),
+        context: {
+          address_region: broadCatalogAddressRegion(context)
+        }
+      })
+    };
+  } catch (error) {
+    return {
+      query,
+      failure: safeVisaProductFailure(error)
+    };
+  }
+}
+function broadCatalogAddressRegion(context) {
+  const directRegions = parseVisaFilterValues(getStringFlag(context.args.flags, "region"));
+  if (directRegions.length === 1 && /^[a-z]{2}$/u.test(directRegions[0] ?? "")) {
+    return directRegions[0].toUpperCase();
+  }
+  const filterSets = parseRecommendationFilterSets(getStringFlag(context.args.flags, "filter-sets"));
+  const inferred = inferVisaBenefitSourceRegion({}, filterSets);
+  return (inferred ?? parseVisaMarket(getStringFlag(context.args.flags, "market"), context.storedConfig)).toUpperCase();
+}
+function parseBroadCatalogQueries(primaryQuery, rawRelatedQueries) {
+  const primary = primaryQuery.normalize("NFKC").trim();
+  if (rawRelatedQueries === void 0) {
+    return [primary];
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawRelatedQueries.replace(/^\uFEFF/u, ""));
+  } catch {
+    throw validationError("--broad-queries must be a JSON array of up to three non-blank strings");
+  }
+  if (!Array.isArray(parsed) || parsed.length > 3) {
+    throw validationError("--broad-queries must be a JSON array of up to three non-blank strings");
+  }
+  const queries = [primary];
+  for (const value of parsed) {
+    if (typeof value !== "string" || !value.normalize("NFKC").trim()) {
+      throw validationError("--broad-queries must contain only non-blank strings");
+    }
+    queries.push(value.normalize("NFKC").trim());
+  }
+  return [...new Set(queries)];
+}
+function normalizeBroadCatalogProducts(payload, query, registeredProviderRoutes = []) {
+  const root = recommendationRecord(payload);
+  if (!Array.isArray(root.groups)) {
+    return [];
+  }
+  const products = [];
+  for (const rawGroup of root.groups) {
+    const group = recommendationRecord(rawGroup);
+    const channelType = recommendationOptionalString(group.channel_type ?? group.channelType);
+    const merchantId = recommendationOptionalString(group.merchant_id ?? group.merchantId);
+    const merchantName = recommendationOptionalString(group.name ?? group.merchant_name ?? group.merchantName);
+    const storeId = recommendationOptionalString(group.store_id ?? group.storeId);
+    const registeredProvider = merchantId ? registeredProviderRoutes.find((route) => route.merchantId === merchantId) : void 0;
+    if (!channelType || !Array.isArray(group.products)) {
+      continue;
+    }
+    for (const rawProduct of group.products) {
+      const product = recommendationRecord(rawProduct);
+      const candidates = Array.isArray(product.variants) && product.variants.length > 0 ? product.variants.map(recommendationRecord) : [product];
+      for (const candidate of candidates) {
+        const itemId = recommendationOptionalString(candidate.id ?? candidate.itemId ?? candidate.item_id ?? product.id);
+        const title = recommendationOptionalString(candidate.title ?? candidate.name ?? product.title ?? product.name);
+        const productUrl2 = recommendationOptionalString(candidate.url ?? candidate.itemUrl ?? candidate.item_url ?? product.url ?? product.itemUrl ?? product.item_url);
+        const purchaseUrl = productUrl2 ?? registeredProvider?.merchantUrl;
+        const money = broadCatalogMoney(candidate.price) ?? exactBroadCatalogRange(product.price_range ?? product.priceRange);
+        if (!itemId || !title || !purchaseUrl || !money || !broadCatalogAvailable(candidate, product)) {
+          continue;
+        }
+        const resolvedMerchantName = recommendationOptionalString(recommendationRecord(candidate.seller).name ?? candidate.merchant_name ?? product.merchant_name ?? merchantName);
+        products.push({
+          state: "CATALOG_PRODUCT_CANDIDATE",
+          action: "SELECT_PRODUCT_TO_ORDER",
+          productResolution: "broad-catalog",
+          ...merchantId ? { merchantId } : {},
+          ...registeredProvider ? { endpoint: registeredProvider.endpoint } : {},
+          product: {
+            itemId,
+            title,
+            sourceTitle: title,
+            productUrl: purchaseUrl,
+            currency: money.currency,
+            unitPriceMajor: minorUnitsMajorAmount(money.amountMinor, money.currency),
+            unitPriceMinor: Number(money.amountMinor),
+            quantity: 1,
+            totalAmountMajor: minorUnitsMajorAmount(money.amountMinor, money.currency),
+            totalAmountMinor: Number(money.amountMinor),
+            availability: "in_stock",
+            ...registeredProvider?.merchantName ?? resolvedMerchantName ? {
+              merchantName: registeredProvider?.merchantName ?? resolvedMerchantName
+            } : {}
+          },
+          matchedPrograms: [],
+          catalogProvenance: {
+            query,
+            channelType,
+            ...merchantId ? { merchantId } : {},
+            ...storeId ? { storeId } : {},
+            ...registeredProvider ? {
+              providerKey: registeredProvider.providerKey,
+              registryVersion: registeredProvider.registryVersion,
+              merchantUrl: registeredProvider.merchantUrl,
+              endpoint: registeredProvider.endpoint
+            } : {}
+          }
+        });
+      }
+    }
+  }
+  return products;
+}
+function broadCatalogProductKey(product) {
+  const item = recommendationRecord(product.product);
+  const provenance = recommendationRecord(product.catalogProvenance);
+  return [
+    recommendationOptionalString(product.merchantId) ?? "",
+    recommendationOptionalString(provenance.channelType) ?? "",
+    recommendationOptionalString(provenance.storeId) ?? "",
+    recommendationOptionalString(item.itemId) ?? JSON.stringify(product)
+  ].join(":");
+}
+function broadCatalogMoney(value) {
+  const price = recommendationRecord(value);
+  const amount = price.amount;
+  const currency = recommendationOptionalString(price.currency ?? price.currencyCode)?.toUpperCase();
+  if (!currency || !/^[A-Z]{3}$/u.test(currency) || !(typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0) && !(typeof amount === "string" && /^\d+$/u.test(amount.trim()))) {
+    return void 0;
+  }
+  const amountMinor = BigInt(typeof amount === "number" ? String(amount) : amount.trim());
+  if (amountMinor > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return void 0;
+  }
+  return { amountMinor, currency };
+}
+function exactBroadCatalogRange(value) {
+  const range = recommendationRecord(value);
+  const minimum = broadCatalogMoney(range.min ?? range.minimum);
+  const maximum = broadCatalogMoney(range.max ?? range.maximum);
+  return minimum && maximum && minimum.amountMinor === maximum.amountMinor && minimum.currency === maximum.currency ? minimum : void 0;
+}
+function broadCatalogAvailable(candidate, product) {
+  for (const value of [candidate, product]) {
+    const availability = recommendationRecord(value.availability);
+    if (availability.available === true || value.available === true) {
+      return true;
+    }
+    const status = recommendationOptionalString(availability.status ?? value.availability_status ?? value.inventory_status)?.toLowerCase();
+    if (status && ["in_stock", "available", "active", "orderable"].includes(status)) {
+      return true;
+    }
+  }
+  return false;
+}
 async function visaDetail(context) {
   assertVisaPositionalCount(context, 3, `usage: ${context.executableName} visa detail <program-code> [options]`);
   const result = await getVisaProgramDetail({
@@ -34013,6 +34312,12 @@ function validateVisaFlagScope(command, subcommand, flags) {
     }
     if (!recommendationCommand && flags["filter-sets"] !== void 0) {
       throw validationError("--filter-sets is only supported by visa recommend or visa recommend-products");
+    }
+    if (!recommendProducts && flags["include-broad-catalog"] !== void 0) {
+      throw validationError("--include-broad-catalog is only supported by visa recommend-products");
+    }
+    if (!recommendProducts && flags["broad-queries"] !== void 0) {
+      throw validationError("--broad-queries is only supported by visa recommend-products");
     }
     return;
   }

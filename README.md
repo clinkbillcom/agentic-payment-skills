@@ -34,15 +34,20 @@ The lightweight shopping routes cover:
 - deterministic presentation of orderable products first and relevant Benefits
   second; empty sections are omitted, and no result is reported only when both
   collections are empty
+- parallel all-channel Catalog search whose available products merge into that
+  same collection without source grouping
+- URL-less internal broad products retained only when their exact merchant ID
+  matches the environment-locked provider registry; the registry supplies the
+  merchant URL and endpoint used for exact product revalidation
 - selected unmatched-Benefit detail through `visa detail`; no repeated
   product-search
 - an order invitation only for an exact `internal-ucp-catalog` match; otherwise
   the response ends with the Visa activity introduction and authoritative link
 - the existing matched Program purchase path through `commerce-login` and
   `commerce-run`
-- no Catalog-only initial shopping route; direct shopping uses the same Visa
-  aggregate and this branch intentionally has no broad Catalog discovery
-- a non-Program Catalog purchase contract using `commerce-login`
+- direct shopping through the same Visa recommendation plus parallel broad
+  Catalog discovery; no Catalog-only initial route
+- a Catalog purchase contract using `commerce-login`
   followed by `commerce-run` with `mode=catalog_purchase`
 - one aggregate missing-card contract: create or reuse an exact no-card
   `PENDING` Instruction, optionally show but never auto-open the Bind Card link,
@@ -50,10 +55,11 @@ The lightweight shopping routes cover:
   VIC-ready and CWallet activates that exact Instruction
 
 Initial discovery never uses `--include-provider-products` or an Agent-managed
-merchant-list lookup. The aggregate anonymously loads the selected environment
-merchant list once and routes a Program only when its exact code equals
-`ext.visa_program_id`. A failed or unmatched resolution remains a Visa Benefit.
-This branch does not run broad Catalog fallback for a Visa Benefit request.
+merchant-list lookup. It starts all-channel Catalog search in parallel with Visa
+recommendation, anonymously loads the selected environment merchant list once,
+and routes a Program only when its exact code equals `ext.visa_program_id`.
+Linked and broad products share one products collection; a failed or unmatched
+Program resolution remains a Visa Benefit.
 Anonymous discovery executes the installed launcher directly, omits environment
 flags, and never probes files, distribution, wallet, or authentication state.
 
@@ -70,6 +76,12 @@ complete frozen merchant/product context. The exact UAT Wellcome gift-card
 route above uses MCC `5411`; malformed/conflicting Program MCCs and
 low-confidence or title-only guesses still stop before login.
 
+For a registered URL-less broad product, the Skill preserves the exact returned
+product ID and provider-registry provenance, never invents an item URL, and
+requires `mode=catalog_purchase` to revalidate through the registered Catalog
+product API before any purchase mutation. Unregistered URL-less rows remain
+excluded.
+
 Eats365 purchase revalidation uses the exact frozen store and product endpoint,
 so it does not depend on broad discovery selecting the same store twice.
 Only `channelType` and `storeId` are required platform route fields;
@@ -83,9 +95,10 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.58` vendors Visa CLI `0.2.49` from upstream commit
-`82cbcc474ac6c7d1b66f0061646f3f5c978779e2`. It uses one-round Visa
-recommendation and exact configured internal product matching, optional
+Skill `0.1.59` vendors Visa CLI `0.2.52` from upstream commit
+`94c21a548f0e63c32b07fb3473db50742bcf97da`. It uses one-round Visa
+recommendation, exact configured internal matching, and parallel broad Catalog,
+optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
 `mode=catalog_purchase`; this Skill sends no `program.code` in new purchase
 contexts. It also requires the aggregate missing-card flow to show rather than
@@ -115,7 +128,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.58`
+Skill version: `0.1.59`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

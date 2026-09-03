@@ -1,7 +1,7 @@
 # Recommend-Products Filters
 
-Use this for one `visa recommend-products` aggregate. Initial
-discovery never uses lower-level `visa recommend`.
+Use this only for one `visa recommend-products` aggregate; never use
+`visa recommend` for initial discovery.
 
 ## Source Region
 
@@ -42,9 +42,7 @@ code. With `--all`, omit `limit` and `page`.
 - Use `--filter-sets` only when exactly four genuinely different safe plans
   improve recall. Put all recommendation filters inside those objects and
   never combine them with outer individual filter flags.
-- Never issue an Agent-managed `visa recommend` command for initial discovery.
-  Run exactly one `visa recommend-products`; four variants belong inside its
-  single `--filter-sets` value.
+- Run one `visa recommend-products`; never run `visa recommend`.
 
 ## Selection Rules
 
@@ -90,8 +88,10 @@ returned code.
 
 ## Intent Boundary
 
-- Purchase and Benefit wording both use `visa recommend-products`; initial
-  discovery never calls `catalog search`.
-- `我想下单咖啡`: use `type=benefit`, `category=dining_cafe_bakery`, and no
-  `reward_type`.
+- Purchase and Benefit wording both use `visa recommend-products
+  --include-broad-catalog`; initial discovery never calls standalone
+  `catalog search`.
+- `我想下单咖啡`: use `type=benefit`, `category=dining_cafe_bakery`, no
+  `reward_type`; keep the original query and add broad queries
+  `["美式咖啡","拿铁咖啡","咖啡饮品"]`.
 - Benefit wording uses the same aggregate with explicit constraints preserved.

@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.58');
+  assert.equal(packageJson.version, '0.1.59');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.58/u);
-  assert.match(skill, /version: "0\.1\.58"/u);
+  assert.match(skill, /Visa Skill 0\.1\.59/u);
+  assert.match(skill, /version: "0\.1\.59"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -150,7 +150,7 @@ test('ordinary execution loads only the routed filter reference and stays non-ex
   );
 });
 
-test('initial Visa discovery uses one recommend-products aggregate', () => {
+test('initial Visa discovery runs one aggregate with parallel broad Catalog', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -172,26 +172,26 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   );
   assert.match(
     discovery,
-    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*performs one Visa recommendation[\s\S]*concurrently tries every[\s\S]*returned Program/iu,
+    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original\s+current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*merchant list once[\s\S]*exact `code`[\s\S]*`ext\.visa_program_id`[\s\S]*Offer URL[\s\S]*never selects a merchant/iu,
   );
   assert.match(
     singleCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*product-query-1[\s\S]*product-query-2[\s\S]*product-query-3[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.doesNotMatch(singleCommand, /<environment-flag>|--sandbox|--test/u);
   assert.match(
     aggregateCommand,
-    /exactly four genuinely different safe plans[\s\S]*recommend-products[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
+    /exactly four genuinely different safe plans[\s\S]*recommend-products "<original-current-user-query>"[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(aggregateCommand, /<environment-flag>|--sandbox|--test/u);
   assert.match(
     discovery,
-    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code/iu,
+    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code[\s\S]*Broad query variants[\s\S]*same CLI\s+command[\s\S]*never multiply Visa requests/iu,
   );
   assert.match(
     discovery,
-    /Read\s+`references\/visa-recommend-filters\.md`/u,
+    /Read `references\/visa-recommend-filters\.md`/u,
   );
   assert.match(
     discovery,
@@ -307,7 +307,7 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     allCommand,
-    /visa recommend-products[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--include-broad-catalog[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(allCommand, /--filter-sets/u);
   assert.doesNotMatch(allCommand, /--include-provider-products/u);
@@ -322,8 +322,23 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     discovery,
-    /matched Program[\s\S]*provenance only[\s\S]*must not be displayed[\s\S]*again as a Visa Benefit/iu,
+    /`products` is one unified list[\s\S]*Visa-linked[\s\S]*broad Catalog[\s\S]*Do not group or label[\s\S]*Preserve `catalogProvenance` internally[\s\S]*matched Program[\s\S]*must not be displayed again as a Benefit/iu,
   );
+  assert.match(
+    discovery,
+    /internal broad candidate[\s\S]*item URL[\s\S]*environment-locked provider registry[\s\S]*Never invent a URL[\s\S]*unregistered URL-less candidate/iu,
+  );
+  for (const field of [
+    'merchantId',
+    'merchantUrl',
+    'endpoint',
+    'providerKey',
+    'registryVersion',
+    'product.itemId',
+    'catalogProvenance',
+  ]) {
+    assert.match(discovery, new RegExp(`\`${field.replace('.', '\\.')}\``, 'u'));
+  }
   assert.match(
     discovery,
     /`matchedPrograms` array[\s\S]*purchase provenance only[\s\S]*Never use it[\s\S]*Benefit title[\s\S]*Offer URL[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
@@ -341,12 +356,35 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
     /hard[\s\S]*constraints[\s\S]*preserve code, title, order, summary, dates, and URL/iu,
   );
   assert.match(
+    discovery,
+    /`broadCatalogSearch\.coverage=partial`[\s\S]*incomplete broad product[\s\S]*preserving linked products and Benefits/iu,
+  );
+  assert.match(
     agent,
-    /read only references\/visa-recommend-filters\.md[\s\S]*smallest safe[\s\S]*one strict explicit-filter call by default[\s\S]*--filter-sets only when exactly four genuinely different safe plans[\s\S]*Run exactly one visa[\s\S]*recommend-products/iu,
+    /read only\s+references\/visa-recommend-filters\.md[\s\S]*smallest safe[\s\S]*one strict explicit-filter call by default[\s\S]*--filter-sets only when exactly four genuinely different safe plans[\s\S]*Run exactly one visa[\s\S]*recommend-products/iu,
   );
   assert.match(
     agent,
     /matchedPrograms is purchase provenance only[\s\S]*never reconstruct a Benefit[\s\S]*visaBenefits is the only source[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
+  );
+  assert.match(
+    agent,
+    /URL-less internal broad product[\s\S]*locked provider registry[\s\S]*never invent a URL/iu,
+  );
+  for (const field of [
+    'merchantId',
+    'merchantUrl',
+    'endpoint',
+    'productId',
+    'providerKey',
+    'registryVersion',
+    'catalogProvenance',
+  ]) {
+    assert.match(agent, new RegExp(field, 'u'));
+  }
+  assert.match(
+    agent,
+    /selected registered product[\s\S]*mode=catalog_purchase[\s\S]*exact-revalidate[\s\S]*Catalog[\s\S]*product API[\s\S]*drift stops/iu,
   );
   assert.match(
     agent,
@@ -410,11 +448,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Never issue an Agent-managed/iu,
+    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Run one `visa recommend-products`[\s\S]*never run `visa recommend`/iu,
   );
   assert.match(
     filterReference,
-    /one `visa recommend-products`[\s\S]*never uses lower-level `visa recommend`[\s\S]*Never issue an Agent-managed `visa recommend`[\s\S]*exactly one `visa recommend-products`/iu,
+    /one `visa recommend-products` aggregate[\s\S]*never use[\s\S]*`visa recommend` for initial discovery/iu,
   );
   assert.match(
     filterReference,
@@ -434,11 +472,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*never calls[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type/iu,
+    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type[\s\S]*美式咖啡[\s\S]*拿铁咖啡[\s\S]*咖啡饮品/iu,
   );
 });
 
-test('a Visa miss stops without broad Catalog fallback', () => {
+test('a Visa miss suppresses fallback rows but keeps parallel broad products', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
@@ -454,11 +492,11 @@ test('a Visa miss stops without broad Catalog fallback', () => {
   );
   assert.match(
     fallback,
-    /structured `ok=false`[\s\S]*`error\.type=api_error`[\s\S]*Visa recommendation relaxed explicitly requested filters:[\s\S]*same Visa\s+miss/iu,
+    /Visa relaxes[\s\S]*compatible CLI[\s\S]*`ok=true`[\s\S]*`recommendationMode=no_matching_offers`[\s\S]*`strictMatchFailure\.code=relaxed_explicit_filters`[\s\S]*broad products remain/iu,
   );
   assert.match(
     fallback,
-    /Every\s+other error stops[\s\S]*timeout[\s\S]*network[\s\S]*authentication[\s\S]*validation[\s\S]*unrelated API error/iu,
+    /legacy `ok=false` relaxation error[\s\S]*incompatible[\s\S]*discarded broad results[\s\S]*Every other[\s\S]*error also stops/iu,
   );
   assert.match(
     fallback,
@@ -466,19 +504,23 @@ test('a Visa miss stops without broad Catalog fallback', () => {
   );
   assert.match(
     fallback,
-    /discard fallback Visa rows[\s\S]*presentation rules[\s\S]*Report no result only when both filtered collections are empty[\s\S]*Do not[\s\S]*run broad `catalog search`/iu,
+    /Visa miss[\s\S]*do not display fallback Visa rows[\s\S]*presentation rules[\s\S]*surviving broad products[\s\S]*Never announce[\s\S]*missing Visa Benefits while products remain/iu,
   );
   assert.match(
     agent,
-    /structured ok=false[\s\S]*error\.type=api_error/iu,
+    /Explicit Visa filter relaxation[\s\S]*ok=true[\s\S]*recommendationMode=no_matching_offers[\s\S]*strictMatchFailure\.code=relaxed_explicit_filters[\s\S]*retaining broad\s+products/iu,
   );
   assert.match(
     agent,
-    /message starts exactly Visa recommendation[\s\S]*relaxed explicitly requested filters:/iu,
+    /legacy ok=false relaxation error[\s\S]*incompatible[\s\S]*stops/iu,
   );
   assert.match(
     agent,
     /every other error stops/iu,
+  );
+  assert.match(
+    agent,
+    /suppress fallback Visa rows[\s\S]*result-presentation rules[\s\S]*Never announce a Visa miss[\s\S]*products\s+remain/iu,
   );
   assert.doesNotMatch(fallback, /bin\/visa-cli catalog search/u);
 });
@@ -511,7 +553,7 @@ test('unmatched Visa Benefit supports detail without another product search', ()
   );
 });
 
-test('direct shopping uses Visa discovery instead of Catalog-only routing', () => {
+test('direct shopping uses combined Visa and broad Catalog discovery', () => {
   const routing = skill.slice(
     skill.indexOf('## Intent Routing'),
     skill.indexOf('## Visa Benefit And Product Discovery'),
@@ -523,7 +565,7 @@ test('direct shopping uses Visa discovery instead of Catalog-only routing', () =
 
   assert.match(
     routing,
-    /Every product, category, or merchant discovery[\s\S]*buy\/order\/checkout request[\s\S]*even\s+without[\s\S]*Visa[\s\S]*我想下单咖啡[\s\S]*same one-round aggregate/iu,
+    /Every product, category, or merchant discovery[\s\S]*buy\/order\/checkout request[\s\S]*combined Visa and broad-Catalog[\s\S]*even without[\s\S]*Visa[\s\S]*我想下单咖啡[\s\S]*same one-round aggregate/iu,
   );
   assert.match(
     routing,
@@ -531,11 +573,11 @@ test('direct shopping uses Visa discovery instead of Catalog-only routing', () =
   );
   assert.match(
     routing,
-    /Never route initial shopping discovery directly to `catalog search`[\s\S]*no broad Catalog discovery/iu,
+    /Never route initial shopping discovery directly to `catalog search`/iu,
   );
   assert.match(
     catalogPurchase,
-    /Initial shopping discovery never calls `catalog search`[\s\S]*does\s+not produce broad Catalog candidates[\s\S]*Do not run another discovery command/iu,
+    /Initial shopping discovery already ran broad Catalog inside[\s\S]*visa recommend-products --include-broad-catalog[\s\S]*Never call standalone[\s\S]*catalog search[\s\S]*Preserve[\s\S]*catalogProvenance/iu,
   );
   assert.doesNotMatch(
     catalogPurchase,
@@ -555,7 +597,7 @@ test('direct shopping uses Visa discovery instead of Catalog-only routing', () =
   );
   assert.match(
     catalogPurchase,
-    /exact non-Program product[\s\S]*another\s+authoritative Catalog capability[\s\S]*ordinary Catalog shopping[\s\S]*must not[\s\S]*inherit Visa Program eligibility/iu,
+    /broad Catalog product[\s\S]*aggregate[\s\S]*no matched Visa Program[\s\S]*ordinary\s+Catalog shopping[\s\S]*must\s+not[\s\S]*inherit Visa Program eligibility/iu,
   );
   assert.match(
     catalogPurchase,
@@ -563,7 +605,11 @@ test('direct shopping uses Visa discovery instead of Catalog-only routing', () =
   );
   assert.match(
     catalogPurchase,
-    /internal merchant[\s\S]*selected `merchant_id`[\s\S]*`ucp-catalog product`[\s\S]*Do not purchase directly from a broad-search display row/iu,
+    /direct-shopping internal merchant[\s\S]*selected `merchant_id`[\s\S]*`ucp-catalog product`[\s\S]*Do not purchase directly from a broad-search display row/iu,
+  );
+  assert.match(
+    catalogPurchase,
+    /registered URL-less internal candidate[\s\S]*CLI-returned[\s\S]*`merchantId`[\s\S]*registry `merchantUrl`[\s\S]*`endpoint`[\s\S]*`productId`[\s\S]*never[\s\S]*invent an item URL[\s\S]*mode=catalog_purchase[\s\S]*bypass the[\s\S]*merchant list[\s\S]*exact-revalidate[\s\S]*Catalog product API[\s\S]*drift stops/iu,
   );
   assert.match(
     catalogPurchase,
