@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.62');
+  assert.equal(packageJson.version, '0.1.63');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.62/u);
-  assert.match(skill, /version: "0\.1\.62"/u);
+  assert.match(skill, /Visa Skill 0\.1\.63/u);
+  assert.match(skill, /version: "0\.1\.63"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -432,7 +432,6 @@ test('discovery presents products first and stays silent about empty collections
 
 test('compact filter reference defines schema, selection priority, and intent boundary', () => {
   for (const field of [
-    'type',
     'limit',
     'page',
     'region',
@@ -458,6 +457,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
     /required positional query[\s\S]*only primary search text[\s\S]*Never pass[\s\S]*`--keyword`[\s\S]*keyword[\s\S]*filter object[\s\S]*Visa keyword[\s\S]*matched merchant Catalog query[\s\S]*first broad Catalog query/iu,
   );
   assert.doesNotMatch(filterReference, /"keyword"\s*:/u);
+  assert.doesNotMatch(filterReference, /"type"\s*:/u);
+  assert.match(
+    filterReference,
+    /Never infer or pass `--type`[\s\S]*Benefit[\s\S]*reward[\s\S]*coupon[\s\S]*discount[\s\S]*purchase wording[\s\S]*do not select/iu,
+  );
   assert.match(
     filterReference,
     /all recommendation filters[\s\S]*inside those objects[\s\S]*never combine them[\s\S]*outer individual filter flags/iu,
@@ -472,7 +476,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*type=benefit[\s\S]*category=dining_cafe_bakery[\s\S]*no[\s\S]*reward_type[\s\S]*美式咖啡[\s\S]*拿铁咖啡[\s\S]*咖啡饮品/iu,
+    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery[\s\S]*no `type`[\s\S]*reward_type[\s\S]*美式咖啡[\s\S]*拿铁咖啡[\s\S]*咖啡饮品/iu,
+  );
+  assert.match(
+    agent,
+    /Never infer[\s\S]*pass --type for recommend-products[\s\S]*Benefit[\s\S]*reward[\s\S]*coupon[\s\S]*discount[\s\S]*purchase wording does not select/iu,
   );
 });
 
@@ -656,7 +664,11 @@ test('direct shopping uses combined Visa and broad Catalog discovery', () => {
   );
   assert.match(
     catalogPurchase,
-    /"amountLimit": "<structured-catalog-purchase-price>"[\s\S]*"currencyCode": "<structured-catalog-purchase-currency>"/iu,
+    /"expected"[\s\S]*"amount": "<product\.totalAmountMajor>"[\s\S]*"currency": "<product\.currency>"[\s\S]*"amountLimit": "<product\.totalAmountMajor>"[\s\S]*"currencyCode": "<product\.currency>"/iu,
+  );
+  assert.doesNotMatch(
+    catalogPurchase,
+    /<structured-catalog-purchase-price>|<structured-catalog-purchase-currency>/u,
   );
   assert.match(
     catalogPurchase,
@@ -782,10 +794,27 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
     section,
     /Catalog total and currency exactly equal[\s\S]*recommendation-backed/iu,
   );
+  assert.match(
+    section,
+    /login context[\s\S]*"expected"[\s\S]*"amount": "<product\.totalAmountMajor>"[\s\S]*"currency": "<verified-currency>"[\s\S]*"amountLimit": "<product\.totalAmountMajor>"/iu,
+  );
+  assert.match(
+    section,
+    /Set login\/purchase `expected\.amount`[\s\S]*every `amountLimit`[\s\S]*`product\.totalAmountMajor`[\s\S]*Never copy `unitPriceMinor`[\s\S]*`totalAmountMinor`[\s\S]*quantity >1[\s\S]*`unitPriceMajor`/iu,
+  );
+  assert.match(
+    section,
+    /`totalAmountMinor=100`[\s\S]*`totalAmountMajor="1"`[\s\S]*all three major-unit fields[\s\S]*`"1"`/iu,
+  );
+  assert.doesNotMatch(section, /<exact-program-price>/u);
+  assert.match(
+    agent,
+    /Every commerce-login context includes expected\.amount[\s\S]*expected\.currency[\s\S]*product\.totalAmountMajor[\s\S]*every amountLimit[\s\S]*never copy unitPriceMinor[\s\S]*totalAmountMinor[\s\S]*quantity above 1[\s\S]*never use unitPriceMajor/iu,
+  );
   assert.match(section, /single\s+purchase authorization/iu);
   assert.match(
     section,
-    /CLI alone owns the Pending Instruction Card\s+Gate/iu,
+    /CLI\s+alone owns the Pending Instruction Card\s+Gate/iu,
   );
   assert.match(
     section,

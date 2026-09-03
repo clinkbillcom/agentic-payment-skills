@@ -17,7 +17,6 @@ Build one strict JSON object first. Allowed fields:
 
 ```json
 {
-  "type": "benefit",
   "limit": 50,
   "page": 1,
   "region": ["hk"],
@@ -36,8 +35,8 @@ code. With `--all`, omit `limit` and `page`.
 ## Call Shape
 
 - One safe plan is the default. Map it to individual CLI flags, for example
-  `type -> --type`, `region -> --region`, `reward_type -> --reward-type`,
-  `card_level -> --card-level`, and `card_issuer -> --card-issuer`.
+  `region -> --region`, `category -> --category`,
+  `reward_type -> --reward-type`, and `card_issuer -> --card-issuer`.
 - The required positional query is the only primary search text. Never pass
   `--keyword` or put `keyword` inside a filter object. The CLI sends the
   unchanged query as the Visa keyword, every matched merchant Catalog query,
@@ -56,8 +55,8 @@ code. With `--all`, omit `limit` and `page`.
 3. Four-set mode may vary only inferred soft filters. Never remove an explicit
    hard constraint. If fewer than four safe variants exist, use one strict
    plan; never repeat or pad filters to reach four.
-4. Use `type=benefit` for card benefits/coupons. Use `type=reward` only for
-   enrollment/cashback campaigns. Omit `type` when both are requested.
+4. Never infer or pass `--type` for `recommend-products`. Benefit, reward,
+   coupon, discount, and purchase wording do not select `benefit` or `reward`.
 5. Set `reward_type` only when the user explicitly names one. Generic
    `优惠`, `benefit`, `offer`, or `礼遇` selects no reward type. Never fan
    out `discount`, `coupon`, `cashback`, or `privilege` merely to create four
@@ -91,7 +90,7 @@ returned code.
 - Purchase and Benefit wording both use `visa recommend-products
   --include-broad-catalog`; initial discovery never calls standalone
   `catalog search`.
-- `我想下单咖啡`: use `type=benefit`, `category=dining_cafe_bakery`, no
+- `我想下单咖啡`: use `category=dining_cafe_bakery`, no `type` or
   `reward_type`; keep the original query and add broad queries
   `["美式咖啡","拿铁咖啡","咖啡饮品"]`.
 - Benefit wording uses the same aggregate with explicit constraints preserved.

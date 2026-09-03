@@ -29,8 +29,10 @@ interface:
     shape. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve
     recall. Preserve every explicit brand, merchant, product, category,
-    geography, eligibility, reward type, and other hard constraint. Set
-    reward_type only when the user explicitly names the reward type;
+    geography, eligibility, reward type, and other hard constraint. Never infer
+    or pass --type for recommend-products; Benefit, reward, coupon, discount,
+    and purchase wording does not select it. Set reward_type only when the user
+    explicitly names the reward type;
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
     recommend-products with the unchanged original current user query,
@@ -84,7 +86,11 @@ interface:
     Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100
     separate from the USD purchase price. Invite ordering for products returned
     by the aggregate, but wait for an explicit purchase reply before
-    commerce-login. When the user selects an unmatched Visa Benefit and asks
+    commerce-login. Every commerce-login context includes expected.amount and
+    expected.currency. Copy product.totalAmountMajor into expected.amount and
+    every amountLimit; never copy unitPriceMinor or totalAmountMinor, and for
+    quantity above 1 never use unitPriceMajor. The commerce-run expected.amount
+    uses the same totalAmountMajor. When the user selects an unmatched Visa Benefit and asks
     for details, run visa detail by stable Program code; do not rerun
     product-search and do not add a purchase CTA. For Visa Program
     purchases, use a valid Program merchantCategoryCode first. If it is absent,

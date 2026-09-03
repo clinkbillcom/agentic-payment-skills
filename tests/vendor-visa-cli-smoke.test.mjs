@@ -87,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.53');
+  assert.equal(vendorPackage.version, '0.2.54');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c25a4e44ba33705892027ffcf9a7bd53ef4723ed',
+    '689ae207f7806f4a93bf0692d73788797b61913e',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -744,6 +744,10 @@ test('aggregate commands support side-effect-free planning', () => {
     '--context',
     JSON.stringify({
       environment: 'uat',
+      expected: {
+        amount: '1',
+        currency: 'USD',
+      },
       instructionContext,
     }),
     '--confirm-purchase',
@@ -756,6 +760,33 @@ test('aggregate commands support side-effect-free planning', () => {
   const commerceLoginPlan = JSON.parse(commerceLogin.stdout).data;
   assert.equal(commerceLoginPlan.status, 'dry_run');
   assert.equal(commerceLoginPlan.sideEffects, false);
+
+  const minorUnitInstructionContext = structuredClone(instructionContext);
+  minorUnitInstructionContext.mandates[0].amountLimit = 100;
+  const invalidCommerceLogin = run([
+    'visa',
+    'commerce-login',
+    '--context',
+    JSON.stringify({
+      environment: 'uat',
+      expected: {
+        amount: '1',
+        currency: 'USD',
+      },
+      instructionContext: minorUnitInstructionContext,
+    }),
+    '--confirm-purchase',
+    '--open',
+    '--dry-run',
+    '--format',
+    'json',
+  ]);
+  assert.equal(invalidCommerceLogin.status, 2, invalidCommerceLogin.stderr);
+  assert.match(
+    invalidCommerceLogin.stderr,
+    /amountLimit must equal expected\.amount in major currency units/,
+  );
+  assert.match(invalidCommerceLogin.stderr, /Do not copy totalAmountMinor/);
 
   const commerceRun = run([
     'visa',
