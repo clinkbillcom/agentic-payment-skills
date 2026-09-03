@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.57');
+  assert.equal(packageJson.version, '0.1.58');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.57/u);
-  assert.match(skill, /version: "0\.1\.57"/u);
+  assert.match(skill, /Visa Skill 0\.1\.58/u);
+  assert.match(skill, /version: "0\.1\.58"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -195,7 +195,7 @@ test('initial Visa discovery uses one recommend-products aggregate', () => {
   );
   assert.match(
     discovery,
-    /Never add `--include-provider-products`[\s\S]*another Agent-managed[\s\S]*product-search[\s\S]*configured exact[\s\S]*never loads the merchant list[\s\S]*never parses an unconfigured/iu,
+    /Never add `--include-provider-products`[\s\S]*Agent-managed[\s\S]*product-search[\s\S]*merchant-list[\s\S]*aggregate owns one[\s\S]*anonymous merchant-list read[\s\S]*exact Program-code matching[\s\S]*never parses an unconfigured/iu,
   );
   assert.match(
     discovery,
@@ -687,7 +687,7 @@ test('Visa Program MCC is authoritative-first with bounded inference', () => {
   );
   assert.match(
     section,
-    /https:\/\/vsrp\.hk\/p\/o5s[\s\S]*mcht_ftmse61a6az0[\s\S]*Wellcome supermarket gift-card[\s\S]*MCC `5411`/iu,
+    /Program `P2026080006`[\s\S]*merchant-list[\s\S]*`ext\.visa_program_id`[\s\S]*mcht_ftmse61a6az0[\s\S]*Wellcome supermarket gift-card[\s\S]*MCC `5411`/iu,
   );
   assert.match(
     section,
@@ -707,7 +707,7 @@ test('Visa Program MCC is authoritative-first with bounded inference', () => {
   );
   assert.match(
     agent,
-    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*vsrp\.hk\/p\/o5s[\s\S]*MCC 5411[\s\S]*Freeze the\s+resolved MCC/iu,
+    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*Program P2026080006[\s\S]*ext\.visa_program_id[\s\S]*mcht_ftmse61a6az0[\s\S]*MCC 5411[\s\S]*Freeze the\s+resolved MCC/iu,
   );
 });
 

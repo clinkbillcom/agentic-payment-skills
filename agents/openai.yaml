@@ -33,9 +33,11 @@ interface:
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
     recommend-products with --anonymous, the locked language, and the locked
-    sandbox/test flag. It recommends Visa Programs and concurrently checks each
-    one against configured exact internal UCP routes; never issue separate
-    recommend, detail, product-search, merchant-list, or external-page calls.
+    sandbox/test flag. It recommends Visa Programs, anonymously loads the
+    selected environment merchant list once, and routes a Program only when its
+    exact code equals merchant ext.visa_program_id. Offer URLs never select a
+    merchant. Never issue separate recommend, detail, product-search,
+    merchant-list, or external-page calls.
     Read only products and visaBenefits. After independent hard-constraint
     filtering, always present nonempty exact orderable products first, then
     relevant visaBenefits. If only products remain, show products only and do
@@ -67,9 +69,10 @@ interface:
     product-search and do not add a purchase CTA. For Visa Program
     purchases, use a valid Program merchantCategoryCode first. If it is absent,
     classify MCC only from the complete frozen merchant/product context with
-    high confidence. The exact vsrp.hk/p/o5s plus mcht_ftmse61a6az0 Wellcome
-    supermarket gift-card route uses MCC 5411. Invalid/conflicting Program MCC,
-    low confidence, or title-only guessing stops before login. Freeze the
+    high confidence. Program P2026080006 exactly matched through merchant
+    ext.visa_program_id to mcht_ftmse61a6az0 plus the verified Wellcome
+    supermarket gift-card product uses MCC 5411. Invalid/conflicting Program
+    MCC, low confidence, or title-only guessing stops before login. Freeze the
     resolved MCC and reuse it unchanged. Direct shopping products use
     commerce-login then commerce-run mode=catalog_purchase. For Eats365,
     manual_item_facts is a normal result:

@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'visa-cli');
 const windowsCli = join(root, 'bin', 'visa-cli.cmd');
-const VISA_SELECT_REWARD_OFFER_URL = 'https://vsrp.hk/p/o5s';
 const vendorBundlePath = join(
   root,
   'vendor',
@@ -88,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.48');
+  assert.equal(vendorPackage.version, '0.2.49');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '1fa57ba4c21c1e61da4b1413d80896cea14d1503',
+    '82cbcc474ac6c7d1b66f0061646f3f5c978779e2',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -405,36 +404,41 @@ test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee'
   assert.match(JSON.stringify(output), /Americano/u);
 });
 
-test('selected Visa Benefit can resolve to an exact internal UCP product', () => {
+test('Visa Program code resolves through merchant-list metadata', () => {
   const result = runWithMock([
     'visa',
-    'product-search',
-    '--merchant-url',
-    VISA_SELECT_REWARD_OFFER_URL,
-    '--query',
+    'recommend-products',
     'Selected Visa Program',
-    '--language',
+    '--region',
+    'hk',
+    '--type',
+    'benefit',
+    '--anonymous',
+    '--all',
+    '--lang',
     'zh-HK',
-    '--limit',
-    '1',
     '--sandbox',
     '--format',
     'json',
-  ], 'visa-select-reward-internal-match');
+  ], 'visa-program-merchant-match');
 
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout).data;
-  assert.equal(output.state, 'PRODUCT_VERIFIED');
-  assert.equal(output.action, 'CONTINUE_TO_COMMERCE_LOGIN');
-  assert.equal(output.productResolution, 'internal-ucp-catalog');
-  assert.equal(output.merchantId, 'mcht_ftmse61a6az0');
+  assert.equal(output.returnedProductCount, 1);
+  assert.equal(output.returnedVisaBenefitCount, 0);
+  assert.equal(output.products[0].productResolution, 'internal-ucp-catalog');
+  assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
   assert.equal(
-    output.endpoint,
+    output.products[0].endpoint,
     'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
   );
-  assert.equal(output.product.itemId, 'benefit-product-1');
-  assert.equal(output.product.currency, 'HKD');
-  assert.equal(output.product.totalAmountMajor, '10');
+  assert.equal(output.products[0].product.itemId, 'benefit-product-1');
+  assert.equal(output.products[0].product.currency, 'HKD');
+  assert.equal(output.products[0].product.totalAmountMajor, '10');
+  assert.deepEqual(output.products[0].matchedPrograms, [{
+    code: 'P2026080006',
+    title: 'Selected Visa Program',
+  }]);
 });
 
 test('Catalog purchase mode is executable with the complete frozen contract', () => {
@@ -968,9 +972,35 @@ globalThis.fetch = async (input, init) => {
     throw new Error('unexpected Visa-miss request: ' + url.href);
   }
 
-  if (scenario === 'visa-select-reward-internal-match') {
+  if (scenario === 'visa-program-merchant-match') {
+    if (url.pathname.endsWith('/taxonomy')) {
+      return jsonResponse({ success: true, data: {} });
+    }
+    if (url.pathname.endsWith('/programs/recommend')) {
+      return jsonResponse({
+        success: true,
+        data: {
+          total: 1,
+          page: 1,
+          limit: 50,
+          count: 1,
+          relaxed_axes: null,
+          items: [{
+            code: 'P2026080006',
+            type: 'benefit',
+            title: 'Selected Visa Program',
+          }],
+        },
+      });
+    }
     if (url.pathname.endsWith('/agent/ucp/merchants')) {
-      throw new Error('exact UAT offer alias must bypass merchant-list lookup');
+      return jsonResponse([{
+        merchant_id: 'mcht_ftmse61a6az0',
+        merchant_name: 'Visa Benefit Catalog Merchant',
+        description: 'Visa benefit redemption and internal Catalog checkout',
+        domain: 'https://testa.link2shops.com',
+        ext: { visa_program_id: 'P2026080006' },
+      }]);
     }
     if (
       url.pathname
@@ -1004,7 +1034,7 @@ globalThis.fetch = async (input, init) => {
       });
     }
     throw new Error(
-      'unexpected Visa Select Reward request: ' + url.href,
+      'unexpected Visa Program merchant request: ' + url.href,
     );
   }
 

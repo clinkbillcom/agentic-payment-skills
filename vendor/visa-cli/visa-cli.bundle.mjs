@@ -32,9 +32,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/error.js
+// ../../clink-cli/node_modules/commander/lib/error.js
 var require_error = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/error.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/error.js"(exports) {
     var CommanderError2 = class extends Error {
       /**
        * Constructs the CommanderError class
@@ -67,9 +67,9 @@ var require_error = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/argument.js
+// ../../clink-cli/node_modules/commander/lib/argument.js
 var require_argument = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/argument.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/argument.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Argument2 = class {
       /**
@@ -195,9 +195,9 @@ var require_argument = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/help.js
+// ../../clink-cli/node_modules/commander/lib/help.js
 var require_help = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/help.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/help.js"(exports) {
     var { humanReadableArgName } = require_argument();
     var Help2 = class {
       constructor() {
@@ -797,9 +797,9 @@ ${itemIndentStr}`);
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/option.js
+// ../../clink-cli/node_modules/commander/lib/option.js
 var require_option = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/option.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/option.js"(exports) {
     var { InvalidArgumentError: InvalidArgumentError2 } = require_error();
     var Option2 = class {
       /**
@@ -1110,9 +1110,9 @@ var require_option = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/suggestSimilar.js
+// ../../clink-cli/node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/suggestSimilar.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
     function editDistance(a, b) {
       if (Math.abs(a.length - b.length) > maxDistance)
@@ -1190,9 +1190,9 @@ var require_suggestSimilar = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/command.js
+// ../../clink-cli/node_modules/commander/lib/command.js
 var require_command = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/lib/command.js"(exports) {
+  "../../clink-cli/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
     var path4 = __require("node:path");
@@ -3436,9 +3436,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/index.js
+// ../../clink-cli/node_modules/commander/index.js
 var require_commander = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/index.js"(exports) {
+  "../../clink-cli/node_modules/commander/index.js"(exports) {
     var { Argument: Argument2 } = require_argument();
     var { Command: Command2 } = require_command();
     var { CommanderError: CommanderError2, InvalidArgumentError: InvalidArgumentError2 } = require_error();
@@ -3458,9 +3458,9 @@ var require_commander = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pend/index.js
+// ../../clink-cli/node_modules/pend/index.js
 var require_pend = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pend/index.js"(exports, module) {
+  "../../clink-cli/node_modules/pend/index.js"(exports, module) {
     module.exports = Pend;
     function Pend() {
       this.pending = 0;
@@ -3513,9 +3513,9 @@ var require_pend = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/fd-slicer.js
+// ../../clink-cli/node_modules/yauzl/fd-slicer.js
 var require_fd_slicer = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/fd-slicer.js"(exports) {
+  "../../clink-cli/node_modules/yauzl/fd-slicer.js"(exports) {
     var fs = __require("fs");
     var util = __require("util");
     var stream = __require("stream");
@@ -3670,9 +3670,9 @@ var require_fd_slicer = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/crc32.js
+// ../../clink-cli/node_modules/yauzl/crc32.js
 var require_crc32 = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/crc32.js"(exports, module) {
+  "../../clink-cli/node_modules/yauzl/crc32.js"(exports, module) {
     var CRC_TABLE = new Int32Array([
       0,
       1996959894,
@@ -3942,9 +3942,9 @@ var require_crc32 = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/index.js
+// ../../clink-cli/node_modules/yauzl/index.js
 var require_yauzl = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/yauzl/index.js"(exports) {
+  "../../clink-cli/node_modules/yauzl/index.js"(exports) {
     var fs = __require("fs");
     var zlib = __require("zlib");
     var fd_slicer = require_fd_slicer();
@@ -4801,18 +4801,18 @@ var require_yauzl = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/can-promise.js
+// ../../clink-cli/node_modules/qrcode/lib/can-promise.js
 var require_can_promise = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/can-promise.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/can-promise.js"(exports, module) {
     module.exports = function() {
       return typeof Promise === "function" && Promise.prototype && Promise.prototype.then;
     };
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/utils.js
+// ../../clink-cli/node_modules/qrcode/lib/core/utils.js
 var require_utils = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/utils.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/utils.js"(exports) {
     var toSJISFunction;
     var CODEWORDS_COUNT = [
       0,
@@ -4889,9 +4889,9 @@ var require_utils = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/error-correction-level.js
+// ../../clink-cli/node_modules/qrcode/lib/core/error-correction-level.js
 var require_error_correction_level = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/error-correction-level.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/error-correction-level.js"(exports) {
     exports.L = { bit: 1 };
     exports.M = { bit: 0 };
     exports.Q = { bit: 3 };
@@ -4934,9 +4934,9 @@ var require_error_correction_level = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/bit-buffer.js
+// ../../clink-cli/node_modules/qrcode/lib/core/bit-buffer.js
 var require_bit_buffer = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/bit-buffer.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/bit-buffer.js"(exports, module) {
     function BitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -4969,9 +4969,9 @@ var require_bit_buffer = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/bit-matrix.js
+// ../../clink-cli/node_modules/qrcode/lib/core/bit-matrix.js
 var require_bit_matrix = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/bit-matrix.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/bit-matrix.js"(exports, module) {
     function BitMatrix(size) {
       if (!size || size < 1) {
         throw new Error("BitMatrix size must be defined and greater than 0");
@@ -4998,9 +4998,9 @@ var require_bit_matrix = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/alignment-pattern.js
+// ../../clink-cli/node_modules/qrcode/lib/core/alignment-pattern.js
 var require_alignment_pattern = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/alignment-pattern.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/alignment-pattern.js"(exports) {
     var getSymbolSize = require_utils().getSymbolSize;
     exports.getRowColCoords = function getRowColCoords(version) {
       if (version === 1) return [];
@@ -5033,9 +5033,9 @@ var require_alignment_pattern = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/finder-pattern.js
+// ../../clink-cli/node_modules/qrcode/lib/core/finder-pattern.js
 var require_finder_pattern = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/finder-pattern.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/finder-pattern.js"(exports) {
     var getSymbolSize = require_utils().getSymbolSize;
     var FINDER_PATTERN_SIZE = 7;
     exports.getPositions = function getPositions(version) {
@@ -5052,9 +5052,9 @@ var require_finder_pattern = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/mask-pattern.js
+// ../../clink-cli/node_modules/qrcode/lib/core/mask-pattern.js
 var require_mask_pattern = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/mask-pattern.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/mask-pattern.js"(exports) {
     exports.Patterns = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -5194,9 +5194,9 @@ var require_mask_pattern = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/error-correction-code.js
+// ../../clink-cli/node_modules/qrcode/lib/core/error-correction-code.js
 var require_error_correction_code = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/error-correction-code.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/error-correction-code.js"(exports) {
     var ECLevel = require_error_correction_level();
     var EC_BLOCKS_TABLE = [
       // L  M  Q  H
@@ -5555,9 +5555,9 @@ var require_error_correction_code = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/galois-field.js
+// ../../clink-cli/node_modules/qrcode/lib/core/galois-field.js
 var require_galois_field = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/galois-field.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/galois-field.js"(exports) {
     var EXP_TABLE = new Uint8Array(512);
     var LOG_TABLE = new Uint8Array(256);
     (function initTables() {
@@ -5588,9 +5588,9 @@ var require_galois_field = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/polynomial.js
+// ../../clink-cli/node_modules/qrcode/lib/core/polynomial.js
 var require_polynomial = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/polynomial.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/polynomial.js"(exports) {
     var GF = require_galois_field();
     exports.mul = function mul(p1, p2) {
       const coeff = new Uint8Array(p1.length + p2.length - 1);
@@ -5624,9 +5624,9 @@ var require_polynomial = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/reed-solomon-encoder.js
+// ../../clink-cli/node_modules/qrcode/lib/core/reed-solomon-encoder.js
 var require_reed_solomon_encoder = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/reed-solomon-encoder.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/reed-solomon-encoder.js"(exports, module) {
     var Polynomial = require_polynomial();
     function ReedSolomonEncoder(degree) {
       this.genPoly = void 0;
@@ -5656,18 +5656,18 @@ var require_reed_solomon_encoder = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/version-check.js
+// ../../clink-cli/node_modules/qrcode/lib/core/version-check.js
 var require_version_check = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/version-check.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/version-check.js"(exports) {
     exports.isValid = function isValid(version) {
       return !isNaN(version) && version >= 1 && version <= 40;
     };
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/regex.js
+// ../../clink-cli/node_modules/qrcode/lib/core/regex.js
 var require_regex = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/regex.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/regex.js"(exports) {
     var numeric = "[0-9]+";
     var alphanumeric = "[A-Z $%*+\\-./:]+";
     var kanji = "(?:[u3000-u303F]|[u3040-u309F]|[u30A0-u30FF]|[uFF00-uFFEF]|[u4E00-u9FAF]|[u2605-u2606]|[u2190-u2195]|u203B|[u2010u2015u2018u2019u2025u2026u201Cu201Du2225u2260]|[u0391-u0451]|[u00A7u00A8u00B1u00B4u00D7u00F7])+";
@@ -5693,9 +5693,9 @@ var require_regex = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/mode.js
+// ../../clink-cli/node_modules/qrcode/lib/core/mode.js
 var require_mode = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/mode.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/mode.js"(exports) {
     var VersionCheck = require_version_check();
     var Regex = require_regex();
     exports.NUMERIC = {
@@ -5774,9 +5774,9 @@ var require_mode = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/version.js
+// ../../clink-cli/node_modules/qrcode/lib/core/version.js
 var require_version = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/version.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/version.js"(exports) {
     var Utils = require_utils();
     var ECCode = require_error_correction_code();
     var ECLevel = require_error_correction_level();
@@ -5869,9 +5869,9 @@ var require_version = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/format-info.js
+// ../../clink-cli/node_modules/qrcode/lib/core/format-info.js
 var require_format_info = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/format-info.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/format-info.js"(exports) {
     var Utils = require_utils();
     var G15 = 1 << 10 | 1 << 8 | 1 << 5 | 1 << 4 | 1 << 2 | 1 << 1 | 1 << 0;
     var G15_MASK = 1 << 14 | 1 << 12 | 1 << 10 | 1 << 4 | 1 << 1;
@@ -5887,9 +5887,9 @@ var require_format_info = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/numeric-data.js
+// ../../clink-cli/node_modules/qrcode/lib/core/numeric-data.js
 var require_numeric_data = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/numeric-data.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/numeric-data.js"(exports, module) {
     var Mode = require_mode();
     function NumericData(data) {
       this.mode = Mode.NUMERIC;
@@ -5922,9 +5922,9 @@ var require_numeric_data = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/alphanumeric-data.js
+// ../../clink-cli/node_modules/qrcode/lib/core/alphanumeric-data.js
 var require_alphanumeric_data = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/alphanumeric-data.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/alphanumeric-data.js"(exports, module) {
     var Mode = require_mode();
     var ALPHA_NUM_CHARS = [
       "0",
@@ -6001,9 +6001,9 @@ var require_alphanumeric_data = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/byte-data.js
+// ../../clink-cli/node_modules/qrcode/lib/core/byte-data.js
 var require_byte_data = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/byte-data.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/byte-data.js"(exports, module) {
     var Mode = require_mode();
     function ByteData(data) {
       this.mode = Mode.BYTE;
@@ -6031,9 +6031,9 @@ var require_byte_data = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/kanji-data.js
+// ../../clink-cli/node_modules/qrcode/lib/core/kanji-data.js
 var require_kanji_data = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/kanji-data.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/core/kanji-data.js"(exports, module) {
     var Mode = require_mode();
     var Utils = require_utils();
     function KanjiData(data) {
@@ -6070,9 +6070,9 @@ var require_kanji_data = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/dijkstrajs/dijkstra.js
+// ../../clink-cli/node_modules/dijkstrajs/dijkstra.js
 var require_dijkstra = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/dijkstrajs/dijkstra.js"(exports, module) {
+  "../../clink-cli/node_modules/dijkstrajs/dijkstra.js"(exports, module) {
     "use strict";
     var dijkstra = {
       single_source_shortest_paths: function(graph, s, d) {
@@ -6171,9 +6171,9 @@ var require_dijkstra = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/segments.js
+// ../../clink-cli/node_modules/qrcode/lib/core/segments.js
 var require_segments = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/segments.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/segments.js"(exports) {
     var Mode = require_mode();
     var NumericData = require_numeric_data();
     var AlphanumericData = require_alphanumeric_data();
@@ -6357,9 +6357,9 @@ var require_segments = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/qrcode.js
+// ../../clink-cli/node_modules/qrcode/lib/core/qrcode.js
 var require_qrcode = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/core/qrcode.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/core/qrcode.js"(exports) {
     var Utils = require_utils();
     var ECLevel = require_error_correction_level();
     var BitBuffer = require_bit_buffer();
@@ -6618,9 +6618,9 @@ var require_qrcode = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/chunkstream.js
+// ../../clink-cli/node_modules/pngjs/lib/chunkstream.js
 var require_chunkstream = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/chunkstream.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/chunkstream.js"(exports, module) {
     "use strict";
     var util = __require("util");
     var Stream = __require("stream");
@@ -6756,9 +6756,9 @@ var require_chunkstream = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/interlace.js
+// ../../clink-cli/node_modules/pngjs/lib/interlace.js
 var require_interlace = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/interlace.js"(exports) {
+  "../../clink-cli/node_modules/pngjs/lib/interlace.js"(exports) {
     "use strict";
     var imagePasses = [
       {
@@ -6839,9 +6839,9 @@ var require_interlace = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/paeth-predictor.js
+// ../../clink-cli/node_modules/pngjs/lib/paeth-predictor.js
 var require_paeth_predictor = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/paeth-predictor.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/paeth-predictor.js"(exports, module) {
     "use strict";
     module.exports = function paethPredictor(left, above, upLeft) {
       let paeth = left + above - upLeft;
@@ -6859,9 +6859,9 @@ var require_paeth_predictor = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse.js
+// ../../clink-cli/node_modules/pngjs/lib/filter-parse.js
 var require_filter_parse = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/filter-parse.js"(exports, module) {
     "use strict";
     var interlaceUtils = require_interlace();
     var paethPredictor = require_paeth_predictor();
@@ -7000,9 +7000,9 @@ var require_filter_parse = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse-async.js
+// ../../clink-cli/node_modules/pngjs/lib/filter-parse-async.js
 var require_filter_parse_async = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse-async.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/filter-parse-async.js"(exports, module) {
     "use strict";
     var util = __require("util");
     var ChunkStream = require_chunkstream();
@@ -7026,9 +7026,9 @@ var require_filter_parse_async = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/constants.js
+// ../../clink-cli/node_modules/pngjs/lib/constants.js
 var require_constants = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/constants.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/constants.js"(exports, module) {
     "use strict";
     module.exports = {
       PNG_SIGNATURE: [137, 80, 78, 71, 13, 10, 26, 10],
@@ -7061,9 +7061,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/crc.js
+// ../../clink-cli/node_modules/pngjs/lib/crc.js
 var require_crc = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/crc.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/crc.js"(exports, module) {
     "use strict";
     var crcTable = [];
     (function() {
@@ -7101,9 +7101,9 @@ var require_crc = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser.js
+// ../../clink-cli/node_modules/pngjs/lib/parser.js
 var require_parser = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/parser.js"(exports, module) {
     "use strict";
     var constants7 = require_constants();
     var CrcCalculator = require_crc();
@@ -7322,9 +7322,9 @@ var require_parser = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/bitmapper.js
+// ../../clink-cli/node_modules/pngjs/lib/bitmapper.js
 var require_bitmapper = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/bitmapper.js"(exports) {
+  "../../clink-cli/node_modules/pngjs/lib/bitmapper.js"(exports) {
     "use strict";
     var interlaceUtils = require_interlace();
     var pixelBppMapper = [
@@ -7570,9 +7570,9 @@ var require_bitmapper = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/format-normaliser.js
+// ../../clink-cli/node_modules/pngjs/lib/format-normaliser.js
 var require_format_normaliser = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/format-normaliser.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/format-normaliser.js"(exports, module) {
     "use strict";
     function dePalette(indata, outdata, width, height, palette) {
       let pxPos = 0;
@@ -7651,9 +7651,9 @@ var require_format_normaliser = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser-async.js
+// ../../clink-cli/node_modules/pngjs/lib/parser-async.js
 var require_parser_async = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser-async.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/parser-async.js"(exports, module) {
     "use strict";
     var util = __require("util");
     var zlib = __require("zlib");
@@ -7777,9 +7777,9 @@ var require_parser_async = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/bitpacker.js
+// ../../clink-cli/node_modules/pngjs/lib/bitpacker.js
 var require_bitpacker = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/bitpacker.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/bitpacker.js"(exports, module) {
     "use strict";
     var constants7 = require_constants();
     module.exports = function(dataIn, width, height, options2) {
@@ -7927,9 +7927,9 @@ var require_bitpacker = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-pack.js
+// ../../clink-cli/node_modules/pngjs/lib/filter-pack.js
 var require_filter_pack = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-pack.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/filter-pack.js"(exports, module) {
     "use strict";
     var paethPredictor = require_paeth_predictor();
     function filterNone(pxData, pxPos, byteWidth, rawData, rawPos) {
@@ -8069,9 +8069,9 @@ var require_filter_pack = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer.js
+// ../../clink-cli/node_modules/pngjs/lib/packer.js
 var require_packer = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/packer.js"(exports, module) {
     "use strict";
     var constants7 = require_constants();
     var CrcStream = require_crc();
@@ -8169,9 +8169,9 @@ var require_packer = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer-async.js
+// ../../clink-cli/node_modules/pngjs/lib/packer-async.js
 var require_packer_async = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer-async.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/packer-async.js"(exports, module) {
     "use strict";
     var util = __require("util");
     var Stream = __require("stream");
@@ -8211,9 +8211,9 @@ var require_packer_async = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/sync-inflate.js
+// ../../clink-cli/node_modules/pngjs/lib/sync-inflate.js
 var require_sync_inflate = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/sync-inflate.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/sync-inflate.js"(exports, module) {
     "use strict";
     var assert = __require("assert").ok;
     var zlib = __require("zlib");
@@ -8348,9 +8348,9 @@ var require_sync_inflate = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/sync-reader.js
+// ../../clink-cli/node_modules/pngjs/lib/sync-reader.js
 var require_sync_reader = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/sync-reader.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/sync-reader.js"(exports, module) {
     "use strict";
     var SyncReader = module.exports = function(buffer) {
       this._buffer = buffer;
@@ -8386,9 +8386,9 @@ var require_sync_reader = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse-sync.js
+// ../../clink-cli/node_modules/pngjs/lib/filter-parse-sync.js
 var require_filter_parse_sync = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/filter-parse-sync.js"(exports) {
+  "../../clink-cli/node_modules/pngjs/lib/filter-parse-sync.js"(exports) {
     "use strict";
     var SyncReader = require_sync_reader();
     var Filter = require_filter_parse();
@@ -8410,9 +8410,9 @@ var require_filter_parse_sync = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser-sync.js
+// ../../clink-cli/node_modules/pngjs/lib/parser-sync.js
 var require_parser_sync = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/parser-sync.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/parser-sync.js"(exports, module) {
     "use strict";
     var hasSyncZlib = true;
     var zlib = __require("zlib");
@@ -8501,9 +8501,9 @@ var require_parser_sync = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer-sync.js
+// ../../clink-cli/node_modules/pngjs/lib/packer-sync.js
 var require_packer_sync = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/packer-sync.js"(exports, module) {
+  "../../clink-cli/node_modules/pngjs/lib/packer-sync.js"(exports, module) {
     "use strict";
     var hasSyncZlib = true;
     var zlib = __require("zlib");
@@ -8546,9 +8546,9 @@ var require_packer_sync = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/png-sync.js
+// ../../clink-cli/node_modules/pngjs/lib/png-sync.js
 var require_png_sync = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/png-sync.js"(exports) {
+  "../../clink-cli/node_modules/pngjs/lib/png-sync.js"(exports) {
     "use strict";
     var parse2 = require_parser_sync();
     var pack = require_packer_sync();
@@ -8561,9 +8561,9 @@ var require_png_sync = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/png.js
+// ../../clink-cli/node_modules/pngjs/lib/png.js
 var require_png = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/pngjs/lib/png.js"(exports) {
+  "../../clink-cli/node_modules/pngjs/lib/png.js"(exports) {
     "use strict";
     var util = __require("util");
     var Stream = __require("stream");
@@ -8698,9 +8698,9 @@ var require_png = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/utils.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/utils.js
 var require_utils2 = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/utils.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/utils.js"(exports) {
     function hex2rgba(hex) {
       if (typeof hex === "number") {
         hex = hex.toString();
@@ -8778,9 +8778,9 @@ var require_utils2 = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/png.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/png.js
 var require_png2 = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/png.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/png.js"(exports) {
     var fs = __require("fs");
     var PNG = require_png().PNG;
     var Utils = require_utils2();
@@ -8845,9 +8845,9 @@ var require_png2 = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/utf8.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/utf8.js
 var require_utf8 = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/utf8.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/utf8.js"(exports) {
     var Utils = require_utils2();
     var BLOCK_CHAR = {
       WW: " ",
@@ -8907,9 +8907,9 @@ var require_utf8 = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal/terminal.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/terminal/terminal.js
 var require_terminal = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal/terminal.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/terminal/terminal.js"(exports) {
     exports.render = function(qrData, options2, cb) {
       const size = qrData.modules.size;
       const data = qrData.modules.data;
@@ -8935,9 +8935,9 @@ var require_terminal = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal/terminal-small.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/terminal/terminal-small.js
 var require_terminal_small = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal/terminal-small.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/terminal/terminal-small.js"(exports) {
     var backgroundWhite = "\x1B[47m";
     var backgroundBlack = "\x1B[40m";
     var foregroundWhite = "\x1B[37m";
@@ -8994,9 +8994,9 @@ var require_terminal_small = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/terminal.js
 var require_terminal2 = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/terminal.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/terminal.js"(exports) {
     var big = require_terminal();
     var small = require_terminal_small();
     exports.render = function(qrData, options2, cb) {
@@ -9008,9 +9008,9 @@ var require_terminal2 = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/svg-tag.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/svg-tag.js
 var require_svg_tag = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/svg-tag.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/svg-tag.js"(exports) {
     var Utils = require_utils2();
     function getColorAttrib(color, attrib) {
       const alpha = color.a / 255;
@@ -9066,9 +9066,9 @@ var require_svg_tag = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/svg.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/svg.js
 var require_svg = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/svg.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/svg.js"(exports) {
     var svgTagRenderer = require_svg_tag();
     exports.render = svgTagRenderer.render;
     exports.renderToFile = function renderToFile(path4, qrData, options2, cb) {
@@ -9084,9 +9084,9 @@ var require_svg = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/canvas.js
+// ../../clink-cli/node_modules/qrcode/lib/renderer/canvas.js
 var require_canvas = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/renderer/canvas.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/renderer/canvas.js"(exports) {
     var Utils = require_utils2();
     function clearCanvas(ctx, canvas, size) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -9137,9 +9137,9 @@ var require_canvas = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/browser.js
+// ../../clink-cli/node_modules/qrcode/lib/browser.js
 var require_browser = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/browser.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/browser.js"(exports) {
     var canPromise = require_can_promise();
     var QRCode2 = require_qrcode();
     var CanvasRenderer = require_canvas();
@@ -9207,9 +9207,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/server.js
+// ../../clink-cli/node_modules/qrcode/lib/server.js
 var require_server = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/server.js"(exports) {
+  "../../clink-cli/node_modules/qrcode/lib/server.js"(exports) {
     var canPromise = require_can_promise();
     var QRCode2 = require_qrcode();
     var PngRenderer = require_png2();
@@ -9327,9 +9327,9 @@ var require_server = __commonJS({
   }
 });
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/index.js
+// ../../clink-cli/node_modules/qrcode/lib/index.js
 var require_lib = __commonJS({
-  "../clink-cli-visa-recommend-query-expansion-0831/node_modules/qrcode/lib/index.js"(exports, module) {
+  "../../clink-cli/node_modules/qrcode/lib/index.js"(exports, module) {
     module.exports = require_server();
   }
 });
@@ -9513,7 +9513,7 @@ function detectHelpHint(argv, helpCommands, executableName) {
 // dist/visa/edition.js
 import { performance as performance2 } from "node:perf_hooks";
 
-// ../clink-cli-visa-recommend-query-expansion-0831/node_modules/commander/esm.mjs
+// ../../clink-cli/node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
 var {
   program,
@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.48";
+var CLI_VERSION = "0.2.49";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -14529,12 +14529,6 @@ var MERCHANT_LIST_TIMEOUT_MS = 15e3;
 var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
 var MERCHANT_LIST_MAX_ATTEMPTS = 2;
 var MERCHANT_LIST_RETRY_DELAY_MS = 50;
-var UAT_EXACT_MERCHANT_URLS = /* @__PURE__ */ new Map([
-  [
-    "https://vsrp.hk/p/o5s",
-    "mcht_ftmse61a6az0"
-  ]
-]);
 var merchantListRequests = /* @__PURE__ */ new WeakMap();
 async function getInternalUcpMerchantList(options2 = {}) {
   return (await loadInternalUcpMerchantList(options2)).merchants;
@@ -14587,17 +14581,15 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  let merchantId = exactMerchantUrlMerchantId(productUrl2, environment);
-  if (!merchantId) {
-    if (options2.merchants) {
-      merchantId = options2.merchants.get(domainName);
-    } else {
-      let loaded = await loadInternalUcpMerchants(options2);
+  let merchantId;
+  if (options2.merchants) {
+    merchantId = options2.merchants.get(domainName);
+  } else {
+    let loaded = await loadInternalUcpMerchants(options2);
+    merchantId = loaded.merchants.get(domainName);
+    if (!merchantId && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchants(options2, true);
       merchantId = loaded.merchants.get(domainName);
-      if (!merchantId && loaded.fromCache) {
-        loaded = await loadInternalUcpMerchants(options2, true);
-        merchantId = loaded.merchants.get(domainName);
-      }
     }
   }
   if (!merchantId) {
@@ -14819,17 +14811,6 @@ function cloneJsonValue(value, ancestors) {
 }
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
-}
-function exactMerchantUrlMerchantId(productUrl2, environment) {
-  if (environment !== "sandbox" || productUrl2.protocol !== "https:" || productUrl2.username || productUrl2.password || productUrl2.port) {
-    return void 0;
-  }
-  const domainName = canonicalDomain(productUrl2.hostname);
-  if (!domainName) {
-    return void 0;
-  }
-  const pathname = productUrl2.pathname.replace(/\/+$/u, "") || "/";
-  return UAT_EXACT_MERCHANT_URLS.get(`https://${domainName}${pathname}`);
 }
 function merchantMap(merchants, source) {
   const merchantIdsByDomain = /* @__PURE__ */ new Map();
@@ -33134,13 +33115,15 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  Runs one Visa recommendation, then concurrently checks every returned Program for a configured
-  internal UCP merchant route using its authoritative URL and title. Only exact
+  Runs one Visa recommendation, loads the selected environment's anonymous merchant list once, then
+  matches each returned Program code only against merchant ext.visa_program_id. The Offer URL is
+  presentation metadata only and never selects a merchant. Only exact
   PRODUCT_VERIFIED + internal-ucp-catalog matches enter products. Their matched Visa Programs are
   removed from visaBenefits to avoid duplicate presentation. Unmatched Programs remain in
-  visaBenefits. Unconfigured Visa campaign pages are never parsed externally. One product failure
-  preserves the Benefit and marks productMatching.coverage partial. This command does not log in,
-  create an Instruction or Checkout, or initiate payment.
+  visaBenefits. Duplicate Program mappings fail closed; a merchant-list or product failure preserves
+  the Benefits and marks productMatching.coverage partial. Unconfigured Visa campaign pages are never
+  parsed externally. This command does not log in, create an Instruction or Checkout, or initiate
+  payment.
 `;
 var VISA_DETAIL_HELP = `clink visa detail
 
@@ -33218,6 +33201,44 @@ function renderVisaHelp(help) {
 }
 function addVisaRootHelp(rootHelp) {
   return rootHelp.replace("  wallet            Initialize wallet and inspect local wallet status\n", "  wallet            Initialize wallet and inspect local wallet status\n  visa              Sign in with Visa and discover Visa offers\n").replace("  clink wallet status --format pretty\n", '  clink wallet status --format pretty\n  clink visa init --sandbox --open\n  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty\n').replace("  clink wallet --help\n", "  clink wallet --help\n  clink visa --help\n").replace("Select an official environment with wallet init:", "Select an official environment with wallet init or visa init:");
+}
+
+// dist/visa/program-merchant.js
+function resolveVisaProgramMerchantRoute(input) {
+  const programCode = input.programCode.trim();
+  if (!programCode) {
+    return void 0;
+  }
+  const matches = input.merchants.filter((merchant2) => visaProgramId(merchant2.ext) === programCode);
+  if (matches.length === 0) {
+    return void 0;
+  }
+  if (matches.length > 1) {
+    throw validationError(`duplicate Visa program merchant mapping: ${programCode}`);
+  }
+  const merchant = matches[0];
+  const merchantUrl = new URL(merchant.domain);
+  const endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchant.merchant_id)}`, input.baseUrl);
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.port === "0" || endpoint.search || endpoint.hash) {
+    throw validationError("invalid internal UCP base URL");
+  }
+  return {
+    programCode,
+    merchantName: merchant.merchant_name,
+    merchantUrl: merchant.domain,
+    routeSource: "merchant_list_ext",
+    domainName: merchantUrl.hostname.toLowerCase().replace(/\.+$/u, ""),
+    merchantId: merchant.merchant_id,
+    provider: "clinkbill",
+    endpoint: endpoint.toString()
+  };
+}
+function visaProgramId(ext) {
+  if (!ext || typeof ext !== "object" || Array.isArray(ext)) {
+    return void 0;
+  }
+  const value = ext.visa_program_id;
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 
 // dist/visa/edition.js
@@ -33780,10 +33801,17 @@ async function visaRecommendProducts(context) {
   const offers = recommendationItems(recommendation);
   const environment = visaBenefitCatalogEnvironment(context);
   const language = catalogLanguageForVisaLocale(execution.locale);
-  const resolutions = await Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language)));
+  const productResolution = await resolveVisaOfferProducts(context, offers, environment, language);
+  const resolutions = productResolution.resolutions;
   const matchedIndexes = /* @__PURE__ */ new Set();
   const productsByKey = /* @__PURE__ */ new Map();
   const failures = [];
+  if (productResolution.merchantListFailure) {
+    failures.push({
+      scope: "merchant_list",
+      message: productResolution.merchantListFailure
+    });
+  }
   let routedOfferCount = 0;
   let matchedOfferCount = 0;
   for (const resolution of resolutions) {
@@ -33830,33 +33858,47 @@ async function visaRecommendProducts(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
-async function resolveVisaOfferProduct(context, offer, index, environment, language) {
+async function resolveVisaOfferProducts(context, offers, environment, language) {
+  if (offers.length === 0) {
+    return { resolutions: [] };
+  }
+  let merchants;
+  try {
+    merchants = await getInternalUcpMerchantList({
+      environment,
+      timeoutMs: context.globalOptions.timeoutMs
+    });
+  } catch (error) {
+    return {
+      resolutions: [],
+      merchantListFailure: safeVisaProductFailure(error)
+    };
+  }
+  return {
+    resolutions: await Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language, merchants)))
+  };
+}
+async function resolveVisaOfferProduct(context, offer, index, environment, language, merchants) {
   const record = recommendationRecord(offer);
   const code = recommendationProgramCode(record);
   const title = recommendationOptionalString(record.title);
   const url = recommendationOfferUrl(record);
-  if (!code || !title || !url) {
+  if (!code || !title) {
     return { index, offer, routed: false, matched: false };
   }
-  const program2 = { code, title, url };
+  const program2 = {
+    code,
+    title,
+    ...url ? { url } : {}
+  };
   let internal;
   try {
-    internal = await resolveInternalUcpEndpoint(url, {
-      baseUrl: API_BASE_URLS[environment],
-      environment,
-      timeoutMs: context.globalOptions.timeoutMs,
-      merchants: /* @__PURE__ */ new Map()
+    internal = resolveVisaProgramMerchantRoute({
+      programCode: code,
+      merchants,
+      baseUrl: API_BASE_URLS[environment]
     });
   } catch (error) {
-    if (error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST") {
-      return {
-        index,
-        offer,
-        routed: false,
-        matched: false,
-        program: program2
-      };
-    }
     return {
       index,
       offer,
@@ -33866,9 +33908,18 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
       failure: safeVisaProductFailure(error)
     };
   }
+  if (!internal) {
+    return {
+      index,
+      offer,
+      routed: false,
+      matched: false,
+      program: program2
+    };
+  }
   try {
     const productResult = await runVisaProductSearch({
-      merchantUrl: url,
+      merchantUrl: internal.merchantUrl,
       query: title,
       language,
       limit: 1
