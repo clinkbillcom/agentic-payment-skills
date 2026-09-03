@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.52";
+var CLI_VERSION = "0.2.53";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -32701,7 +32701,7 @@ Usage:
   clink visa status [options]
   clink visa region get | set <hk|cn> [options]
   clink visa recommend [natural language] [filters]
-  clink visa recommend-products [natural language] [filters]
+  clink visa recommend-products <query> [filters]
   clink visa detail <program-code> [options]
   clink visa taxonomy [options]
   clink visa product-search --merchant-url <url> --query <text> [options]
@@ -32727,7 +32727,7 @@ Examples:
   clink visa region get
   clink visa region set cn
   clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --anonymous --all --format pretty
-  clink visa recommend-products --region hk --category shopping_supermarket --anonymous --sandbox
+  clink visa recommend-products "\u9999\u6E2F\u8D85\u5E02\u6709\u4EC0\u4E48\u4F18\u60E0" --region hk --category shopping_supermarket --anonymous --sandbox
   clink visa recommend "\u65E5\u672C\u9910\u5385\u4F18\u60E0" --region jp --category dining_restaurant
   clink visa recommend --personalized "\u6211\u7684\u5361\u80FD\u7528\u4EC0\u4E48"
   clink visa detail P2025110009
@@ -33135,12 +33135,12 @@ Behavior:
 var VISA_RECOMMEND_PRODUCTS_HELP = `clink visa recommend-products
 
 Usage:
-  clink visa recommend-products [natural language] [filters]
+  clink visa recommend-products <query> [filters]
 
 Recommendation Filters:
   Same explicit filters as visa recommend, including --region, --category, --purpose,
-  --reward-type, --attribute, --card-level, --card-issuer, --type, --keyword, --all,
-  and --filter-sets.
+  --reward-type, --attribute, --card-level, --card-issuer, --type, --all, and
+  --filter-sets. Do not pass --keyword or keyword inside --filter-sets.
 
 Options:
   --anonymous                  Ignore any saved VSRA token
@@ -33155,9 +33155,14 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  Runs one Visa recommendation, loads the selected environment's anonymous merchant list once, then
-  matches each returned Program code only against merchant ext.visa_program_id. The Offer URL is
-  presentation metadata only and never selects a merchant. Only exact
+  The required query is the single primary search text. The CLI sends that same original query as
+  the Visa recommendation keyword, uses it for every matched merchant Catalog search, and uses it
+  as the first broad Catalog query when --include-broad-catalog is enabled. Offer title is display
+  and provenance metadata only; it is never substituted as Catalog search text.
+
+  The command loads the selected environment's anonymous merchant list once, then matches each
+  returned Program code only against merchant ext.visa_program_id. The Offer URL is presentation
+  metadata only and never selects a merchant. Only exact
   PRODUCT_VERIFIED + internal-ucp-catalog matches enter products. Their matched Visa Programs are
   removed from visaBenefits to avoid duplicate presentation. Unmatched Programs remain in
   visaBenefits. Duplicate Program mappings fail closed; a merchant-list or product failure preserves
@@ -33165,9 +33170,9 @@ Behavior:
   parsed externally. This command does not log in, create an Instruction or Checkout, or initiate
   payment.
 
-  With --include-broad-catalog, the original positional query is required. Broad Catalog search
-  starts in parallel with Visa recommendation. --broad-queries accepts a JSON array of up to three
-  additional product queries; all one-to-four broad requests run concurrently and de-duplicate into
+  Broad Catalog search starts in parallel with Visa recommendation. --broad-queries accepts a JSON
+  array of up to three additional product queries; all one-to-four broad requests run concurrently
+  and de-duplicate into
   the same products collection without source grouping. catalogProvenance is retained only for exact
   purchase revalidation. An available internal product without an item URL is retained only when its
   merchantId exactly matches the environment-locked provider registry; the registry supplies the
@@ -33734,7 +33739,18 @@ async function executeVisaRecommendation(context, options2 = {}) {
   if (personalized && anonymous) {
     throw validationError("--personalized and --anonymous cannot be used together");
   }
-  const filterSets = parseRecommendationFilterSets(getStringFlag(context.args.flags, "filter-sets"));
+  const parsedFilterSets = parseRecommendationFilterSets(getStringFlag(context.args.flags, "filter-sets"));
+  const queryKeyword = options2.queryKeyword;
+  if (queryKeyword && context.args.flags.keyword !== void 0) {
+    throw validationError("visa recommend-products uses its query as the Visa keyword; do not pass --keyword");
+  }
+  if (queryKeyword && parsedFilterSets.some((filterSet) => filterSet.keyword !== void 0)) {
+    throw validationError("visa recommend-products uses its query as the Visa keyword; --filter-sets must omit keyword");
+  }
+  const filterSets = queryKeyword ? parsedFilterSets.map((filterSet) => ({
+    ...filterSet,
+    keyword: queryKeyword
+  })) : parsedFilterSets;
   if (filterSets.length > 0 && !anonymous) {
     throw validationError("--filter-sets requires --anonymous");
   }
@@ -33754,7 +33770,9 @@ async function executeVisaRecommendation(context, options2 = {}) {
     filters.type = type;
   }
   const keyword = getStringFlag(context.args.flags, "keyword")?.trim();
-  if (keyword) {
+  if (queryKeyword) {
+    filters.keyword = queryKeyword;
+  } else if (keyword) {
     filters.keyword = keyword;
   }
   const limit = parsePositiveIntFlag(getStringFlag(context.args.flags, "limit"), "--limit must be a positive integer");
@@ -33843,18 +33861,16 @@ async function executeVisaRecommendation(context, options2 = {}) {
   };
 }
 async function visaRecommendProducts(context) {
+  const query = visaRecommendProductsQuery(context);
   const includeBroadCatalog = getBooleanFlag(context.args.flags, "include-broad-catalog");
-  const broadQuery = getStringFlag(context.args.flags, "query") ?? context.args.positionals.slice(2).join(" ");
-  if (includeBroadCatalog && !broadQuery.normalize("NFKC").trim()) {
-    throw validationError("--include-broad-catalog requires the original non-blank search query");
-  }
-  const broadQueries = includeBroadCatalog ? parseBroadCatalogQueries(broadQuery, getStringFlag(context.args.flags, "broad-queries")) : [];
+  const broadQueries = includeBroadCatalog ? parseBroadCatalogQueries(query, getStringFlag(context.args.flags, "broad-queries")) : [];
   if (!includeBroadCatalog && context.args.flags["broad-queries"] !== void 0) {
     throw validationError("--broad-queries requires --include-broad-catalog");
   }
-  const broadCatalogPromise = includeBroadCatalog && !context.globalOptions.dryRun ? Promise.all(broadQueries.map((query) => runBroadCatalogSearch(context, query, normalizeVisaLocale(getStringFlag(context.args.flags, "lang"))))) : Promise.resolve(void 0);
+  const broadCatalogPromise = includeBroadCatalog && !context.globalOptions.dryRun ? Promise.all(broadQueries.map((query2) => runBroadCatalogSearch(context, query2, normalizeVisaLocale(getStringFlag(context.args.flags, "lang"))))) : Promise.resolve(void 0);
   const execution = await executeVisaRecommendation(context, {
-    explicitFilterRelaxation: includeBroadCatalog ? "no_match" : "error"
+    explicitFilterRelaxation: includeBroadCatalog ? "no_match" : "error",
+    queryKeyword: query
   });
   if (context.globalOptions.dryRun) {
     printSuccess({
@@ -33885,7 +33901,7 @@ async function visaRecommendProducts(context) {
   const language = catalogLanguageForVisaLocale(execution.locale);
   const registeredProviderRoutes = visaBenefitCatalogProviderRoutes(environment, API_BASE_URLS[environment]);
   const [productResolution, broadCatalogRuns] = await Promise.all([
-    resolveVisaOfferProducts(context, offers, environment, language),
+    resolveVisaOfferProducts(context, offers, environment, language, query),
     broadCatalogPromise
   ]);
   const resolutions = productResolution.resolutions;
@@ -33979,7 +33995,7 @@ async function visaRecommendProducts(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
-async function resolveVisaOfferProducts(context, offers, environment, language) {
+async function resolveVisaOfferProducts(context, offers, environment, language, query) {
   if (offers.length === 0) {
     return { resolutions: [] };
   }
@@ -33996,10 +34012,10 @@ async function resolveVisaOfferProducts(context, offers, environment, language) 
     };
   }
   return {
-    resolutions: await Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language, merchants)))
+    resolutions: await Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language, merchants, query)))
   };
 }
-async function resolveVisaOfferProduct(context, offer, index, environment, language, merchants) {
+async function resolveVisaOfferProduct(context, offer, index, environment, language, merchants, query) {
   const record = recommendationRecord(offer);
   const code = recommendationProgramCode(record);
   const title = recommendationOptionalString(record.title);
@@ -34041,7 +34057,7 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
   try {
     const productResult = await runVisaProductSearch({
       merchantUrl: internal.merchantUrl,
-      query: title,
+      query,
       language,
       limit: 1
     }, {
@@ -34069,6 +34085,18 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
       failure: safeVisaProductFailure(error)
     };
   }
+}
+function visaRecommendProductsQuery(context) {
+  const positional = context.args.positionals.slice(2).join(" ").normalize("NFKC").trim();
+  const queryFlag = getStringFlag(context.args.flags, "query")?.normalize("NFKC").trim();
+  if (positional && queryFlag && positional !== queryFlag) {
+    throw validationError("visa recommend-products accepts only one query source");
+  }
+  const query = queryFlag || positional;
+  if (!query) {
+    throw validationError("visa recommend-products requires a non-blank query");
+  }
+  return query;
 }
 async function runBroadCatalogSearch(context, rawQuery, locale) {
   const query = rawQuery.normalize("NFKC").trim();

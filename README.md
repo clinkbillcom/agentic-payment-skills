@@ -27,6 +27,8 @@ The lightweight shopping routes cover:
 - product, category, merchant, purchase, and Visa Benefit queries through one
   `visa recommend-products` call, which immediately checks every returned
   Program against configured exact internal UCP routes
+- one unchanged query drives the Visa keyword, matched-merchant Catalog search,
+  and first broad Catalog search; Offer titles remain display metadata only
 - automatic HK/CN source persistence from a unique `visa recommend --region`,
   with explicit `--market` reserved for cross-source searches
 - one unified `products` collection plus unmatched `visaBenefits`; a Program
@@ -95,8 +97,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.61` vendors Visa CLI `0.2.52` from upstream commit
-`94c21a548f0e63c32b07fb3473db50742bcf97da`. It uses one-round Visa
+Skill `0.1.62` vendors Visa CLI `0.2.53` from upstream commit
+`c25a4e44ba33705892027ffcf9a7bd53ef4723ed`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -128,7 +130,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.61`
+Skill version: `0.1.62`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

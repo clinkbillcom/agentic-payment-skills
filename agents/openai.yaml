@@ -35,6 +35,11 @@ interface:
     or duplicate filters to reach a count. Run exactly one visa
     recommend-products with the unchanged original current user query,
     --include-broad-catalog, and up to three product-only --broad-queries.
+    That positional query is the only primary search text. Never pass --keyword
+    or put keyword inside --filter-sets. The CLI sends the unchanged query as
+    the Visa recommendation keyword, every Program-matched merchant Catalog
+    query, and the first broad Catalog query. Offer titles are display and
+    provenance only and never replace it.
     For 我想下单咖啡 use 美式咖啡, 拿铁咖啡, and 咖啡饮品; never invent a
     merchant or brand. Also pass --anonymous, the locked language, and the
     locked sandbox/test flag. Broad variants run in parallel inside that one

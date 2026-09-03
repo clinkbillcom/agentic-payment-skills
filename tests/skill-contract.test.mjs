@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.61');
+  assert.equal(packageJson.version, '0.1.62');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.61/u);
-  assert.match(skill, /version: "0\.1\.61"/u);
+  assert.match(skill, /Visa Skill 0\.1\.62/u);
+  assert.match(skill, /version: "0\.1\.62"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -172,7 +172,7 @@ test('initial Visa discovery runs one aggregate with parallel broad Catalog', ()
   );
   assert.match(
     discovery,
-    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original\s+current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*merchant list once[\s\S]*exact `code`[\s\S]*`ext\.visa_program_id`[\s\S]*Offer URL[\s\S]*never selects a merchant/iu,
+    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original\s+current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*merchant list once[\s\S]*exact `code`[\s\S]*`ext\.visa_program_id`[\s\S]*Offer URL[\s\S]*never selects a merchant[\s\S]*only primary search text[\s\S]*Never pass `--keyword`[\s\S]*Visa recommendation keyword[\s\S]*Program-matched merchant Catalog[\s\S]*first broad Catalog query[\s\S]*Offer\s+titles[\s\S]*must not replace/iu,
   );
   assert.match(
     singleCommand,
@@ -433,7 +433,6 @@ test('discovery presents products first and stays silent about empty collections
 test('compact filter reference defines schema, selection priority, and intent boundary', () => {
   for (const field of [
     'type',
-    'keyword',
     'limit',
     'page',
     'region',
@@ -456,8 +455,9 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /keyword[\s\S]*exact official title[\s\S]*Never put a conversational question/iu,
+    /required positional query[\s\S]*only primary search text[\s\S]*Never pass[\s\S]*`--keyword`[\s\S]*keyword[\s\S]*filter object[\s\S]*Visa keyword[\s\S]*matched merchant Catalog query[\s\S]*first broad Catalog query/iu,
   );
+  assert.doesNotMatch(filterReference, /"keyword"\s*:/u);
   assert.match(
     filterReference,
     /all recommendation filters[\s\S]*inside those objects[\s\S]*never combine them[\s\S]*outer individual filter flags/iu,
