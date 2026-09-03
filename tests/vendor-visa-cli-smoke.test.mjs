@@ -87,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.52');
+  assert.equal(vendorPackage.version, '0.2.53');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '94c21a548f0e63c32b07fb3473db50742bcf97da',
+    'c25a4e44ba33705892027ffcf9a7bd53ef4723ed',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -151,6 +151,9 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
 
   const aggregateHelp = run(['visa', 'recommend-products', '--help']);
   assert.equal(aggregateHelp.status, 0, aggregateHelp.stderr);
+  assert.match(aggregateHelp.stdout, /recommend-products <query>/u);
+  assert.match(aggregateHelp.stdout, /Do not pass --keyword/u);
+  assert.match(aggregateHelp.stdout, /same original query/u);
   assert.match(aggregateHelp.stdout, /--include-broad-catalog/u);
   assert.match(aggregateHelp.stdout, /--broad-queries <json>/u);
   assert.match(aggregateHelp.stdout, /strictMatchFailure/u);
@@ -469,10 +472,11 @@ test('aggregate retains only registered URL-less internal broad products', () =>
 });
 
 test('Visa Program code resolves through merchant-list metadata', () => {
+  const query = 'visa 香港超市有什么优惠';
   const result = runWithMock([
     'visa',
     'recommend-products',
-    'Selected Visa Program',
+    query,
     '--region',
     'hk',
     '--type',
@@ -501,8 +505,24 @@ test('Visa Program code resolves through merchant-list metadata', () => {
   assert.equal(output.products[0].product.totalAmountMajor, '10');
   assert.deepEqual(output.products[0].matchedPrograms, [{
     code: 'P2026080006',
-    title: 'Selected Visa Program',
+    title: '香港本地超市現金券優惠',
   }]);
+});
+
+test('recommend-products rejects a second Visa keyword source', () => {
+  const result = run([
+    'visa',
+    'recommend-products',
+    'visa 香港超市有什么优惠',
+    '--keyword',
+    '香港本地超市現金券優惠',
+    '--all',
+    '--anonymous',
+    '--sandbox',
+  ]);
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /uses its query as the Visa keyword/u);
 });
 
 test('Catalog purchase mode is executable with the complete frozen contract', () => {
@@ -1072,6 +1092,11 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse({ success: true, data: {} });
     }
     if (url.pathname.endsWith('/programs/recommend')) {
+      if (url.searchParams.get('keyword') !== 'Watsons 屈臣氏') {
+        throw new Error(
+          'unexpected registered Visa keyword: ' + url.search,
+        );
+      }
       return jsonResponse({
         success: true,
         data: {
@@ -1103,6 +1128,11 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse({ success: true, data: {} });
     }
     if (url.pathname.endsWith('/programs/recommend')) {
+      if (url.searchParams.get('keyword') !== 'visa 香港超市有什么优惠') {
+        throw new Error(
+          'unexpected Visa Program keyword: ' + url.search,
+        );
+      }
       return jsonResponse({
         success: true,
         data: {
@@ -1114,7 +1144,7 @@ globalThis.fetch = async (input, init) => {
           items: [{
             code: 'P2026080006',
             type: 'benefit',
-            title: 'Selected Visa Program',
+            title: '香港本地超市現金券優惠',
           }],
         },
       });
@@ -1137,7 +1167,7 @@ globalThis.fetch = async (input, init) => {
       }
       const body = JSON.parse(String(init.body));
       if (
-        body.query !== 'Selected Visa Program'
+        body.query !== 'visa 香港超市有什么优惠'
         || body.pagination?.limit !== 1
       ) {
         throw new Error(

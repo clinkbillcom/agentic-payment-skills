@@ -18,7 +18,6 @@ Build one strict JSON object first. Allowed fields:
 ```json
 {
   "type": "benefit",
-  "keyword": "exact official title only",
   "limit": 50,
   "page": 1,
   "region": ["hk"],
@@ -39,6 +38,10 @@ code. With `--all`, omit `limit` and `page`.
 - One safe plan is the default. Map it to individual CLI flags, for example
   `type -> --type`, `region -> --region`, `reward_type -> --reward-type`,
   `card_level -> --card-level`, and `card_issuer -> --card-issuer`.
+- The required positional query is the only primary search text. Never pass
+  `--keyword` or put `keyword` inside a filter object. The CLI sends the
+  unchanged query as the Visa keyword, every matched merchant Catalog query,
+  and the first broad Catalog query.
 - Use `--filter-sets` only when exactly four genuinely different safe plans
   improve recall. Put all recommendation filters inside those objects and
   never combine them with outer individual filter flags.
@@ -53,16 +56,13 @@ code. With `--all`, omit `limit` and `page`.
 3. Four-set mode may vary only inferred soft filters. Never remove an explicit
    hard constraint. If fewer than four safe variants exist, use one strict
    plan; never repeat or pad filters to reach four.
-4. `keyword` is strict text matching. Use it only for an exact official title
-   or exact merchant phrase already present in current authoritative context.
-   Never put a conversational question or paraphrase in `keyword`.
-5. Use `type=benefit` for card benefits/coupons. Use `type=reward` only for
+4. Use `type=benefit` for card benefits/coupons. Use `type=reward` only for
    enrollment/cashback campaigns. Omit `type` when both are requested.
-6. Set `reward_type` only when the user explicitly names one. Generic
+5. Set `reward_type` only when the user explicitly names one. Generic
    `优惠`, `benefit`, `offer`, or `礼遇` selects no reward type. Never fan
    out `discount`, `coupon`, `cashback`, or `privilege` merely to create four
    sets; use the single strict plan instead.
-7. `--market` is not a recommendation filter: it selects the issuing-market
+6. `--market` is not a recommendation filter: it selects the issuing-market
    data source and may remain outside `--filter-sets`. `region[]` selects where
    the Benefit is usable. They are not interchangeable.
 
