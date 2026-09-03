@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.53";
+var CLI_VERSION = "0.2.54";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -26954,9 +26954,15 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
   const mandates = normalizeInstructionMandates(raw.mandates, isRecurring, { maxEntries: 10, requireCoreFields: true }).map((mandate, index) => normalizeVisaMandate(mandate, index, isRecurring));
   if (options2.expectedAmount !== void 0 && options2.expectedCurrency !== void 0) {
     const expectedCurrency = options2.expectedCurrency.toUpperCase();
-    const mismatched = mandates.find((mandate) => comparableAmount(mandate.amountLimit) !== comparableAmount(options2.expectedAmount) || mandate.currencyCode !== expectedCurrency);
-    if (mismatched) {
-      throw validationError("every instructionContext mandate must use the exact expected amount and currency");
+    const amountMismatchIndex = mandates.findIndex((mandate) => comparableAmount(mandate.amountLimit) !== comparableAmount(options2.expectedAmount));
+    if (amountMismatchIndex >= 0) {
+      const actualAmount = mandates[amountMismatchIndex]?.amountLimit;
+      throw validationError(`instructionContext.mandates[${amountMismatchIndex}].amountLimit must equal expected.amount in major currency units: got "${actualAmount}", expected "${options2.expectedAmount}". Do not copy totalAmountMinor into amountLimit.`);
+    }
+    const currencyMismatchIndex = mandates.findIndex((mandate) => mandate.currencyCode !== expectedCurrency);
+    if (currencyMismatchIndex >= 0) {
+      const actualCurrency = mandates[currencyMismatchIndex]?.currencyCode;
+      throw validationError(`instructionContext.mandates[${currencyMismatchIndex}].currencyCode must equal expected.currency: got "${actualCurrency}", expected "${expectedCurrency}"`);
     }
   }
   const merchantCategoryCodes = [
@@ -31170,6 +31176,8 @@ function isRecord26(value) {
 
 // dist/visa/commerce-login-context.js
 var MAX_CONTEXT_BYTES3 = 64 * 1024;
+var MAJOR_AMOUNT_FORMAT2 = /^\d{1,18}(?:\.\d{1,2})?$/u;
+var CURRENCY_FORMAT3 = /^[A-Z]{3}$/u;
 async function readVisaCommerceLoginContext(flags) {
   return normalizeVisaCommerceLoginContext(await readVisaContextInput(flags, "visa commerce-login"));
 }
@@ -31178,9 +31186,14 @@ function normalizeVisaCommerceLoginContext(raw) {
     throw validationError("commerce login context must be a JSON object");
   }
   const environment = normalizeVisaCommerceEnvironment(raw.environment);
-  const instructionContext = normalizeVisaInstructionContext(raw.instructionContext).context;
+  const expected = normalizeVisaCommerceLoginExpected(raw.expected);
+  const instructionContext = normalizeVisaInstructionContext(raw.instructionContext, {
+    expectedAmount: expected.amount,
+    expectedCurrency: expected.currency
+  }).context;
   const context = {
     environment,
+    expected,
     instructionContext
   };
   const bytes = Buffer.byteLength(JSON.stringify(context), "utf8");
@@ -31188,6 +31201,41 @@ function normalizeVisaCommerceLoginContext(raw) {
     throw validationError(`commerce login context must be at most ${MAX_CONTEXT_BYTES3} UTF-8 bytes, got ${bytes}`);
   }
   return deepFreeze2(context);
+}
+function normalizeVisaCommerceLoginExpected(value) {
+  if (!isRecord27(value)) {
+    throw validationError("expected must be a JSON object");
+  }
+  const unknown = Object.keys(value).find((field) => field !== "amount" && field !== "currency");
+  if (unknown) {
+    throw validationError(`expected contains unsupported field: ${unknown}`);
+  }
+  const amount = normalizeMajorAmount2(value.amount, "expected.amount");
+  const currency = requiredText6(value.currency, "expected.currency").toUpperCase();
+  if (!CURRENCY_FORMAT3.test(currency)) {
+    throw validationError("expected.currency must be a three-letter currency code");
+  }
+  return { amount, currency };
+}
+function normalizeMajorAmount2(value, field) {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!MAJOR_AMOUNT_FORMAT2.test(text) || Number(text) <= 0) {
+    throw validationError(`${field} must be a positive major-unit amount with at most 2 decimals`);
+  }
+  if (typeof value === "number" && !Number.isSafeInteger(Number(text.replace(".", "")))) {
+    throw validationError(`${field} must be a string when its minor units are not a safe integer`);
+  }
+  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  return trimDecimalZeros2(`${BigInt(integerPart).toString()}${fractionPart ? `.${fractionPart}` : ""}`);
+}
+function trimDecimalZeros2(value) {
+  return value.includes(".") ? value.replace(/0+$/u, "").replace(/\.$/u, "") : value;
+}
+function requiredText6(value, field) {
+  if (typeof value !== "string" || !value.normalize("NFKC").trim()) {
+    throw validationError(`${field} is required and cannot be blank`);
+  }
+  return value.normalize("NFKC").trim();
 }
 function visaCommerceLoginApiBaseUrl(context) {
   return visaCommerceApiBaseUrl(context.environment);
@@ -32793,7 +32841,7 @@ Usage:
   clink visa commerce-login (--context <json> | --context-file <path>) [options]
 
 Options:
-  --context <json>             Login context JSON with environment and instructionContext
+  --context <json>             Login context with environment, expected, and instructionContext
   --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required before every live login check or initialization
   --open                       Open the Visa Benefit authorization URL when login is required
@@ -32803,9 +32851,11 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  The JSON object contains only the selected environment and the complete frozen
-  instructionContext. Validation covers title, 1-10 mandates, mandate descriptions up to 150
-  characters, positive amount limits, three-letter currencies, four-digit MCCs, merchant-scope
+  The JSON object contains the selected environment, expected.amount/currency, and the complete
+  frozen instructionContext. expected.amount is the exact purchase total in major currency units.
+  Every mandate amountLimit and currencyCode must equal those expected values before config,
+  login, or network access. Never copy Catalog totalAmountMinor into amountLimit. Validation also
+  covers title, 1-10 mandates, descriptions up to 150 characters, four-digit MCCs, merchant-scope
   conflicts, recurring frequency, UTC expiry, shipping address, and total context size.
   When the CLI distribution is locked to sandbox/UAT or test, a generic production context
   defaults to that locked environment. Other incompatible environment values still fail closed.

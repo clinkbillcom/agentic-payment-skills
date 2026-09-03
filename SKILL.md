@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.60. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.61. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.60"
+  version: "0.1.61"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -314,11 +314,10 @@ never add an outer `--region`; the CLI rejects mixed filter ownership.
 `--market hk` remains a source selector and is used only when Hong Kong card
 issuance is explicit.
 
-Set `reward_type` only when the user explicitly asks for a coupon, cashback,
-discount, points, privilege, gift, or another exact reward type. Generic
-wording such as "优惠", "benefit", "offer", or "礼遇" selects no
-`reward_type`. Never fan out inferred reward types. If only one safe plan
-remains, use the single explicit-filter call.
+Never infer or pass `--type` for `recommend-products`; Benefit, reward, coupon,
+discount, or purchase wording does not select it. Set `reward_type` only when
+the user explicitly requests one. Generic "优惠", "benefit", "offer", or
+"礼遇" selects none. Never fan out reward types; use one safe plan when possible.
 
 For category-, merchant-, or product-specific shopping requests, choose one
 strict plan by default and use four-set aggregation only for four meaningful
@@ -436,20 +435,22 @@ Before login, require all of the following:
 6. Every required product, fulfillment, and environment field is present.
 7. The complete purchase passes the Restricted Instruction Gate.
 
-Create a login context containing only the locked environment and exact
-Instruction context:
+Build this login context:
 
 ```json
 {
   "environment": "uat",
+  "expected": {
+    "amount": "<product.totalAmountMajor>",
+    "currency": "<verified-currency>"
+  },
   "instructionContext": {
     "title": "<selected-program-title>",
-    "description": "Purchase the selected Visa Program",
     "mandates": [
       {
         "title": "<selected-program-title>",
         "description": "Purchase the selected Visa Program",
-        "amountLimit": "<exact-program-price>",
+        "amountLimit": "<product.totalAmountMajor>",
         "currencyCode": "<program-currency>",
         "merchantCategoryCode": "<resolved-four-digit-mcc>"
       }
@@ -458,8 +459,10 @@ Instruction context:
 }
 ```
 
-Mandate descriptions must be at most 150 characters. The amount is the exact
-authorized price with no buffer.
+Set login/purchase `expected.amount` and every `amountLimit` to
+`product.totalAmountMajor`. Never copy `unitPriceMinor`, `totalAmountMinor`, or,
+for quantity >1, `unitPriceMajor`. Example: `totalAmountMinor=100` and
+`totalAmountMajor="1"` make all three major-unit fields `"1"`.
 
 Say that login, card, VIC, and Instruction readiness are being checked. Login
 may open in the browser. Show but never open a returned Bind Card link; an
@@ -473,11 +476,10 @@ already-open Agent Portal also works. Then run once in the foreground:
   --format json
 ```
 
-Keep this process foreground until `ok=true` and `ready=true` or a bound
-timeout continuation. The CLI alone owns the Pending Instruction Card Gate.
-The Agent must not inspect, persist, infer, or copy registration fields,
-`pendingInstructionId`, or any login-returned Instruction ID. Quick
-Instruction is an internal acceleration path, not purchase identity.
+Keep it foreground until `ok=true` and `ready=true` or a bound timeout. The CLI
+alone owns the Pending Instruction Card Gate. Never inspect or copy registration
+fields, `pendingInstructionId`, or login-returned Instruction IDs; Quick
+Instruction is acceleration, not purchase identity.
 
 Build one frozen purchase context from the same Program and verified product:
 
@@ -497,7 +499,7 @@ Build one frozen purchase context from the same Program and verified product:
   "expected": {
     "merchantName": "<verified-merchant-name>",
     "itemTitle": "<provider-source-title>",
-    "amount": "<verified-total-major>",
+    "amount": "<product.totalAmountMajor>",
     "currency": "<verified-currency>"
   },
   "instructionContext": {
@@ -506,7 +508,7 @@ Build one frozen purchase context from the same Program and verified product:
       {
         "title": "<selected-program-title>",
         "description": "Purchase the selected Visa Program",
-        "amountLimit": "<exact-program-price>",
+        "amountLimit": "<product.totalAmountMajor>",
         "currencyCode": "<program-currency>",
         "merchantCategoryCode": "<resolved-four-digit-mcc>"
       }
@@ -519,6 +521,7 @@ Build one frozen purchase context from the same Program and verified product:
     "displayTitle": "<localized-display-title>",
     "unitPriceMajor": "<verified-unit-major>",
     "unitPriceMinor": "<verified-unit-minor>",
+    "totalAmountMajor": "<verified-total-major>",
     "totalAmountMinor": "<verified-total-minor>",
     "availability": "<verified-availability>"
   }
@@ -648,22 +651,23 @@ current wallet email automatically; include `buyer.email` only when the user
 explicitly selected a different order-contact email. Treat buyer data as
 private: never place it in metadata or echo it in summaries.
 
-An explicit request to buy the unambiguous displayed product is one purchase
-authorization. Build the same minimal login shape, using only the Catalog
-product facts:
+For the authorized selected product, build this Catalog login context:
 
 ```json
 {
   "environment": "uat",
+  "expected": {
+    "amount": "<product.totalAmountMajor>",
+    "currency": "<product.currency>"
+  },
   "instructionContext": {
     "title": "<authoritative-catalog-title>",
-    "description": "Purchase the selected Catalog product",
     "mandates": [
       {
         "title": "<authoritative-catalog-title>",
         "description": "Purchase the selected Catalog product",
-        "amountLimit": "<structured-catalog-purchase-price>",
-        "currencyCode": "<structured-catalog-purchase-currency>",
+        "amountLimit": "<product.totalAmountMajor>",
+        "currencyCode": "<product.currency>",
         "merchantCategoryCode": "<classified-four-digit-mcc>"
       }
     ]
@@ -697,8 +701,8 @@ shared fields:
   "expected": {
     "merchantName": "<authoritative-merchant-name>",
     "itemTitle": "<authoritative-product-title>",
-    "amount": "<structured-catalog-purchase-price>",
-    "currency": "<structured-catalog-purchase-currency>",
+    "amount": "<product.totalAmountMajor>",
+    "currency": "<product.currency>",
     "availability": "<authoritative-orderable-status>"
   },
   "instructionContext": {
@@ -707,8 +711,8 @@ shared fields:
       {
         "title": "<authoritative-catalog-title>",
         "description": "Purchase the selected Catalog product",
-        "amountLimit": "<structured-catalog-purchase-price>",
-        "currencyCode": "<structured-catalog-purchase-currency>",
+        "amountLimit": "<product.totalAmountMajor>",
+        "currencyCode": "<product.currency>",
         "merchantCategoryCode": "<classified-four-digit-mcc>"
       }
     ]
@@ -746,8 +750,8 @@ contract:
       {
         "title": "<frozen-provider-title>",
         "description": "Purchase the selected Catalog product",
-        "amountLimit": "<structured-catalog-purchase-price>",
-        "currencyCode": "<structured-catalog-purchase-currency>",
+        "amountLimit": "<product.totalAmountMajor>",
+        "currencyCode": "<product.currency>",
         "merchantCategoryCode": "5814"
       }
     ]
