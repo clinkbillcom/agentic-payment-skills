@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.60. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.61. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.60"
+  version: "0.1.61"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -243,8 +243,10 @@ must make exactly one `visa recommend-products` call with the unchanged original
 current user request and
 `--include-broad-catalog`. Read `references/visa-recommend-filters.md` and
 choose the smallest safe filter shape. The CLI starts broad all-channel Catalog
-search in parallel with Visa recommendation, then checks every returned Program
-against configured internal UCP merchant routes.
+search in parallel with Visa recommendation and anonymously loads the selected
+environment merchant list once. A Program routes only when its exact `code`
+equals one merchant's `ext.visa_program_id`; its Offer URL is presentation
+metadata only and never selects a merchant.
 
 For product or category discovery, add up to three distinct product-only broad
 queries with `--broad-queries`. They improve Catalog recall only: they do not
@@ -285,10 +287,10 @@ de-duplicates by Program code. Broad query variants run inside that same CLI
 command and never multiply Visa requests.
 
 Never add `--include-provider-products` or issue another Agent-managed
-recommend/product-search command. The aggregate uses only configured exact
-internal routes, never loads the merchant list, and never parses an unconfigured
-Visa campaign page. It does not log in, bind a card, create an Instruction,
-Checkout, or payment.
+recommend, product-search, or merchant-list command. The aggregate owns one
+anonymous merchant-list read, exact Program-code matching, and internal Catalog
+search; it never parses an unconfigured Visa campaign page. It does not log in,
+bind a card, create an Instruction, Checkout, or payment.
 
 For broad availability wording such as "What Visa Benefits can I use in Hong
 Kong?", always add `--all` because the required result is the complete regional
@@ -424,9 +426,9 @@ Before login, require all of the following:
      Program, merchant ID, merchant URL, merchant name, product title/source
      title, category, and fulfillment context. The classification must be
      high-confidence and must pass the Restricted Instruction Gate.
-   - For the exact UAT route `https://vsrp.hk/p/o5s`, merchant
-     `mcht_ftmse61a6az0`, and the verified Wellcome supermarket gift-card
-     product, use MCC `5411`.
+   - For Program `P2026080006` exactly mapped through merchant-list
+     `ext.visa_program_id` to merchant `mcht_ftmse61a6az0`, and the verified
+     Wellcome supermarket gift-card product, use MCC `5411`.
    - An invalid or conflicting Program MCC, title-only guess, broad
      common-MCC fallback, or low-confidence classification stops before login.
    Freeze the resolved MCC once and reuse it unchanged in login, Instruction,

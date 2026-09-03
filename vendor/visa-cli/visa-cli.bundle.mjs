@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.51";
+var CLI_VERSION = "0.2.52";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -14529,12 +14529,6 @@ var MERCHANT_LIST_TIMEOUT_MS = 15e3;
 var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
 var MERCHANT_LIST_MAX_ATTEMPTS = 2;
 var MERCHANT_LIST_RETRY_DELAY_MS = 50;
-var UAT_EXACT_MERCHANT_URLS = /* @__PURE__ */ new Map([
-  [
-    "https://vsrp.hk/p/o5s",
-    "mcht_ftmse61a6az0"
-  ]
-]);
 var merchantListRequests = /* @__PURE__ */ new WeakMap();
 async function getInternalUcpMerchantList(options2 = {}) {
   return (await loadInternalUcpMerchantList(options2)).merchants;
@@ -14587,17 +14581,15 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!domainName) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  let merchantId = exactMerchantUrlMerchantId(productUrl2, environment);
-  if (!merchantId) {
-    if (options2.merchants) {
-      merchantId = options2.merchants.get(domainName);
-    } else {
-      let loaded = await loadInternalUcpMerchants(options2);
+  let merchantId;
+  if (options2.merchants) {
+    merchantId = options2.merchants.get(domainName);
+  } else {
+    let loaded = await loadInternalUcpMerchants(options2);
+    merchantId = loaded.merchants.get(domainName);
+    if (!merchantId && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchants(options2, true);
       merchantId = loaded.merchants.get(domainName);
-      if (!merchantId && loaded.fromCache) {
-        loaded = await loadInternalUcpMerchants(options2, true);
-        merchantId = loaded.merchants.get(domainName);
-      }
     }
   }
   if (!merchantId) {
@@ -14819,17 +14811,6 @@ function cloneJsonValue(value, ancestors) {
 }
 function canonicalDomain(value) {
   return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
-}
-function exactMerchantUrlMerchantId(productUrl2, environment) {
-  if (environment !== "sandbox" || productUrl2.protocol !== "https:" || productUrl2.username || productUrl2.password || productUrl2.port) {
-    return void 0;
-  }
-  const domainName = canonicalDomain(productUrl2.hostname);
-  if (!domainName) {
-    return void 0;
-  }
-  const pathname = productUrl2.pathname.replace(/\/+$/u, "") || "/";
-  return UAT_EXACT_MERCHANT_URLS.get(`https://${domainName}${pathname}`);
 }
 function merchantMap(merchants, source) {
   const merchantIdsByDomain = /* @__PURE__ */ new Map();
@@ -33174,13 +33155,15 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  Runs one Visa recommendation, then concurrently checks every returned Program for a configured
-  internal UCP merchant route using its authoritative URL and title. Only exact
+  Runs one Visa recommendation, loads the selected environment's anonymous merchant list once, then
+  matches each returned Program code only against merchant ext.visa_program_id. The Offer URL is
+  presentation metadata only and never selects a merchant. Only exact
   PRODUCT_VERIFIED + internal-ucp-catalog matches enter products. Their matched Visa Programs are
   removed from visaBenefits to avoid duplicate presentation. Unmatched Programs remain in
-  visaBenefits. Unconfigured Visa campaign pages are never parsed externally. One product failure
-  preserves the Benefit and marks productMatching.coverage partial. This command does not log in,
-  create an Instruction or Checkout, or initiate payment.
+  visaBenefits. Duplicate Program mappings fail closed; a merchant-list or product failure preserves
+  the Benefits and marks productMatching.coverage partial. Unconfigured Visa campaign pages are never
+  parsed externally. This command does not log in, create an Instruction or Checkout, or initiate
+  payment.
 
   With --include-broad-catalog, the original positional query is required. Broad Catalog search
   starts in parallel with Visa recommendation. --broad-queries accepts a JSON array of up to three
@@ -33268,6 +33251,44 @@ function renderVisaHelp(help) {
 }
 function addVisaRootHelp(rootHelp) {
   return rootHelp.replace("  wallet            Initialize wallet and inspect local wallet status\n", "  wallet            Initialize wallet and inspect local wallet status\n  visa              Sign in with Visa and discover Visa offers\n").replace("  clink wallet status --format pretty\n", '  clink wallet status --format pretty\n  clink visa init --sandbox --open\n  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty\n').replace("  clink wallet --help\n", "  clink wallet --help\n  clink visa --help\n").replace("Select an official environment with wallet init:", "Select an official environment with wallet init or visa init:");
+}
+
+// dist/visa/program-merchant.js
+function resolveVisaProgramMerchantRoute(input) {
+  const programCode = input.programCode.trim();
+  if (!programCode) {
+    return void 0;
+  }
+  const matches = input.merchants.filter((merchant2) => visaProgramId(merchant2.ext) === programCode);
+  if (matches.length === 0) {
+    return void 0;
+  }
+  if (matches.length > 1) {
+    throw validationError(`duplicate Visa program merchant mapping: ${programCode}`);
+  }
+  const merchant = matches[0];
+  const merchantUrl = new URL(merchant.domain);
+  const endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchant.merchant_id)}`, input.baseUrl);
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.port === "0" || endpoint.search || endpoint.hash) {
+    throw validationError("invalid internal UCP base URL");
+  }
+  return {
+    programCode,
+    merchantName: merchant.merchant_name,
+    merchantUrl: merchant.domain,
+    routeSource: "merchant_list_ext",
+    domainName: merchantUrl.hostname.toLowerCase().replace(/\.+$/u, ""),
+    merchantId: merchant.merchant_id,
+    provider: "clinkbill",
+    endpoint: endpoint.toString()
+  };
+}
+function visaProgramId(ext) {
+  if (!ext || typeof ext !== "object" || Array.isArray(ext)) {
+    return void 0;
+  }
+  const value = ext.visa_program_id;
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 
 // dist/visa/edition.js
@@ -33863,13 +33884,20 @@ async function visaRecommendProducts(context) {
   const environment = visaBenefitCatalogEnvironment(context);
   const language = catalogLanguageForVisaLocale(execution.locale);
   const registeredProviderRoutes = visaBenefitCatalogProviderRoutes(environment, API_BASE_URLS[environment]);
-  const [resolutions, broadCatalogRuns] = await Promise.all([
-    Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language))),
+  const [productResolution, broadCatalogRuns] = await Promise.all([
+    resolveVisaOfferProducts(context, offers, environment, language),
     broadCatalogPromise
   ]);
+  const resolutions = productResolution.resolutions;
   const matchedIndexes = /* @__PURE__ */ new Set();
   const productsByKey = /* @__PURE__ */ new Map();
   const failures = [];
+  if (productResolution.merchantListFailure) {
+    failures.push({
+      scope: "merchant_list",
+      message: productResolution.merchantListFailure
+    });
+  }
   let routedOfferCount = 0;
   let matchedOfferCount = 0;
   for (const resolution of resolutions) {
@@ -33951,33 +33979,47 @@ async function visaRecommendProducts(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
-async function resolveVisaOfferProduct(context, offer, index, environment, language) {
+async function resolveVisaOfferProducts(context, offers, environment, language) {
+  if (offers.length === 0) {
+    return { resolutions: [] };
+  }
+  let merchants;
+  try {
+    merchants = await getInternalUcpMerchantList({
+      environment,
+      timeoutMs: context.globalOptions.timeoutMs
+    });
+  } catch (error) {
+    return {
+      resolutions: [],
+      merchantListFailure: safeVisaProductFailure(error)
+    };
+  }
+  return {
+    resolutions: await Promise.all(offers.map((offer, index) => resolveVisaOfferProduct(context, offer, index, environment, language, merchants)))
+  };
+}
+async function resolveVisaOfferProduct(context, offer, index, environment, language, merchants) {
   const record = recommendationRecord(offer);
   const code = recommendationProgramCode(record);
   const title = recommendationOptionalString(record.title);
   const url = recommendationOfferUrl(record);
-  if (!code || !title || !url) {
+  if (!code || !title) {
     return { index, offer, routed: false, matched: false };
   }
-  const program2 = { code, title, url };
+  const program2 = {
+    code,
+    title,
+    ...url ? { url } : {}
+  };
   let internal;
   try {
-    internal = await resolveInternalUcpEndpoint(url, {
-      baseUrl: API_BASE_URLS[environment],
-      environment,
-      timeoutMs: context.globalOptions.timeoutMs,
-      merchants: /* @__PURE__ */ new Map()
+    internal = resolveVisaProgramMerchantRoute({
+      programCode: code,
+      merchants,
+      baseUrl: API_BASE_URLS[environment]
     });
   } catch (error) {
-    if (error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST") {
-      return {
-        index,
-        offer,
-        routed: false,
-        matched: false,
-        program: program2
-      };
-    }
     return {
       index,
       offer,
@@ -33987,9 +34029,18 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
       failure: safeVisaProductFailure(error)
     };
   }
+  if (!internal) {
+    return {
+      index,
+      offer,
+      routed: false,
+      matched: false,
+      program: program2
+    };
+  }
   try {
     const productResult = await runVisaProductSearch({
-      merchantUrl: url,
+      merchantUrl: internal.merchantUrl,
       query: title,
       language,
       limit: 1

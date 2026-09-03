@@ -44,17 +44,19 @@ visa commerce-run
   Bind Card 链接但绝不自动打开；CLI 保持前台等待；只有同一张卡完成 VIC 且
   CWallet 自动激活该精确 Instruction 后才继续
 
-首轮不使用 `--include-provider-products` 或 merchant-list。全渠道 Catalog
-与 Visa 推荐并行，权益匹配商品和广域商品进入同一个商品集合；失败或未匹配
-Program 继续保留为 Visa 权益。
+首轮不使用 `--include-provider-products`，Agent 也不单独调用 merchant-list。
+全渠道 Catalog 与 Visa 推荐并行，聚合命令会匿名读取一次所选环境 merchant
+list，并且只在 Program code 与 `ext.visa_program_id` 完全相同时路由商户。
+权益匹配商品和广域商品进入同一个商品集合；失败或未匹配 Program 继续保留为
+Visa 权益。
 匿名发现直接执行内置 launcher，不传环境参数，也不探测文件、发行版、wallet
 或认证状态。
 
 可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
 商户身份。商品中的 matched Program 仅作购买 provenance；只有 `visaBenefits`
 可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
-UAT 额外只把 `https://vsrp.hk/p/o5s` 作为 CLI 内置 alias 映射到商户
-`mcht_ftmse61a6az0`；同一 host 的其他路径不继承该映射。
+UAT 只有在返回的 Program code 与商户 `mcht_ftmse61a6az0` 的 merchant-list
+`ext.visa_program_id` 完全相同时才建立路由；Offer URL 不再选择商户。
 已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
 时，允许从完整冻结的商户和商品上下文做一次高置信分类。上述 UAT 惠康礼品卡
 精确路由使用 MCC `5411`；Program MCC 格式错误或冲突、低置信分类和只看标题
@@ -78,8 +80,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.60` 已 vendor 上游提交
-`2acae4d98e6a328ca6d34489e3dd9d6612a73ae2` 的 Visa CLI `0.2.51`。它支持
+Skill `0.1.61` 已 vendor 上游提交
+`94c21a548f0e63c32b07fb3473db50742bcf97da` 的 Visa CLI `0.2.52`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -107,7 +109,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.60`
+Skill 版本：`0.1.61`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

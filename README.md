@@ -54,10 +54,12 @@ The lightweight shopping routes cover:
   keep the CLI in the foreground, and continue only after the same card is
   VIC-ready and CWallet activates that exact Instruction
 
-Initial discovery never uses `--include-provider-products` or a merchant-list
-lookup. It starts all-channel Catalog search in parallel with Visa
-recommendation. Linked and broad products share one products collection; a
-failed or unmatched Program resolution remains a Visa Benefit.
+Initial discovery never uses `--include-provider-products` or an Agent-managed
+merchant-list lookup. It starts all-channel Catalog search in parallel with Visa
+recommendation, anonymously loads the selected environment merchant list once,
+and routes a Program only when its exact code equals `ext.visa_program_id`.
+Linked and broad products share one products collection; a failed or unmatched
+Program resolution remains a Visa Benefit.
 Anonymous discovery executes the installed launcher directly, omits environment
 flags, and never probes files, distribution, wallet, or authentication state.
 
@@ -65,9 +67,9 @@ Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
 Program provenance. That provenance is never a display source: only
 `visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
-use `visa detail`, but the Skill does not rerun product-search. UAT recognizes only
-`https://vsrp.hk/p/o5s` as a CLI-owned alias for merchant
-`mcht_ftmse61a6az0`; no other path on that host inherits the mapping.
+use `visa detail`, but the Skill does not rerun product-search. UAT merchant
+`mcht_ftmse61a6az0` is selected only when a returned Program code exactly
+matches its merchant-list `ext.visa_program_id`; Offer URLs never select it.
 For a verified Program purchase, a valid Program MCC remains authoritative.
 When it is missing, the Skill may classify one high-confidence MCC from the
 complete frozen merchant/product context. The exact UAT Wellcome gift-card
@@ -93,8 +95,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.60` vendors Visa CLI `0.2.51` from upstream commit
-`2acae4d98e6a328ca6d34489e3dd9d6612a73ae2`. It uses one-round Visa
+Skill `0.1.61` vendors Visa CLI `0.2.52` from upstream commit
+`94c21a548f0e63c32b07fb3473db50742bcf97da`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
@@ -126,7 +128,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.60`
+Skill version: `0.1.61`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
