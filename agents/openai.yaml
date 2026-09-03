@@ -36,8 +36,14 @@ interface:
     sandbox/test flag. It recommends Visa Programs and concurrently checks each
     one against configured exact internal UCP routes; never issue separate
     recommend, detail, product-search, merchant-list, or external-page calls.
-    Read only products and visaBenefits. Present exact orderable products first.
-    A Program represented by a product must not also be displayed as a Benefit.
+    Read only products and visaBenefits. After independent hard-constraint
+    filtering, always present nonempty exact orderable products first, then
+    relevant visaBenefits. If only products remain, show products only and do
+    not mention missing Benefits, Offers, coupons, or discounts. If only
+    visaBenefits remain, show Benefits only and do not mention missing or
+    unorderable products. Only when both filtered collections are empty, give
+    one concise no-results answer. A Program represented by a product must not
+    also be displayed as a Benefit.
     matchedPrograms is purchase provenance only: never reconstruct a Benefit
     title, activity description, Offer URL, eligibility, terms, or CTA from it.
     visaBenefits is the only source of user-facing Benefit rows. If
@@ -46,8 +52,9 @@ interface:
     constraints. PRODUCT_SELECTION_REQUIRED, unavailable, external, and failed
     matches remain Benefits. Disclose partial productMatching coverage. If
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
-    survives semantic filtering, report no strict match; do not run broad
-    catalog search in this branch. Treat only structured ok=false,
+    survives semantic filtering, suppress fallback rows and apply the same
+    result-presentation rules; do not run broad catalog search in this branch.
+    Treat only structured ok=false,
     error.type=api_error, whose message starts exactly Visa recommendation
     relaxed explicitly requested filters: as the same no-strict-match result;
     every other error stops. Catalog price.amount and price_range amounts are minor

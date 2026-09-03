@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.56. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.57. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.56"
+  version: "0.1.57"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -313,6 +313,13 @@ prior filters and results.
 
 Read only the aggregate `products` and `visaBenefits` collections:
 
+- After independently applying the original hard constraints to both
+  collections, present nonempty results in this fixed order: exact orderable
+  `products` first, then relevant `visaBenefits`.
+- When only `products` remains, show products only and do not mention missing
+  Benefits, Offers, coupons, or discounts. When only `visaBenefits` remains,
+  show Benefits only and do not mention missing or unorderable products. Only
+  when both filtered collections are empty, give one concise no-results answer.
 - `products` contains exact `PRODUCT_VERIFIED` internal UCP matches. Present
   the authoritative product title, major-unit price/currency, availability, and
   merchant. A matched Program is provenance only and must not be displayed
@@ -342,8 +349,9 @@ miss. This exact read-only response means no strict Program matched. Every
 other error stops; never turn a timeout, network, authentication, validation,
 or unrelated API error into Catalog fallback.
 
-For a Visa miss, report no strict matching Visa Benefit or linked product. Do
-not run broad `catalog search` in this branch.
+For a Visa miss, discard fallback Visa rows and apply the presentation rules
+above. Report no result only when both filtered collections are empty. Do not
+run broad `catalog search` in this branch.
 
 For count-only wording, return the authoritative Visa matching total. Do not
 silently replace a requested Visa Benefit count with a bounded Catalog count.
@@ -946,8 +954,13 @@ general workflow engine.
 
 - Continue only from structured `ok=true` results or an exact documented
   read-only continuation.
-- For Visa discovery, use only `visa recommend-products` output. Display
-  products and unmatched visaBenefits; never display a matched Program twice.
+- For Visa discovery, use only `visa recommend-products` output. Present
+  nonempty exact orderable products first, then relevant unmatched
+  visaBenefits; never display a matched Program twice. Omit an empty collection
+  without explaining its absence. When only products remain, show products only
+  and do not mention missing Benefits. When only visaBenefits remain, show
+  Benefits only and do not mention missing products. Report no result only when
+  both filtered collections are empty.
 - Never derive a Benefit presentation from `products[*].matchedPrograms`. When
   an exact product replaced its Program, display only that product.
 - For a selected Visa Benefit, report an order option only after an exact
