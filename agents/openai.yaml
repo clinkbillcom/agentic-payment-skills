@@ -41,8 +41,14 @@ interface:
     command and never multiply Visa requests. It checks each Program against
     configured exact internal UCP routes; never issue separate
     recommend, detail, product-search, merchant-list, or external-page calls.
-    Read only products and visaBenefits. Products is one unified list: never
-    group or label Visa-linked and broad Catalog products by source. Preserve
+    Read only products and visaBenefits. After independent hard-constraint
+    filtering, always present nonempty exact orderable products first, then
+    relevant visaBenefits. If only products remain, show products only and do
+    not mention missing Benefits, Offers, coupons, or discounts. If only
+    visaBenefits remain, show Benefits only and do not mention missing or
+    unorderable products. Only when both filtered collections are empty, give
+    one concise no-results answer. Products is one unified list: never group or
+    label Visa-linked and broad Catalog products by source. Preserve
     catalogProvenance internally for purchase revalidation. A Program represented
     by a product must not also be displayed as a Benefit.
     A URL-less internal broad product is valid only when its exact merchantId
@@ -59,8 +65,9 @@ interface:
     constraints. PRODUCT_SELECTION_REQUIRED, unavailable, external, and failed
     matches remain Benefits. Disclose partial productMatching coverage. If
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
-    survives semantic filtering, report no strict Visa match but still present
-    broad products. Disclose partial productMatching or broadCatalogSearch
+    survives semantic filtering, suppress fallback Visa rows and apply the same
+    result-presentation rules. Never announce a Visa miss while products
+    remain. Disclose partial productMatching or broadCatalogSearch
     coverage. Explicit Visa filter relaxation must return ok=true,
     recommendationMode=no_matching_offers, and
     strictMatchFailure.code=relaxed_explicit_filters while retaining broad

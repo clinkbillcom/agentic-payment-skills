@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.59');
+  assert.equal(packageJson.version, '0.1.60');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.59/u);
-  assert.match(skill, /version: "0\.1\.59"/u);
+  assert.match(skill, /Visa Skill 0\.1\.60/u);
+  assert.match(skill, /version: "0\.1\.60"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -392,6 +392,44 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
 });
 
+test('discovery presents products first and stays silent about empty collections', () => {
+  const discovery = skill.slice(
+    skill.indexOf('## Visa Benefit And Product Discovery'),
+    skill.indexOf('### Selected Visa Benefit Resolution'),
+  );
+  const resultContract = skill.slice(
+    skill.indexOf('## Result Contract'),
+    skill.indexOf('## Safety Summary'),
+  );
+
+  for (const document of [discovery, resultContract, agent]) {
+    assert.match(
+      document,
+      /products`?\s+first[\s\S]*visaBenefits/iu,
+    );
+    assert.match(
+      document,
+      /only\s+`?products`?\s+remain[\s\S]*products only[\s\S]*do not mention missing[\s\S]*Benefits/iu,
+    );
+    assert.match(
+      document,
+      /only\s+`?visaBenefits`?\s+remain[\s\S]*Benefits only[\s\S]*do not mention missing[\s\S]*products/iu,
+    );
+    assert.match(
+      document,
+      /both filtered collections are empty[\s\S]*no-results|no result only when[\s\S]*both filtered collections are empty/iu,
+    );
+  }
+  assert.match(
+    readme,
+    /orderable products first[\s\S]*Benefits[\s\S]*empty sections are omitted[\s\S]*both[\s\S]*collections are empty/iu,
+  );
+  assert.match(
+    readmeZh,
+    /可下单商品优先[\s\S]*相关权益其次[\s\S]*空集合不单独说明[\s\S]*两边[\s\S]*都为空/iu,
+  );
+});
+
 test('compact filter reference defines schema, selection priority, and intent boundary', () => {
   for (const field of [
     'type',
@@ -466,7 +504,7 @@ test('a Visa miss suppresses fallback rows but keeps parallel broad products', (
   );
   assert.match(
     fallback,
-    /Visa miss[\s\S]*do not display fallback Visa rows[\s\S]*Still present any products[\s\S]*parallel broad Catalog search/iu,
+    /Visa miss[\s\S]*do not display fallback Visa rows[\s\S]*presentation rules[\s\S]*surviving broad products[\s\S]*Never announce[\s\S]*missing Visa Benefits while products remain/iu,
   );
   assert.match(
     agent,
@@ -482,7 +520,7 @@ test('a Visa miss suppresses fallback rows but keeps parallel broad products', (
   );
   assert.match(
     agent,
-    /no strict Visa match[\s\S]*still present[\s\S]*broad products/iu,
+    /suppress fallback Visa rows[\s\S]*result-presentation rules[\s\S]*Never announce a Visa miss[\s\S]*products\s+remain/iu,
   );
   assert.doesNotMatch(fallback, /bin\/visa-cli catalog search/u);
 });

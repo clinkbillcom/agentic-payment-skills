@@ -31,6 +31,9 @@ The lightweight shopping routes cover:
   with explicit `--market` reserved for cross-source searches
 - one unified `products` collection plus unmatched `visaBenefits`; a Program
   represented by a product is not displayed twice
+- deterministic presentation of orderable products first and relevant Benefits
+  second; empty sections are omitted, and no result is reported only when both
+  collections are empty
 - parallel all-channel Catalog search whose available products merge into that
   same collection without source grouping
 - URL-less internal broad products retained only when their exact merchant ID
@@ -90,7 +93,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.59` vendors Visa CLI `0.2.51` from upstream commit
+Skill `0.1.60` vendors Visa CLI `0.2.51` from upstream commit
 `2acae4d98e6a328ca6d34489e3dd9d6612a73ae2`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
@@ -123,7 +126,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.59`
+Skill version: `0.1.60`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
