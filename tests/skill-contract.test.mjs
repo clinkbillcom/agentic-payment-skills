@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.65');
+  assert.equal(packageJson.version, '0.1.66');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.65/u);
-  assert.match(skill, /version: "0\.1\.65"/u);
+  assert.match(skill, /Visa Skill 0\.1\.66/u);
+  assert.match(skill, /version: "0\.1\.66"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -53,9 +53,12 @@ test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.ok(readmeZh.includes(`Skill \`${packageJson.version}\``));
   assert.ok(readmeZh.includes(`Visa CLI \`${vendorPackage.version}\``));
   assert.ok(readmeZh.includes(vendorPackage.upstreamCommit));
+  assert.match(readme, /production-backend variant/iu);
+  assert.match(readmeZh, /生产后端发行线/u);
   assert.match(skill, /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
   assert.match(combined, /bin\/visa-cli/u);
   assert.doesNotMatch(combined, /vendor\/clink-cli|bin\/clink\b/u);
+  assert.doesNotMatch(skill, /"environment": "uat"/u);
 });
 
 test('description routes broad payment and commerce intent without naming a product', () => {
@@ -168,7 +171,7 @@ test('initial Visa discovery runs one matched-merchant aggregate without broad C
   assert.match(skill, /\ben\b[\s\S]*zh-CN[\s\S]*zh-TW[\s\S]*zh-HK/u);
   assert.match(
     skill,
-    /Distribution And Purchase Environment[\s\S]*bundled launcher already pins[\s\S]*Anonymous discovery invokes it directly/iu,
+    /Distribution And Purchase Environment[\s\S]*bundled launcher pins[\s\S]*`production`[\s\S]*Anonymous[\s\S]*discovery invokes it directly/iu,
   );
   assert.match(
     discovery,
@@ -249,11 +252,15 @@ test('anonymous discovery never preflights wallet environment', () => {
 
   assert.match(
     environment,
-    /bundled launcher already pins[\s\S]*Anonymous discovery invokes it directly[\s\S]*omits `--sandbox`\/`--test`[\s\S]*never[\s\S]*determine, inspect, infer, or override[\s\S]*run any shell or authentication preflight/iu,
+    /bundled launcher pins[\s\S]*`production`[\s\S]*omits `--sandbox`\/`--test`/iu,
   );
   assert.match(
     environment,
-    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated\s+purchase[\s\S]*wallet and purchase environments agree/iu,
+    /never determine,[\s\S]*inspect,[\s\S]*infer,[\s\S]*override[\s\S]*authentication preflight/iu,
+  );
+  assert.match(
+    environment,
+    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated\s+purchase[\s\S]*wallet is production-bound[\s\S]*environment: "production"[\s\S]*conflicting[\s\S]*stops/iu,
   );
   assert.match(
     wallet,
@@ -265,7 +272,15 @@ test('anonymous discovery never preflights wallet environment', () => {
   );
   assert.match(
     agent,
-    /resolved Skill Path and launcher are[\s\S]*authoritative[\s\S]*Execute it directly[\s\S]*never run ls[\s\S]*stat[\s\S]*find[\s\S]*which[\s\S]*test -x[\s\S]*launcher already pins[\s\S]*anonymous[\s\S]*omits --sandbox\/--test[\s\S]*Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit purchase authorization/iu,
+    /resolved Skill Path and launcher are[\s\S]*authoritative[\s\S]*Execute it directly[\s\S]*never run ls[\s\S]*stat[\s\S]*find[\s\S]*which[\s\S]*test -x/iu,
+  );
+  assert.match(
+    agent,
+    /launcher pins this distribution to production[\s\S]*anonymous discovery[\s\S]*omits --sandbox\/--test/iu,
+  );
+  assert.match(
+    agent,
+    /Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit[\s\S]*purchase authorization[\s\S]*context uses[\s\S]*environment production/iu,
   );
 });
 
@@ -637,11 +652,7 @@ test('Visa Program MCC is authoritative-first with bounded inference', () => {
   );
   assert.match(
     section,
-    /Program `P2026080006`[\s\S]*merchant-list[\s\S]*`ext\.visa_program_id`[\s\S]*mcht_ftmse61a6az0[\s\S]*Wellcome supermarket gift-card[\s\S]*MCC `5411`/iu,
-  );
-  assert.match(
-    section,
-    /invalid or conflicting Program MCC[\s\S]*title-only guess[\s\S]*broad[\s\S]*common-MCC fallback[\s\S]*low-confidence[\s\S]*stops before login/iu,
+    /invalid or conflicting Program MCC[\s\S]*title-only guess[\s\S]*broad[\s\S]*common-MCC fallback[\s\S]*environment-specific merchant\/MCC override[\s\S]*low-confidence[\s\S]*stops before login/iu,
   );
   assert.match(
     section,
@@ -657,8 +668,10 @@ test('Visa Program MCC is authoritative-first with bounded inference', () => {
   );
   assert.match(
     agent,
-    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*Program P2026080006[\s\S]*ext\.visa_program_id[\s\S]*mcht_ftmse61a6az0[\s\S]*MCC 5411[\s\S]*Freeze the\s+resolved MCC/iu,
+    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*Never reuse an environment-specific merchant identity or[\s\S]*MCC override[\s\S]*Freeze the\s+resolved MCC/iu,
   );
+  assert.doesNotMatch(section, /P2026080006|mcht_ftmse61a6az0/u);
+  assert.doesNotMatch(agent, /P2026080006|mcht_ftmse61a6az0/u);
 });
 
 test('Visa fast path preserves aggregate order and never decomposes purchase', () => {

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
-set "CLINK_WALLET_INIT_ENVIRONMENT=sandbox"
+set "CLINK_WALLET_INIT_ENVIRONMENT=production"
 
 set "NODE_EXE="
 if defined NVM_SYMLINK if exist "%NVM_SYMLINK%\node.exe" set "NODE_EXE=%NVM_SYMLINK%\node.exe"

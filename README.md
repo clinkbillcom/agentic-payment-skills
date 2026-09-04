@@ -1,7 +1,9 @@
 # Visa Skill
 
-This branch is the lightweight Visa Skill distribution hosted in
-`agentic-payment-skills`.
+This branch is the production-backend variant of
+`wujh/visa-offer-product-match-0901` in `agentic-payment-skills`. Its bundled
+launcher pins discovery, wallet initialization, and authenticated commerce to
+the production Clink environment.
 
 It ships one Visa Edition bundle:
 
@@ -70,14 +72,14 @@ Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
 Program provenance. That provenance is never a display source: only
 `visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
-use `visa detail`, but the Skill does not rerun product-search. UAT merchant
-`mcht_ftmse61a6az0` is selected only when a returned Program code exactly
-matches its merchant-list `ext.visa_program_id`; Offer URLs never select it.
-For a verified Program purchase, a valid Program MCC remains authoritative.
-When it is missing, the Skill may classify one high-confidence MCC from the
-complete frozen merchant/product context. The exact UAT Wellcome gift-card
-route above uses MCC `5411`; malformed/conflicting Program MCCs and
-low-confidence or title-only guesses still stop before login.
+use `visa detail`, but the Skill does not rerun product-search. Production
+merchant identity must come from the production merchant list through an exact
+Program-code match; Offer URLs never select a merchant, and UAT configuration
+must not be treated as production identity. For a verified Program purchase, a
+valid Program MCC remains authoritative. When it is missing, the Skill may
+classify one high-confidence MCC from the complete frozen merchant/product
+context. Environment-specific MCC overrides, malformed/conflicting Program
+MCCs, and low-confidence or title-only guesses still stop before login.
 
 Visa Program purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
@@ -85,7 +87,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.65` vendors Visa CLI `0.2.56` from upstream commit
+Skill `0.1.66` vendors Visa CLI `0.2.56` from upstream commit
 `72e6c2fe4c464461e54f992bbe9712ce617f2d8f`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
@@ -118,7 +120,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.65`
+Skill version: `0.1.66`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

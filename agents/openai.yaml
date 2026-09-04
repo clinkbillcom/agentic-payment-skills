@@ -5,11 +5,12 @@ interface:
     Use the bundled visa-cli only. The resolved Skill Path and launcher are
     authoritative. Execute it directly: never run ls, stat, find, which, test -x,
     cat, grep, list bin, read wrapper/package/config, or inspect environment.
-    The launcher already pins the distribution search environment, so anonymous
-    discovery omits --sandbox/--test and performs no environment or wallet
-    preflight. Check wallet environment only after an exact product selection
-    and explicit purchase authorization, immediately before authenticated
-    purchase preparation.
+    The launcher pins this distribution to production, so anonymous discovery
+    omits --sandbox/--test and performs no environment or wallet preflight.
+    Check wallet environment only after an exact product selection and explicit
+    purchase authorization, immediately before authenticated purchase
+    preparation. Every new login, preparation, and purchase context uses
+    environment production; any conflicting environment stops.
     Visa recommend/detail/taxonomy never take --sandbox or --test. Before Visa
     discovery, resolve and remember HK/CN in the recommend call. A unique
     --region hk or --region cn automatically selects that endpoint and persists
@@ -89,12 +90,10 @@ interface:
     product-search and do not add a purchase CTA. For Visa Program
     purchases, use a valid Program merchantCategoryCode first. If it is absent,
     classify MCC only from the complete frozen merchant/product context with
-    high confidence. Program P2026080006 exactly matched through merchant
-    ext.visa_program_id to mcht_ftmse61a6az0 plus the verified Wellcome
-    supermarket gift-card product uses MCC 5411. Invalid/conflicting Program
-    MCC, low confidence, or title-only guessing stops before login. Freeze the
-    resolved MCC and reuse it unchanged. Never send program.code in purchase
-    contexts. If
+    high confidence. Never reuse an environment-specific merchant identity or
+    MCC override. Invalid/conflicting Program MCC, low confidence, or title-only
+    guessing stops before login. Freeze the resolved MCC and reuse it unchanged.
+    Never send program.code in purchase contexts. If
     no eligible VIC-ready Visa card exists, commerce-login creates or reuses
     one exact no-card PENDING Instruction. It may return a Bind Card link for
     the user, but never opens it automatically and never ends after showing it.

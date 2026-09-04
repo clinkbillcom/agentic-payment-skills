@@ -1,6 +1,8 @@
 # Visa Skill
 
-此分支是在 `agentic-payment-skills` 仓库中维护的轻量 Visa Skill 发行线。
+此分支基于 `wujh/visa-offer-product-match-0901`，是
+`agentic-payment-skills` 的生产后端发行线。内置 launcher 会把商品发现、
+钱包初始化和认证购买固定到 Clink 生产环境。
 
 它只携带一份 Visa Edition：
 
@@ -57,12 +59,12 @@ visa commerce-run
 可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
 商户身份。商品中的 matched Program 仅作购买 provenance；只有 `visaBenefits`
 可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
-UAT 只有在返回的 Program code 与商户 `mcht_ftmse61a6az0` 的 merchant-list
-`ext.visa_program_id` 完全相同时才建立路由；Offer URL 不再选择商户。
+生产商户身份只能来自生产 merchant-list 中 Program code 与
+`ext.visa_program_id` 的精确匹配；Offer URL 不能选择商户，也不能把 UAT 配置
+当成生产身份。
 已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
-时，允许从完整冻结的商户和商品上下文做一次高置信分类。上述 UAT 惠康礼品卡
-精确路由使用 MCC `5411`；Program MCC 格式错误或冲突、低置信分类和只看标题
-的猜测仍必须在登录前停止。
+时，允许从完整冻结的商户和商品上下文做一次高置信分类。环境专属 MCC 覆盖、
+Program MCC 格式错误或冲突、低置信分类和只看标题的猜测仍必须在登录前停止。
 
 Visa Program 购买保持 CLI 聚合。Skill 不包含
 运行时工作流 JavaScript、长 Action Matrix 或大量操作 reference。钱包、
@@ -70,7 +72,7 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.65` 已 vendor 上游提交
+Skill `0.1.66` 已 vendor 上游提交
 `72e6c2fe4c464461e54f992bbe9712ce617f2d8f` 的 Visa CLI `0.2.56`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
@@ -99,7 +101,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.65`
+Skill 版本：`0.1.66`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

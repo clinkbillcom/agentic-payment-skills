@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.65. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.66. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.65"
+  version: "0.1.66"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -54,15 +54,16 @@ authoritative Program, merchant, product, and Skill names exactly as returned.
 
 ### Distribution And Purchase Environment
 
-The bundled launcher already pins the distribution search environment.
-Anonymous discovery invokes it directly and omits `--sandbox`/`--test`; never
-determine, inspect, infer, or override that environment at runtime. Do not read
-files, wrapper/package/config, wallet state, or process environment, and do not
-run any shell or authentication preflight.
+The bundled launcher pins this distribution to `production`. Anonymous
+discovery invokes it directly and omits `--sandbox`/`--test`; never determine,
+inspect, infer, or override that environment at runtime. Do not read files,
+wrapper/package/config, wallet state, or process environment, and do not run
+any shell or authentication preflight.
 
 Only after the user selects an exact product and authorizes an authenticated
-purchase may the Skill verify that wallet and purchase environments agree and
-write the verified environment into purchase contexts.
+purchase may the Skill verify that the wallet is production-bound. Every new
+login, preparation, and purchase context must use `environment: "production"`.
+Any conflicting saved or requested environment stops the flow.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
 `--sandbox` or `--test`. For `visa recommend-products`, also omit them and rely
@@ -387,11 +388,9 @@ Before login, require all of the following:
      Program, merchant ID, merchant URL, merchant name, product title/source
      title, category, and fulfillment context. The classification must be
      high-confidence and must pass the Restricted Instruction Gate.
-   - For Program `P2026080006` exactly mapped through merchant-list
-     `ext.visa_program_id` to merchant `mcht_ftmse61a6az0`, and the verified
-     Wellcome supermarket gift-card product, use MCC `5411`.
    - An invalid or conflicting Program MCC, title-only guess, broad
-     common-MCC fallback, or low-confidence classification stops before login.
+     common-MCC fallback, environment-specific merchant/MCC override, or
+     low-confidence classification stops before login.
    Freeze the resolved MCC once and reuse it unchanged in login, Instruction,
    purchase context, and Checkout.
 6. Every required product, fulfillment, and environment field is present.
@@ -401,7 +400,7 @@ Build this login context:
 
 ```json
 {
-  "environment": "uat",
+  "environment": "production",
   "expected": {
     "amount": "<product.totalAmountMajor>",
     "currency": "<verified-currency>"
@@ -448,7 +447,7 @@ Build one frozen purchase context from the same Program and verified product:
 ```json
 {
   "mode": "purchase",
-  "environment": "uat",
+  "environment": "production",
   "requestText": "<original purchase request>",
   "selection": {
     "merchantUrl": "<authoritative-program-commerce-url>",
@@ -528,7 +527,7 @@ mode:
 {
   "mode": "prepare",
   "target": "login",
-  "environment": "uat",
+  "environment": "production",
   "requestText": "Log in to Visa Benefit"
 }
 ```

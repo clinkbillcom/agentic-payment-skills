@@ -3,5 +3,5 @@ set -eu
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-export CLINK_WALLET_INIT_ENVIRONMENT=sandbox
+export CLINK_WALLET_INIT_ENVIRONMENT=production
 exec node "$SCRIPT_DIR/../vendor/visa-cli/visa-cli.bundle.mjs" "$@"

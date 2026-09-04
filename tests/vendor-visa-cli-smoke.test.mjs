@@ -523,7 +523,6 @@ test('recommend-products rejects Visa keyword input', () => {
     '香港本地超市現金券優惠',
     '--all',
     '--anonymous',
-    '--sandbox',
   ]);
 
   assert.equal(result.status, 2, result.stderr);
@@ -537,7 +536,7 @@ test('Catalog purchase mode is executable with the complete frozen contract', ()
     '--context',
     JSON.stringify({
       mode: 'catalog_purchase',
-      environment: 'uat',
+      environment: 'production',
       requestText: 'Buy one selected Catalog voucher',
       selection: {
         merchantUrl: 'https://merchant.example/products/voucher-1',
@@ -723,7 +722,6 @@ test('aggregate commands support side-effect-free planning', () => {
     'en',
     '--limit',
     '1',
-    '--sandbox',
     '--dry-run',
     '--format',
     'json',
@@ -748,7 +746,7 @@ test('aggregate commands support side-effect-free planning', () => {
     'commerce-login',
     '--context',
     JSON.stringify({
-      environment: 'uat',
+      environment: 'production',
       expected: {
         amount: '1',
         currency: 'USD',
@@ -773,7 +771,7 @@ test('aggregate commands support side-effect-free planning', () => {
     'commerce-login',
     '--context',
     JSON.stringify({
-      environment: 'uat',
+      environment: 'production',
       expected: {
         amount: '1',
         currency: 'USD',
@@ -800,7 +798,7 @@ test('aggregate commands support side-effect-free planning', () => {
     JSON.stringify({
       mode: 'prepare',
       target: 'login',
-      environment: 'uat',
+      environment: 'production',
       requestText: 'Log in to Visa Benefit',
     }),
     '--open',
@@ -815,7 +813,7 @@ test('aggregate commands support side-effect-free planning', () => {
 function programPurchaseContext() {
   return {
     mode: 'purchase',
-    environment: 'uat',
+    environment: 'production',
     requestText: 'Buy one selected Visa Program voucher',
     selection: {
       merchantUrl: 'https://merchant.example/products/program-voucher-1',
@@ -846,13 +844,13 @@ function programPurchaseContext() {
 function catalogVoucherPurchaseContext() {
   return {
     mode: 'catalog_purchase',
-    environment: 'uat',
+    environment: 'production',
     requestText: 'Buy the selected provider voucher',
     selection: {
       merchantUrl: 'https://vtravel.link2shops.com/yiyuan/',
       merchantId: 'mcht_ftmse61a6az0',
       endpoint:
-        'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+        'https://api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
       productId: 'provider_product_1',
       productQuery: 'Watsons HKD 100 voucher',
       quantity: 1,
@@ -886,14 +884,14 @@ const EATS365_PRODUCT_URL =
 function eats365CatalogPurchaseContext(overrides = {}) {
   return {
     mode: 'catalog_purchase',
-    environment: 'uat',
+    environment: 'production',
     requestText: 'Buy the selected Americano',
     selection: {
       merchantUrl: overrides.merchantUrl ?? EATS365_PRODUCT_URL,
       channelType: 'eats365',
       storeId: 'chaptercoffee_kowloontong',
       catalogQuery: '咖啡',
-      catalogEnvironment: 'sandbox',
+      catalogEnvironment: 'production',
       catalogLanguage: 'zh-Hans',
       productId: '10210949',
       productQuery: '美式咖啡 Americano',
@@ -949,7 +947,7 @@ async function createReadyVisaHome() {
   await mkdir(configDirectory, { recursive: true });
   const now = Date.now();
   const customerId = 'customer-smoke';
-  const issuerOrigin = 'https://uat-api.clinkbill.com';
+  const issuerOrigin = 'https://api.clinkbill.com';
   await writeFile(
     join(configDirectory, 'config.json'),
     `${JSON.stringify({
