@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.62');
+  assert.equal(packageJson.version, '0.1.63');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.62/u);
-  assert.match(skill, /version: "0\.1\.62"/u);
+  assert.match(skill, /Visa Skill 0\.1\.63/u);
+  assert.match(skill, /version: "0\.1\.63"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -279,7 +279,7 @@ test('Benefit source region resolves inside recommend without a preflight', () =
   );
   assert.match(
     filterReference,
-    /Source Region[\s\S]*region\[\]=hk\|cn[\s\S]*persists it[\s\S]*saved config\/default HK[\s\S]*explicit `--market` wins[\s\S]*Never call `visa region get\/set`[\s\S]*multi-value destinations do not update/iu,
+    /Required Shape[\s\S]*`region`[\s\S]*user destination[\s\S]*remembered region[\s\S]*`hk`[\s\S]*`category`/iu,
   );
 });
 
@@ -439,56 +439,90 @@ test('discovery presents products first and stays silent about empty collections
 });
 
 test('compact filter reference defines schema, selection priority, and intent boundary', () => {
-  for (const field of [
-    'limit',
-    'page',
-    'region',
-    'category',
-    'purpose',
-    'reward_type',
-    'attribute',
-    'card_level',
-    'card_issuer',
-  ]) {
-    assert.match(filterReference, new RegExp(`"${field}"`, 'u'));
+  assert.match(
+    filterReference,
+    /Every request or `--filter-sets` object requires[\s\S]*`region`[\s\S]*`category`/iu,
+  );
+  assert.match(
+    filterReference,
+    /`category`[\s\S]*Multiple[\s\S]*values are OR[\s\S]*Different axes are AND/iu,
+  );
+  assert.match(
+    filterReference,
+    /"region": \["hk"\][\s\S]*"category": \["shopping_supermarket", "shopping_department_mall"\]/u,
+  );
+  assert.match(
+    filterReference,
+    /Add `purpose`, `reward_type`, `attribute`, `card_level`, or `card_issuer` only[\s\S]*explicitly stated[\s\S]*otherwise omit/iu,
+  );
+  assert.match(
+    filterReference,
+    /Generic `优惠`[\s\S]*`权益`[\s\S]*`benefit`[\s\S]*`offer` selects none/iu,
+  );
+  for (const field of ['type', 'keyword', 'limit', 'page']) {
+    assert.doesNotMatch(filterReference, new RegExp(`"${field}"\\s*:`, 'u'));
   }
   assert.match(
     filterReference,
-    /Build one strict JSON object[\s\S]*One safe plan is the default[\s\S]*--filter-sets[\s\S]*exactly four genuinely different safe plans[\s\S]*Run one `visa recommend-products`[\s\S]*never run `visa recommend`/iu,
+    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each still\s+requires region\/category/iu,
   );
   assert.match(
     filterReference,
-    /one `visa recommend-products` aggregate[\s\S]*never use[\s\S]*`visa recommend` for initial discovery/iu,
+    /positional query[\s\S]*only primary text[\s\S]*Visa[\s\S]*matched-merchant[\s\S]*first broad search[\s\S]*`--broad-queries`/iu,
   );
+  const taxonomyCodes = [
+    'outbound', 'study', 'local', 'inbound', 'haitao',
+    'cn', 'hmt', 'kj', 'sea', 'anz', 'eu', 'na', 'mideast', 'sasia',
+    'africa', 'global', 'hk', 'mo', 'tw', 'jp', 'kr', 'th', 'my', 'sg',
+    'vn', 'ph', 'id', 'kh', 'la', 'bn', 'mv', 'au', 'nz', 'gb', 'fr',
+    'de', 'it', 'es', 'ch', 'nl', 'be', 'at', 'pt', 'gr', 'ie', 'us',
+    'ca', 'mx', 'ae', 'qa', 'sa', 'in', 'np', 'bd', 'pk', 'ma', 'za', 'eg',
+    'dining', 'dining_restaurant', 'dining_cafe_bakery', 'dining_bar',
+    'dining_fast_casual', 'dining_fine', 'dining_delivery_food', 'dining_other',
+    'shopping', 'shopping_department_mall', 'shopping_supermarket',
+    'shopping_fashion', 'shopping_luxury', 'shopping_beauty',
+    'shopping_jewelry_watches', 'shopping_electronics', 'shopping_duty_free',
+    'shopping_specialty', 'shopping_other', 'lodging', 'lodging_hotel',
+    'lodging_resort', 'lodging_apartment', 'lodging_budget', 'lodging_other',
+    'airfare', 'airfare_ticket', 'airfare_upgrade', 'airfare_lounge',
+    'airfare_baggage', 'airfare_other', 'ground_transport',
+    'transport_car_rental', 'transport_ride_taxi', 'transport_airport_transfer',
+    'transport_transit_rail', 'transport_fuel_parking', 'transport_other',
+    'travel_service', 'travel_visa', 'travel_insurance', 'travel_medical',
+    'travel_tour_activity', 'travel_tax_refund', 'travel_concierge',
+    'travel_other', 'entertainment', 'ent_attraction', 'ent_cinema_show',
+    'ent_culture', 'ent_sports', 'ent_nightlife_gaming', 'ent_other',
+    'wellness', 'wellness_spa_massage', 'wellness_beauty_salon',
+    'wellness_fitness', 'wellness_medical', 'wellness_onsen', 'wellness_other',
+    'telecom', 'telecom_roaming', 'telecom_sim_esim', 'telecom_wifi',
+    'telecom_mobile', 'telecom_other', 'financial_service', 'fin_fx',
+    'fin_installment', 'fin_insurance', 'fin_other', 'education',
+    'edu_study_abroad', 'edu_course', 'edu_tuition', 'edu_student_living',
+    'edu_other', 'other', 'other_uncategorized', 'discount', 'cashback',
+    'coupon', 'points', 'privilege', 'gift', 'new_customer', 'limited_time',
+    'limited_quantity', 'no_threshold', 'stackable', 'online_only',
+    'instore_only', 'app_exclusive', 'applepay', 'reservation_required',
+    'free_cancellation', 'family_friendly', 'couple', 'group', 'pet_friendly',
+    'senior_friendly', 'premium', 'exclusive', 'classic', 'gold', 'platinum',
+    'signature', 'infinite', 'business', 'business_gold', 'business_platinum',
+    'business_signature', 'corporate', 'all', 'BOC', 'BOCOM', 'CCB', 'ICBC',
+    'ABC', 'CITIC', 'CGB', 'CMB', 'PAB', 'SPDB', 'CIB', 'HXB', 'CMBC',
+    'BOB', 'BOS', 'CEB', 'CITI', 'BEA', 'SCB', 'NCB', 'HKB', 'BOJ', 'BOD',
+    'HSB', 'BODG', 'JXB', 'BOZ', 'CQRCB', 'BONB', 'BOG', 'BOX', 'ZJTLB',
+    'HRB', 'BRCB', 'GRCB', 'BOH', 'CZB', 'BOSZ', 'NYRCB', 'BOGY', 'BOCS',
+    'BOJL', 'SJB', 'BOCD', 'XIB', 'PSBC', 'SRCB', 'FUBON', 'CITICDB',
+    'CCBDB', 'BOCDB', 'CMBDB', 'ABCDB', 'CIBPLATINUM', 'BOCAPP',
+  ];
+  for (const code of taxonomyCodes) {
+    assert.match(filterReference, new RegExp(`\\b${code}\\b`, 'u'), code);
+  }
   assert.match(
     filterReference,
-    /required positional query[\s\S]*only primary search text[\s\S]*Never pass[\s\S]*`--keyword`[\s\S]*keyword[\s\S]*filter object[\s\S]*Visa keyword[\s\S]*matched merchant Catalog query[\s\S]*first broad Catalog query/iu,
-  );
-  assert.doesNotMatch(filterReference, /"keyword"\s*:/u);
-  assert.doesNotMatch(filterReference, /"type"\s*:/u);
-  assert.match(
-    filterReference,
-    /Never infer or pass `--type`[\s\S]*Benefit[\s\S]*reward[\s\S]*coupon[\s\S]*discount[\s\S]*purchase wording[\s\S]*do not select/iu,
-  );
-  assert.match(
-    filterReference,
-    /all recommendation filters[\s\S]*inside those objects[\s\S]*never combine them[\s\S]*outer individual filter flags/iu,
-  );
-  assert.match(
-    filterReference,
-    /Prefer one strict plan[\s\S]*If fewer than four safe variants exist[\s\S]*use one strict[\s\S]*never repeat or pad/iu,
-  );
-  assert.match(
-    filterReference,
-    /reward_type[\s\S]*explicitly names one[\s\S]*优惠[\s\S]*selects no reward type[\s\S]*Never fan[\s\S]*discount[\s\S]*coupon[\s\S]*cashback[\s\S]*privilege[\s\S]*single strict plan/iu,
-  );
-  assert.match(
-    filterReference,
-    /Purchase and Benefit wording[\s\S]*visa recommend-products[\s\S]*include-broad-catalog[\s\S]*standalone[\s\S]*catalog search[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery[\s\S]*no `type`[\s\S]*reward_type[\s\S]*美式咖啡[\s\S]*拿铁咖啡[\s\S]*咖啡饮品/iu,
+    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市优惠券[\s\S]*purpose=local[\s\S]*reward_type=coupon[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery/iu,
   );
   assert.match(
     agent,
-    /Never infer[\s\S]*pass --type for recommend-products[\s\S]*Benefit[\s\S]*reward[\s\S]*coupon[\s\S]*discount[\s\S]*purchase wording does not select/iu,
+    /Every plan must include region[\s\S]*at least one category[\s\S]*remembered search region[\s\S]*else hk[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*reward_type[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
   );
 });
 

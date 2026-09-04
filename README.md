@@ -30,6 +30,8 @@ The lightweight shopping routes cover:
 - one unchanged query drives the Visa keyword, matched-merchant Catalog search,
   and first broad Catalog search; Offer titles remain display metadata only
 - Agent-selected `recommend-products` filters never infer or pass `--type`
+- every filter plan requires region and one or more OR-combined categories;
+  other taxonomy axes are used only when explicitly requested
 - login and purchase mandates use `product.totalAmountMajor`; minor-unit
   Catalog amounts are never copied into `amountLimit`
 - automatic HK/CN source persistence from a unique `visa recommend --region`,
@@ -102,7 +104,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.62` vendors Visa CLI `0.2.55` from upstream commit
+Skill `0.1.63` vendors Visa CLI `0.2.55` from upstream commit
 `94c7a250c16804983a29f356abb527b7bc8b238e`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
@@ -135,7 +137,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.62`
+Skill version: `0.1.63`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
