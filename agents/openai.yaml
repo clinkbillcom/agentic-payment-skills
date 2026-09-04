@@ -19,12 +19,10 @@ interface:
     --region <destination>; explicit market wins. Never run visa region get/set
     as a search preflight. Other or multi-value destinations do not update the
     saved source.
-    Route every product, category, or merchant discovery and every explicit
-    buy/order/checkout request through exactly one visa recommend-products with
-    --include-broad-catalog, even without a Visa, Benefit, coupon, voucher,
-    discount, or offer signal. 我想下单咖啡, 有咖啡的券吗, Visa 咖啡优惠券,
-    and 有哪些咖啡权益 all use this aggregate. Never call standalone catalog
-    search for initial shopping discovery. Read only
+    Route every product, category, merchant, buy/order/checkout, and Benefit
+    request through exactly one visa recommend-products. This product-match
+    branch never runs broad Catalog: never pass --include-broad-catalog or
+    --broad-queries and never call standalone catalog search as fallback. Read only
     references/visa-recommend-filters.md and choose the smallest safe filter
     shape. Every plan must include region and at least one category. Use the
     user's region, else the remembered search region, else hk. Category accepts
@@ -40,19 +38,15 @@ interface:
     explicitly names the reward type;
     generic 优惠, benefit, offer, or 礼遇 omits it. Never fan out reward types
     or duplicate filters to reach a count. Run exactly one visa
-    recommend-products with the unchanged original current user query,
-    --include-broad-catalog, and up to three product-only --broad-queries.
+    recommend-products with the unchanged original current user query.
     That positional query is the only primary search text. Never pass --keyword
     or put keyword inside --filter-sets. The CLI sends the unchanged query as
-    the Visa recommendation keyword, every Program-matched merchant Catalog
-    query, and the first broad Catalog query. Offer titles are display and
-    provenance only and never replace it.
-    For 我想下单咖啡 use 美式咖啡, 拿铁咖啡, and 咖啡饮品; never invent a
-    merchant or brand. Also pass --anonymous, the locked language, and the
-    locked sandbox/test flag. Broad variants run in parallel inside that one
-    command and never multiply Visa requests. It anonymously loads the selected
-    environment merchant list once and routes a Program only when its exact code
-    equals merchant ext.visa_program_id. Offer URLs never select a merchant.
+    the Visa recommendation keyword and, only after exact Program-to-merchant
+    matching, that merchant's Catalog query. Offer titles are display and
+    provenance only and never replace it. Also pass --anonymous and the locked
+    language, but no sandbox/test environment flag. It anonymously loads the
+    selected environment merchant list once and routes a Program only when its
+    exact code equals merchant ext.visa_program_id. Offer URLs never select a merchant.
     Never issue separate recommend, detail, product-search, merchant-list, or
     external-page calls.
     Read only products and visaBenefits. Before display, lightly check every
@@ -65,16 +59,9 @@ interface:
     not mention missing Benefits, Offers, coupons, or discounts. If only
     visaBenefits remain, show Benefits only and do not mention missing or
     unorderable products. Only when both filtered collections are empty, give
-    one concise no-results answer. Products is one unified list: never group or
-    label Visa-linked and broad Catalog products by source. Preserve
-    catalogProvenance internally for purchase revalidation. A Program represented
-    by a product must not also be displayed as a Benefit.
-    A URL-less internal broad product is valid only when its exact merchantId
-    matches the locked provider registry. Preserve the CLI-returned merchantUrl,
-    endpoint, productId, providerKey, registryVersion, and catalogProvenance;
-    never invent a URL. A selected registered product must use
-    mode=catalog_purchase and exact-revalidate through that provider's Catalog
-    product API before mutation; any route or product drift stops.
+    one concise no-results answer. Products contains only verified internal UCP
+    products from exact Program-to-merchant matching. A Program represented by
+    a product must not also be displayed as a Benefit.
     matchedPrograms is purchase provenance only: never reconstruct a Benefit
     title, activity description, Offer URL, eligibility, terms, or CTA from it.
     visaBenefits is the only source of user-facing Benefit rows. If
@@ -85,12 +72,9 @@ interface:
     recommendationMode is fallback_all_offers, no_matching_offers, or no row
     survives semantic filtering, suppress fallback Visa rows and apply the same
     result-presentation rules. Never announce a Visa miss while products
-    remain. Disclose partial productMatching or broadCatalogSearch
-    coverage. Explicit Visa filter relaxation must return ok=true,
-    recommendationMode=no_matching_offers, and
-    strictMatchFailure.code=relaxed_explicit_filters while retaining broad
-    products. A legacy ok=false relaxation error is incompatible and stops;
-    every other error stops. Catalog price.amount and price_range amounts are minor
+    remain. Disclose partial productMatching coverage. A Visa miss, relaxed
+    explicit filter, or command error never starts Catalog fallback. Catalog
+    price.amount and price_range amounts are minor
     units: convert with ISO currency fraction digits before display or freeze.
     Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100
     separate from the USD purchase price. Invite ordering for products returned
@@ -108,14 +92,8 @@ interface:
     ext.visa_program_id to mcht_ftmse61a6az0 plus the verified Wellcome
     supermarket gift-card product uses MCC 5411. Invalid/conflicting Program
     MCC, low confidence, or title-only guessing stops before login. Freeze the
-    resolved MCC and reuse it unchanged. Direct shopping products use
-    commerce-login then commerce-run mode=catalog_purchase. For Eats365,
-    manual_item_facts is a normal result:
-    freeze channel, store, product, title, price, currency, availability, and
-    URL from one broad-Catalog snapshot. Coffee and quick-service food use
-    high-confidence MCC 5814, NO_SHIPPING_REQUIRED, and
-    digitalDeliveryExpected=false. Ask when MCC or fulfillment confidence is
-    low. Never send program.code in purchase or catalog_purchase contexts. If
+    resolved MCC and reuse it unchanged. Never send program.code in purchase
+    contexts. If
     no eligible VIC-ready Visa card exists, commerce-login creates or reuses
     one exact no-card PENDING Instruction. It may return a Bind Card link for
     the user, but never opens it automatically and never ends after showing it.
