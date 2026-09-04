@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.66. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.67. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.66"
+  version: "0.1.67"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -244,13 +244,14 @@ call with unchanged original current user request and
 in parallel with Visa recommendation, loads merchant list once, and routes
 exact `code` == `ext.visa_program_id`; Offer URL never selects a merchant. Positional
 query is the only primary search text: never pass `--keyword` or filter-set
-`keyword`. CLI reuses it as the Visa recommendation keyword,
-Program-matched merchant Catalog query, and first broad Catalog query. Offer
-titles must not replace it. Read `references/visa-recommend-filters.md`.
+`keyword`. Visa recommendation sends taxonomy filters only and no keyword. CLI
+uses the original query for every Program-matched merchant Catalog query and
+the first broad Catalog query. Offer titles must not replace it. Read
+`references/visa-recommend-filters.md`.
 
-For product or category discovery, add up to three distinct product-only broad
-queries with `--broad-queries`. They improve Catalog recall only: they do not
-change Visa filters or create additional Visa requests. For "我想下单咖啡",
+Add up to three distinct product-only broad queries with `--broad-queries`.
+They improve Catalog recall without changing Visa filters or adding Visa
+requests. For "我想下单咖啡",
 use `["美式咖啡","拿铁咖啡","咖啡饮品"]`. Omit merchant or brand names the
 user did not provide.
 

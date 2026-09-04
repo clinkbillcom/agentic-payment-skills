@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.66');
+  assert.equal(packageJson.version, '0.1.67');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.66/u);
-  assert.match(skill, /version: "0\.1\.66"/u);
+  assert.match(skill, /Visa Skill 0\.1\.67/u);
+  assert.match(skill, /version: "0\.1\.67"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -172,7 +172,7 @@ test('initial Visa discovery runs one aggregate with parallel broad Catalog', ()
   );
   assert.match(
     discovery,
-    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original\s+current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*merchant list once[\s\S]*exact `code`[\s\S]*`ext\.visa_program_id`[\s\S]*Offer URL[\s\S]*never selects a merchant[\s\S]*only primary search text[\s\S]*Never pass `--keyword`[\s\S]*Visa recommendation keyword[\s\S]*Program-matched merchant Catalog[\s\S]*first broad Catalog query[\s\S]*Offer\s+titles[\s\S]*must not replace/iu,
+    /initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original\s+current user request[\s\S]*`--include-broad-catalog`[\s\S]*broad all-channel Catalog[\s\S]*in parallel with Visa recommendation[\s\S]*merchant list once[\s\S]*exact `code`[\s\S]*`ext\.visa_program_id`[\s\S]*Offer URL[\s\S]*never selects a merchant[\s\S]*only primary search text[\s\S]*Never pass `--keyword`[\s\S]*Visa recommendation sends taxonomy filters only[\s\S]*no keyword[\s\S]*Program-matched merchant Catalog[\s\S]*first broad Catalog query[\s\S]*Offer\s+titles[\s\S]*must not replace/iu,
   );
   assert.match(
     singleCommand,
@@ -191,7 +191,7 @@ test('initial Visa discovery runs one aggregate with parallel broad Catalog', ()
   );
   assert.match(
     discovery,
-    /Read `references\/visa-recommend-filters\.md`/u,
+    /Read[\s\S]*`references\/visa-recommend-filters\.md`/u,
   );
   assert.match(
     discovery,
@@ -468,7 +468,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /positional query[\s\S]*only primary text[\s\S]*Visa[\s\S]*matched-merchant[\s\S]*first broad search[\s\S]*`--broad-queries`/iu,
+    /Visa recommendation uses only[\s\S]*taxonomy filters[\s\S]*sends no[\s\S]*keyword[\s\S]*unchanged positional query[\s\S]*matched-merchant Catalog[\s\S]*first broad search[\s\S]*`--broad-queries`/iu,
   );
   const taxonomyCodes = [
     'outbound', 'study', 'local', 'inbound', 'haitao',

@@ -29,8 +29,9 @@ Flag mapping: `region -> --region`, `category -> --category`,
 `--filter-sets` only for four genuinely different safe plans; each still
 requires region/category and every explicit constraint.
 
-The positional query is the only primary text and drives Visa, matched-merchant
-Catalog, and the first broad search. Variants use only `--broad-queries`.
+Visa recommendation uses only the selected taxonomy filters and sends no
+keyword. The unchanged positional query drives matched-merchant Catalog and
+the first broad search. Variants use only `--broad-queries`.
 
 ## Canonical Codes
 

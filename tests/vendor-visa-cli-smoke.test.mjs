@@ -87,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.55');
+  assert.equal(vendorPackage.version, '0.2.56');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '94c7a250c16804983a29f356abb527b7bc8b238e',
+    '44f829ad76f62136d4d674698ff9123fdad6aee3',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -153,7 +153,7 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   assert.equal(aggregateHelp.status, 0, aggregateHelp.stderr);
   assert.match(aggregateHelp.stdout, /recommend-products <query>/u);
   assert.match(aggregateHelp.stdout, /Do not pass --keyword/u);
-  assert.match(aggregateHelp.stdout, /same original query/u);
+  assert.match(aggregateHelp.stdout, /required original[\s\S]*query/u);
   assert.match(aggregateHelp.stdout, /matched merchant Catalog search uses no fixed/iu);
   assert.match(aggregateHelp.stdout, /verify all resolvable orderable products/iu);
   assert.match(aggregateHelp.stdout, /--include-broad-catalog/u);
@@ -514,7 +514,7 @@ test('Visa Program code resolves through merchant-list metadata', () => {
   }
 });
 
-test('recommend-products rejects a second Visa keyword source', () => {
+test('recommend-products rejects Visa keyword input', () => {
   const result = run([
     'visa',
     'recommend-products',
@@ -527,7 +527,7 @@ test('recommend-products rejects a second Visa keyword source', () => {
   ]);
 
   assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /uses its query as the Visa keyword/u);
+  assert.match(result.stderr, /does not send a Visa keyword/u);
 });
 
 test('Catalog purchase mode is executable with the complete frozen contract', () => {
@@ -1128,7 +1128,7 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse({ success: true, data: {} });
     }
     if (url.pathname.endsWith('/programs/recommend')) {
-      if (url.searchParams.get('keyword') !== 'Watsons 屈臣氏') {
+      if (url.searchParams.has('keyword')) {
         throw new Error(
           'unexpected registered Visa keyword: ' + url.search,
         );
@@ -1164,7 +1164,7 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse({ success: true, data: {} });
     }
     if (url.pathname.endsWith('/programs/recommend')) {
-      if (url.searchParams.get('keyword') !== '超市优惠') {
+      if (url.searchParams.has('keyword')) {
         throw new Error(
           'unexpected Visa Program keyword: ' + url.search,
         );
