@@ -3,6 +3,11 @@
 This branch is the lightweight Visa Skill distribution hosted in
 `agentic-payment-skills`.
 
+It is the `wujh/visa-offer-product-match-0901` flow plus parallel broad
+Catalog search. The product-match branch stops after Visa Offer discovery,
+exact Program-code merchant matching, and that merchant's Catalog search;
+this branch additionally searches all-channel Catalog in parallel.
+
 It ships one Visa Edition bundle:
 
 ```text
@@ -104,7 +109,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.65` vendors Visa CLI `0.2.55` from upstream commit
+Skill `0.1.66` vendors Visa CLI `0.2.55` from upstream commit
 `94c7a250c16804983a29f356abb527b7bc8b238e`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
@@ -137,7 +142,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.65`
+Skill version: `0.1.66`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

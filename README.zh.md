@@ -2,6 +2,10 @@
 
 此分支是在 `agentic-payment-skills` 仓库中维护的轻量 Visa Skill 发行线。
 
+它是在 `wujh/visa-offer-product-match-0901` 流程上增加并行广域 Catalog 搜索。
+product-match 分支只执行 Visa Offer 搜索、Program code 精确匹配商户，以及使用
+原始 query 搜索该商户；本分支在此基础上额外并行搜索全渠道 Catalog。
+
 它只携带一份 Visa Edition：
 
 ```text
@@ -88,7 +92,7 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.65` 已 vendor 上游提交
+Skill `0.1.66` 已 vendor 上游提交
 `94c7a250c16804983a29f356abb527b7bc8b238e` 的 Visa CLI `0.2.55`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
@@ -117,7 +121,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.65`
+Skill 版本：`0.1.66`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
