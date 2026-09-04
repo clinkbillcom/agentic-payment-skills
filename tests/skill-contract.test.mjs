@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.67');
+  assert.equal(packageJson.version, '0.1.68');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.67/u);
-  assert.match(skill, /version: "0\.1\.67"/u);
+  assert.match(skill, /Visa Skill 0\.1\.68/u);
+  assert.match(skill, /version: "0\.1\.68"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -587,7 +587,7 @@ test('unmatched Visa Benefit supports detail without another product search', ()
   assert.equal(productSearch, -1);
   assert.match(
     selected,
-    /unmatched Visa Benefit[\s\S]*stable Program code[\s\S]*authoritative detail/iu,
+    /unmatched Visa Benefit[\s\S]*stable Program code[\s\S]*visa detail[\s\S]*activity summary[\s\S]*do not rerun[\s\S]*or add a[\s\S]*purchase CTA/iu,
   );
   assert.match(
     selected,
@@ -599,7 +599,7 @@ test('unmatched Visa Benefit supports detail without another product search', ()
   );
   assert.match(
     selected,
-    /already attempted product matching[\s\S]*Do not rerun[\s\S]*product-search[\s\S]*activity[\s\S]*authoritative link only[\s\S]*no purchase CTA/iu,
+    /Do not rerun `visa product-search`[\s\S]*add a purchase CTA[\s\S]*authorized exact[\s\S]*never `visa detail`/iu,
   );
 });
 
@@ -824,6 +824,18 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   const login = section.indexOf('visa commerce-login');
   const run = section.indexOf('visa commerce-run');
   assert.ok(login >= 0 && run > login);
+  assert.match(
+    section,
+    /latest unchanged[\s\S]*`recommend-products` snapshot[\s\S]*directly in `visa commerce-login`[\s\S]*never run or refresh `visa detail`/iu,
+  );
+  assert.doesNotMatch(
+    section,
+    /<Skill Path>\/bin\/visa-cli visa detail/u,
+  );
+  assert.match(
+    agent,
+    /explicitly authorizes buy, order, or checkout[\s\S]*directly to commerce-login[\s\S]*never run or refresh visa detail/iu,
+  );
   assert.match(
     section,
     /Program and Catalog identify the same merchant and product/iu,
