@@ -32,6 +32,7 @@ visa commerce-run
 - 唯一 `visa recommend --region hk|cn` 会自动选择并保存对应来源；
   只有跨来源查询才额外使用 `--market`
 - 最终统一返回可下单商品和未匹配 Visa 权益；已匹配成商品的权益不重复展示
+- Agent 展示前做轻度相关性检查，过滤明显无关商品和权益，同时保留合理别名与翻译
 - 展示顺序固定为可下单商品优先、相关权益其次；空集合不单独说明，只有两边
   都为空时才提示没有搜到
 - 全渠道 Catalog 与 Visa 推荐并行，广域商品合并进同一个商品列表且不按来源分组
@@ -85,8 +86,8 @@ Visa Program 和其他 Catalog 购买都保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.61` 已 vendor 上游提交
-`689ae207f7806f4a93bf0692d73788797b61913e` 的 Visa CLI `0.2.54`。它支持
+Skill `0.1.62` 已 vendor 上游提交
+`94c7a250c16804983a29f356abb527b7bc8b238e` 的 Visa CLI `0.2.55`。它支持
 一轮 Visa 推荐、内部商品匹配、并行广域 Catalog、可选的旧版 `program.code`、完整 Eats365
 `manual_item_facts` 复验和
 `mode=catalog_purchase`；新购买上下文仍不发送 `program.code`。本版还要求
@@ -114,7 +115,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.61`
+Skill 版本：`0.1.62`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

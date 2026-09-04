@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.54";
+var CLI_VERSION = "0.2.55";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -33212,8 +33212,9 @@ Behavior:
 
   The command loads the selected environment's anonymous merchant list once, then matches each
   returned Program code only against merchant ext.visa_program_id. The Offer URL is presentation
-  metadata only and never selects a merchant. Only exact
-  PRODUCT_VERIFIED + internal-ucp-catalog matches enter products. Their matched Visa Programs are
+  metadata only and never selects a merchant. A matched merchant Catalog search uses no fixed
+  client limit. The CLI reuses that one response to verify all resolvable orderable products; exact
+  PRODUCT_VERIFIED + internal-ucp-catalog rows enter products. Their matched Visa Programs are
   removed from visaBenefits to avoid duplicate presentation. Unmatched Programs remain in
   visaBenefits. Duplicate Program mappings fail closed; a merchant-list or product failure preserves
   the Benefits and marks productMatching.coverage partial. Unconfigured Visa campaign pages are never
@@ -33978,12 +33979,14 @@ async function visaRecommendProducts(context) {
       });
       continue;
     }
-    if (!resolution.matched || !resolution.productResult || !resolution.program) {
+    if (!resolution.matched || !resolution.productResults?.length || !resolution.program) {
       continue;
     }
     matchedIndexes.add(resolution.index);
     matchedOfferCount += 1;
-    mergeMatchedProduct(productsByKey, resolution.productResult, resolution.program);
+    for (const productResult of resolution.productResults) {
+      mergeMatchedProduct(productsByKey, productResult, resolution.program);
+    }
   }
   const broadProductsByKey = /* @__PURE__ */ new Map();
   const broadQueryResults = (broadCatalogRuns ?? []).map((run) => {
@@ -34105,25 +34108,31 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
     };
   }
   try {
-    const productResult = await runVisaProductSearch({
+    const productInput = {
       merchantUrl: internal.merchantUrl,
       query,
-      language,
-      limit: 1
-    }, {
+      language
+    };
+    let catalogSearch2;
+    const dependencies = {
       resolveInternal: async () => internal,
-      searchInternal: (merchantId, productQuery, limit, productLanguage) => searchCommandUcpCatalog(context, merchantId, productQuery, limit, productLanguage),
+      searchInternal: (merchantId, productQuery, _limit, productLanguage) => {
+        catalogSearch2 ??= searchCommandUcpCatalog(context, merchantId, productQuery, void 0, productLanguage);
+        return catalogSearch2;
+      },
       parseExternal: async () => {
         throw validationError("recommend-products does not parse unmatched Visa campaign pages");
       }
-    });
+    };
+    const productResult = await runVisaProductSearch(productInput, dependencies);
+    const productResults = await collectVerifiedVisaProductResults(productResult, productInput, dependencies);
     return {
       index,
       offer,
       routed: true,
-      matched: isVerifiedInternalProduct(productResult),
+      matched: productResults.length > 0,
       program: program2,
-      productResult
+      productResults
     };
   } catch (error) {
     return {
@@ -34135,6 +34144,37 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
       failure: safeVisaProductFailure(error)
     };
   }
+}
+async function collectVerifiedVisaProductResults(initial, input, dependencies) {
+  const verified = /* @__PURE__ */ new Map();
+  const visitedProductIds = /* @__PURE__ */ new Set();
+  const collect = async (result) => {
+    if (isVerifiedInternalProduct(result)) {
+      const product = recommendationRecord(result.product);
+      const itemId = recommendationOptionalString(product.itemId);
+      if (itemId && !verified.has(itemId)) {
+        verified.set(itemId, result);
+      }
+      return;
+    }
+    if (result.state !== "PRODUCT_SELECTION_REQUIRED" || !Array.isArray(result.products)) {
+      return;
+    }
+    for (const candidate of result.products) {
+      const productId2 = recommendationOptionalString(recommendationRecord(candidate).productId);
+      if (!productId2 || visitedProductIds.has(productId2)) {
+        continue;
+      }
+      visitedProductIds.add(productId2);
+      const selected = await runVisaProductSearch({
+        ...input,
+        selectedProductId: productId2
+      }, dependencies);
+      await collect(selected);
+    }
+  };
+  await collect(initial);
+  return [...verified.values()];
 }
 function visaRecommendProductsQuery(context) {
   const positional = context.args.positionals.slice(2).join(" ").normalize("NFKC").trim();

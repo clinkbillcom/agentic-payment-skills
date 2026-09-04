@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.61');
+  assert.equal(packageJson.version, '0.1.62');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.61/u);
-  assert.match(skill, /version: "0\.1\.61"/u);
+  assert.match(skill, /Visa Skill 0\.1\.62/u);
+  assert.match(skill, /version: "0\.1\.62"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -357,6 +357,10 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   );
   assert.match(
     discovery,
+    /Lightly check both collections[\s\S]*original request[\s\S]*Drop clearly unrelated rows[\s\S]*coffee excludes supermarket products\/Benefits[\s\S]*Keep plausible aliases\/translations/iu,
+  );
+  assert.match(
+    discovery,
     /`broadCatalogSearch\.coverage=partial`[\s\S]*incomplete broad product[\s\S]*preserving linked products and Benefits/iu,
   );
   assert.match(
@@ -366,6 +370,10 @@ test('broad Visa availability matches products and retains unmatched Benefits', 
   assert.match(
     agent,
     /matchedPrograms is purchase provenance only[\s\S]*never reconstruct a Benefit[\s\S]*visaBenefits is the only source[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
+  );
+  assert.match(
+    agent,
+    /lightly check every[\s\S]*original request[\s\S]*product title\/sourceTitle\/merchant[\s\S]*Benefit title\/summary\/tags[\s\S]*coffee[\s\S]*excludes supermarket gift cards[\s\S]*Keep[\s\S]*translations[\s\S]*brand aliases[\s\S]*category synonyms[\s\S]*do not invent[\s\S]*constraints/iu,
   );
   assert.match(
     agent,

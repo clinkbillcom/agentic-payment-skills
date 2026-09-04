@@ -87,11 +87,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.54');
+  assert.equal(vendorPackage.version, '0.2.55');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '689ae207f7806f4a93bf0692d73788797b61913e',
+    '94c7a250c16804983a29f356abb527b7bc8b238e',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -154,6 +154,8 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   assert.match(aggregateHelp.stdout, /recommend-products <query>/u);
   assert.match(aggregateHelp.stdout, /Do not pass --keyword/u);
   assert.match(aggregateHelp.stdout, /same original query/u);
+  assert.match(aggregateHelp.stdout, /matched merchant Catalog search uses no fixed/iu);
+  assert.match(aggregateHelp.stdout, /verify all resolvable orderable products/iu);
   assert.match(aggregateHelp.stdout, /--include-broad-catalog/u);
   assert.match(aggregateHelp.stdout, /--broad-queries <json>/u);
   assert.match(aggregateHelp.stdout, /strictMatchFailure/u);
@@ -472,15 +474,13 @@ test('aggregate retains only registered URL-less internal broad products', () =>
 });
 
 test('Visa Program code resolves through merchant-list metadata', () => {
-  const query = 'visa 香港超市有什么优惠';
+  const query = '超市优惠';
   const result = runWithMock([
     'visa',
     'recommend-products',
     query,
     '--region',
     'hk',
-    '--type',
-    'benefit',
     '--anonymous',
     '--all',
     '--lang',
@@ -492,7 +492,7 @@ test('Visa Program code resolves through merchant-list metadata', () => {
 
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout).data;
-  assert.equal(output.returnedProductCount, 1);
+  assert.equal(output.returnedProductCount, 2);
   assert.equal(output.returnedVisaBenefitCount, 0);
   assert.equal(output.products[0].productResolution, 'internal-ucp-catalog');
   assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
@@ -500,13 +500,18 @@ test('Visa Program code resolves through merchant-list metadata', () => {
     output.products[0].endpoint,
     'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
   );
-  assert.equal(output.products[0].product.itemId, 'benefit-product-1');
-  assert.equal(output.products[0].product.currency, 'HKD');
-  assert.equal(output.products[0].product.totalAmountMajor, '10');
-  assert.deepEqual(output.products[0].matchedPrograms, [{
-    code: 'P2026080006',
-    title: '香港本地超市現金券優惠',
-  }]);
+  assert.deepEqual(
+    output.products.map(({ product }) => product.itemId),
+    ['wellcome-100', 'parknshop-100'],
+  );
+  for (const product of output.products) {
+    assert.equal(product.product.currency, 'USD');
+    assert.equal(product.product.totalAmountMajor, '1');
+    assert.deepEqual(product.matchedPrograms, [{
+      code: 'P2026080006',
+      title: '香港本地超市現金券優惠',
+    }]);
+  }
 });
 
 test('recommend-products rejects a second Visa keyword source', () => {
@@ -1159,7 +1164,7 @@ globalThis.fetch = async (input, init) => {
       return jsonResponse({ success: true, data: {} });
     }
     if (url.pathname.endsWith('/programs/recommend')) {
-      if (url.searchParams.get('keyword') !== 'visa 香港超市有什么优惠') {
+      if (url.searchParams.get('keyword') !== '超市优惠') {
         throw new Error(
           'unexpected Visa Program keyword: ' + url.search,
         );
@@ -1198,25 +1203,28 @@ globalThis.fetch = async (input, init) => {
       }
       const body = JSON.parse(String(init.body));
       if (
-        body.query !== 'visa 香港超市有什么优惠'
-        || body.pagination?.limit !== 1
+        body.query !== '超市优惠'
+        || body.pagination !== undefined
       ) {
         throw new Error(
           'unexpected internal Benefit search: ' + JSON.stringify(body),
         );
       }
+      const product = (id, title) => ({
+        id,
+        title,
+        url:
+          'https://vtravel.link2shops.com/yiyuan/'
+          + '?product_id=' + id,
+        price: { amount: 100, currency: 'USD' },
+        availability: { available: true, status: 'in_stock' },
+        seller: { name: 'Visa Benefit Catalog Merchant' },
+      });
       return jsonResponse({
-        products: [{
-          id: 'benefit-product-1',
-          title: 'Selected Visa Program',
-          sourceTitle: 'Selected Visa Program',
-          url:
-            'https://vtravel.link2shops.com/yiyuan/'
-            + '?product_id=benefit-product-1',
-          price: { amount: 1000, currency: 'HKD' },
-          availability: { available: true, status: 'in_stock' },
-          seller: { name: 'Visa Benefit Catalog Merchant' },
-        }],
+        products: [
+          product('wellcome-100', 'Wellcome Supermarket HKD 100 Gift Card'),
+          product('parknshop-100', 'PARKnSHOP Supermarket HKD 100 Gift Card'),
+        ],
         pagination: { has_next_page: false },
       });
     }
