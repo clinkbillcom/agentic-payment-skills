@@ -50,9 +50,13 @@ interface:
     equals merchant ext.visa_program_id. Offer URLs never select a merchant.
     Never issue separate recommend, detail, product-search, merchant-list, or
     external-page calls.
-    Read only products and visaBenefits. After independent hard-constraint
-    filtering, always present nonempty exact orderable products first, then
-    relevant visaBenefits. If only products remain, show products only and do
+    Read only products and visaBenefits. Before display, lightly check every
+    row against the original request using product title/sourceTitle/merchant
+    and Benefit title/summary/tags. Remove clearly unrelated rows: a coffee
+    request excludes supermarket gift cards and supermarket Benefits. Keep
+    plausible translations, brand aliases, and category synonyms; do not invent
+    new constraints. Present nonempty products first, then visaBenefits. If only
+    products remain, show products only and do
     not mention missing Benefits, Offers, coupons, or discounts. If only
     visaBenefits remain, show Benefits only and do not mention missing or
     unorderable products. Only when both filtered collections are empty, give
