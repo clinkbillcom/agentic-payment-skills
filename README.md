@@ -27,8 +27,9 @@ The lightweight shopping routes cover:
 - product, category, merchant, purchase, and Visa Benefit queries through one
   `visa recommend-products` call, which immediately checks every returned
   Program against configured exact internal UCP routes
-- one unchanged query drives the Visa keyword and, after Program-code merchant
-  matching, that merchant's Catalog search; Offer titles remain display only
+- Visa recommendation sends taxonomy filters only and no keyword; after
+  Program-code merchant matching, the unchanged original query drives that
+  merchant's Catalog search; Offer titles remain display only
 - no `--include-broad-catalog`, broad query variants, or Catalog fallback
 - Agent-selected `recommend-products` filters never infer or pass `--type`
 - every filter plan requires region and one or more OR-combined categories;
@@ -84,8 +85,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.64` vendors Visa CLI `0.2.55` from upstream commit
-`94c7a250c16804983a29f356abb527b7bc8b238e`. This product-match branch performs
+Skill `0.1.65` vendors Visa CLI `0.2.56` from upstream commit
+`72e6c2fe4c464461e54f992bbe9712ce617f2d8f`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
@@ -117,7 +118,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.64`
+Skill version: `0.1.65`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

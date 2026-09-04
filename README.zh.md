@@ -24,8 +24,8 @@ visa commerce-run
 
 - 商品、品类、商户、下单和 Visa 权益请求都通过一次 `visa recommend-products` 查询；
   CLI 会立即把每条 Program 与已配置的精确内部 UCP 路由做商品匹配
-- 同一份原始 query 用于 Visa keyword，并在 Program code 命中商户后用于该商户
-  的 Catalog 搜索；Offer 标题只作为展示信息
+- Visa recommendation 只发送 taxonomy filters，不发送 keyword；Program code
+  命中商户后，才使用不改写的原始 query 搜索该商户；Offer 标题只作为展示信息
 - 不传 `--include-broad-catalog`，不生成 broad query，也不做 Catalog fallback
 - Agent 为 `recommend-products` 选择筛选条件时不推断、不传 `--type`
 - 每个筛选方案必须包含 region 和至少一个 category；多个 category 按 OR，
@@ -70,8 +70,8 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.64` 已 vendor 上游提交
-`94c7a250c16804983a29f356abb527b7bc8b238e` 的 Visa CLI `0.2.55`。本
+Skill `0.1.65` 已 vendor 上游提交
+`72e6c2fe4c464461e54f992bbe9712ce617f2d8f` 的 Visa CLI `0.2.56`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
@@ -99,7 +99,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.64`
+Skill 版本：`0.1.65`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

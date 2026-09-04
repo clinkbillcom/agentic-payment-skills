@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.64');
+  assert.equal(packageJson.version, '0.1.65');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.64/u);
-  assert.match(skill, /version: "0\.1\.64"/u);
+  assert.match(skill, /Visa Skill 0\.1\.65/u);
+  assert.match(skill, /version: "0\.1\.65"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -184,7 +184,7 @@ test('initial Visa discovery runs one matched-merchant aggregate without broad C
   );
   assert.match(
     discovery,
-    /positional query[\s\S]*only primary text[\s\S]*Visa recommendation keyword[\s\S]*Program-to-merchant match[\s\S]*merchant's Catalog query[\s\S]*Offer titles must[\s\S]*not replace/iu,
+    /positional query[\s\S]*only primary text[\s\S]*Visa recommendation sends taxonomy filters only[\s\S]*no keyword[\s\S]*Program-to-merchant match[\s\S]*merchant's Catalog query[\s\S]*Offer titles must[\s\S]*not replace/iu,
   );
   assert.match(
     singleCommand,
@@ -209,7 +209,7 @@ test('initial Visa discovery runs one matched-merchant aggregate without broad C
   );
   assert.match(
     discovery,
-    /Read `references\/visa-recommend-filters\.md`/u,
+    /Read[\s\S]*`references\/visa-recommend-filters\.md`/u,
   );
   assert.match(
     discovery,
@@ -437,7 +437,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /positional query[\s\S]*only primary text[\s\S]*Visa[\s\S]*Program-matched merchant Catalog search[\s\S]*Never pass `--include-broad-catalog`[\s\S]*`--broad-queries`/iu,
+    /Visa recommendation uses only[\s\S]*taxonomy filters[\s\S]*sends no[\s\S]*keyword[\s\S]*unchanged positional query[\s\S]*Program-matched[\s\S]*merchant Catalog search[\s\S]*Never pass `--include-broad-catalog`[\s\S]*`--broad-queries`/iu,
   );
   const taxonomyCodes = [
     'outbound', 'study', 'local', 'inbound', 'haitao',
@@ -580,7 +580,7 @@ test('direct shopping remains Visa-first without broad or Catalog-only routing',
   );
   assert.match(
     discovery,
-    /For "我想下单咖啡"[\s\S]*`dining_cafe_bakery`[\s\S]*do not invent a `reward_type`[\s\S]*unchanged[\s\S]*query is used only for Visa and a Program-matched merchant/iu,
+    /For "我想下单咖啡"[\s\S]*`dining_cafe_bakery`[\s\S]*do not invent a `reward_type`[\s\S]*unchanged[\s\S]*query is not sent to Visa[\s\S]*used only for a Program-matched merchant/iu,
   );
   assert.doesNotMatch(discovery, /visa recommend-products --include-broad-catalog/u);
   assert.doesNotMatch(skill, /## Catalog Purchase Fast Path/u);

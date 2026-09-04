@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.64. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.65. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.64"
+  version: "0.1.65"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -228,9 +228,10 @@ with the unchanged original current user request. Never pass
 environment merchant list once and routes only exact Program `code` ==
 merchant `ext.visa_program_id`; Offer URL never selects a merchant. The
 positional query is the only primary text: never pass `--keyword` or filter-set
-`keyword`. CLI reuses it as the Visa recommendation keyword and, after a
-Program-to-merchant match, as that merchant's Catalog query. Offer titles must
-not replace it. Read `references/visa-recommend-filters.md`.
+`keyword`. Visa recommendation sends taxonomy filters only and no keyword.
+After a Program-to-merchant match, CLI uses the unchanged positional query as
+that merchant's Catalog query. Offer titles must not replace it. Read
+`references/visa-recommend-filters.md`.
 
 Use one strict explicit-filter request by default:
 
@@ -295,9 +296,9 @@ For category-, merchant-, or product-specific shopping requests, choose one
 strict plan by default and use four-set aggregation only for four meaningful
 variants. For "我想下单咖啡", select the high-confidence
 `dining_cafe_bakery` category and do not invent a `reward_type`. The unchanged
-query is used only for Visa and a Program-matched merchant. Add `--all` when
-the user asks for every matching Benefit. A follow-up query invalidates all
-prior filters and results.
+query is not sent to Visa and is used only for a Program-matched merchant.
+Add `--all` when the user asks for every matching Benefit. A follow-up query
+invalidates all prior filters and results.
 
 Read only the aggregate `products` and `visaBenefits` collections:
 
