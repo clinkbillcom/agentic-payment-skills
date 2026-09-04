@@ -49,8 +49,8 @@ The lightweight shopping routes cover:
   product-search
 - an order invitation only for an exact `internal-ucp-catalog` match; otherwise
   the response ends with the Visa activity introduction and authoritative link
-- the existing matched Program purchase path through `commerce-login` and
-  `commerce-run`
+- matched Program purchase directly from the unchanged `recommend-products`
+  snapshot through `commerce-login` and `commerce-run`, without `visa detail`
 - direct shopping through the same Visa-only Offer and matched-merchant flow
 - one aggregate missing-card contract: create or reuse an exact no-card
   `PENDING` Instruction, optionally show but never auto-open the Bind Card link,
@@ -85,7 +85,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.65` vendors Visa CLI `0.2.56` from upstream commit
+Skill `0.1.66` vendors Visa CLI `0.2.56` from upstream commit
 `72e6c2fe4c464461e54f992bbe9712ce617f2d8f`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
@@ -118,7 +118,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.65`
+Skill version: `0.1.66`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

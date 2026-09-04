@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.65. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.66. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.65"
+  version: "0.1.66"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -346,8 +346,7 @@ For explicit food delivery use `--category dining_delivery_food` and exclude
 
 ### Selected Visa Benefit Resolution
 
-When the user selects an unmatched Visa Benefit and asks for details, bind one
-stable Program code and fetch its authoritative detail:
+For details on an unmatched Visa Benefit, bind one stable Program code and run:
 
 ```text
 <Skill Path>/bin/visa-cli visa detail <program-code> \
@@ -355,13 +354,10 @@ stable Program code and fetch its authoritative detail:
   --format json
 ```
 
-Preserve the detail's authoritative title, activity summary, hard terms, dates,
-and campaign/activity URL. Never infer a merchant route from an arbitrary
-Visa/VSRP campaign URL.
-
-The one-round aggregate has already attempted product matching. Do not rerun
-`visa product-search` for an unmatched Benefit. Present its activity
-introduction, terms, and authoritative link only, with no purchase CTA.
+Preserve activity summary, hard terms, dates, and campaign/activity URL.
+Never infer a merchant route from an arbitrary Visa/VSRP campaign URL.
+Do not rerun `visa product-search` or add a purchase CTA. An authorized exact
+`products[]` order uses the purchase fast path, never `visa detail`.
 
 A new Visa query, refreshed recommendation, changed language, changed
 geography, or changed environment invalidates the prior Program selection and
@@ -372,6 +368,10 @@ UCP result.
 An explicit request to buy one unambiguous selected Visa Benefit is the single
 purchase authorization. A reply selecting a previously shown Benefit and
 asking to buy it is also sufficient.
+
+After authorization, use the latest unchanged `recommend-products` snapshot
+directly in `visa commerce-login`; never run or refresh `visa detail`. If the
+snapshot is missing or invalidated, stop and return to discovery.
 
 Before login, require all of the following:
 
@@ -725,14 +725,14 @@ general workflow engine.
   explicit-filter request by default, or one four-set aggregate.
 - Every returned Program is checked only against configured exact internal UCP
   routes. Exact matches become products and are removed from visaBenefits.
-- Selecting a Visa Benefit fetches Visa detail first. Only an exact
-  `internal-ucp-catalog` product match permits an order invitation.
+- `visa detail` is only for unmatched-Benefit details, never an exact product
+  purchase.
 - Without an internal UCP match, present only the activity introduction, terms,
   and authoritative activity link, with no purchase-inducing next step.
 - Direct shopping uses the same Visa-only recommendation and matched-merchant
   product resolution; it never starts with standalone `catalog search`.
-- A matched Visa Program purchase uses the three purchase aggregates in Program
-  mode after `visa detail` and internal product verification.
+- A matched Visa Program purchase uses the latest unchanged
+  `recommend-products` snapshot directly in the purchase aggregates.
 - For a Program purchase, the Program and internal UCP Catalog product identity
   plus recommendation-backed purchase amount/currency must agree.
 - New `mode=purchase` contexts never send `program.code`.
