@@ -43,7 +43,8 @@ visa commerce-run
 - 用户选择未匹配权益后可用 `visa detail` 查看详情，但不重复 product-search
 - 只有精确 `internal-ucp-catalog` 命中才提示是否下单；未命中时只展示
   Visa 活动介绍与权威活动链接，不追加购买引导
-- 命中的 Program 购买继续走 `commerce-login`、`commerce-run`
+- 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
+  `commerce-login`、`commerce-run`，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
 - 聚合缺卡合同：创建或复用一条精确的无卡 `PENDING` Instruction；可以提示
   Bind Card 链接但绝不自动打开；CLI 保持前台等待；只有同一张卡完成 VIC 且
@@ -72,7 +73,7 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.66` 已 vendor 上游提交
+Skill `0.1.67` 已 vendor 上游提交
 `72e6c2fe4c464461e54f992bbe9712ce617f2d8f` 的 Visa CLI `0.2.56`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
@@ -101,7 +102,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.66`
+Skill 版本：`0.1.67`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

@@ -87,8 +87,13 @@ interface:
     quantity above 1 never use unitPriceMajor. The commerce-run expected.amount
     uses the same totalAmountMajor. When the user selects an unmatched Visa Benefit and asks
     for details, run visa detail by stable Program code; do not rerun
-    product-search and do not add a purchase CTA. For Visa Program
-    purchases, use a valid Program merchantCategoryCode first. If it is absent,
+    product-search and do not add a purchase CTA. Once the user selects an
+    exact returned product and explicitly authorizes buy, order, or checkout,
+    preserve the latest unchanged recommend-products snapshot and proceed
+    directly to commerce-login; never run or refresh visa detail in the
+    purchase path. If that snapshot is missing or invalidated, stop and return
+    to discovery. For Visa Program purchases, use a valid
+    Program merchantCategoryCode first. If it is absent,
     classify MCC only from the complete frozen merchant/product context with
     high confidence. Never reuse an environment-specific merchant identity or
     MCC override. Invalid/conflicting Program MCC, low confidence, or title-only
