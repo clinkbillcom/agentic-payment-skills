@@ -26,7 +26,12 @@ interface:
     and 有哪些咖啡权益 all use this aggregate. Never call standalone catalog
     search for initial shopping discovery. Read only
     references/visa-recommend-filters.md and choose the smallest safe filter
-    shape. Use one strict explicit-filter call by default. Use
+    shape. Every plan must include region and at least one category. Use the
+    user's region, else the remembered search region, else hk. Category accepts
+    multiple values as OR; prefer specific child codes and one multi-category
+    plan. Add purpose, reward_type, attribute, card_level, or card_issuer only
+    when explicitly stated by the current user; otherwise omit them. Never
+    choose limit or page. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve
     recall. Preserve every explicit brand, merchant, product, category,
     geography, eligibility, reward type, and other hard constraint. Never infer
