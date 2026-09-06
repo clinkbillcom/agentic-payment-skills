@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.71. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.74. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.71"
+  version: "0.1.74"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -238,11 +238,19 @@ Use one strict explicit-filter request by default:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
-  <individual-filter-flags> \
+  --region <region> --category <category> \
   --anonymous \
   --lang <language-tag> \
   --format json
 ```
+
+Natural language never replaces the category flag: every strict call carries
+`--region` and at least one `--category`. Supermarket / grocery / 超市 / 街市 map
+to `shopping_supermarket`, department store / mall / 百货 / 商场 to
+`shopping_department_mall`, coffee / 咖啡 to `dining_cafe_bakery`. A region-only
+browse must add `--all`. The CLI rejects a call with neither (`filters
+incomplete`, exit code 2); treat that error as a missing category and rerun
+with one, never as "no results".
 
 Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:

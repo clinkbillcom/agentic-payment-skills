@@ -87,7 +87,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.71` vendors Visa CLI `0.2.56` from upstream commit
+Skill `0.1.74` vendors Visa CLI `0.2.56` from upstream commit
 `ce90bd3b3ae597a65eb2512e2e0bdc2a01a49f57`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
@@ -120,7 +120,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.71`
+Skill version: `0.1.74`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
