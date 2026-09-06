@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.70. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.73. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.70"
+  version: "0.1.73"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -249,23 +249,27 @@ uses the original query for every Program-matched merchant Catalog query and
 the first broad Catalog query. Offer titles must not replace it. Read
 `references/visa-recommend-filters.md`.
 
-Add up to three distinct product-only broad queries with `--broad-queries`.
-They improve Catalog recall without changing Visa filters or adding Visa
-requests. For "我想下单咖啡",
-use `["美式咖啡","拿铁咖啡","咖啡饮品"]`. Omit merchant or brand names the
-user did not provide.
+Add up to three product-only `--broad-queries` (for "我想下单咖啡":
+`["美式咖啡","拿铁咖啡","咖啡饮品"]`); they add Catalog recall, not Visa
+requests. Omit merchant or brand names the user did not provide.
 
 Use one strict explicit-filter request by default:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
-  <individual-filter-flags> \
+  --region <region> --category <category> \
   --anonymous \
   --include-broad-catalog \
   --broad-queries '["<product-query-1>","<product-query-2>","<product-query-3>"]' \
   --lang <language-tag> \
   --format json
 ```
+
+Natural language never replaces the category flag: every strict call carries
+`--region` and at least one `--category` (超市 / supermarket / grocery map to
+`shopping_supermarket`, 百货 / mall to `shopping_department_mall`). A
+region-only browse must add `--all`; never answer
+"no results" after a call without a category.
 
 Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:
@@ -315,17 +319,14 @@ never add an outer `--region`; the CLI rejects mixed filter ownership.
 `--market hk` remains a source selector and is used only when Hong Kong card
 issuance is explicit.
 
-Never infer or pass `--type` for `recommend-products`; Benefit, reward, coupon,
-discount, or purchase wording does not select it. Set `reward_type` only when
-the user explicitly requests one. Generic "优惠", "benefit", "offer", or
-"礼遇" selects none. Never fan out reward types; use one safe plan when possible.
+Never infer or pass `--type`; Benefit, reward, coupon, discount, or purchase
+wording does not select it. Set `reward_type` only on explicit request;
+generic "优惠", "benefit", "offer", or "礼遇" selects none.
 
-For category-, merchant-, or product-specific shopping requests, choose one
-strict plan by default and use four-set aggregation only for four meaningful
-variants. For "我想下单咖啡", select the high-confidence
-`dining_cafe_bakery` category, preserve the unchanged query for broad Catalog,
-and do not invent a `reward_type`. Add `--all` when the user asks for every
-matching Benefit. A follow-up query invalidates all prior filters and results.
+For category-, merchant-, or product-specific requests use one strict plan;
+four-set aggregation only for four meaningful variants. "我想下单咖啡" selects
+`dining_cafe_bakery` with no invented `reward_type`. A follow-up query
+invalidates all prior filters and results.
 
 Read only the aggregate `products` and `visaBenefits` collections:
 

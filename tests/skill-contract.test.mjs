@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.70');
+  assert.equal(packageJson.version, '0.1.73');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.70/u);
-  assert.match(skill, /version: "0\.1\.70"/u);
+  assert.match(skill, /Visa Skill 0\.1\.73/u);
+  assert.match(skill, /version: "0\.1\.73"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -176,7 +176,7 @@ test('initial Visa discovery runs one aggregate with parallel broad Catalog', ()
   );
   assert.match(
     singleCommand,
-    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*product-query-1[\s\S]*product-query-2[\s\S]*product-query-3[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*--region <region> --category <category>[\s\S]*--anonymous[\s\S]*--include-broad-catalog[\s\S]*--broad-queries[\s\S]*product-query-1[\s\S]*product-query-2[\s\S]*product-query-3[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.doesNotMatch(singleCommand, /<environment-flag>|--sandbox|--test/u);
@@ -1031,4 +1031,14 @@ test('purchase context maps merchantUrl to the recommend-products merchant route
   assert.match(skill, /products\[\]\.product\.productUrl/u);
   assert.match(skill, /Never use the Program `url`/u);
   assert.doesNotMatch(skill, /authoritative-program-commerce-url/u);
+});
+
+test('recommend-products always carries a category or an explicit --all browse', () => {
+  assert.match(skill, /Natural language never replaces the category flag/u);
+  assert.match(skill, /every strict call carries\s+`--region` and at least one `--category`/u);
+  assert.match(skill, /supermarket \/ grocery map to\s+`shopping_supermarket`/u);
+  assert.match(skill, /region-only browse must add `--all`/u);
+  assert.match(skill, /never answer\s+"no results" after a call without a category/u);
+  assert.match(filterReference, /Natural language never replaces `category`/u);
+  assert.match(filterReference, /region-only\s+browse\s+requires `--all`/u);
 });

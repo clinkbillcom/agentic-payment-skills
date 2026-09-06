@@ -1,6 +1,6 @@
 # Recommend-Products Filters
 
-Use one `visa recommend-products`; no standalone discovery calls.
+One `visa recommend-products` call; no standalone discovery.
 
 ## Required Shape
 
@@ -9,6 +9,9 @@ Every request or `--filter-sets` object requires:
 - `region`: user destination, else remembered region, else `hk`.
 - `category`: one or more relevant codes; prefer specific children. Multiple
   values are OR. Different axes are AND.
+- Natural language never replaces `category` (超市/supermarket ->
+  `shopping_supermarket`, 百货/mall -> `shopping_department_mall`). A region-only
+  browse requires `--all`.
 
 ```json
 {
@@ -18,14 +21,12 @@ Every request or `--filter-sets` object requires:
 ```
 
 Add `purpose`, `reward_type`, `attribute`, `card_level`, or `card_issuer` only
-when explicitly stated by the current user; otherwise omit it. Generic `优惠`,
+when explicitly stated; otherwise omit it. Generic `优惠`,
 `权益`, `benefit`, or `offer` selects none. Never pass `type`, `keyword`,
-`limit`, or `page`. Add `--all` only for an explicit every/all request.
+`limit`, or `page`. Add `--all` only for an explicit all request.
 
-Flag mapping: `region -> --region`, `category -> --category`,
-`purpose -> --purpose`, `reward_type -> --reward-type`,
-`attribute -> --attribute`, `card_level -> --card-level`,
-`card_issuer -> --card-issuer`. Prefer one multi-category plan. Use
+Flags: each axis maps to `--<axis>` with `_` written as `-`
+(`reward_type -> --reward-type`). Prefer one multi-category plan. Use
 `--filter-sets` only for four genuinely different safe plans; each still
 requires region/category and every explicit constraint.
 
@@ -101,8 +102,7 @@ CCBDB BOCDB CMBDB ABCDB CIBPLATINUM BOCAPP
 
 Examples:
 
-- `香港超市和百货优惠`: one request with `region=hk` and categories
-  `shopping_supermarket shopping_department_mall`.
+- `香港超市和百货优惠`: `region=hk`, `shopping_supermarket shopping_department_mall`.
 - `香港本地超市优惠券`: also `purpose=local`, `reward_type=coupon`.
-- `我想下单咖啡`: `region=<resolved>`, `category=dining_cafe_bakery`; no
-  optional taxonomy axis unless the user states one.
+- `我想下单咖啡`: `region=<resolved>`, `category=dining_cafe_bakery`; no other
+  axis unless stated.
