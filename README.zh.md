@@ -72,7 +72,7 @@ events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-close
 Capability Contract 提供。
 
 Skill `0.1.69` 已 vendor 上游提交
-`72e6c2fe4c464461e54f992bbe9712ce617f2d8f` 的 Visa CLI `0.2.56`。本
+`ce90bd3b3ae597a65eb2512e2e0bdc2a01a49f57` 的 Visa CLI `0.2.56`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
