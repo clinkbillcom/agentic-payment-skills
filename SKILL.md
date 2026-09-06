@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.68. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.70. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.68"
+  version: "0.1.70"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -479,9 +479,8 @@ already-open Agent Portal also works. Then run once in the foreground:
 ```
 
 Keep it foreground until `ok=true` and `ready=true` or a bound timeout. The CLI
-alone owns the Pending Instruction Card Gate. Never inspect or copy registration
-fields, `pendingInstructionId`, or login-returned Instruction IDs; Quick
-Instruction is acceleration, not purchase identity.
+alone owns the Pending Instruction Card Gate; never inspect or copy registration
+fields, `pendingInstructionId`, or login-returned Instruction IDs.
 
 Build one frozen purchase context from the same Program and verified product:
 
@@ -491,7 +490,7 @@ Build one frozen purchase context from the same Program and verified product:
   "environment": "uat",
   "requestText": "<original purchase request>",
   "selection": {
-    "merchantUrl": "<authoritative-program-commerce-url>",
+    "merchantUrl": "<verified-merchant-route-url>",
     "merchantId": "<verified-merchant-id>",
     "endpoint": "<verified-endpoint>",
     "productId": "<verified-item-id>",
@@ -530,14 +529,16 @@ Build one frozen purchase context from the same Program and verified product:
 }
 ```
 
-Do not include a top-level `program` object or `metadata.programCode`.
-`commerce-run` may accept legacy Program metadata for compatibility, but this
-Skill never sends it and never treats it as a purchase prerequisite.
+`selection.merchantUrl` is `products[].product.merchantUrl`, else
+`products[].product.productUrl`. Never use the Program `url`; the CLI rejects it.
 
-Use native JSON types: `quantity` is a positive integer and
-`digitalDeliveryExpected` is a boolean. Use `true` only for a verified digital
-artifact. Keep Program, Catalog, expected, and Instruction facts unchanged.
-Never add an Instruction ID or caller-generated Checkout ID.
+Do not include a top-level `program` object or `metadata.programCode`; legacy
+Program metadata exists only for compatibility and this Skill never sends it.
+
+Use native JSON types (`quantity` integer, `digitalDeliveryExpected` boolean,
+`true` only for a verified digital artifact). Keep Program, Catalog,
+expected, and Instruction facts unchanged; never add an Instruction ID or
+caller-generated Checkout ID.
 
 Run exactly once in the foreground:
 
