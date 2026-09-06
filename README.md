@@ -111,7 +111,7 @@ Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
 Skill `0.1.73` vendors Visa CLI `0.2.56` from upstream commit
-`8b1b3ca579f2b83d2549163e63b056b9d13dbf30`. It uses one-round Visa
+`5cb40e9c87081efbd9b4d1bbdf2f3d45fd35d109`. It uses one-round Visa
 recommendation, exact configured internal matching, and parallel broad Catalog,
 optional
 legacy `program.code`, complete Eats365 `manual_item_facts` revalidation, and
