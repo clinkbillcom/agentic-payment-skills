@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.66');
+  assert.equal(packageJson.version, '0.1.69');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.66/u);
-  assert.match(skill, /version: "0\.1\.66"/u);
+  assert.match(skill, /Visa Skill 0\.1\.69/u);
+  assert.match(skill, /version: "0\.1\.69"/u);
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -873,4 +873,12 @@ test('funds, browser, and result boundaries remain explicit', () => {
   assert.match(skill, /Bind Card[\s\S]*never auto-open/iu);
   assert.match(skill, /Alipay QR is not a browser page/iu);
   assert.match(skill, /No payment, Tip, refund, Checkout completion[\s\S]*blindly retried/iu);
+});
+
+test('purchase context maps merchantUrl to the recommend-products merchant route, never the Program page', () => {
+  assert.match(skill, /"merchantUrl": "<verified-merchant-route-url>"/u);
+  assert.match(skill, /products\[\]\.product\.merchantUrl/u);
+  assert.match(skill, /products\[\]\.product\.productUrl/u);
+  assert.match(skill, /Never use the Program `url`/u);
+  assert.doesNotMatch(skill, /authoritative-program-commerce-url/u);
 });
