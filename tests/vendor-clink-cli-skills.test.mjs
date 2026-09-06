@@ -2211,7 +2211,7 @@ test('vendored CLI metadata tracks the main edition and production contracts', (
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'd8952341e5d4699d4010c4216cb1975a9d7f5577',
+    '666138c698fccc325557925935278b308c840f0f',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

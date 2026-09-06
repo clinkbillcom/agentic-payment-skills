@@ -11749,6 +11749,16 @@ function assertValidCollectTarget(options2) {
     throw validationError("nextToken requires checkoutId");
   }
   assertValidExpectedResource(options2.expectedResource);
+  if (options2.resourceScopedTypes !== void 0) {
+    const requested = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
+    const scoped = options2.resourceScopedTypes;
+    if (scoped.length === 0 || scoped.some((type) => normalizedValue(type) === void 0 || !requested.has(type.trim()))) {
+      throw validationError("resourceScopedTypes must list non-blank event types included in type");
+    }
+    if (options2.expectedResource === void 0) {
+      throw validationError("resourceScopedTypes requires expectedResource");
+    }
+  }
 }
 function assertValidExpectedResource(expectedResource) {
   if (expectedResource === void 0) {
@@ -11829,7 +11839,8 @@ async function collectWebhookEvents(options2) {
     throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
   }
   const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
-  const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
+  const resourceScopedTypes = options2.resourceScopedTypes ? new Set(options2.resourceScopedTypes) : void 0;
+  const matchesExpectedResource = (event) => !hasResourceFilter || resourceScopedTypes !== void 0 && !resourceScopedTypes.has(event.eventType) || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
   const matchesTarget = (event, sourceRecord) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || recordMatchesCheckoutId(sourceRecord, checkoutId) && recordHasConsistentPaymentOrderIdAliases(sourceRecord)) && matchesExpectedResource(event);
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
@@ -13970,6 +13981,12 @@ Behavior:
   shared by every Mandate, but does not require equality with caller-supplied expiry values.
   If CWallet returns CARD_READY or VIC_READY without an instructionId because VIC completed during
   the request race, the command returns card_ready without another POST or a binding handoff.
+  The watch also wakes on customer-wide payment_method.update / vic_device.binding_succeeded. A
+  Portal ceremony that started before this PENDING existed never activates it, so after a card
+  event the CLI waits a short grace period for the activation, exact-GETs the same ID, and if it is
+  still PENDING re-posts the identical context once; a VIC_READY answer returns card_ready with the
+  original instructionId and fallbackReason=card_vic_ready_without_pending_activation so the caller
+  continues with a regular Instruction on the ready card.
   --open and --no-watch are intentionally unsupported.
 
 Mandate Fields:
@@ -19662,13 +19679,21 @@ var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
   "DECLINED",
   "FAILED"
 ]);
+var PENDING_ACTIVATION_EVENT_TYPE = "purchase_instruction.activated";
+var PENDING_CARD_READY_EVENT_TYPES = [
+  "payment_method.update",
+  "vic_device.binding_succeeded"
+];
+var PENDING_ACTIVATION_GRACE_SECONDS = 20;
+var PENDING_CARD_READY_FALLBACK_REASON = "card_vic_ready_without_pending_activation";
 async function preparePendingInstruction(instructionContext, maxWaitSeconds, dependencies) {
+  const now = dependencies.now ?? Date.now;
   const created = await dependencies.createPendingInstruction(instructionContext);
   const initialStatus = normalizedStatus(created.status);
   if (initialStatus === "UNKNOWN") {
     throw apiError("missing status in pending instruction response", 502);
   }
-  if (initialStatus === "CARD_READY" || initialStatus === "VIC_READY") {
+  if (isCardReadyStatus(initialStatus)) {
     return {
       instructionStatus: initialStatus,
       state: "CARD_READY",
@@ -19679,10 +19704,11 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
       bindingLinkPresented: false
     };
   }
-  const instructionId = requiredText(created.instructionId, "missing instructionId in pending instruction response");
+  let instructionId = requiredText(created.instructionId, "missing instructionId in pending instruction response");
   if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus)) {
     throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
   }
+  const ceremony = ceremonyHint(created.detail, instructionId);
   if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus)) {
     return finalizePendingInstruction({
       instructionId,
@@ -19691,7 +19717,8 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
       timedOut: false,
       eventTypes: [],
       watchReady: false,
-      bindingLinkPresented: false
+      bindingLinkPresented: false,
+      ...ceremony ? { ceremony } : {}
     }, dependencies);
   }
   let bindingUrl;
@@ -19703,24 +19730,111 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
     bindingLinkError = errorMessage2(error);
   }
   let timedOut = false;
-  let eventTypes = [];
+  const eventTypes = [];
   let waitError;
   let watchReady = false;
-  try {
-    const wait = await dependencies.waitForInstructionActivation(instructionId, maxWaitSeconds, dependencies.onWatchReady ? () => {
-      watchReady = true;
-      dependencies.onWatchReady?.({
+  let exactGetError;
+  const deadlineMs = now() + maxWaitSeconds * 1e3;
+  const onReady = dependencies.onWatchReady ? () => {
+    watchReady = true;
+    dependencies.onWatchReady?.({
+      instructionId,
+      instructionStatus: initialStatus,
+      ...bindingUrl ? { bindingUrl } : {},
+      ...bindingLinkError ? { bindingLinkError } : {},
+      ...ceremony ? { ceremony } : {}
+    });
+  } : void 0;
+  let firstWait = true;
+  waitLoop: for (; ; ) {
+    const remainingSeconds = Math.ceil((deadlineMs - now()) / 1e3);
+    if (remainingSeconds <= 0) {
+      timedOut = true;
+      break;
+    }
+    let wait;
+    try {
+      wait = await dependencies.waitForInstructionActivation(instructionId, remainingSeconds, firstWait ? onReady : void 0, { wakeOnCardEvents: true });
+    } catch (error) {
+      rethrowAuthError(error);
+      waitError = errorMessage2(error);
+      break;
+    }
+    firstWait = false;
+    eventTypes.push(...wait.eventTypes);
+    if (wait.eventTypes.includes(PENDING_ACTIVATION_EVENT_TYPE)) {
+      break;
+    }
+    if (wait.timedOut) {
+      timedOut = true;
+      break;
+    }
+    if (!wait.eventTypes.some((eventType) => isCardReadyEventType(eventType))) {
+      break;
+    }
+    const graceSeconds = Math.min(PENDING_ACTIVATION_GRACE_SECONDS, Math.ceil((deadlineMs - now()) / 1e3));
+    if (graceSeconds > 0) {
+      try {
+        const grace = await dependencies.waitForInstructionActivation(instructionId, graceSeconds, void 0, { wakeOnCardEvents: false });
+        eventTypes.push(...grace.eventTypes);
+        if (grace.eventTypes.includes(PENDING_ACTIVATION_EVENT_TYPE)) {
+          break;
+        }
+      } catch (error) {
+        rethrowAuthError(error);
+        waitError = errorMessage2(error);
+        break;
+      }
+    }
+    let current;
+    try {
+      current = await dependencies.getInstruction(instructionId);
+    } catch (error) {
+      rethrowAuthError(error);
+      exactGetError = errorMessage2(error);
+      break;
+    }
+    if (current) {
+      assertExactInstruction(current, instructionId);
+      const currentStatus = normalizedStatus(current.status ?? current.state);
+      if (currentStatus === "ACTIVE" || isTerminalInstructionStatus(currentStatus)) {
+        break;
+      }
+    }
+    let recheck;
+    try {
+      recheck = await dependencies.createPendingInstruction(instructionContext);
+    } catch (error) {
+      rethrowAuthError(error);
+      waitError = errorMessage2(error);
+      break;
+    }
+    const recheckStatus = normalizedStatus(recheck.status);
+    if (isCardReadyStatus(recheckStatus)) {
+      dependencies.onCardReadyFallback?.({
         instructionId,
-        instructionStatus: initialStatus,
-        ...bindingUrl ? { bindingUrl } : {},
-        ...bindingLinkError ? { bindingLinkError } : {}
+        instructionStatus: recheckStatus,
+        eventTypes: [...eventTypes]
       });
-    } : void 0);
-    timedOut = wait.timedOut;
-    eventTypes = wait.eventTypes;
-  } catch (error) {
-    rethrowAuthError(error);
-    waitError = errorMessage2(error);
+      return {
+        instructionId,
+        instructionStatus: recheckStatus,
+        state: "CARD_READY",
+        createdDetail: created.detail,
+        timedOut: false,
+        eventTypes,
+        watchReady,
+        bindingLinkPresented: watchReady && bindingUrl !== void 0,
+        fallbackReason: PENDING_CARD_READY_FALLBACK_REASON,
+        ...ceremony ? { ceremony } : {},
+        ...bindingLinkError ? { bindingLinkError } : {}
+      };
+    }
+    const recheckId = optionalText(recheck.instructionId);
+    if (recheckId && recheckId !== instructionId) {
+      instructionId = recheckId;
+    }
+    continue waitLoop;
   }
   return finalizePendingInstruction({
     instructionId,
@@ -19730,13 +19844,15 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
     eventTypes,
     watchReady,
     bindingLinkPresented: watchReady && bindingUrl !== void 0,
+    ...ceremony ? { ceremony } : {},
     ...bindingLinkError ? { bindingLinkError } : {},
-    ...waitError ? { waitError } : {}
+    ...waitError ? { waitError } : {},
+    ...exactGetError ? { exactGetError } : {}
   }, dependencies);
 }
 async function finalizePendingInstruction(input, dependencies) {
   let instruction;
-  let exactGetError;
+  let exactGetError = input.exactGetError;
   try {
     instruction = await dependencies.getInstruction(input.instructionId);
   } catch (error) {
@@ -19759,6 +19875,7 @@ async function finalizePendingInstruction(input, dependencies) {
     watchReady: input.watchReady,
     bindingLinkPresented: input.bindingLinkPresented,
     resumeCommand: dependencies.resumeCommand(input.instructionId),
+    ...input.ceremony ? { ceremony: input.ceremony } : {},
     ...input.bindingLinkError ? { bindingLinkError: input.bindingLinkError } : {},
     ...input.waitError ? { waitError: input.waitError } : {},
     ...exactGetError ? { exactGetError } : {}
@@ -19769,6 +19886,24 @@ function pendingInstructionId(instruction) {
 }
 function isTerminalInstructionStatus(status) {
   return TERMINAL_INSTRUCTION_STATUSES.has(normalizedStatus(status));
+}
+function ceremonyHint(detail, instructionId) {
+  if (typeof detail.ceremonyInProgress !== "boolean") {
+    return void 0;
+  }
+  const boundInstructionId = optionalText(detail.ceremonyBoundInstructionId);
+  const activationExpected = typeof detail.activationExpected === "boolean" ? detail.activationExpected : !detail.ceremonyInProgress || boundInstructionId === instructionId;
+  return {
+    inProgress: detail.ceremonyInProgress,
+    ...boundInstructionId ? { boundInstructionId } : {},
+    activationExpected
+  };
+}
+function isCardReadyEventType(eventType) {
+  return PENDING_CARD_READY_EVENT_TYPES.includes(eventType);
+}
+function isCardReadyStatus(status) {
+  return status === "CARD_READY" || status === "VIC_READY";
 }
 function assertExactInstruction(instruction, expectedInstructionId) {
   if (pendingInstructionId(instruction) !== expectedInstructionId) {
@@ -23083,6 +23218,7 @@ async function collectCommandEvents(context, options2) {
     type: options2.type,
     maxDurationMs,
     ...options2.expectedResource ? { expectedResource: options2.expectedResource } : {},
+    ...options2.resourceScopedTypes ? { resourceScopedTypes: options2.resourceScopedTypes } : {},
     ...options2.onReady ? { onReady: options2.onReady } : {}
   });
   return {
@@ -25506,20 +25642,26 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
       };
     },
     getInstruction: (instructionId) => getCommandInstruction(context, instructionId),
-    waitForInstructionActivation: async (instructionId, waitSeconds, onReady) => {
+    waitForInstructionActivation: async (instructionId, waitSeconds, onReady, waitOptions) => {
+      const wakeOnCardEvents = waitOptions?.wakeOnCardEvents === true;
       const wait = await collectCommandEvents(context, {
-        type: "purchase_instruction.activated",
+        type: wakeOnCardEvents ? [PENDING_ACTIVATION_EVENT_TYPE, ...PENDING_CARD_READY_EVENT_TYPES].join(",") : PENDING_ACTIVATION_EVENT_TYPE,
         maxWaitSeconds: waitSeconds,
         expectedResource: {
           instructionId,
           purchaseInstructionId: instructionId
         },
+        ...wakeOnCardEvents ? { resourceScopedTypes: [PENDING_ACTIVATION_EVENT_TYPE] } : {},
         ...onReady ? { onReady } : {}
       });
       return {
         timedOut: wait.timedOut,
         eventTypes: wait.events.map((event) => event.eventType)
       };
+    },
+    onCardReadyFallback: ({ instructionId, instructionStatus }) => {
+      process.stderr.write(`A Visa card became VIC-ready but pending Instruction ${instructionId} was not activated by that card binding ceremony (it started before the Instruction existed). CWallet reported ${instructionStatus}; continuing with a regular Instruction on the ready card, which needs one more Passkey confirmation.
+`);
     },
     resolveBindingUrl: async () => {
       if (options2.bindingResolution?.status === "ready") {
@@ -25534,7 +25676,7 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
       }
       return prepared.url;
     },
-    onWatchReady: ({ instructionId, instructionStatus, bindingUrl, bindingLinkError }) => {
+    onWatchReady: ({ instructionId, instructionStatus, bindingUrl, bindingLinkError, ceremony }) => {
       process.stderr.write(`Pending Instruction ${instructionId} is ${instructionStatus}.
 `);
       if (bindingUrl) {
@@ -25545,7 +25687,10 @@ ${bindingUrl}
         process.stderr.write(`Card binding link is unavailable (${bindingLinkError}); continuing to wait for Portal completion.
 `);
       }
-      process.stderr.write(`Waiting for exact Instruction ${instructionId} activation...
+      if (ceremony?.inProgress && !ceremony.activationExpected) {
+        process.stderr.write("A card binding ceremony already started before this Instruction existed and will not activate it. Finish that binding; the CLI will continue with a regular Instruction once the card is VIC-ready.\n");
+      }
+      process.stderr.write(`Waiting for exact Instruction ${instructionId} activation (or a VIC-ready card)...
 `);
       if (options2.emitPendingEnvelope) {
         printSuccess({
@@ -25556,8 +25701,10 @@ ${bindingUrl}
           instructionStatus,
           ...bindingUrl ? { bindingUrl } : {},
           ...bindingLinkError ? { bindingLinkError } : {},
+          ...ceremony ? { ceremony } : {},
           watchReady: true,
           watchEventType: "purchase_instruction.activated",
+          cardReadyEventTypes: [...PENDING_CARD_READY_EVENT_TYPES],
           terminal: false,
           processRunning: true
         }, context.globalOptions.format);
@@ -25606,6 +25753,8 @@ function pendingInstructionCommandOutput(result) {
     eventTypes: result.eventTypes,
     watchReady: result.watchReady,
     bindingLinkPresented: result.bindingLinkPresented,
+    ...result.fallbackReason ? { fallbackReason: result.fallbackReason } : {},
+    ...result.ceremony ? { ceremony: result.ceremony } : {},
     ...result.state === "PENDING" && result.resumeCommand ? {
       userActionRequired: true,
       resumeCommand: result.resumeCommand,
