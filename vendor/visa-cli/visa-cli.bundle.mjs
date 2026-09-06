@@ -33287,6 +33287,12 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
+  Filters are validated before any request: without --include-broad-catalog, recommend-products
+  requires at least one --category (or category inside at least one --filter-sets entry) unless --all is
+  passed for an explicit region-wide browse. A region-only request would only see Visa's first page
+  and could report zero products for a Program on a later page, so it fails with exit code 2
+  ("filters incomplete") instead of returning ok=true with no products.
+
   Visa recommendation uses taxonomy filters only and never sends a keyword. The required original
   query is used for every matched merchant Catalog search and as the first broad Catalog query when
   --include-broad-catalog is enabled. Offer title is display and provenance metadata only; it is
@@ -33860,6 +33866,9 @@ async function visaRegion(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
+function hasVisaCategoryFilter(filters) {
+  return Array.isArray(filters.category) && filters.category.length > 0;
+}
 async function visaRecommend(context) {
   const execution = await executeVisaRecommendation(context);
   printSuccess(execution.result, context.globalOptions.format);
@@ -33933,6 +33942,12 @@ async function executeVisaRecommendation(context, options2 = {}) {
   if (filterSets.length === 0 && !all && Object.keys(filters).length === 0) {
     throw validationError("visa recommend requires explicit filters, --all, or --filter-sets; natural-language filter inference is handled by the Agent");
   }
+  if (options2.requireCategoryOrAll === true && !all) {
+    const hasCategory = filterSets.length > 0 ? filterSets.some((filterSet) => hasVisaCategoryFilter(filterSet)) : hasVisaCategoryFilter(filters);
+    if (!hasCategory) {
+      throw validationError("recommend-products requires --category for a category search; use --all for an explicit region-wide browse (filters incomplete)" + (filterSets.length > 0 ? "; at least one --filter-sets entry must include category" : ""));
+    }
+  }
   const inferredRegion = inferVisaBenefitSourceRegion(filters, filterSets);
   const sourceRegionReason = explicitMarket !== void 0 ? "explicit_market" : inferredRegion !== void 0 ? "destination_region" : "saved_or_default";
   const market = parseVisaMarket(explicitMarket ?? inferredRegion, context.storedConfig);
@@ -34000,7 +34015,8 @@ async function visaRecommendProducts(context) {
   const broadCatalogPromise = includeBroadCatalog && !context.globalOptions.dryRun ? Promise.all(broadQueries.map((query2) => runBroadCatalogSearch(context, query2, normalizeVisaLocale(getStringFlag(context.args.flags, "lang"))))) : Promise.resolve(void 0);
   const execution = await executeVisaRecommendation(context, {
     explicitFilterRelaxation: includeBroadCatalog ? "no_match" : "error",
-    forbidKeyword: true
+    forbidKeyword: true,
+    requireCategoryOrAll: !includeBroadCatalog
   });
   if (context.globalOptions.dryRun) {
     printSuccess({
