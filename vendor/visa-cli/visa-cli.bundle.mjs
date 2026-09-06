@@ -14595,7 +14595,34 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
   if (!merchantId) {
     throw validationError("NOT_IN_INTERNAL_UCP_LIST");
   }
-  const baseUrl = options2.baseUrl ?? API_BASE_URLS[environment];
+  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
+}
+async function resolveInternalUcpEndpointByMerchantId(rawMerchantId, options2 = {}) {
+  const merchantId = nonBlankString(rawMerchantId);
+  if (!merchantId) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  const environment = options2.environment ?? "production";
+  let domainName;
+  if (options2.merchants) {
+    domainName = domainNameForMerchantId(options2.merchants, merchantId);
+  } else {
+    let loaded = await loadInternalUcpMerchantList(options2);
+    domainName = merchantListDomainName(loaded.merchants, merchantId);
+    if (!domainName && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchantList(options2, true);
+      domainName = merchantListDomainName(loaded.merchants, merchantId);
+    }
+  }
+  if (!domainName) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
+}
+function internalUcpMerchantRouteUrl(domainName) {
+  return `https://${domainName}/`;
+}
+function internalUcpEndpointResult(domainName, merchantId, baseUrl) {
   let endpoint;
   try {
     endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchantId)}`, baseUrl);
@@ -14611,6 +14638,26 @@ async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
     provider: "clinkbill",
     endpoint: endpoint.toString()
   };
+}
+function domainNameForMerchantId(merchants, merchantId) {
+  for (const [domainName, mappedMerchantId] of merchants) {
+    if (mappedMerchantId === merchantId) {
+      return domainName;
+    }
+  }
+  return void 0;
+}
+function merchantListDomainName(merchants, merchantId) {
+  for (const merchant of merchants) {
+    if (merchant.merchant_id !== merchantId) {
+      continue;
+    }
+    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
+    if (domainName) {
+      return domainName;
+    }
+  }
+  return void 0;
 }
 async function loadInternalUcpMerchants(options2, forceRefresh = false) {
   const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
@@ -27903,6 +27950,9 @@ function resolveInternalProductDetail(payload, selectedProductId, input, interna
     parseItemAllowed: false,
     merchantId: internal.merchantId,
     endpoint: internal.endpoint,
+    // The route URL a purchase context must freeze as selection.merchantUrl. It is distinct from
+    // productUrl, which may be an item page or the Program presentation URL.
+    merchantUrl: internalUcpMerchantRouteUrl(internal.domainName),
     itemId: selectedId,
     title: selectedTitle,
     sourceTitle,
@@ -27930,6 +27980,7 @@ function verifiedProduct(input) {
       title: input.title,
       sourceTitle: input.sourceTitle,
       productUrl: input.productUrl,
+      ...input.merchantUrl ? { merchantUrl: input.merchantUrl } : {},
       currency: input.currency,
       unitPriceMajor: minorUnitsMajorAmount(input.amountMinor, input.currency),
       unitPriceMinor,
@@ -30616,17 +30667,40 @@ async function resolveVisaCommercePurchase(context, commerceContext, purchase) {
     requireEats365CatalogProductUrl(purchase.merchantUrl);
     return resolveExternalCommercePurchase(context, commerceContext, expectedBaseUrl, purchase);
   }
+  const internalRouteOptions = {
+    baseUrl: expectedBaseUrl,
+    environment,
+    timeoutMs: context.globalOptions.timeoutMs
+  };
   try {
-    const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, {
-      baseUrl: expectedBaseUrl,
-      environment,
-      timeoutMs: context.globalOptions.timeoutMs
-    });
+    const internal = await resolveInternalUcpEndpoint(purchase.merchantUrl, internalRouteOptions);
     return resolveInternalCatalogPurchase(context, commerceContext, purchase, internal);
   } catch (error) {
-    if (!(error instanceof CliError) || error.message !== "NOT_IN_INTERNAL_UCP_LIST") {
+    if (!isInternalListMiss(error)) {
       throw error;
     }
+  }
+  if (purchase.merchantId) {
+    let internal;
+    try {
+      internal = await resolveInternalUcpEndpointByMerchantId(purchase.merchantId, internalRouteOptions);
+    } catch (error) {
+      if (!isInternalListMiss(error)) {
+        throw error;
+      }
+      throw validationError(`frozen merchantId ${purchase.merchantId} is not in the internal merchant list; selection.merchantUrl must be the merchant route URL (product.merchantUrl / product.productUrl), not a Program page`);
+    }
+    const merchantRouteUrl2 = internalUcpMerchantRouteUrl(internal.domainName);
+    const resolved = await resolveInternalCatalogPurchase(context, commerceContext, { ...purchase, merchantUrl: merchantRouteUrl2 }, internal);
+    return {
+      ...resolved,
+      route: {
+        ...resolved.route,
+        merchantUrlResolution: "frozen_merchant_id",
+        frozenMerchantUrl: purchase.merchantUrl,
+        merchantRouteUrl: merchantRouteUrl2
+      }
+    };
   }
   return resolveExternalCommercePurchase(context, commerceContext, expectedBaseUrl, purchase);
 }
@@ -30854,6 +30928,9 @@ function sameEats365MenuRoute(currentValue, frozenValue, productId2) {
   }
   const currentProductIds = current.searchParams.getAll("product_id").map((value) => value.trim()).filter(Boolean);
   return currentProductIds.every((value) => value === productId2);
+}
+function isInternalListMiss(error) {
+  return error instanceof CliError && error.message === "NOT_IN_INTERNAL_UCP_LIST";
 }
 function assertFrozenRoute(purchase, merchantId, endpoint) {
   if (purchase.merchantId && purchase.merchantId !== merchantId) {
@@ -32909,6 +32986,11 @@ Context:
   selection.merchantUrl/productId/productQuery/quantity, expected.merchantName/itemTitle/amount/
   currency, instructionContext, and digitalDeliveryExpected. Top-level instructionId is rejected;
   commerce-run selects a usable ACTIVE Instruction from the VIC-ready payment instrument.
+  selection.merchantUrl must be the merchant route URL returned as product.merchantUrl (or
+  product.productUrl), never a Visa Program offer page. When merchantUrl is not routable but the
+  frozen merchantId/endpoint come from an authoritative product resolution, the internal route is
+  resolved by that merchantId, verified against the frozen endpoint, and reported as
+  route.merchantUrlResolution=frozen_merchant_id with route.merchantRouteUrl.
   This mode keeps the Visa Program flow:
   visa recommend -> visa product-search -> visa commerce-login -> visa commerce-run.
 
@@ -33214,7 +33296,9 @@ Behavior:
   returned Program code only against merchant ext.visa_program_id. The Offer URL is presentation
   metadata only and never selects a merchant. A matched merchant Catalog search uses no fixed
   client limit. The CLI reuses that one response to verify all resolvable orderable products; exact
-  PRODUCT_VERIFIED + internal-ucp-catalog rows enter products. Their matched Visa Programs are
+  PRODUCT_VERIFIED + internal-ucp-catalog rows enter products. Each such product carries
+  product.merchantUrl, the merchant route URL to freeze as selection.merchantUrl for commerce-login
+  and commerce-run; the Program url is presentation only. Their matched Visa Programs are
   removed from visaBenefits to avoid duplicate presentation. Unmatched Programs remain in
   visaBenefits. Duplicate Program mappings fail closed; a merchant-list or product failure preserves
   the Benefits and marks productMatching.coverage partial. Unconfigured Visa campaign pages are never
