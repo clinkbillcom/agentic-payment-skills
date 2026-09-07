@@ -30,8 +30,8 @@ visa commerce-run
 - Agent 为 `recommend-products` 选择筛选条件时不推断、不传 `--type`
 - 每个筛选方案必须包含 region 和至少一个 category；多个 category 按 OR，
   其他 taxonomy 轴仅在用户明确提及时填写
-- 登录和购买 mandate 统一使用 `product.totalAmountMajor`，禁止把 Catalog
-  最小单位金额复制到 `amountLimit`
+- 单次只买一种商品、数量 1；CLI 生成可复用购买快照及所需授权参数
+- 已展示订单事实不变时，“买这个”“帮我下单”“确认购买”均有效，不要求复述完整订单
 - 唯一 `visa recommend --region hk|cn` 会自动选择并保存对应来源；
   只有跨来源查询才额外使用 `--market`
 - 最终统一返回可下单商品和未匹配 Visa 权益；已匹配成商品的权益不重复展示
@@ -44,9 +44,7 @@ visa commerce-run
 - 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
   `commerce-login`、`commerce-run`，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
-- 聚合缺卡合同：创建或复用一条精确的无卡 `PENDING` Instruction；可以提示
-  Bind Card 链接但绝不自动打开；CLI 保持前台等待；只有同一张卡完成 VIC 且
-  CWallet 自动激活该精确 Instruction 后才继续
+- 绑卡和 VIC 交给 Portal；CLI 准备或复用精确 PENDING 并等待，不另开绑卡/VIC 页面
 
 首轮不使用 `--include-provider-products`、`--include-broad-catalog` 或
 `--broad-queries`，也不调用 standalone Catalog 或 Agent-managed merchant-list。
@@ -60,10 +58,8 @@ visa commerce-run
 可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
 UAT 只有在返回的 Program code 与商户 `mcht_ftmse61a6az0` 的 merchant-list
 `ext.visa_program_id` 完全相同时才建立路由；Offer URL 不再选择商户。
-已验证的 Program 购买优先使用 Program 返回的有效 MCC；Program 缺失 MCC
-时，允许从完整冻结的商户和商品上下文做一次高置信分类。上述 UAT 惠康礼品卡
-精确路由使用 MCC `5411`；Program MCC 格式错误或冲突、低置信分类和只看标题
-的猜测仍必须在登录前停止。
+登录和购买复用选中商品的 `purchaseContext`，Agent 不再推断 MCC、复制 Program
+字段或拼装 Instruction。现有数据不足时报告 `purchaseContextUnavailable`。
 
 Visa Program 购买保持 CLI 聚合。Skill 不包含
 运行时工作流 JavaScript、长 Action Matrix 或大量操作 reference。钱包、
@@ -71,27 +67,24 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.72` 已 vendor 上游提交
-`c92fd99b4b4b268dc23af8030e2bb6b2a8386477` 的 Visa CLI `0.2.56`。本
+Skill `0.1.73` 已 vendor 上游提交
+`cd9797ed83e0bf9cf6722ce518f1485d97b92a23` 的 Visa CLI `0.2.57`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
-聚合缺卡流程只提示、不自动打开 Bind Card 链接，提示后继续前台等待同一条
-PENDING Instruction，并且只在同卡 `visaRegistrationSucceeded=true` 且该
+聚合缺卡流程交给 Portal 处理，CLI 前台等待同一条 PENDING Instruction，
+不生成额外绑卡/VIC 入口，并且只在同卡 `visaRegistrationSucceeded=true` 且该
 精确 Instruction 为 `ACTIVE` 后继续。
 
 本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
-合同，当前安装应视为
-不兼容并停止，不能自动打开绑卡/VIC 页面、不能提示链接后结束、不能回退到
-Program mode，也不能拆成原子命令执行购买。
+购买快照合同，应报告限制，不猜测缺失字段，也不拆成原子命令执行购买。
 
 ## 环境要求
 
 - Node.js 20 或更高版本
 - 始终按路径调用内置 launcher，不使用全局 CLI
 - OAuth、绑卡、Passkey、3DS、Instruction 和风控页面由用户在系统浏览器完成
-- 可以展示 Bind Card 链接，但 CLI 不得自动打开，也不得展示后停止等待同一条
-  PENDING Instruction
+- 登录前提示可能需要登录，购买执行前提示可能需要授权；提示不构成第二次购买确认
 
 ## 验证
 
@@ -100,7 +93,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.72`
+Skill 版本：`0.1.73`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

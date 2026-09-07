@@ -3197,9 +3197,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
           helpWidth: context.helpWidth,
           outputHasColors: context.hasColors
         });
-        const text = helper.formatHelp(this, helper);
-        if (context.hasColors) return text;
-        return this._outputConfiguration.stripColor(text);
+        const text2 = helper.formatHelp(this, helper);
+        if (context.hasColors) return text2;
+        return this._outputConfiguration.stripColor(text2);
       }
       /**
        * @typedef HelpContext
@@ -3359,7 +3359,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {(string | Function)} text - string to add, or a function returning a string
        * @return {Command} `this` command for chaining
        */
-      addHelpText(position, text) {
+      addHelpText(position, text2) {
         const allowedValues = ["beforeAll", "before", "after", "afterAll"];
         if (!allowedValues.includes(position)) {
           throw new Error(`Unexpected value for position to addHelpText.
@@ -3368,10 +3368,10 @@ Expecting one of '${allowedValues.join("', '")}'`);
         const helpEvent = `${position}Help`;
         this.on(helpEvent, (context) => {
           let helpStr;
-          if (typeof text === "function") {
-            helpStr = text({ error: context.error, command: context.command });
+          if (typeof text2 === "function") {
+            helpStr = text2({ error: context.error, command: context.command });
           } else {
-            helpStr = text;
+            helpStr = text2;
           }
           if (helpStr) {
             context.write(`${helpStr}
@@ -9144,7 +9144,7 @@ var require_browser = __commonJS({
     var QRCode2 = require_qrcode();
     var CanvasRenderer = require_canvas();
     var SvgRenderer = require_svg_tag();
-    function renderCanvas(renderFunc, canvas, text, opts, cb) {
+    function renderCanvas(renderFunc, canvas, text2, opts, cb) {
       const args = [].slice.call(arguments, 1);
       const argsNum = args.length;
       const isLastArgCb = typeof args[argsNum - 1] === "function";
@@ -9156,8 +9156,8 @@ var require_browser = __commonJS({
           throw new Error("Too few arguments provided");
         }
         if (argsNum === 2) {
-          cb = text;
-          text = canvas;
+          cb = text2;
+          text2 = canvas;
           canvas = opts = void 0;
         } else if (argsNum === 3) {
           if (canvas.getContext && typeof cb === "undefined") {
@@ -9165,8 +9165,8 @@ var require_browser = __commonJS({
             opts = void 0;
           } else {
             cb = opts;
-            opts = text;
-            text = canvas;
+            opts = text2;
+            text2 = canvas;
             canvas = void 0;
           }
         }
@@ -9175,16 +9175,16 @@ var require_browser = __commonJS({
           throw new Error("Too few arguments provided");
         }
         if (argsNum === 1) {
-          text = canvas;
+          text2 = canvas;
           canvas = opts = void 0;
         } else if (argsNum === 2 && !canvas.getContext) {
-          opts = text;
-          text = canvas;
+          opts = text2;
+          text2 = canvas;
           canvas = void 0;
         }
         return new Promise(function(resolve6, reject) {
           try {
-            const data = QRCode2.create(text, opts);
+            const data = QRCode2.create(text2, opts);
             resolve6(renderFunc(data, canvas, opts));
           } catch (e) {
             reject(e);
@@ -9192,7 +9192,7 @@ var require_browser = __commonJS({
         });
       }
       try {
-        const data = QRCode2.create(text, opts);
+        const data = QRCode2.create(text2, opts);
         cb(null, renderFunc(data, canvas, opts));
       } catch (e) {
         cb(e);
@@ -9216,8 +9216,8 @@ var require_server = __commonJS({
     var Utf8Renderer = require_utf8();
     var TerminalRenderer = require_terminal2();
     var SvgRenderer = require_svg();
-    function checkParams(text, opts, cb) {
-      if (typeof text === "undefined") {
+    function checkParams(text2, opts, cb) {
+      if (typeof text2 === "undefined") {
         throw new Error("String required as first argument");
       }
       if (typeof cb === "undefined") {
@@ -9264,11 +9264,11 @@ var require_server = __commonJS({
           return Utf8Renderer;
       }
     }
-    function render(renderFunc, text, params) {
+    function render(renderFunc, text2, params) {
       if (!params.cb) {
         return new Promise(function(resolve6, reject) {
           try {
-            const data = QRCode2.create(text, params.opts);
+            const data = QRCode2.create(text2, params.opts);
             return renderFunc(data, params.opts, function(err, data2) {
               return err ? reject(err) : resolve6(data2);
             });
@@ -9278,7 +9278,7 @@ var require_server = __commonJS({
         });
       }
       try {
-        const data = QRCode2.create(text, params.opts);
+        const data = QRCode2.create(text2, params.opts);
         return renderFunc(data, params.opts, params.cb);
       } catch (e) {
         params.cb(e);
@@ -9286,43 +9286,43 @@ var require_server = __commonJS({
     }
     exports.create = QRCode2.create;
     exports.toCanvas = require_browser().toCanvas;
-    exports.toString = function toString(text, opts, cb) {
-      const params = checkParams(text, opts, cb);
+    exports.toString = function toString(text2, opts, cb) {
+      const params = checkParams(text2, opts, cb);
       const type = params.opts ? params.opts.type : void 0;
       const renderer = getStringRendererFromType(type);
-      return render(renderer.render, text, params);
+      return render(renderer.render, text2, params);
     };
-    exports.toDataURL = function toDataURL(text, opts, cb) {
-      const params = checkParams(text, opts, cb);
+    exports.toDataURL = function toDataURL(text2, opts, cb) {
+      const params = checkParams(text2, opts, cb);
       const renderer = getRendererFromType(params.opts.type);
-      return render(renderer.renderToDataURL, text, params);
+      return render(renderer.renderToDataURL, text2, params);
     };
-    exports.toBuffer = function toBuffer(text, opts, cb) {
-      const params = checkParams(text, opts, cb);
+    exports.toBuffer = function toBuffer(text2, opts, cb) {
+      const params = checkParams(text2, opts, cb);
       const renderer = getRendererFromType(params.opts.type);
-      return render(renderer.renderToBuffer, text, params);
+      return render(renderer.renderToBuffer, text2, params);
     };
-    exports.toFile = function toFile(path4, text, opts, cb) {
-      if (typeof path4 !== "string" || !(typeof text === "string" || typeof text === "object")) {
+    exports.toFile = function toFile(path4, text2, opts, cb) {
+      if (typeof path4 !== "string" || !(typeof text2 === "string" || typeof text2 === "object")) {
         throw new Error("Invalid argument");
       }
       if (arguments.length < 3 && !canPromise()) {
         throw new Error("Too few arguments provided");
       }
-      const params = checkParams(text, opts, cb);
+      const params = checkParams(text2, opts, cb);
       const type = params.opts.type || getTypeFromFilename(path4);
       const renderer = getRendererFromType(type);
       const renderToFile = renderer.renderToFile.bind(null, path4);
-      return render(renderToFile, text, params);
+      return render(renderToFile, text2, params);
     };
-    exports.toFileStream = function toFileStream(stream, text, opts) {
+    exports.toFileStream = function toFileStream(stream, text2, opts) {
       if (arguments.length < 2) {
         throw new Error("Too few arguments provided");
       }
-      const params = checkParams(text, opts, stream.emit.bind(stream, "error"));
+      const params = checkParams(text2, opts, stream.emit.bind(stream, "error"));
       const renderer = getRendererFromType("png");
       const renderToFileStream = renderer.renderToFileStream.bind(null, stream);
-      render(renderToFileStream, text, params);
+      render(renderToFileStream, text2, params);
     };
   }
 });
@@ -10053,11 +10053,11 @@ function singleQueryValue(url, name) {
   return values.length === 1 ? values[0] : void 0;
 }
 function requiredOpaqueValue(value) {
-  const text = requiredString(value);
-  if (!isOpaqueValue(text)) {
+  const text2 = requiredString(value);
+  if (!isOpaqueValue(text2)) {
     throw new Error("invalid opaque value");
   }
-  return text;
+  return text2;
 }
 function requiredString(value) {
   if (typeof value !== "string" || !value.trim()) {
@@ -10463,16 +10463,16 @@ function normalizeStoredConfig(raw) {
   if (typeof raw !== "object" || raw === null) {
     return config;
   }
-  const record = raw;
-  if (typeof record.baseUrl === "string" && record.baseUrl.length > 0) {
-    config.baseUrl = record.baseUrl;
+  const record2 = raw;
+  if (typeof record2.baseUrl === "string" && record2.baseUrl.length > 0) {
+    config.baseUrl = record2.baseUrl;
   }
-  if (typeof record.defaultOpenLinks === "boolean") {
-    config.defaultOpenLinks = record.defaultOpenLinks;
+  if (typeof record2.defaultOpenLinks === "boolean") {
+    config.defaultOpenLinks = record2.defaultOpenLinks;
   }
-  assignStoredCustomerState(config, parseStoredCustomerState(record));
-  if (isRecord2(record.visa)) {
-    config.visa = cloneOpaqueVisaState(record.visa);
+  assignStoredCustomerState(config, parseStoredCustomerState(record2));
+  if (isRecord2(record2.visa)) {
+    config.visa = cloneOpaqueVisaState(record2.visa);
   }
   return config;
 }
@@ -10487,11 +10487,11 @@ function parseStoredCustomerState(raw) {
   if (typeof raw !== "object" || raw === null) {
     return customer;
   }
-  const record = raw;
-  assignCustomerString(customer, "customerId", record.customerId);
-  assignCustomerString(customer, "customerApiKey", record.customerApiKey ?? record.customerAPIKey);
-  const authorization = parseStoredAuthorization(record.authorization, customer.customerId);
-  const oauthRequired = record.oauthRequired === true || record.authorization !== void 0;
+  const record2 = raw;
+  assignCustomerString(customer, "customerId", record2.customerId);
+  assignCustomerString(customer, "customerApiKey", record2.customerApiKey ?? record2.customerAPIKey);
+  const authorization = parseStoredAuthorization(record2.authorization, customer.customerId);
+  const oauthRequired = record2.oauthRequired === true || record2.authorization !== void 0;
   if (authorization) {
     customer.authorization = authorization;
     customer.customerId = authorization.customerId;
@@ -10500,10 +10500,10 @@ function parseStoredCustomerState(raw) {
     customer.oauthRequired = true;
     delete customer.customerApiKey;
   }
-  assignCustomerString(customer, "email", record.email);
-  assignCustomerString(customer, "name", record.name);
-  assignPaymentMethods(customer, record.paymentMethods);
-  assignRiskRules(customer, record.riskRules);
+  assignCustomerString(customer, "email", record2.email);
+  assignCustomerString(customer, "name", record2.name);
+  assignPaymentMethods(customer, record2.paymentMethods);
+  assignRiskRules(customer, record2.riskRules);
   return customer;
 }
 function assignStoredCustomerState(target, value) {
@@ -10524,19 +10524,19 @@ function parseStoredAuthorization(raw, fallbackCustomerId) {
   if (typeof raw !== "object" || raw === null) {
     return void 0;
   }
-  const record = raw;
-  const customerId = nonEmptyString(record.customerId) ?? fallbackCustomerId;
-  const customerIdVerified = record.customerIdVerified === true;
-  const sessionId = nonEmptyString(record.sessionId);
-  const deviceId = nonEmptyString(record.deviceId);
-  const issuerOrigin = httpOrigin(nonEmptyString(record.issuerOrigin) ?? "");
-  const accessToken = nonEmptyString(record.accessToken);
-  const refreshToken = nonEmptyString(record.refreshToken);
-  const agentClientId = nonEmptyString(record.agentClientId);
-  const visaRegistrationStatus = parseVisaRegistrationStatus(record.visaRegistrationStatus);
-  const scope = nonEmptyString(record.scope);
-  const accessTokenExpiresAt = finiteNumber(record.accessTokenExpiresAt);
-  const refreshTokenExpiresAt = finiteNumber(record.refreshTokenExpiresAt);
+  const record2 = raw;
+  const customerId = nonEmptyString(record2.customerId) ?? fallbackCustomerId;
+  const customerIdVerified = record2.customerIdVerified === true;
+  const sessionId = nonEmptyString(record2.sessionId);
+  const deviceId = nonEmptyString(record2.deviceId);
+  const issuerOrigin = httpOrigin(nonEmptyString(record2.issuerOrigin) ?? "");
+  const accessToken = nonEmptyString(record2.accessToken);
+  const refreshToken = nonEmptyString(record2.refreshToken);
+  const agentClientId = nonEmptyString(record2.agentClientId);
+  const visaRegistrationStatus = parseVisaRegistrationStatus(record2.visaRegistrationStatus);
+  const scope = nonEmptyString(record2.scope);
+  const accessTokenExpiresAt = finiteNumber(record2.accessTokenExpiresAt);
+  const refreshTokenExpiresAt = finiteNumber(record2.refreshTokenExpiresAt);
   if (!customerId || !deviceId || !issuerOrigin || !accessToken || !refreshToken || !scope || accessTokenExpiresAt === void 0 || refreshTokenExpiresAt === void 0) {
     return void 0;
   }
@@ -10620,9 +10620,9 @@ async function readWalletInitState() {
     try {
       const parsed = JSON.parse(content);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        const record = parsed;
-        const generation = nonEmptyString(record.generation);
-        const startedAt = finiteNumber(record.startedAt);
+        const record2 = parsed;
+        const generation = nonEmptyString(record2.generation);
+        const startedAt = finiteNumber(record2.startedAt);
         if (generation && startedAt !== void 0 && startedAt >= 0) {
           return { generation, startedAt };
         }
@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.56";
+var CLI_VERSION = "0.2.57";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -11426,8 +11426,8 @@ function pickDefaultPaymentMethod(items) {
     if (typeof item !== "object" || item === null) {
       return false;
     }
-    const record = item;
-    return record.isDefault === true || record.default === true || record.defaultPaymentMethod === true;
+    const record2 = item;
+    return record2.isDefault === true || record2.default === true || record2.defaultPaymentMethod === true;
   }) ?? items[0];
   if (typeof preferred !== "object" || preferred === null) {
     throw configError("unable to resolve default payment method");
@@ -11663,8 +11663,8 @@ async function watchEvents(options2) {
       continue;
     }
     if (records.length > 0) {
-      const staleRecords = records.filter((record) => isStaleForWatch(record, staleEventCutoffMs));
-      const currentRecords = records.filter((record) => !isStaleForWatch(record, staleEventCutoffMs));
+      const staleRecords = records.filter((record2) => isStaleForWatch(record2, staleEventCutoffMs));
+      const currentRecords = records.filter((record2) => !isStaleForWatch(record2, staleEventCutoffMs));
       const watchTargetEnabled = hasWatchTarget(options2);
       const staleEvents = staleRecords.map(toProcessedEvent);
       const staleAckableEvents = watchTargetEnabled && !ackUnmatchedEvents ? staleEvents.filter((event) => eventMatchesWatchTarget(event, options2)) : staleEvents;
@@ -11752,8 +11752,8 @@ async function watchEvents(options2) {
   log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
   return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
 }
-function isStaleForWatch(record, staleEventCutoffMs) {
-  const rawEventTime = record.eventTime;
+function isStaleForWatch(record2, staleEventCutoffMs) {
+  const rawEventTime = record2.eventTime;
   const eventTimeMs = parseEventTimeMs(rawEventTime);
   if (eventTimeMs === void 0) {
     return false;
@@ -12067,8 +12067,8 @@ async function collectWebhookEvents(options2) {
     ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
   };
 }
-function recordMatchesCheckoutId(record, expectedCheckoutId) {
-  const payload = strictPayloadObject(record?.payload);
+function recordMatchesCheckoutId(record2, expectedCheckoutId) {
+  const payload = strictPayloadObject(record2?.payload);
   if (!payload) {
     return false;
   }
@@ -12084,8 +12084,8 @@ function recordMatchesCheckoutId(record, expectedCheckoutId) {
     ] : []
   ]) === expectedCheckoutId;
 }
-function recordHasConsistentPaymentOrderIdAliases(record) {
-  const payload = strictPayloadObject(record?.payload);
+function recordHasConsistentPaymentOrderIdAliases(record2) {
+  const payload = strictPayloadObject(record2?.payload);
   if (!payload) {
     return false;
   }
@@ -12093,7 +12093,7 @@ function recordHasConsistentPaymentOrderIdAliases(record) {
   const data = isRecord4(dataValue) ? dataValue : void 0;
   const paymentData = data ?? (dataValue === void 0 ? payload : void 0);
   const aliases = [
-    record?.resourceId,
+    record2?.resourceId,
     ...dataValue === null ? [null] : [],
     paymentData?.resourceId,
     paymentData?.resource_id,
@@ -12104,18 +12104,18 @@ function recordHasConsistentPaymentOrderIdAliases(record) {
   ];
   return aliases.every((value) => value === void 0) || resolvedTypedIdentifierAliases(aliases) !== void 0;
 }
-function strictObjectValue(record, key) {
-  if (!(key in record)) {
+function strictObjectValue(record2, key) {
+  if (!(key in record2)) {
     return void 0;
   }
-  const value = record[key];
+  const value = record2[key];
   return isRecord4(value) ? value : null;
 }
 function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function strictNestedValue(record, path4) {
-  let current = record;
+function strictNestedValue(record2, path4) {
+  let current = record2;
   for (const key of path4) {
     if (!isRecord4(current)) {
       return null;
@@ -12197,17 +12197,17 @@ function eventCustomerIds(event) {
   }
   return [...new Set(customerIds.filter((value) => Boolean(value)))];
 }
-function toProcessedEvent(record) {
-  const data = parsePayloadData(record.payload);
+function toProcessedEvent(record2) {
+  const data = parsePayloadData(record2.payload);
   return {
-    eventId: record.eventId,
-    eventType: record.eventType,
-    ...record.customerId ? { customerId: record.customerId } : {},
-    ...record.resourceId ? { resourceId: record.resourceId } : {},
-    ...record.businessStatus ? { businessStatus: record.businessStatus } : {},
-    ...record.eventTime ? { eventTime: record.eventTime } : {},
-    known: KNOWN_EVENT_TYPES.has(record.eventType),
-    summary: summarizeEvent(record, data),
+    eventId: record2.eventId,
+    eventType: record2.eventType,
+    ...record2.customerId ? { customerId: record2.customerId } : {},
+    ...record2.resourceId ? { resourceId: record2.resourceId } : {},
+    ...record2.businessStatus ? { businessStatus: record2.businessStatus } : {},
+    ...record2.eventTime ? { eventTime: record2.eventTime } : {},
+    known: KNOWN_EVENT_TYPES.has(record2.eventType),
+    summary: summarizeEvent(record2, data),
     data
   };
 }
@@ -12264,46 +12264,46 @@ function applyRiskRuleEvent(riskRules, event) {
     riskRules.push(nextRiskRule);
   }
 }
-function summarizeEvent(record, data) {
-  switch (record.eventType) {
+function summarizeEvent(record2, data) {
+  switch (record2.eventType) {
     case "agent_order.succeeded":
-      return `order ${str(data, "orderId", record.resourceId)} succeeded${amountSuffix(data)}`;
+      return `order ${str(data, "orderId", record2.resourceId)} succeeded${amountSuffix(data)}`;
     case "agent_order.failed":
-      return `order ${str(data, "orderId", record.resourceId)} failed${failureSuffix(data)}`;
+      return `order ${str(data, "orderId", record2.resourceId)} failed${failureSuffix(data)}`;
     case "agent_order.created":
-      return `order ${str(data, "orderId", record.resourceId)} created${amountSuffix(data)}`;
+      return `order ${str(data, "orderId", record2.resourceId)} created${amountSuffix(data)}`;
     case "agent_refund.succeeded":
-      return `refund ${str(data, "refundId", record.resourceId)} succeeded for order ${str(data, "orderId")}`;
+      return `refund ${str(data, "refundId", record2.resourceId)} succeeded for order ${str(data, "orderId")}`;
     case "agent_refund.failed":
-      return `refund ${str(data, "refundId", record.resourceId)} failed${failureSuffix(data)}`;
+      return `refund ${str(data, "refundId", record2.resourceId)} failed${failureSuffix(data)}`;
     case "agent_refund.rejected":
-      return `refund ${str(data, "refundId", record.resourceId)} rejected${reasonSuffix(data)}`;
+      return `refund ${str(data, "refundId", record2.resourceId)} rejected${reasonSuffix(data)}`;
     case "agent_refund.approved":
-      return `refund ${str(data, "refundId", record.resourceId)} approved`;
+      return `refund ${str(data, "refundId", record2.resourceId)} approved`;
     case "payment_method.added":
-      return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} added${cardSuffix(data)}`;
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} added${cardSuffix(data)}`;
     case "payment_method.update":
     case "payment_method.updated":
-      return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} updated${cardSuffix(data)}`;
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} updated${cardSuffix(data)}`;
     case "payment_method.delete":
     case "payment_method.deleted":
-      return `payment method ${str(data, "paymentInstrumentId", record.resourceId)} deleted${cardSuffix(data)}`;
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} deleted${cardSuffix(data)}`;
     case "payment_method.default_change":
-      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record.resourceId))}`;
+      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record2.resourceId))}`;
     case "risk_rule.updated":
-      return `risk rules updated for ${str(data, "customerId", record.customerId)}`;
+      return `risk rules updated for ${str(data, "customerId", record2.customerId)}`;
     case "vic_device.binding_succeeded":
-      return `VIC device bound for payment method ${str(data, "paymentInstrumentId", record.resourceId)}`;
+      return `VIC device bound for payment method ${str(data, "paymentInstrumentId", record2.resourceId)}`;
     case "purchase_instruction.created":
-      return `purchase instruction ${str(data, "instructionId", record.resourceId)} created${titleSuffix(data)}`;
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} created${titleSuffix(data)}`;
     case "purchase_instruction.activated":
-      return `purchase instruction ${str(data, "instructionId", record.resourceId)} activated (Passkey/FIDO authorized)`;
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} activated (Passkey/FIDO authorized)`;
     case "purchase_instruction.updated":
-      return `purchase instruction ${str(data, "instructionId", record.resourceId)} updated${statusSuffix(data)}`;
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} updated${statusSuffix(data)}`;
     case "purchase_instruction.cancelled":
-      return `purchase instruction ${str(data, "instructionId", record.resourceId)} cancelled${reasonSuffix(data)}`;
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} cancelled${reasonSuffix(data)}`;
     default:
-      return `received ${record.eventType}${record.resourceId ? ` (${record.resourceId})` : ""}`;
+      return `received ${record2.eventType}${record2.resourceId ? ` (${record2.resourceId})` : ""}`;
   }
 }
 function amountSuffix(data) {
@@ -12355,11 +12355,11 @@ function parsePayloadData(payload) {
   if (typeof parsed !== "object" || parsed === null) {
     return {};
   }
-  const record = parsed;
-  if (typeof record.data === "object" && record.data !== null) {
-    return record.data;
+  const record2 = parsed;
+  if (typeof record2.data === "object" && record2.data !== null) {
+    return record2.data;
   }
-  return record;
+  return record2;
 }
 function isWebhookEventRecord(value) {
   return typeof value === "object" && value !== null && typeof value.eventId === "string" && value.eventId.trim().length > 0 && typeof value.eventType === "string" && value.eventType.trim().length > 0;
@@ -14538,11 +14538,11 @@ function validateInternalUcpMerchantList(value, source) {
     throw invalidMerchantList(source, "expected an array");
   }
   const merchants = [];
-  for (const record of value) {
-    if (!record || typeof record !== "object" || Array.isArray(record)) {
+  for (const record2 of value) {
+    if (!record2 || typeof record2 !== "object" || Array.isArray(record2)) {
       continue;
     }
-    const fields = record;
+    const fields = record2;
     const merchantId = nonBlankString(fields.merchant_id);
     const merchantName = nonBlankString(fields.merchant_name);
     const description = optionalDescription(fields.description);
@@ -15132,12 +15132,12 @@ function requireMandateAmountLimit(mandate, index) {
   if (value === void 0 || value === null) {
     throw validationError(`--mandates[${index}].amountLimit is required`);
   }
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text) || Number(text) <= 0) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text2) || Number(text2) <= 0) {
     throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
   }
   if (typeof value === "number") {
-    const [integerPart, fractionPart = ""] = text.split(".");
+    const [integerPart, fractionPart = ""] = text2.split(".");
     const minorUnits2 = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
     if (!Number.isSafeInteger(minorUnits2)) {
       throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
@@ -15468,13 +15468,13 @@ function parseOAuthError(body) {
   if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
     return void 0;
   }
-  const record = candidate;
-  if (typeof record.error !== "string" || record.error.length === 0) {
+  const record2 = candidate;
+  if (typeof record2.error !== "string" || record2.error.length === 0) {
     return void 0;
   }
-  const errorDescription = typeof record.error_description === "string" ? record.error_description : typeof record.errorDescription === "string" ? record.errorDescription : void 0;
+  const errorDescription = typeof record2.error_description === "string" ? record2.error_description : typeof record2.errorDescription === "string" ? record2.errorDescription : void 0;
   return {
-    error: record.error,
+    error: record2.error,
     ...errorDescription ? { errorDescription } : {}
   };
 }
@@ -17297,34 +17297,34 @@ function parseLockMetadata(bytes) {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("lock metadata is not an object");
   }
-  const record = parsed;
-  const keys = Object.keys(record).sort();
-  const isLegacy = keys.length === 3 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && record.schemaVersion === 1;
-  const isCurrent = keys.length === 4 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && keys[3] === "token" && record.schemaVersion === LOCK_SCHEMA_VERSION;
+  const record2 = parsed;
+  const keys = Object.keys(record2).sort();
+  const isLegacy = keys.length === 3 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && record2.schemaVersion === 1;
+  const isCurrent = keys.length === 4 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && keys[3] === "token" && record2.schemaVersion === LOCK_SCHEMA_VERSION;
   if (!isLegacy && !isCurrent) {
     throw new Error("lock metadata fields are invalid");
   }
-  if (typeof record.pid !== "number" || !Number.isSafeInteger(record.pid) || record.pid < 1 || record.pid > MAX_PID) {
+  if (typeof record2.pid !== "number" || !Number.isSafeInteger(record2.pid) || record2.pid < 1 || record2.pid > MAX_PID) {
     throw new Error("lock metadata pid is invalid");
   }
-  if (isCurrent && (typeof record.token !== "string" || !/^[a-f0-9]{64}$/.test(record.token))) {
+  if (isCurrent && (typeof record2.token !== "string" || !/^[a-f0-9]{64}$/.test(record2.token))) {
     throw new Error("lock metadata token is invalid");
   }
-  if (typeof record.acquiredAt !== "string" || !isCanonicalTimestamp(record.acquiredAt)) {
+  if (typeof record2.acquiredAt !== "string" || !isCanonicalTimestamp(record2.acquiredAt)) {
     throw new Error("lock metadata timestamp is invalid");
   }
   if (isCurrent) {
     return {
       schemaVersion: LOCK_SCHEMA_VERSION,
-      pid: record.pid,
-      acquiredAt: record.acquiredAt,
-      token: record.token
+      pid: record2.pid,
+      acquiredAt: record2.acquiredAt,
+      token: record2.token
     };
   }
   return {
     schemaVersion: 1,
-    pid: record.pid,
-    acquiredAt: record.acquiredAt
+    pid: record2.pid,
+    acquiredAt: record2.acquiredAt
   };
 }
 function isCanonicalTimestamp(value) {
@@ -18952,11 +18952,11 @@ async function readBoundedNoFollowJson(path4, maximumBytes) {
     if (!namedStats.isFile() || namedStats.isSymbolicLink() || !sameEntryFingerprint(beforeFingerprint, entryFingerprint(namedStats))) {
       throw new Error("metadata path changed while reading");
     }
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const text2 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return {
       path: path4,
       fingerprint: beforeFingerprint,
-      value: JSON.parse(text)
+      value: JSON.parse(text2)
     };
   } finally {
     await handle.close();
@@ -19788,7 +19788,7 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
   if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus)) {
     throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
   }
-  if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus)) {
+  if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus) || dependencies.portalManaged && created.detail.activationExpected === false) {
     return finalizePendingInstruction({
       instructionId: instructionId2,
       initialStatus,
@@ -19796,16 +19796,21 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
       timedOut: false,
       eventTypes: [],
       watchReady: false,
-      bindingLinkPresented: false
+      bindingLinkPresented: false,
+      ...initialStatus === "PENDING" ? {
+        waitError: "The existing Portal authorization is not associated with this Instruction; continue in Portal with this exact purchase context"
+      } : {}
     }, dependencies);
   }
   let bindingUrl;
   let bindingLinkError;
-  try {
-    bindingUrl = await dependencies.resolveBindingUrl();
-  } catch (error) {
-    rethrowAuthError(error);
-    bindingLinkError = errorMessage2(error);
+  if (!dependencies.portalManaged) {
+    try {
+      bindingUrl = await dependencies.resolveBindingUrl();
+    } catch (error) {
+      rethrowAuthError(error);
+      bindingLinkError = errorMessage2(error);
+    }
   }
   let timedOut = false;
   let eventTypes = [];
@@ -19881,11 +19886,11 @@ function assertExactInstruction(instruction, expectedInstructionId) {
   }
 }
 function requiredText(value, message) {
-  const text = optionalText(value);
-  if (!text) {
+  const text2 = optionalText(value);
+  if (!text2) {
     throw apiError(message, 502);
   }
-  return text;
+  return text2;
 }
 function optionalText(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
@@ -22417,11 +22422,11 @@ function checkoutStatus(checkout) {
   return normalizedText(checkout.status)?.toLowerCase() ?? "unknown";
 }
 function normalizedRetryAt(value) {
-  const text = normalizedText(value);
-  if (!text) {
+  const text2 = normalizedText(value);
+  if (!text2) {
     return void 0;
   }
-  const timestamp = Date.parse(text);
+  const timestamp = Date.parse(text2);
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : void 0;
 }
 function resolvePollDelayMs(nextRetryAt, now) {
@@ -24730,7 +24735,8 @@ async function executeUcpCheckoutRun(context, options2 = {}) {
   }
   const maxWaitSeconds = waitDelivery ? parseIntFlag(getStringFlag(flags, "max-wait"), "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS : DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
   const preparedCreate = prepareUcpCheckoutCreate(context, {
-    requireMajorUnitMoneyStrings: true
+    requireMajorUnitMoneyStrings: true,
+    allowMissingMerchantCategoryCode: options2.allowMissingMerchantCategoryCode === true
   });
   const createResult2 = await requestOAuthBusinessJsonOnce(context, (runtimeConfig) => buildUcpCheckoutCreateRequest(context, runtimeConfig, preparedCreate));
   if (isDryRun3(createResult2)) {
@@ -25064,7 +25070,7 @@ function prepareUcpCheckoutCreate(context, options2 = {}) {
   const body = compact3({
     merchant_url: requireStringFlag(flags, "missing --merchant-url", "merchant-url"),
     merchant_name: getStringFlag(flags, "merchant-name"),
-    merchant_category_code: requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
+    merchant_category_code: options2.allowMissingMerchantCategoryCode ? getStringFlag(flags, "merchant-category-code") : requireStringFlag(flags, "missing --merchant-category-code", "merchant-category-code"),
     order_channel_id: getStringFlag(flags, "order-channel-id"),
     customer_id: customerId,
     context: { currency },
@@ -25717,6 +25723,7 @@ async function instructionPrepare(context) {
 }
 async function prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, options2 = {}) {
   return preparePendingInstruction(instructionContext, maxWaitSeconds, {
+    ...options2.portalManaged ? { portalManaged: true } : {},
     createPendingInstruction: async (input) => {
       const detail = await createCommandPendingInstruction(context, input);
       const instructionId2 = asOptionalString(detail.instructionId ?? detail.purchaseInstructionId);
@@ -25758,7 +25765,14 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
     onWatchReady: ({ instructionId: instructionId2, instructionStatus: instructionStatus3, bindingUrl, bindingLinkError }) => {
       process.stderr.write(`Pending Instruction ${instructionId2} is ${instructionStatus3}.
 `);
-      if (bindingUrl) {
+      if (options2.portalManaged) {
+        const portal = new URL(resolveAgentBaseUrl(context.runtimeConfig.baseUrl));
+        portal.searchParams.set("nextAction", "visa-card-ready");
+        portal.searchParams.set("instructionId", instructionId2);
+        process.stderr.write(`Continue card setup and VIC in Agent Portal; do not start a second flow:
+${portal.toString()}
+`);
+      } else if (bindingUrl) {
         process.stderr.write(`If no card is bound yet, open this link:
 ${bindingUrl}
 `);
@@ -26787,11 +26801,11 @@ function pick(source, ...keys) {
   return void 0;
 }
 function requiredString3(value, message) {
-  const text = optionalString3(value);
-  if (!text) {
+  const text2 = optionalString3(value);
+  if (!text2) {
     throw apiError(message);
   }
-  return text;
+  return text2;
 }
 function optionalString3(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -26998,7 +27012,7 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
   if (raw.isRecurring !== void 0 && typeof raw.isRecurring !== "boolean") {
     throw validationError("instructionContext.isRecurring must be a boolean");
   }
-  const mandates = normalizeInstructionMandates(raw.mandates, isRecurring, { maxEntries: 10, requireCoreFields: true }).map((mandate, index) => normalizeVisaMandate(mandate, index, isRecurring));
+  const mandates = normalizeInstructionMandates(raw.mandates, isRecurring, { maxEntries: 10, requireCoreFields: true }).map((mandate, index) => normalizeVisaMandate(mandate, index, isRecurring, options2.allowMissingMerchantCategoryCode === true));
   if (options2.expectedAmount !== void 0 && options2.expectedCurrency !== void 0) {
     const expectedCurrency = options2.expectedCurrency.toUpperCase();
     const amountMismatchIndex = mandates.findIndex((mandate) => comparableAmount(mandate.amountLimit) !== comparableAmount(options2.expectedAmount));
@@ -27013,7 +27027,7 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
     }
   }
   const merchantCategoryCodes = [
-    ...new Set(mandates.map((mandate) => mandate.merchantCategoryCode))
+    ...new Set(mandates.flatMap((mandate) => mandate.merchantCategoryCode ? [mandate.merchantCategoryCode] : []))
   ];
   if (options2.requireSingleMerchantCategoryCode && merchantCategoryCodes.length > 1) {
     throw validationError("instructionContext mandates must use one merchantCategoryCode");
@@ -27037,7 +27051,7 @@ function normalizeVisaInstructionContext(raw, options2 = {}) {
     merchantCategoryCodes
   };
 }
-function normalizeVisaMandate(mandate, index, isRecurring) {
+function normalizeVisaMandate(mandate, index, isRecurring, allowMissingMerchantCategoryCode) {
   const field = `instructionContext.mandates[${index}]`;
   const title = requiredText2(mandate.title, `${field}.title`);
   const description = requiredText2(mandate.description, `${field}.description`);
@@ -27046,8 +27060,8 @@ function normalizeVisaMandate(mandate, index, isRecurring) {
   if (!CURRENCY_FORMAT.test(currencyCode)) {
     throw validationError(`${field}.currencyCode must be a three-letter currency code`);
   }
-  const merchantCategoryCode2 = requiredText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
-  if (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000") {
+  const merchantCategoryCode2 = allowMissingMerchantCategoryCode ? optionalText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`) : requiredText2(mandate.merchantCategoryCode, `${field}.merchantCategoryCode`);
+  if (merchantCategoryCode2 && (!MCC_FORMAT.test(merchantCategoryCode2) || merchantCategoryCode2 === "0000")) {
     throw validationError(`${field}.merchantCategoryCode must be a nonzero four-digit MCC`);
   }
   const preferredMerchantName = optionalText2(mandate.preferredMerchantName, `${field}.preferredMerchantName`);
@@ -27065,9 +27079,9 @@ function normalizeVisaMandate(mandate, index, isRecurring) {
     title,
     description,
     amountLimit,
-    currencyCode,
-    merchantCategoryCode: merchantCategoryCode2
+    currencyCode
   };
+  assignOptional(normalized, "merchantCategoryCode", merchantCategoryCode2);
   assignOptional(normalized, "preferredMerchantName", preferredMerchantName);
   assignOptional(normalized, "merchantCategory", merchantCategory);
   assignOptional(normalized, "recurringFrequency", recurringFrequency);
@@ -27075,33 +27089,33 @@ function normalizeVisaMandate(mandate, index, isRecurring) {
   return normalized;
 }
 function normalizeAmountLimit(value, field) {
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!AMOUNT_LIMIT_FORMAT.test(text) || Number(text) <= 0) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!AMOUNT_LIMIT_FORMAT.test(text2) || Number(text2) <= 0) {
     throw validationError(`${field} must be a positive number with at most 2 decimal places`);
   }
-  return text;
+  return text2;
 }
 function comparableAmount(value) {
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!AMOUNT_LIMIT_FORMAT.test(text)) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!AMOUNT_LIMIT_FORMAT.test(text2)) {
     return "";
   }
-  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  const [integerPart = "0", fractionPart = ""] = text2.split(".");
   return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
 }
 function optionalUtcDateTime(value, field) {
-  const text = optionalText2(value, field);
-  if (text && !UTC_DATETIME_FORMAT2.test(text)) {
+  const text2 = optionalText2(value, field);
+  if (text2 && !UTC_DATETIME_FORMAT2.test(text2)) {
     throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
   }
-  return text;
+  return text2;
 }
 function requiredText2(value, field) {
-  const text = optionalText2(value, field);
-  if (!text) {
+  const text2 = optionalText2(value, field);
+  if (!text2) {
     throw validationError(`${field} is required and cannot be blank`);
   }
-  return text;
+  return text2;
 }
 function optionalText2(value, field) {
   if (value === void 0 || value === null) {
@@ -27130,6 +27144,100 @@ function assignOptional(target, field, value) {
 }
 function isRecord20(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/visa/selected-product-context.js
+function expandSelectedProductContext(value) {
+  const unknown = Object.keys(value).find((key) => !["mode", "environment", "requestText", "selectedProduct"].includes(key));
+  if (unknown) {
+    throw validationError(`selected_product contains unsupported field: ${unknown}`);
+  }
+  const selected = record(value.selectedProduct);
+  const product = record(selected.product);
+  if (product.quantity !== 1) {
+    throw validationError("selected_product supports exactly one item with quantity 1; do not split or reduce a multi-item request");
+  }
+  if (selected.state !== "PRODUCT_VERIFIED" || selected.productResolution !== "internal-ucp-catalog" || selected.action !== "CONTINUE_TO_COMMERCE_LOGIN") {
+    throw validationError("selected_product requires an unchanged verified internal Catalog product");
+  }
+  const mcc = selected.merchantCategoryCode == null ? void 0 : text(selected.merchantCategoryCode, "selectedProduct.merchantCategoryCode");
+  if (mcc && (!/^[0-9]{4}$/u.test(mcc) || mcc === "0000")) {
+    throw validationError("selected product has no valid configured merchant category code; do not infer one");
+  }
+  const title = text(product.sourceTitle ?? product.title, "selectedProduct.product.sourceTitle");
+  const currency = text(product.currency, "selectedProduct.product.currency");
+  const amount = text(product.totalAmountMajor, "selectedProduct.product.totalAmountMajor");
+  if (product.unitPriceMajor !== product.totalAmountMajor) {
+    throw validationError("selected_product unit and total prices must agree for quantity 1");
+  }
+  if (product.availability !== "in_stock") {
+    throw validationError("selected_product is not available");
+  }
+  if (typeof selected.digitalDeliveryExpected !== "boolean") {
+    throw validationError("selectedProduct.digitalDeliveryExpected must be supplied by the CLI");
+  }
+  return {
+    mode: "purchase",
+    environment: value.environment,
+    requestText: text(value.requestText, "requestText"),
+    selection: {
+      merchantUrl: text(product.merchantUrl ?? product.productUrl, "selectedProduct.product.merchantUrl"),
+      merchantId: text(selected.merchantId, "selectedProduct.merchantId"),
+      endpoint: text(selected.endpoint, "selectedProduct.endpoint"),
+      productId: text(product.itemId, "selectedProduct.product.itemId"),
+      quantity: 1
+    },
+    expected: {
+      merchantName: text(product.merchantName, "selectedProduct.product.merchantName"),
+      itemTitle: title,
+      amount,
+      currency,
+      availability: "IN_STOCK"
+    },
+    instructionContext: {
+      title,
+      mandates: [{
+        title,
+        description: `Purchase ${title}`.slice(0, 150),
+        amountLimit: amount,
+        currencyCode: currency,
+        preferredMerchantName: text(product.merchantName, "selectedProduct.product.merchantName"),
+        ...mcc ? { merchantCategoryCode: mcc } : {}
+      }]
+    },
+    digitalDeliveryExpected: selected.digitalDeliveryExpected
+  };
+}
+function selectedProductPurchaseSnapshot(selected, environment, requestText, merchantCategoryCode2, digitalDeliveryExpected) {
+  const snapshot = {
+    mode: "selected_product",
+    environment,
+    requestText,
+    selectedProduct: {
+      state: selected.state,
+      action: selected.action,
+      productResolution: selected.productResolution,
+      merchantId: selected.merchantId,
+      endpoint: selected.endpoint,
+      product: selected.product,
+      ...merchantCategoryCode2 == null ? {} : { merchantCategoryCode: merchantCategoryCode2 },
+      digitalDeliveryExpected
+    }
+  };
+  expandSelectedProductContext(snapshot);
+  return snapshot;
+}
+function record(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw validationError("selected_product requires a CLI-generated selectedProduct snapshot");
+  }
+  return value;
+}
+function text(value, field) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw validationError(`${field} is missing; use the CLI-generated purchase snapshot`);
+  }
+  return value.trim();
 }
 
 // dist/visa/commerce-context.js
@@ -27239,8 +27347,10 @@ function normalizeVisaCommerceContext(raw) {
   if (!isRecord21(raw)) {
     throw validationError("commerce context must be a JSON object");
   }
-  const mode = requiredText3(raw.mode, "mode").toLowerCase();
-  const context = mode === "prepare" ? normalizePrepareContext(raw) : mode === "purchase" ? normalizePurchaseRunContext(raw, "purchase") : mode === "catalog_purchase" ? normalizePurchaseRunContext(raw, "catalog_purchase") : (() => {
+  const selectedProduct = raw.mode === "selected_product";
+  const source = selectedProduct ? expandSelectedProductContext(raw) : raw;
+  const mode = requiredText3(source.mode, "mode").toLowerCase();
+  const context = mode === "prepare" ? normalizePrepareContext(source) : mode === "purchase" ? normalizePurchaseRunContext(source, "purchase", selectedProduct) : mode === "catalog_purchase" ? normalizePurchaseRunContext(source, "catalog_purchase") : (() => {
     throw validationError('mode must be "prepare", "purchase", or "catalog_purchase"');
   })();
   const bytes = Buffer.byteLength(JSON.stringify(context), "utf8");
@@ -27297,7 +27407,7 @@ function normalizePrepareContext(raw) {
     ...requestText ? { requestText } : {}
   };
 }
-function normalizePurchaseRunContext(raw, mode) {
+function normalizePurchaseRunContext(raw, mode, allowMissingMerchantCategoryCode = false) {
   if (raw.instructionId !== void 0) {
     throw validationError("purchase context does not accept instructionId; commerce-run selects a usable ACTIVE Instruction");
   }
@@ -27360,7 +27470,8 @@ function normalizePurchaseRunContext(raw, mode) {
   const normalizedInstruction = normalizeVisaInstructionContext(raw.instructionContext, {
     expectedAmount: totalPrice,
     expectedCurrency: currency,
-    requireSingleMerchantCategoryCode: true
+    requireSingleMerchantCategoryCode: true,
+    allowMissingMerchantCategoryCode
   });
   const instructionContext = normalizedInstruction.context;
   const merchantCategoryCode2 = normalizedInstruction.merchantCategoryCodes[0];
@@ -27413,7 +27524,7 @@ function normalizePurchaseRunContext(raw, mode) {
     price,
     totalPrice,
     currency,
-    merchantCategoryCode: merchantCategoryCode2,
+    ...merchantCategoryCode2 ? { merchantCategoryCode: merchantCategoryCode2 } : {},
     ...authorizedAvailability ? { authorizedAvailability } : {},
     ...fulfillmentType ? { fulfillmentType } : {},
     digitalDeliveryExpected,
@@ -27655,14 +27766,14 @@ function minorUnitsToMajorAmount(value, fractionDigits) {
   return trimDecimalZeros(`${digits.slice(0, -fractionDigits)}.${digits.slice(-fractionDigits)}`);
 }
 function normalizeMajorAmount(value, field) {
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!MAJOR_AMOUNT_FORMAT.test(text) || Number(text) <= 0) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!MAJOR_AMOUNT_FORMAT.test(text2) || Number(text2) <= 0) {
     throw validationError(`${field} must be a positive major-unit amount with at most 2 decimals`);
   }
-  if (typeof value === "number" && !Number.isSafeInteger(Number(text.replace(".", "")))) {
+  if (typeof value === "number" && !Number.isSafeInteger(Number(text2.replace(".", "")))) {
     throw validationError(`${field} must be a string when its minor units are not a safe integer`);
   }
-  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  const [integerPart = "0", fractionPart = ""] = text2.split(".");
   return trimDecimalZeros(`${BigInt(integerPart).toString()}${fractionPart ? `.${fractionPart}` : ""}`);
 }
 function trimDecimalZeros(value) {
@@ -27675,11 +27786,11 @@ function requiredPositiveInteger(value, field) {
   return value;
 }
 function requiredText3(value, field) {
-  const text = optionalText3(value, field);
-  if (!text) {
+  const text2 = optionalText3(value, field);
+  if (!text2) {
     throw validationError(`${field} is required and cannot be blank`);
   }
-  return text;
+  return text2;
 }
 function optionalText3(value, field) {
   if (value === void 0 || value === null) {
@@ -27698,13 +27809,13 @@ function requiredHttpUrl(value, field) {
   return url;
 }
 function optionalHttpUrl(value, field) {
-  const text = optionalText3(value, field);
-  if (!text) {
+  const text2 = optionalText3(value, field);
+  if (!text2) {
     return void 0;
   }
   let url;
   try {
-    url = new URL(text);
+    url = new URL(text2);
   } catch {
     throw validationError(`${field} must be an absolute http(s) URL`);
   }
@@ -28201,11 +28312,11 @@ function safeMinorUnits(value) {
   return Number(value);
 }
 function requiredText4(value, message) {
-  const text = normalizedText2(value);
-  if (!text) {
+  const text2 = normalizedText2(value);
+  if (!text2) {
     throw validationError(message);
   }
-  return text;
+  return text2;
 }
 function normalizedText2(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
@@ -28505,11 +28616,11 @@ function normalizeInput2(input) {
   };
 }
 function requiredText5(value, message) {
-  const text = optionalText4(value);
-  if (!text) {
+  const text2 = optionalText4(value);
+  if (!text2) {
     throw validationError(message);
   }
-  return text;
+  return text2;
 }
 function optionalText4(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
@@ -28526,6 +28637,1350 @@ function optionalRecord(value) {
 function safeErrorMessage(error) {
   const message = error instanceof Error ? error.message : "provider Catalog search failed";
   return message.normalize("NFKC").replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 300) || "provider Catalog search failed";
+}
+
+// dist/visa/commerce-restriction.js
+var RESTRICTED_CATEGORIES = [
+  {
+    category: "ADULT_CONTENT",
+    label: "Adult content and services",
+    labelZh: "\u6210\u4EBA\u5185\u5BB9\u4E0E\u670D\u52A1",
+    merchantCategoryCodes: [],
+    keywords: [
+      "porn",
+      "pornography",
+      "pornhub",
+      "onlyfans",
+      "adult content",
+      "adult video",
+      "adult website",
+      "adult live",
+      "adult subscription",
+      "\u6210\u4EBA\u5185\u5BB9",
+      "\u6210\u4EBA\u7F51\u7AD9",
+      "\u6210\u4EBA\u89C6\u9891",
+      "\u6210\u4EBA\u76F4\u64AD",
+      "\u6210\u4EBA\u670D\u52A1",
+      "\u8272\u60C5",
+      "\u60C5\u8272",
+      "\u88F8\u804A"
+    ]
+  },
+  {
+    category: "DATING_COMPANIONSHIP",
+    label: "Dating and companionship services",
+    labelZh: "\u4EA4\u53CB\u53CA\u966A\u4F34\u670D\u52A1",
+    merchantCategoryCodes: ["7273"],
+    keywords: [
+      "dating site",
+      "dating website",
+      "dating app",
+      "dating service",
+      "dating subscription",
+      "escort",
+      "sugar dating",
+      "\u4EA4\u53CB\u7F51\u7AD9",
+      "\u4EA4\u53CB\u8F6F\u4EF6",
+      "\u4EA4\u53CB\u670D\u52A1",
+      "\u76F8\u4EB2",
+      "\u966A\u4F8D",
+      "\u4F34\u6E38",
+      "\u63F4\u4EA4",
+      "\u966A\u4F34\u670D\u52A1"
+    ]
+  },
+  {
+    category: "GAMBLING",
+    label: "Gambling and betting",
+    labelZh: "\u8D4C\u535A/\u535A\u5F69",
+    merchantCategoryCodes: ["7995"],
+    keywords: [
+      "gambling",
+      "casino",
+      "betting",
+      "sportsbook",
+      "wager",
+      "lottery",
+      "poker chips",
+      "slot machine",
+      "roulette",
+      "baccarat",
+      "blackjack",
+      "\u8D4C\u535A",
+      "\u535A\u5F69",
+      "\u8D4C\u573A",
+      "\u6295\u6CE8",
+      "\u4E0B\u6CE8",
+      "\u62BC\u6CE8",
+      "\u5F69\u7968",
+      "\u516D\u5408\u5F69",
+      "\u7B79\u7801",
+      "\u8D4C\u8D44"
+    ]
+  },
+  {
+    category: "PRESCRIPTION_DRUGS",
+    label: "Prescription drugs",
+    labelZh: "\u5904\u65B9\u836F",
+    merchantCategoryCodes: [],
+    keywords: [
+      "prescription drug",
+      "prescription medication",
+      "prescription medicine",
+      "prescription-only",
+      "rx only",
+      "viagra",
+      "cialis",
+      "sildenafil",
+      "ozempic",
+      "xanax",
+      "adderall",
+      "tramadol",
+      "\u5904\u65B9\u836F",
+      "\u51ED\u5904\u65B9",
+      "\u9700\u5904\u65B9",
+      "\u4F1F\u54E5"
+    ]
+  },
+  {
+    category: "CRYPTOCURRENCY",
+    label: "Cryptocurrency",
+    labelZh: "\u52A0\u5BC6\u8D27\u5E01",
+    merchantCategoryCodes: ["6051"],
+    keywords: [
+      "crypto",
+      "cryptocurrency",
+      "bitcoin",
+      "ethereum",
+      "stablecoin",
+      "usdt",
+      "usdc",
+      "btc",
+      "eth",
+      "initial coin offering",
+      "token sale",
+      "defi",
+      "binance",
+      "coinbase",
+      "\u52A0\u5BC6\u8D27\u5E01",
+      "\u865A\u62DF\u8D27\u5E01",
+      "\u6570\u5B57\u8D27\u5E01",
+      "\u6BD4\u7279\u5E01",
+      "\u4EE5\u592A\u574A",
+      "\u6CF0\u8FBE\u5E01",
+      "\u5145\u5E01",
+      "\u63D0\u5E01",
+      "\u7092\u5E01",
+      "\u5E01\u5708",
+      "\u4EE3\u5E01\u53D1\u884C",
+      "\u52A0\u5BC6\u94B1\u5305"
+    ]
+  },
+  {
+    category: "CYBERLOCKER_FILE_SHARING",
+    label: "Cyberlockers and public file sharing",
+    labelZh: "Cyberlocker / \u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+    merchantCategoryCodes: [],
+    keywords: [
+      "cyberlocker",
+      "file locker",
+      "filelocker",
+      "rapidgator",
+      "pay per download",
+      "pay-per-download",
+      "upload rewards",
+      "\u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+      "\u6309\u4E0B\u8F7D\u91CF\u5956\u52B1",
+      "\u4E0A\u4F20\u5956\u52B1",
+      "\u6587\u4EF6\u5206\u4EAB\u5956\u52B1"
+    ]
+  },
+  {
+    category: "SKILL_BASED_PRIZE_GAMES",
+    label: "Skill-based prize games",
+    labelZh: "\u6280\u5DE7\u578B\u6709\u5956\u6E38\u620F",
+    merchantCategoryCodes: [],
+    keywords: [
+      "daily fantasy",
+      "fantasy sports",
+      "draftkings",
+      "fanduel",
+      "skill gaming",
+      "skill-based prize",
+      "prize contest",
+      "cash tournament entry",
+      "paid tournament entry",
+      "\u6280\u5DE7\u578B\u6709\u5956",
+      "\u6709\u5956\u7ADE\u6280",
+      "\u4ED8\u8D39\u7ADE\u8D5B",
+      "\u68A6\u5E7B\u4F53\u80B2",
+      "\u5956\u91D1\u8D5B"
+    ]
+  },
+  {
+    category: "FINANCIAL_PRODUCTS_TRADING",
+    label: "Financial products and trading",
+    labelZh: "\u91D1\u878D\u4EA7\u54C1/\u91D1\u878D\u4EA4\u6613",
+    merchantCategoryCodes: ["6211"],
+    keywords: [
+      "stock trading",
+      "buy stocks",
+      "sell stocks",
+      "share trading",
+      "securities trading",
+      "securities brokerage",
+      "brokerage account",
+      "forex trading",
+      "foreign exchange trading",
+      "options trading",
+      "futures trading",
+      "margin trading",
+      "cfd trading",
+      "\u80A1\u7968\u4EA4\u6613",
+      "\u8D2D\u4E70\u80A1\u7968",
+      "\u4E70\u5165\u80A1\u7968",
+      "\u8BC1\u5238\u4EA4\u6613",
+      "\u8BC1\u5238\u5F00\u6237",
+      "\u80A1\u7968\u5F00\u6237",
+      "\u671F\u8D27\u4EA4\u6613",
+      "\u5916\u6C47\u4EA4\u6613",
+      "\u878D\u8D44\u878D\u5238",
+      "\u7ECF\u7EAA\u670D\u52A1",
+      "\u91D1\u878D\u884D\u751F\u54C1"
+    ]
+  },
+  {
+    category: "TELEMARKETING",
+    label: "Telemarketing",
+    labelZh: "\u7535\u8BDD\u8425\u9500",
+    merchantCategoryCodes: ["5966", "5967"],
+    keywords: [
+      "telemarketing",
+      "robocall",
+      "cold calling",
+      "outbound calling",
+      "\u7535\u8BDD\u8425\u9500",
+      "\u7535\u8BDD\u63A8\u9500",
+      "\u7535\u9500",
+      "\u5916\u547C\u8425\u9500"
+    ]
+  },
+  {
+    category: "TOBACCO",
+    label: "Tobacco products",
+    labelZh: "\u70DF\u8349\u4EA7\u54C1",
+    merchantCategoryCodes: ["5993"],
+    keywords: [
+      "tobacco",
+      "cigarette",
+      "cigarettes",
+      "cigar",
+      "cigars",
+      "e-cigarette",
+      "e-cig",
+      "vape",
+      "vaping",
+      "shisha",
+      "snus",
+      "\u70DF\u8349",
+      "\u9999\u70DF",
+      "\u5377\u70DF",
+      "\u7535\u5B50\u70DF",
+      "\u96EA\u8304",
+      "\u70DF\u4E1D",
+      "\u6C34\u70DF"
+    ]
+  },
+  {
+    category: "OTHER_REGULATED_GOODS",
+    label: "Other regulated goods",
+    labelZh: "\u5176\u4ED6\u53D7\u76D1\u7BA1\u5546\u54C1",
+    merchantCategoryCodes: [],
+    keywords: [
+      "firearm",
+      "firearms",
+      "ammunition",
+      "handgun",
+      "handguns",
+      "explosives",
+      "\u519B\u706B",
+      "\u67AA\u652F",
+      "\u5F39\u836F",
+      "\u7206\u70B8\u7269",
+      "\u7BA1\u5236\u5200\u5177"
+    ]
+  }
+];
+var CATEGORY_BY_NAME = new Map(RESTRICTED_CATEGORIES.map((entry) => [entry.category, entry]));
+var CATEGORY_BY_MCC = new Map(RESTRICTED_CATEGORIES.flatMap((entry) => entry.merchantCategoryCodes.map((code) => [code, entry])));
+function classifyVisaCommerceRestriction(context) {
+  const purchase = context.purchaseContext;
+  if (purchase.assertedCategory) {
+    const asserted = purchase.assertedCategory.trim().toUpperCase();
+    const entry = CATEGORY_BY_NAME.get(asserted);
+    if (entry) {
+      return blocked(entry, "asserted_category", entry.category);
+    }
+  }
+  const mccEntry = purchase.merchantCategoryCode ? CATEGORY_BY_MCC.get(purchase.merchantCategoryCode) : void 0;
+  if (mccEntry && purchase.merchantCategoryCode) {
+    return blocked(mccEntry, "merchant_category_code", purchase.merchantCategoryCode);
+  }
+  const text2 = restrictionText(context);
+  for (const entry of RESTRICTED_CATEGORIES) {
+    for (const keyword of [...entry.keywords].sort((left, right) => right.length - left.length)) {
+      if (keywordPattern(keyword).test(text2)) {
+        return blocked(entry, "keyword", keyword);
+      }
+    }
+  }
+  return { allowed: true, reason: "no_restricted_category_match" };
+}
+function restrictionText(context) {
+  const purchase = context.purchaseContext;
+  const instruction = context.instructionContext;
+  const programCode = typeof purchase.programCode === "string" ? purchase.programCode : void 0;
+  const values = [
+    purchase.originalRequest,
+    purchase.title,
+    purchase.productId,
+    purchase.productQuery,
+    programCode,
+    purchase.merchantName,
+    purchase.merchantUrl,
+    instruction.title,
+    instruction.description,
+    ...instruction.mandates.flatMap((mandate) => [
+      mandate.title,
+      mandate.description,
+      mandate.preferredMerchantName,
+      mandate.merchantCategory
+    ])
+  ];
+  return values.filter((value) => typeof value === "string").flatMap((value) => {
+    const normalized = value.normalize("NFKC");
+    return [
+      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), ""),
+      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), " ")
+    ];
+  }).map((value) => value.trim().replace(/\s+/gu, " ")).filter(Boolean).join("\n");
+}
+function keywordPattern(keyword) {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return /^[\p{Script=Latin}0-9][\p{Script=Latin}0-9 .&'-]*$/u.test(keyword) ? new RegExp(`(?<![\\p{Script=Latin}\\p{N}])${escaped}(?![\\p{Script=Latin}\\p{N}])`, "iu") : new RegExp(escaped, "iu");
+}
+function blocked(entry, matchedBy, matchedValue) {
+  return {
+    allowed: false,
+    reason: `restricted_category_${entry.category.toLowerCase()}`,
+    category: entry.category,
+    categoryLabel: entry.label,
+    categoryLabelZh: entry.labelZh,
+    matchedBy,
+    matchedValue
+  };
+}
+
+// dist/visa/commerce-run.js
+var DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
+async function runVisaCommerce(context, options2, dependencies) {
+  if (context.mode === "prepare") {
+    if (options2.confirmedPurchase) {
+      throw validationError("visa commerce-run prepare mode does not accept purchase confirmation");
+    }
+    return runVisaCommercePreparation(context, options2, dependencies);
+  }
+  if (!options2.dryRun && !options2.confirmedPurchase) {
+    throw validationError("visa commerce-run purchase mode requires explicit purchase confirmation");
+  }
+  const waitDelivery = options2.waitDelivery ?? context.purchaseContext.digitalDeliveryExpected;
+  const maxWaitSeconds = options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS;
+  const restriction = classifyVisaCommerceRestriction(context);
+  if (!restriction.allowed) {
+    return {
+      command: "visa commerce-run",
+      stage: "restriction",
+      status: "refused",
+      terminal: true,
+      restriction
+    };
+  }
+  if (options2.dryRun) {
+    return buildDryRunPlan(context, {
+      confirmedPurchase: options2.confirmedPurchase,
+      waitDelivery,
+      maxWaitSeconds
+    });
+  }
+  let login;
+  try {
+    login = await dependencies.inspectLogin();
+  } catch (error) {
+    return workflowFailure("login_status", error);
+  }
+  if (!login.ready) {
+    return {
+      command: "visa commerce-run",
+      stage: "login",
+      status: "authentication_required",
+      terminal: true,
+      userActionRequired: true,
+      reason: "run_visa_commerce_login_before_purchase",
+      detail: login.detail
+    };
+  }
+  let resolvedPurchase;
+  try {
+    resolvedPurchase = await dependencies.resolvePurchase(context.purchaseContext);
+  } catch (error) {
+    return workflowFailure("product_resolution", error);
+  }
+  const cardResult = await ensureVisaCardReady(dependencies, context, maxWaitSeconds);
+  if (!cardResult.ready) {
+    return {
+      command: "visa commerce-run",
+      ...cardResult,
+      login: login.detail
+    };
+  }
+  const card = cardResult.card;
+  const paymentInstrumentId = card.paymentInstrumentId;
+  let instruction = cardResult.instruction;
+  if (!instruction) {
+    const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
+    if (!regular.instruction) {
+      return {
+        command: "visa commerce-run",
+        ...regular.result,
+        paymentInstrumentId,
+        card: safeCard(cardResult.card)
+      };
+    }
+    instruction = regular.instruction;
+  }
+  try {
+    resolvedPurchase = await dependencies.resolvePurchase(resolvedPurchase.purchaseContext);
+  } catch (error) {
+    return workflowFailure("product_revalidation", error, {
+      paymentInstrumentId,
+      instruction: publicInstruction(instruction)
+    });
+  }
+  let checkout;
+  try {
+    checkout = await dependencies.runCheckout({
+      paymentInstrumentId,
+      purchaseContext: resolvedPurchase.purchaseContext,
+      waitDelivery,
+      maxWaitSeconds
+    });
+  } catch (error) {
+    return workflowFailure("checkout", error, {
+      paymentInstrumentId,
+      instruction: publicInstruction(instruction)
+    });
+  }
+  const resumeCommand = typeof checkout.resumeCommand === "string" ? checkout.resumeCommand : void 0;
+  return {
+    command: "visa commerce-run",
+    stage: typeof checkout.stage === "string" ? checkout.stage : "checkout",
+    status: typeof checkout.status === "string" ? checkout.status : "unknown",
+    terminal: resumeCommand === void 0,
+    paymentInstrumentId,
+    card: safeCard(card),
+    route: resolvedPurchase.route,
+    product: resolvedPurchase.product,
+    instruction: publicInstruction(instruction),
+    ...resumeCommand ? {
+      resumeCommand,
+      resumeReadOnly: true,
+      paymentRetryAllowed: false
+    } : {},
+    checkout
+  };
+}
+async function runVisaCommercePreparation(context, options2, dependencies) {
+  if (options2.dryRun) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      stage: "plan",
+      status: "dry_run",
+      dryRun: true,
+      sideEffects: false,
+      createsInstruction: false,
+      createsCheckout: false,
+      pays: false,
+      steps: context.target === "login" ? [{ stage: "login", effect: "check_or_complete_benefit_login" }] : [
+        { stage: "login", effect: "check_or_complete_benefit_login" },
+        {
+          stage: "card",
+          effect: "reuse_or_prepare_visa_card_and_verify_vic"
+        }
+      ]
+    };
+  }
+  let login;
+  try {
+    login = await dependencies.inspectLogin();
+    if (!login.ready) {
+      login = await dependencies.login();
+    }
+  } catch (error) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      ...workflowFailure("login", error)
+    };
+  }
+  if (!login.ready) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: context.target,
+      stage: "login",
+      status: "authentication_pending",
+      terminal: false,
+      userActionRequired: true,
+      detail: login.detail
+    };
+  }
+  if (context.target === "login") {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: "login",
+      stage: "login",
+      status: "ready",
+      terminal: true,
+      login: login.detail
+    };
+  }
+  const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS);
+  if (!cardResult.ready) {
+    return {
+      command: "visa commerce-run",
+      mode: "prepare",
+      target: "visa_card_ready",
+      ...cardResult,
+      login: login.detail
+    };
+  }
+  return {
+    command: "visa commerce-run",
+    mode: "prepare",
+    target: "visa_card_ready",
+    stage: "card",
+    status: "ready",
+    terminal: true,
+    login: login.detail,
+    card: safeCard(cardResult.card)
+  };
+}
+function buildDryRunPlan(context, options2) {
+  return {
+    command: "visa commerce-run",
+    mode: context.mode,
+    stage: "plan",
+    status: "dry_run",
+    dryRun: true,
+    sideEffects: false,
+    confirmedPurchase: options2.confirmedPurchase,
+    purchase: {
+      merchantUrl: context.purchaseContext.merchantUrl,
+      endpoint: context.purchaseContext.endpoint ?? null,
+      productId: context.purchaseContext.productId,
+      title: context.purchaseContext.title,
+      quantity: context.purchaseContext.quantity,
+      unitPrice: context.purchaseContext.price,
+      totalPrice: context.purchaseContext.totalPrice,
+      currency: context.purchaseContext.currency,
+      merchantCategoryCode: context.purchaseContext.merchantCategoryCode,
+      authorizedAvailability: context.purchaseContext.authorizedAvailability ?? null,
+      fulfillmentType: context.purchaseContext.fulfillmentType ?? null,
+      digitalDeliveryExpected: context.purchaseContext.digitalDeliveryExpected
+    },
+    retryPolicy: {
+      createCheckout: "never",
+      completeCheckout: "never"
+    },
+    steps: [
+      {
+        stage: "card",
+        effect: "reuse a VIC-ready Visa, or create/reuse one no-card PENDING Instruction and wait for Portal-owned card binding/VIC",
+        authority: "visaRegistrationSucceeded=true"
+      },
+      {
+        stage: "instruction",
+        effect: "use the exact Portal-activated PENDING Instruction, or select/create one regular Instruction for an already-ready card",
+        amountLimit: context.purchaseContext.totalPrice
+      },
+      {
+        stage: "product_revalidation",
+        effect: "revalidate exact product identity, availability, and authorized price immediately before checkout",
+        readOnly: true
+      },
+      {
+        stage: "checkout",
+        effect: "create_checkout_then_complete_exactly_once",
+        paymentRetry: false
+      },
+      {
+        stage: "delivery",
+        enabled: options2.waitDelivery,
+        readOnly: true,
+        maxWaitSeconds: options2.maxWaitSeconds
+      }
+    ]
+  };
+}
+async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS) {
+  let cards;
+  try {
+    cards = await dependencies.refreshCards();
+  } catch (error) {
+    if (purchaseContext) {
+      return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
+    }
+    return {
+      ready: false,
+      ...workflowFailure("card_refresh", error)
+    };
+  }
+  const selection = selectVisaCard(cards);
+  if (selection.action === "add") {
+    if (!purchaseContext) {
+      return {
+        ready: false,
+        stage: "card",
+        status: "pending_instruction_required",
+        terminal: true,
+        userActionRequired: false,
+        reason: "visa_card_setup_requires_a_frozen_purchase_instruction_context"
+      };
+    }
+    return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
+  }
+  if (selection.action === "select") {
+    return {
+      ready: false,
+      stage: "card_selection",
+      status: "ambiguous",
+      terminal: true,
+      reason: "multiple_enabled_visa_cards_without_one_default",
+      cards: selection.cards.map(safeCard)
+    };
+  }
+  if (selection.action === "unavailable") {
+    return {
+      ready: false,
+      stage: "card_selection",
+      status: "unavailable",
+      terminal: true,
+      reason: selection.reason
+    };
+  }
+  return { ready: true, card: selection.card };
+}
+async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSeconds) {
+  let pending;
+  try {
+    pending = await dependencies.preparePendingInstruction({
+      instructionContext: context.instructionContext,
+      maxWaitSeconds
+    });
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("pending_instruction_prepare", error)
+    };
+  }
+  if (pending.state === "CARD_READY") {
+    let cards2;
+    try {
+      cards2 = await dependencies.refreshCards();
+    } catch (error) {
+      return {
+        ready: false,
+        ...workflowFailure("card_ready_race_refresh", error)
+      };
+    }
+    const selection = selectVisaCard(cards2);
+    if (selection.action === "use") {
+      return { ready: true, card: selection.card };
+    }
+    if (selection.action === "select") {
+      return {
+        ready: false,
+        stage: "card_selection",
+        status: "ambiguous",
+        terminal: true,
+        reason: "multiple_enabled_visa_cards_without_one_default",
+        cards: selection.cards.map(safeCard)
+      };
+    }
+    return {
+      ready: false,
+      stage: "card_verification",
+      status: "failed",
+      terminal: true,
+      reason: "pending_endpoint_reported_card_ready_but_refresh_found_no_vic_ready_visa",
+      pendingStatus: pending.instructionStatus,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
+  const pendingInstructionId2 = pending.instructionId;
+  const pendingResumeCommand = pending.resumeCommand;
+  if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
+    return {
+      ready: false,
+      stage: "instruction_activation",
+      status: pending.state === "TERMINAL" ? pending.instructionStatus.toLowerCase() : pending.timedOut ? "timeout" : "pending",
+      terminal: pending.state === "TERMINAL",
+      userActionRequired: pending.state === "PENDING",
+      instructionId: pendingInstructionId2 ?? null,
+      instructionStatus: pending.instructionStatus,
+      eventTypes: pending.eventTypes,
+      bindingLinkPresented: pending.bindingLinkPresented,
+      ...pendingResumeCommand ? {
+        resumeCommand: pendingResumeCommand,
+        resumeReadOnly: true
+      } : {},
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false,
+      ...pending.bindingLinkError ? { bindingLinkError: pending.bindingLinkError } : {},
+      ...pending.waitError ? { waitError: pending.waitError } : {},
+      ...pending.exactGetError ? { exactGetError: pending.exactGetError } : {}
+    };
+  }
+  const paymentInstrumentId = instructionPaymentInstrumentId(pending.instruction);
+  if (!paymentInstrumentId || !pendingInstructionMatchesContext(pending.instruction, paymentInstrumentId, context)) {
+    return {
+      ready: false,
+      stage: "instruction_verification",
+      status: "failed",
+      terminal: true,
+      reason: "activated_pending_instruction_failed_exact_context_verification",
+      instructionId: pendingInstructionId2,
+      paymentInstrumentId: paymentInstrumentId ?? null,
+      resumeCommand: pendingResumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
+  let cards;
+  try {
+    cards = await dependencies.refreshCards();
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("card_post_activation_refresh", error, {
+        instructionId: pendingInstructionId2,
+        paymentInstrumentId,
+        resumeCommand: pendingResumeCommand,
+        resumeReadOnly: true,
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      })
+    };
+  }
+  const card = cards.find((candidate) => candidate.paymentInstrumentId === paymentInstrumentId);
+  if (!card || cardDisabled(card) || !cardIsVisa(card) || !cardVicReady(card)) {
+    return {
+      ready: false,
+      stage: "card_verification",
+      status: "failed",
+      terminal: true,
+      reason: "activated_pending_instruction_card_not_vic_ready",
+      instructionId: pendingInstructionId2,
+      paymentInstrumentId,
+      card: card ? safeCard(card) : null,
+      resumeCommand: pendingResumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
+  return {
+    ready: true,
+    card,
+    instruction: {
+      instructionId: pendingInstructionId2,
+      source: "pending_activated",
+      detail: pending.instruction
+    }
+  };
+}
+function selectVisaCard(cards, requestedPaymentInstrumentId) {
+  const enabled = cards.filter((card) => !cardDisabled(card));
+  if (requestedPaymentInstrumentId) {
+    const selected = enabled.find((card) => card.paymentInstrumentId === requestedPaymentInstrumentId);
+    if (!selected) {
+      return { action: "unavailable", reason: "requested_payment_instrument_not_found" };
+    }
+    return cardIsVisa(selected) && cardVicReady(selected) ? { action: "use", card: selected } : {
+      action: "unavailable",
+      reason: cardIsVisa(selected) ? "requested_payment_instrument_not_vic_ready" : "requested_payment_instrument_not_visa"
+    };
+  }
+  const visaCards = enabled.filter(cardIsVisa);
+  const readyCards = visaCards.filter(cardVicReady);
+  if (readyCards.length === 0) {
+    return { action: "add" };
+  }
+  const defaultCards = readyCards.filter(cardDefault);
+  if (defaultCards.length === 1) {
+    return { action: "use", card: defaultCards[0] };
+  }
+  if (readyCards.length === 1) {
+    return { action: "use", card: readyCards[0] };
+  }
+  return { action: "select", cards: readyCards };
+}
+async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
+  let listed;
+  try {
+    listed = await dependencies.listInstructions(paymentInstrumentId);
+  } catch (error) {
+    return { result: workflowFailure("instruction_list", error) };
+  }
+  const selection = selectActiveInstruction(listed, paymentInstrumentId, context, Date.now());
+  if (selection.kind === "ambiguous") {
+    return {
+      result: {
+        stage: "instruction_selection",
+        status: "ambiguous",
+        terminal: true,
+        reason: selection.reason,
+        instructionIds: selection.instructionIds
+      }
+    };
+  }
+  if (selection.kind === "selected") {
+    const active = selection.candidate;
+    let verified;
+    try {
+      verified = await dependencies.getInstruction(active.instructionId);
+    } catch (error) {
+      return {
+        result: workflowFailure("instruction_active_verify", error, {
+          instructionId: active.instructionId,
+          resumeCommand: instructionGetResumeCommand(active.instructionId)
+        })
+      };
+    }
+    const exact = verified ? activeInstructionCandidate(verified, paymentInstrumentId, context, Date.now()) : void 0;
+    if (!exact || exact.instructionId !== active.instructionId || exact.amountMinorUnits !== active.amountMinorUnits || exact.createdAtMs !== active.createdAtMs) {
+      return {
+        result: {
+          stage: "instruction_selection",
+          status: "stale",
+          terminal: true,
+          reason: "selected_instruction_failed_exact_verification",
+          instructionId: active.instructionId,
+          resumeCommand: instructionGetResumeCommand(active.instructionId)
+        }
+      };
+    }
+    return {
+      instruction: {
+        instructionId: active.instructionId,
+        source: "existing_active",
+        detail: exact.detail,
+        amountLimit: active.amountLimit
+      },
+      result: {}
+    };
+  }
+  let created;
+  try {
+    created = await dependencies.createInstruction({
+      paymentInstrumentId,
+      instructionContext: context.instructionContext
+    });
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_create", error, {
+        resumeCommand: `${VISA_EXECUTABLE_NAME} instruction list --payment-instrument-id ${quoteShell(paymentInstrumentId)} --format json`
+      })
+    };
+  }
+  const authorized = await authorizeInstruction(dependencies, created.instructionId, paymentInstrumentId, context, maxWaitSeconds);
+  return authorized.instruction ? { instruction: authorized.instruction, result: {} } : { result: authorized.result };
+}
+async function authorizeInstruction(dependencies, instructionIdValue, paymentInstrumentId, context, maxWaitSeconds) {
+  const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId, instructionIdValue);
+  let browserLaunch;
+  try {
+    browserLaunch = await dependencies.openUserAction(passkeyUrl, "instruction_authorization");
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_authorization", error, {
+        instructionId: instructionIdValue,
+        paymentInstrumentId,
+        manualOpenUrl: passkeyUrl,
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  let wait;
+  try {
+    wait = await dependencies.waitForEvents({
+      type: "purchase_instruction.activated",
+      maxWaitSeconds,
+      expectedResource: {
+        instructionId: instructionIdValue,
+        purchaseInstructionId: instructionIdValue
+      }
+    });
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_activation_wait", error, {
+        instructionId: instructionIdValue,
+        ...browserActionOutput(passkeyUrl, browserLaunch),
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  let instruction;
+  try {
+    instruction = await dependencies.getInstruction(instructionIdValue);
+  } catch (error) {
+    return {
+      result: workflowFailure("instruction_final_get", error, {
+        instructionId: instructionIdValue,
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      })
+    };
+  }
+  if (instruction && instructionId(instruction) === instructionIdValue && createdInstructionMatchesContext(instruction, paymentInstrumentId, context)) {
+    return {
+      instruction: {
+        instructionId: instructionIdValue,
+        source: "created",
+        detail: instruction
+      },
+      result: {}
+    };
+  }
+  return {
+    result: {
+      stage: "instruction_activation",
+      status: wait.timedOut ? "timeout" : "pending",
+      terminal: false,
+      userActionRequired: true,
+      instructionId: instructionIdValue,
+      paymentInstrumentId,
+      ...browserActionOutput(passkeyUrl, browserLaunch),
+      resumeCommand: instructionGetResumeCommand(instructionIdValue)
+    }
+  };
+}
+function browserActionOutput(url, browserLaunch) {
+  return {
+    browserLaunch,
+    ...browserLaunch.status === "launched" ? {} : { manualOpenUrl: url }
+  };
+}
+function selectActiveInstruction(payload, paymentInstrumentId, context, nowMs) {
+  const candidates = instructionArray(payload).map((instruction) => activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs)).filter((candidate) => candidate !== void 0);
+  if (candidates.length === 0) {
+    return { kind: "none" };
+  }
+  const minimumAmount = candidates.reduce((minimum, candidate) => candidate.amountMinorUnits < minimum ? candidate.amountMinorUnits : minimum, candidates[0].amountMinorUnits);
+  const closest = candidates.filter((candidate) => candidate.amountMinorUnits === minimumAmount);
+  if (closest.some((candidate) => candidate.createdAtMs === void 0)) {
+    return {
+      kind: "ambiguous",
+      reason: "best_active_instruction_missing_trusted_creation_time",
+      instructionIds: closest.map((candidate) => candidate.instructionId).sort()
+    };
+  }
+  const latestCreatedAt = Math.max(...closest.map((candidate) => candidate.createdAtMs));
+  const latest = closest.filter((candidate) => candidate.createdAtMs === latestCreatedAt);
+  if (latest.length !== 1) {
+    return {
+      kind: "ambiguous",
+      reason: "best_active_instruction_creation_time_tied",
+      instructionIds: latest.map((candidate) => candidate.instructionId).sort()
+    };
+  }
+  return {
+    kind: "selected",
+    candidate: latest[0]
+  };
+}
+function activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs) {
+  if (instructionStatus(instruction) !== "ACTIVE") {
+    return void 0;
+  }
+  const observedInstructionId = instructionId(instruction);
+  const observedPaymentInstrumentId = instructionPaymentInstrumentId(instruction);
+  if (!observedInstructionId || observedPaymentInstrumentId !== paymentInstrumentId || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
+    return void 0;
+  }
+  const expectedCurrency = normalizedText3(context.purchaseContext.currency);
+  const instructionCurrency = optionalNormalized(instruction.currencyCode ?? instruction.currency);
+  if (instructionCurrency && instructionCurrency !== expectedCurrency) {
+    return void 0;
+  }
+  const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
+  const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
+    const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
+    if (!optionalText5(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+      return [];
+    }
+    return [{
+      amountLimit: minorUnitsAmountText(amountMinorUnits, context.purchaseContext.currency),
+      amountMinorUnits
+    }];
+  });
+  if (eligibleMandates.length === 0) {
+    return void 0;
+  }
+  eligibleMandates.sort((left, right) => left.amountMinorUnits < right.amountMinorUnits ? -1 : left.amountMinorUnits > right.amountMinorUnits ? 1 : 0);
+  const bestMandate = eligibleMandates[0];
+  const createdAtMs = instructionCreatedAtMs(instruction);
+  return {
+    instructionId: observedInstructionId,
+    amountLimit: bestMandate.amountLimit,
+    amountMinorUnits: bestMandate.amountMinorUnits,
+    ...createdAtMs !== void 0 ? { createdAtMs } : {},
+    detail: instruction
+  };
+}
+function createdInstructionMatchesContext(instruction, paymentInstrumentId, context) {
+  const nowMs = Date.now();
+  if (instructionStatus(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || normalizedText3(instruction.title) !== normalizedText3(context.instructionContext.title) || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
+    return false;
+  }
+  const expectedMandates = context.instructionContext.mandates;
+  const observedMandates = mandateArray(instruction);
+  return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
+}
+function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context) {
+  const expected = context.instructionContext;
+  const nowMs = Date.now();
+  const instructionExpiryMs = parsedFutureTimestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time, nowMs);
+  const observedRecurring = normalizedBoolean(instruction.isRecurring ?? instruction.is_recurring);
+  if (instructionStatus(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
+    return false;
+  }
+  const expectedMandates = expected.mandates;
+  const observedMandates = mandateArray(instruction);
+  if (observedMandates.length !== expectedMandates.length) {
+    return false;
+  }
+  const expectedFingerprints = expectedMandates.map((mandate) => pendingExpectedMandateFingerprint(mandate, expected.isRecurring === true));
+  const observedFingerprints = observedMandates.map((mandate) => pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs));
+  if (expectedFingerprints.some((value) => value === void 0) || observedFingerprints.some((value) => value === void 0)) {
+    return false;
+  }
+  const sortedExpected = expectedFingerprints.sort();
+  const sortedObserved = observedFingerprints.sort();
+  return sortedExpected.every((value, index) => value === sortedObserved[index]);
+}
+var PENDING_MANDATE_CONTEXT_FIELDS = /* @__PURE__ */ new Set([
+  "title",
+  "description",
+  "amountLimit",
+  "currencyCode",
+  "merchantCategory",
+  "merchantCategoryCode",
+  "preferredMerchantName",
+  "effectiveUntilTime",
+  "recurringFrequency",
+  "extra"
+]);
+function pendingExpectedMandateFingerprint(mandate, isRecurring) {
+  if (Object.keys(mandate).some((field) => !PENDING_MANDATE_CONTEXT_FIELDS.has(field))) {
+    return void 0;
+  }
+  const recurringFrequency = optionalNormalized(mandate.recurringFrequency);
+  if (isRecurring !== (recurringFrequency !== void 0) || !isStructuredMapOrAbsent(mandate.extra)) {
+    return void 0;
+  }
+  return stableJson({
+    title: exactText(mandate.title),
+    description: exactText(mandate.description),
+    amountLimit: comparableAmount2(mandate.amountLimit),
+    currencyCode: normalizedText3(mandate.currencyCode),
+    merchantCategoryCode: normalizedText3(mandate.merchantCategoryCode),
+    preferredMerchantName: optionalExactText(mandate.preferredMerchantName) ?? null,
+    merchantCategory: optionalExactText(mandate.merchantCategory) ?? null,
+    recurringFrequency: recurringFrequency ?? null,
+    extra: canonicalOptionalMap(mandate.extra, false)
+  });
+}
+function pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs) {
+  const mandateExpiryMs = parsedFutureTimestamp(mandate.effectiveUntilTime ?? mandate.effective_until_time, nowMs);
+  if (mandateExpiryMs === void 0 || mandateExpiryMs !== instructionExpiryMs || !zeroLike(mandate.reserveStatus ?? mandate.reserve_status) || !isStructuredMapOrAbsent(mandate.extra)) {
+    return void 0;
+  }
+  return stableJson({
+    title: exactText(mandate.title),
+    description: exactText(mandate.description),
+    amountLimit: comparableAmount2(mandate.amountLimit),
+    currencyCode: normalizedText3(mandate.currencyCode ?? mandate.currency),
+    merchantCategoryCode: normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code),
+    preferredMerchantName: optionalExactText(mandate.preferredMerchantName ?? mandate.preferred_merchant_name) ?? null,
+    merchantCategory: optionalExactText(mandate.merchantCategory ?? mandate.merchant_category) ?? null,
+    recurringFrequency: optionalNormalized(mandate.recurringFrequency ?? mandate.recurring_frequency) ?? null,
+    extra: canonicalOptionalMap(mandate.extra, false)
+  });
+}
+function merchantScopeMatchesContext(candidate, context) {
+  return context.instructionContext.mandates.some((expected) => optionalNormalized(candidate.preferredMerchantName ?? candidate.preferred_merchant_name) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory ?? candidate.merchant_category) === optionalNormalized(expected.merchantCategory));
+}
+function mandatesEqual(candidate, expected) {
+  return normalizedText3(candidate.title) === normalizedText3(expected.title) && normalizedText3(candidate.description) === normalizedText3(expected.description) && comparableAmount2(candidate.amountLimit) === comparableAmount2(expected.amountLimit) && normalizedText3(candidate.currencyCode ?? candidate.currency) === normalizedText3(expected.currencyCode) && normalizedText3(candidate.merchantCategoryCode ?? candidate.merchant_category_code) === normalizedText3(expected.merchantCategoryCode) && optionalNormalized(candidate.preferredMerchantName) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory) === optionalNormalized(expected.merchantCategory);
+}
+function instructionArray(payload) {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord23);
+  }
+  if (!isRecord23(payload)) {
+    return [];
+  }
+  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
+    if (Array.isArray(payload[key])) {
+      return payload[key].filter(isRecord23);
+    }
+  }
+  return [];
+}
+function mandateArray(instruction) {
+  for (const key of ["mandates", "mandateList", "mandateVoList"]) {
+    if (Array.isArray(instruction[key])) {
+      return instruction[key].filter(isRecord23);
+    }
+  }
+  return [];
+}
+function instructionId(instruction) {
+  return optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+}
+function instructionPaymentInstrumentId(instruction) {
+  return optionalText5(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+}
+function instructionStatus(instruction) {
+  return normalizedText3(instruction.status ?? instruction.state);
+}
+function cardIsVisa(card) {
+  const brand = optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? optionalText5(card.brand) ?? optionalText5(card.network) ?? "";
+  return brand.toUpperCase() === "VISA";
+}
+function cardVicReady(card) {
+  return card.visaRegistrationSucceeded === true;
+}
+function cardDisabled(card) {
+  return card.isDisabled === true || card.is_disabled === true;
+}
+function cardDefault(card) {
+  return card.isDefault === true || card.is_default === true || card.default === true;
+}
+function safeCard(card) {
+  return {
+    paymentInstrumentId: card.paymentInstrumentId,
+    cardScheme: optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? null,
+    cardLastFour: optionalText5(card.cardLastFour) ?? optionalText5(card.card_last_four) ?? null,
+    isDefault: cardDefault(card),
+    visaRegistrationSucceeded: cardVicReady(card)
+  };
+}
+function publicInstruction(instruction) {
+  return {
+    instructionId: instruction.instructionId,
+    source: instruction.source,
+    status: instructionStatus(instruction.detail),
+    ...instruction.amountLimit ? { amountLimit: instruction.amountLimit } : {}
+  };
+}
+function instructionGetResumeCommand(instructionIdValue) {
+  return `${VISA_EXECUTABLE_NAME} instruction get --purchase-instruction-id ${quoteShell(instructionIdValue)} --format json`;
+}
+function workflowFailure(stage, error, detail = {}) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return {
+    stage,
+    status: "failed",
+    terminal: true,
+    ...detail,
+    error: {
+      name: value.name,
+      message: renderCliCommandText(value.message, VISA_EXECUTABLE_NAME)
+    }
+  };
+}
+function quoteShell(value) {
+  return /^[A-Za-z0-9._:/=-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+function comparableAmount2(value) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(?:\.\d{1,2})?$/u.test(text2)) {
+    return "";
+  }
+  const [integerPart = "0", fractionPart = ""] = text2.split(".");
+  return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
+}
+function candidateAmountMinorUnits(value, currency) {
+  const text2 = typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!text2) {
+    return void 0;
+  }
+  try {
+    return majorAmountMinorUnits(text2, currency);
+  } catch {
+    return void 0;
+  }
+}
+function minorUnitsAmountText(value, currency) {
+  return minorUnitsMajorAmount(value, currency);
+}
+function instructionCreatedAtMs(instruction) {
+  const values = [
+    optionalText5(instruction.createdAt),
+    optionalText5(instruction.createTime)
+  ].filter((value) => value !== void 0);
+  if (values.length === 0) {
+    return void 0;
+  }
+  const timestamps = values.map(parseTimestamp);
+  if (timestamps.some((value) => value === void 0) || new Set(timestamps).size !== 1) {
+    return void 0;
+  }
+  return timestamps[0];
+}
+function optionalNormalized(value) {
+  return optionalText5(value)?.normalize("NFKC").toUpperCase();
+}
+function optionalExactText(value) {
+  return optionalText5(value)?.normalize("NFKC");
+}
+function exactText(value) {
+  return optionalExactText(value) ?? "";
+}
+function normalizedText3(value) {
+  return optionalNormalized(value) ?? "";
+}
+function optionalText5(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isFutureTimestamp(value, nowMs) {
+  const text2 = optionalText5(value);
+  if (!text2) {
+    return false;
+  }
+  const parsed = parseTimestamp(text2);
+  return parsed !== void 0 && parsed > nowMs;
+}
+function parsedFutureTimestamp(value, nowMs) {
+  const text2 = optionalText5(value);
+  if (!text2) {
+    return void 0;
+  }
+  const parsed = parseTimestamp(text2);
+  return parsed !== void 0 && parsed > nowMs ? parsed : void 0;
+}
+function mandateIsUnexpired(mandate, instruction, nowMs) {
+  const mandateExpiry = optionalText5(mandate.effectiveUntilTime);
+  return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
+}
+function parseTimestamp(value) {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(value) ? `${value.replace(" ", "T")}Z` : value;
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function oneTimeInstruction(instruction) {
+  const value = instruction.isRecurring;
+  return !(value === true || value === 1 || value === "1" || normalizedText3(value) === "TRUE");
+}
+function zeroLike(value) {
+  return value === 0 || value === "0" || value === false;
+}
+function normalizedBoolean(value) {
+  if (value === true || value === 1 || value === "1") {
+    return true;
+  }
+  if (value === false || value === 0 || value === "0" || normalizedText3(value) === "FALSE") {
+    return false;
+  }
+  if (normalizedText3(value) === "TRUE") {
+    return true;
+  }
+  return void 0;
+}
+function optionalStructuredMapEquals(expected, observed, dropNullObjectFields) {
+  if (!isStructuredMapOrAbsent(expected) || !isStructuredMapOrAbsent(observed)) {
+    return false;
+  }
+  return stableJson(canonicalOptionalMap(expected, dropNullObjectFields)) === stableJson(canonicalOptionalMap(observed, dropNullObjectFields));
+}
+function isStructuredMapOrAbsent(value) {
+  if (value === void 0 || value === null) {
+    return true;
+  }
+  if (isRecord23(value)) {
+    return true;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    return false;
+  }
+  try {
+    return isRecord23(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}
+function canonicalOptionalMap(value, dropNullObjectFields) {
+  const record2 = structuredMap(value);
+  if (!record2) {
+    return null;
+  }
+  const canonical = canonicalStructuredValue(record2, dropNullObjectFields);
+  return Object.keys(canonical).length === 0 ? null : canonical;
+}
+function structuredMap(value) {
+  if (isRecord23(value)) {
+    return value;
+  }
+  if (typeof value !== "string" || !value.trim()) {
+    return void 0;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord23(parsed) ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function canonicalStructuredValue(value, dropNullObjectFields) {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalStructuredValue(item, dropNullObjectFields));
+  }
+  if (isRecord23(value)) {
+    return Object.fromEntries(Object.keys(value).sort().flatMap((key) => {
+      const entry = value[key];
+      if (entry === void 0 || dropNullObjectFields && entry === null) {
+        return [];
+      }
+      return [[
+        key,
+        canonicalStructuredValue(entry, dropNullObjectFields)
+      ]];
+    }));
+  }
+  return typeof value === "string" ? value.normalize("NFKC") : value;
+}
+function stableJson(value) {
+  return JSON.stringify(value);
+}
+function isRecord23(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // dist/visa/service.js
@@ -28645,7 +30100,7 @@ function cloneVisaState(state) {
   };
 }
 function normalizeStoredVisaState(raw) {
-  if (!isRecord23(raw)) {
+  if (!isRecord24(raw)) {
     return void 0;
   }
   const defaults = defaultVisaState();
@@ -28659,14 +30114,14 @@ function normalizeStoredVisaState(raw) {
   assignString(state, "fsmUpdatedAt", raw.fsmUpdatedAt);
   assignString(state, "deviceId", raw.deviceId);
   assignString(state, "pendingBenefitLoginGeneration", raw.pendingBenefitLoginGeneration);
-  if (isRecord23(raw.lastError)) {
+  if (isRecord24(raw.lastError)) {
     const code = nonEmptyString4(raw.lastError.code);
     const at = nonEmptyString4(raw.lastError.at);
     if (code && at) {
       state.lastError = { code, at };
     }
   }
-  if (isRecord23(raw.benefitConnection)) {
+  if (isRecord24(raw.benefitConnection)) {
     const customerId = nonEmptyString4(raw.benefitConnection.customerId);
     const issuerOrigin = httpOrigin2(raw.benefitConnection.issuerOrigin);
     const connectedAt = nonEmptyString4(raw.benefitConnection.connectedAt);
@@ -28750,13 +30205,13 @@ function normalizeVisaMarket(value) {
   return market;
 }
 function normalizeVsraTokens(raw) {
-  if (!isRecord23(raw)) {
+  if (!isRecord24(raw)) {
     return {};
   }
   const tokens = {};
   for (const market of ["cn", "hk", "tw"]) {
     const value = raw[market];
-    if (!isRecord23(value)) {
+    if (!isRecord24(value)) {
       continue;
     }
     const apiToken = nonEmptyString4(value.apiToken);
@@ -28768,7 +30223,7 @@ function normalizeVsraTokens(raw) {
   return tokens;
 }
 function normalizePendingVsraLogin(raw) {
-  if (!isRecord23(raw)) {
+  if (!isRecord24(raw)) {
     return void 0;
   }
   const market = normalizeVisaMarketValue(raw.market);
@@ -28796,7 +30251,7 @@ function normalizePendingVsraLogin(raw) {
   };
 }
 function normalizePendingBenefitLogin(raw) {
-  if (!isRecord23(raw)) {
+  if (!isRecord24(raw)) {
     return void 0;
   }
   const baseUrl = absoluteHttpUrl(raw.baseUrl);
@@ -28842,18 +30297,18 @@ function normalizeVisaMarketValue(value) {
   return market === "cn" || market === "hk" || market === "tw" ? market : void 0;
 }
 function assignString(target, key, value) {
-  const text = nonEmptyString4(value);
-  if (text) {
-    target[key] = text;
+  const text2 = nonEmptyString4(value);
+  if (text2) {
+    target[key] = text2;
   }
 }
 function absoluteHttpUrl(value) {
-  const text = nonEmptyString4(value);
-  if (!text) {
+  const text2 = nonEmptyString4(value);
+  if (!text2) {
     return void 0;
   }
   try {
-    const url = new URL(text);
+    const url = new URL(text2);
     return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : void 0;
   } catch {
     return void 0;
@@ -28870,7 +30325,7 @@ function positiveNumber3(value) {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) && number > 0 ? number : void 0;
 }
-function isRecord23(value) {
+function isRecord24(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -29055,23 +30510,23 @@ function buildVisaTaxonomyIndex(payload) {
   return index;
 }
 function mapNaturalLanguageFilters(query, taxonomy, market) {
-  const text = normalizeText(query);
+  const text2 = normalizeText(query);
   const result = {};
-  if (!text) {
+  if (!text2) {
     return result;
   }
   for (const axis of VISA_FILTER_AXES) {
     for (const entry of taxonomy[axis]) {
-      if (entry.aliases.some((alias) => containsAlias(text, alias))) {
+      if (entry.aliases.some((alias) => containsAlias(text2, alias))) {
         addAxisValue(result, axis, entry.code);
       }
     }
   }
-  if (["\u9AD8\u7AEF\u793C\u9047", "\u9AD8\u7AEF\u6743\u76CA", "\u9876\u7EA7\u793C\u9047", "\u5C0A\u4EAB\u793C\u9047", "premium visa benefits"].some((alias) => containsAlias(text, alias))) {
+  if (["\u9AD8\u7AEF\u793C\u9047", "\u9AD8\u7AEF\u6743\u76CA", "\u9876\u7EA7\u793C\u9047", "\u5C0A\u4EAB\u793C\u9047", "premium visa benefits"].some((alias) => containsAlias(text2, alias))) {
     addAxisValue(result, "card_level", "infinite");
     addAxisValue(result, "card_level", "signature");
   }
-  const explicitAssignments = text.matchAll(/\b(region|category|purpose|reward_type|attribute|card_level|card_issuer)\s*=\s*([a-z0-9_]+)/gu);
+  const explicitAssignments = text2.matchAll(/\b(region|category|purpose|reward_type|attribute|card_level|card_issuer)\s*=\s*([a-z0-9_]+)/gu);
   for (const match of explicitAssignments) {
     const axis = match[1];
     const code = match[2];
@@ -29083,15 +30538,15 @@ function mapNaturalLanguageFilters(query, taxonomy, market) {
     }
   }
   removeInferredAncestorValues(result, taxonomy);
-  if (["\u8FD4\u73B0\u6D3B\u52A8", "\u62A5\u540D\u6D3B\u52A8", "\u9700\u8981\u62A5\u540D", "\u9700\u62A5\u540D", "cashback campaign", "enrollment required"].some((alias) => containsAlias(text, alias))) {
+  if (["\u8FD4\u73B0\u6D3B\u52A8", "\u62A5\u540D\u6D3B\u52A8", "\u9700\u8981\u62A5\u540D", "\u9700\u62A5\u540D", "cashback campaign", "enrollment required"].some((alias) => containsAlias(text2, alias))) {
     result.type = "reward";
-  } else if (["\u53EA\u770B\u793C\u9047", "\u4E0D\u8981\u6D3B\u52A8", "\u4EC5\u793C\u9047", "benefits only", "no campaigns"].some((alias) => containsAlias(text, alias))) {
+  } else if (["\u53EA\u770B\u793C\u9047", "\u4E0D\u8981\u6D3B\u52A8", "\u4EC5\u793C\u9047", "benefits only", "no campaigns"].some((alias) => containsAlias(text2, alias))) {
     result.type = "benefit";
   }
   if (market === "hk") {
     delete result.card_issuer;
   }
-  removeIssuingMarketFromDestination(result, text, market);
+  removeIssuingMarketFromDestination(result, text2, market);
   return result;
 }
 function normalizeRecommendationFilters(raw, taxonomy) {
@@ -29144,20 +30599,20 @@ function shouldFetchAllOffers(query, explicitAll, filters = {}, explicitPaginati
   if (explicitAll) {
     return true;
   }
-  const text = normalizeText(query);
-  if (!text || !PROGRAM_INTENT_PATTERN.test(text)) {
+  const text2 = normalizeText(query);
+  if (!text2 || !PROGRAM_INTENT_PATTERN.test(text2)) {
     return false;
   }
-  if (EXPLICIT_ALL_PATTERN.test(text)) {
+  if (EXPLICIT_ALL_PATTERN.test(text2)) {
     return true;
   }
   if (explicitPagination || hasScopedFilters(filters)) {
     return false;
   }
-  return BROAD_CHINESE_PATTERN.test(text) || BROAD_ENGLISH_PATTERN.test(text);
+  return BROAD_CHINESE_PATTERN.test(text2) || BROAD_ENGLISH_PATTERN.test(text2);
 }
 function collectTaxonomyEntries(value, target, ancestorCodes = []) {
-  if (!isRecord24(value)) {
+  if (!isRecord25(value)) {
     return;
   }
   for (const [code, rawEntry] of Object.entries(value)) {
@@ -29165,7 +30620,7 @@ function collectTaxonomyEntries(value, target, ancestorCodes = []) {
       collectTaxonomyEntries(rawEntry, target, ancestorCodes);
       continue;
     }
-    if (!isRecord24(rawEntry)) {
+    if (!isRecord25(rawEntry)) {
       continue;
     }
     const aliases = [
@@ -29180,7 +30635,7 @@ function collectTaxonomyEntries(value, target, ancestorCodes = []) {
       mergeTaxonomyEntry(target, code, aliases, ancestorCodes);
       childAncestorCodes = [...ancestorCodes, code];
     }
-    if (isRecord24(rawEntry.children)) {
+    if (isRecord25(rawEntry.children)) {
       collectTaxonomyEntries(rawEntry.children, target, childAncestorCodes);
     }
   }
@@ -29230,7 +30685,7 @@ function removeInferredAncestorValues(result, taxonomy) {
     assignAxis(result, axis, filtered);
   }
 }
-function removeIssuingMarketFromDestination(result, text, market) {
+function removeIssuingMarketFromDestination(result, text2, market) {
   const rules = {
     cn: {
       issuing: ["\u5927\u9646\u6301\u5361", "\u4E2D\u56FD\u53D1\u884C", "mainland china-issued", "china-issued card"],
@@ -29249,7 +30704,7 @@ function removeIssuingMarketFromDestination(result, text, market) {
     }
   };
   const rule = rules[market];
-  if (rule.issuing.some((alias) => containsAlias(text, alias)) && !rule.destination.some((alias) => containsAlias(text, alias)) && result.region) {
+  if (rule.issuing.some((alias) => containsAlias(text2, alias)) && !rule.destination.some((alias) => containsAlias(text2, alias)) && result.region) {
     result.region = result.region.filter((code) => code !== rule.code);
     if (result.region.length === 0) {
       delete result.region;
@@ -29282,16 +30737,16 @@ function normalizeText(value) {
   const simplified = replacements.reduce((result, [from, to]) => result.replaceAll(from, to), String(value ?? ""));
   return simplified.toLowerCase().replace(/[，。！？、；："'`()[\]{}]/gu, " ").replace(/\s+/gu, " ").trim();
 }
-function containsAlias(text, alias) {
+function containsAlias(text2, alias) {
   const normalizedAlias = normalizeText(alias);
   if (!normalizedAlias) {
     return false;
   }
   if (/^[a-z0-9 .&+/-]+$/u.test(normalizedAlias)) {
     const pattern = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replace(/\s+/gu, "\\s+");
-    return new RegExp(`(?:^|[^a-z0-9])${pattern}(?:$|[^a-z0-9])`, "u").test(text);
+    return new RegExp(`(?:^|[^a-z0-9])${pattern}(?:$|[^a-z0-9])`, "u").test(text2);
   }
-  return text.includes(normalizedAlias);
+  return text2.includes(normalizedAlias);
 }
 function unique(values) {
   return [...new Set(values)];
@@ -29300,15 +30755,15 @@ function stringValue3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function unwrapRecord2(value) {
-  if (!isRecord24(value)) {
+  if (!isRecord25(value)) {
     return {};
   }
-  if (isRecord24(value.data)) {
+  if (isRecord25(value.data)) {
     return value.data;
   }
   return value;
 }
-function isRecord24(value) {
+function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -30176,7 +31631,7 @@ async function fetchRecommendationPages(options2) {
   };
 }
 function replaceResponseItems(body, items) {
-  if (!isRecord25(body)) {
+  if (!isRecord26(body)) {
     return {
       data: {
         total: items.length,
@@ -30187,7 +31642,7 @@ function replaceResponseItems(body, items) {
       }
     };
   }
-  if (isRecord25(body.data)) {
+  if (isRecord26(body.data)) {
     return {
       ...body,
       data: {
@@ -30210,10 +31665,10 @@ function replaceResponseItems(body, items) {
   };
 }
 function enrichRecommendationCommerce(body) {
-  if (!isRecord25(body)) {
+  if (!isRecord26(body)) {
     return body;
   }
-  if (isRecord25(body.data) && Array.isArray(body.data.items)) {
+  if (isRecord26(body.data) && Array.isArray(body.data.items)) {
     return {
       ...body,
       data: {
@@ -30231,13 +31686,13 @@ function enrichRecommendationCommerce(body) {
   return body;
 }
 function enrichProgramCommerce(value) {
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return value;
   }
-  if (value.commerce !== void 0 && !isRecord25(value.commerce)) {
+  if (value.commerce !== void 0 && !isRecord26(value.commerce)) {
     return value;
   }
-  const commerce = isRecord25(value.commerce) ? value.commerce : {};
+  const commerce = isRecord26(value.commerce) ? value.commerce : {};
   const commerceMerchantCategoryCode = merchantCategoryCode(commerce.merchantCategoryCode);
   if (commerceMerchantCategoryCode) {
     return {
@@ -30279,10 +31734,10 @@ function withoutMerchantCategoryCode(commerce) {
   return result;
 }
 function responseDataRecord(body) {
-  if (!isRecord25(body)) {
+  if (!isRecord26(body)) {
     return {};
   }
-  return isRecord25(body.data) ? body.data : body;
+  return isRecord26(body.data) ? body.data : body;
 }
 function appendUniqueItems(target, seenKeys, values) {
   for (const value of values) {
@@ -30295,7 +31750,7 @@ function appendUniqueItems(target, seenKeys, values) {
   }
 }
 function offerKey(value) {
-  if (isRecord25(value)) {
+  if (isRecord26(value)) {
     for (const key of ["code", "id", "programCode", "program_code"]) {
       const candidate = value[key];
       if (typeof candidate === "string" && candidate.length > 0) {
@@ -30485,7 +31940,7 @@ function reportedPageSize(data, fallback) {
 function arrayValue(value) {
   return Array.isArray(value) ? value : [];
 }
-function isRecord25(value) {
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isDryRun5(value) {
@@ -30530,6 +31985,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
       }
     },
     preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
+      portalManaged: true,
       ...bindingResolution ? { bindingResolution } : {}
     }),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
@@ -30564,7 +32020,7 @@ ${url}
         ...instructionContext.isRecurring ? { isRecurring: true } : {},
         ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
       });
-      const instructionId2 = optionalText5(detail.instructionId ?? detail.purchaseInstructionId);
+      const instructionId2 = optionalText6(detail.instructionId ?? detail.purchaseInstructionId);
       if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -30573,6 +32029,7 @@ ${url}
     resolvePurchase: (purchaseContext) => resolveVisaCommercePurchase(context, commerceContext, purchaseContext),
     runCheckout: async (input) => executeUcpCheckoutRun(checkoutCommandContext(context, input), {
       returnSafeCompleteFailure: true,
+      allowMissingMerchantCategoryCode: input.purchaseContext.merchantCategoryCode === void 0,
       readOnlyRecovery: {
         maxWaitSeconds: input.maxWaitSeconds
       }
@@ -30583,6 +32040,20 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
   const baseUrl = visaCommerceApiBaseUrl(environment);
   assertCommerceEnvironment(context, environment, baseUrl);
   return {
+    preparePurchaseIntent: async (instructionContext) => {
+      const cards = await resolveBindingLink(context, CARD_SETUP_PATH2);
+      if (cards.dryRun) {
+        throw apiError("card readiness unexpectedly produced a dry-run response");
+      }
+      const selected = selectVisaCard(normalizeCards(cards.data.paymentMethodsVoList));
+      if (selected.action === "use") {
+        return { state: "VIC_READY" };
+      }
+      if (selected.action !== "add") {
+        throw validationError("Select one eligible Visa card in Agent Portal before continuing");
+      }
+      return createCommandPendingInstruction(context, instructionContext);
+    },
     inspectLogin: async () => {
       const result = getVisaBenefitLoginReadiness({
         storedConfig: context.storedConfig,
@@ -30615,11 +32086,11 @@ ${event.url}
         }
       });
       applyStoredConfig(context, storedConfig);
-      const detail = isRecord26(result) ? result : { status: "unknown" };
-      const pendingInstructionId2 = optionalText5(detail.pendingInstructionId);
-      const oauthMode = optionalText5(detail.oauthMode);
+      const detail = isRecord27(result) ? result : { status: "unknown" };
+      const pendingInstructionId2 = optionalText6(detail.pendingInstructionId);
+      const oauthMode = optionalText6(detail.oauthMode);
       const customerCreated = optionalBoolean2(detail.customerCreated);
-      const activationDriver = optionalText5(detail.activationDriver);
+      const activationDriver = optionalText6(detail.activationDriver);
       return {
         ready: detail.status === "ready",
         ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
@@ -30834,7 +32305,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   if (!Array.isArray(root.groups)) {
     throw validationError("broad Catalog search response is missing groups");
   }
-  const groups = root.groups.map((value) => requireRecord3(value, "invalid broad Catalog group")).filter((group2) => normalizedText3(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText3(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
+  const groups = root.groups.map((value) => requireRecord3(value, "invalid broad Catalog group")).filter((group2) => normalizedText4(requiredProductText(group2.channel_type ?? group2.channelType, "broad Catalog group is missing channel_type")) === normalizedText4(purchase.channelType) && requiredProductText(group2.store_id ?? group2.storeId, "broad Catalog group is missing store_id") === purchase.storeId);
   if (groups.length === 0) {
     throw validationError("frozen Eats365 store is no longer present in broad Catalog results");
   }
@@ -30843,7 +32314,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   }
   const group = groups[0];
   const merchantName = requiredProductText(group.name ?? group.merchant_name ?? group.merchantName, "broad Catalog group is missing merchant name");
-  if (normalizedText3(merchantName) !== normalizedText3(purchase.merchantName)) {
+  if (normalizedText4(merchantName) !== normalizedText4(purchase.merchantName)) {
     throw validationError("current broad Catalog merchant name differs from the frozen purchase context");
   }
   if (!Array.isArray(group.products)) {
@@ -30862,7 +32333,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
     throw validationError("current Eats365 menu route differs from the frozen purchase context");
   }
   const productTitle2 = requiredProductText(product.title ?? product.name, "broad Catalog product is missing title");
-  if (normalizedText3(productTitle2) !== normalizedText3(purchase.title)) {
+  if (normalizedText4(productTitle2) !== normalizedText4(purchase.title)) {
     throw validationError("current broad Catalog product title differs from the frozen purchase context");
   }
   if (!Array.isArray(product.variants)) {
@@ -30874,7 +32345,7 @@ function resolveUniquePlatformCatalogCandidate(payload, purchase) {
   }
   const variant = variants[0];
   const variantTitle = requiredProductText(variant.title ?? variant.name, "broad Catalog variant is missing title");
-  if (normalizedText3(variantTitle) !== normalizedText3(purchase.title)) {
+  if (normalizedText4(variantTitle) !== normalizedText4(purchase.title)) {
     throw validationError("current broad Catalog variant title differs from the frozen purchase context");
   }
   const price = requireRecord3(variant.price, "broad Catalog variant is missing structured price");
@@ -30974,10 +32445,10 @@ function verifyInternalProduct(payload, purchase, internalMerchantId, requireMer
 }
 function assertInternalCatalogMerchant(product, variant, internalMerchantId, frozenMerchantName) {
   const merchantIds = [
-    optionalText5(variant?.merchantId),
-    optionalText5(variant?.merchant_id),
-    optionalText5(product.merchantId),
-    optionalText5(product.merchant_id)
+    optionalText6(variant?.merchantId),
+    optionalText6(variant?.merchant_id),
+    optionalText6(product.merchantId),
+    optionalText6(product.merchant_id)
   ].filter((value) => value !== void 0);
   if (merchantIds.some((merchantId) => merchantId !== internalMerchantId)) {
     throw validationError("current Catalog merchant ID differs from the resolved internal merchant");
@@ -30986,7 +32457,7 @@ function assertInternalCatalogMerchant(product, variant, internalMerchantId, fro
     internalCatalogMerchantName(variant),
     internalCatalogMerchantName(product)
   ].filter((value) => value !== void 0);
-  if (merchantNames.some((merchantName) => normalizedText3(merchantName) !== normalizedText3(frozenMerchantName))) {
+  if (merchantNames.some((merchantName) => normalizedText4(merchantName) !== normalizedText4(frozenMerchantName))) {
     throw validationError("current merchant name differs from the frozen purchase context");
   }
 }
@@ -30994,9 +32465,9 @@ function internalCatalogMerchantName(value) {
   if (!value) {
     return void 0;
   }
-  const merchant = isRecord26(value.merchant) ? value.merchant : void 0;
-  const seller = isRecord26(value.seller) ? value.seller : void 0;
-  return optionalText5(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
+  const merchant = isRecord27(value.merchant) ? value.merchant : void 0;
+  const seller = isRecord27(value.seller) ? value.seller : void 0;
+  return optionalText6(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
 }
 function internalProductVariants(product) {
   if (product.variants === void 0 || product.variants === null) {
@@ -31067,7 +32538,7 @@ function sameInternalCatalogPrice(left, right) {
 }
 function verifyExternalProduct(currency, merchantName, variant, purchase) {
   assertProductIdentity(variant.itemId, variant.title, currency, BigInt(variant.unitPriceMinor), purchase);
-  if (normalizedText3(merchantName) !== normalizedText3(purchase.merchantName)) {
+  if (normalizedText4(merchantName) !== normalizedText4(purchase.merchantName)) {
     throw validationError("current merchant name differs from the frozen purchase context");
   }
   if (variant.available !== true || variant.inventoryStatus === "out_of_stock") {
@@ -31078,7 +32549,7 @@ function assertProductIdentity(productId2, title, currency, unitPriceMinor, purc
   if (productId2 !== purchase.productId) {
     throw validationError("current product ID differs from the frozen purchase context");
   }
-  if (normalizedText3(title) !== normalizedText3(purchase.title)) {
+  if (normalizedText4(title) !== normalizedText4(purchase.title)) {
     throw validationError("current product title differs from the frozen purchase context");
   }
   if (currency.toUpperCase() !== purchase.currency) {
@@ -31109,11 +32580,11 @@ function productAvailability(product) {
   return typeof available === "boolean" ? available : null;
 }
 function productAvailabilitySignals(product) {
-  const availability = isRecord26(product.availability) ? product.availability : void 0;
+  const availability = isRecord27(product.availability) ? product.availability : void 0;
   const signals = [];
   for (const value of [
     product.available,
-    isRecord26(product.availability) ? void 0 : product.availability,
+    isRecord27(product.availability) ? void 0 : product.availability,
     availability?.available,
     availability?.status,
     product.inventoryStatus,
@@ -31148,12 +32619,12 @@ function requiredProductText(value, message) {
   return value.normalize("NFKC").trim();
 }
 function requireRecord3(value, message) {
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     throw validationError(message);
   }
   return value;
 }
-function normalizedText3(value) {
+function normalizedText4(value) {
   return value.normalize("NFKC").trim().toUpperCase();
 }
 function normalizedUrl(value) {
@@ -31176,7 +32647,7 @@ function checkoutCommandContext(context, input) {
   };
   const flags = {
     "merchant-url": purchase.merchantUrl,
-    "merchant-category-code": purchase.merchantCategoryCode,
+    ...purchase.merchantCategoryCode ? { "merchant-category-code": purchase.merchantCategoryCode } : {},
     currency: purchase.currency,
     "line-items": JSON.stringify(buildCommerceLineItems(purchase)),
     "payment-instrument-id": input.paymentInstrumentId,
@@ -31236,18 +32707,18 @@ function applyStoredConfig(context, storedConfig) {
   context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
 }
 function normalizeCards(value) {
-  if (!Array.isArray(value) || !value.every((card) => isRecord26(card) && typeof card.paymentInstrumentId === "string" && card.paymentInstrumentId.trim())) {
+  if (!Array.isArray(value) || !value.every((card) => isRecord27(card) && typeof card.paymentInstrumentId === "string" && card.paymentInstrumentId.trim())) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((card) => ({ ...card }));
 }
-function optionalText5(value) {
+function optionalText6(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function optionalBoolean2(value) {
   return typeof value === "boolean" ? value : void 0;
 }
-function isRecord26(value) {
+function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -31259,8 +32730,26 @@ async function readVisaCommerceLoginContext(flags) {
   return normalizeVisaCommerceLoginContext(await readVisaContextInput(flags, "visa commerce-login"));
 }
 function normalizeVisaCommerceLoginContext(raw) {
-  if (!isRecord27(raw)) {
+  if (!isRecord28(raw)) {
     throw validationError("commerce login context must be a JSON object");
+  }
+  if (raw.mode === "selected_product") {
+    const purchase = normalizeVisaCommerceContext(raw);
+    if (purchase.mode === "prepare") {
+      throw validationError("commerce-login requires a selected product purchase");
+    }
+    const restriction = classifyVisaCommerceRestriction(purchase);
+    if (!restriction.allowed) {
+      throw validationError(`Purchase refused before login: ${restriction.reason}`);
+    }
+    return deepFreeze2({
+      environment: purchase.environment,
+      expected: {
+        amount: purchase.expected.amount,
+        currency: purchase.expected.currency
+      },
+      instructionContext: purchase.instructionContext
+    });
   }
   const environment = normalizeVisaCommerceEnvironment(raw.environment);
   const expected = normalizeVisaCommerceLoginExpected(raw.expected);
@@ -31280,7 +32769,7 @@ function normalizeVisaCommerceLoginContext(raw) {
   return deepFreeze2(context);
 }
 function normalizeVisaCommerceLoginExpected(value) {
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     throw validationError("expected must be a JSON object");
   }
   const unknown = Object.keys(value).find((field) => field !== "amount" && field !== "currency");
@@ -31295,14 +32784,14 @@ function normalizeVisaCommerceLoginExpected(value) {
   return { amount, currency };
 }
 function normalizeMajorAmount2(value, field) {
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!MAJOR_AMOUNT_FORMAT2.test(text) || Number(text) <= 0) {
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!MAJOR_AMOUNT_FORMAT2.test(text2) || Number(text2) <= 0) {
     throw validationError(`${field} must be a positive major-unit amount with at most 2 decimals`);
   }
-  if (typeof value === "number" && !Number.isSafeInteger(Number(text.replace(".", "")))) {
+  if (typeof value === "number" && !Number.isSafeInteger(Number(text2.replace(".", "")))) {
     throw validationError(`${field} must be a string when its minor units are not a safe integer`);
   }
-  const [integerPart = "0", fractionPart = ""] = text.split(".");
+  const [integerPart = "0", fractionPart = ""] = text2.split(".");
   return trimDecimalZeros2(`${BigInt(integerPart).toString()}${fractionPart ? `.${fractionPart}` : ""}`);
 }
 function trimDecimalZeros2(value) {
@@ -31317,7 +32806,7 @@ function requiredText6(value, field) {
 function visaCommerceLoginApiBaseUrl(context) {
   return visaCommerceApiBaseUrl(context.environment);
 }
-function isRecord27(value) {
+function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function deepFreeze2(value) {
@@ -31374,20 +32863,22 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
   }
   const current = await dependencies.inspectLogin();
   if (current.ready) {
+    const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
+    const pendingInstructionId3 = optionalText7(prepared?.instructionId);
     return {
       command: "visa commerce-login",
       operation: "visa-commerce-login",
       environment: context.environment,
       state: "LOGIN_READY",
       action: "CONTINUE_REGULAR_INSTRUCTION_FLOW",
-      reason: "visa_login_already_ready_quick_start_not_available",
+      reason: pendingInstructionId3 ? "purchase_pending_prepared_for_portal" : "visa_login_already_ready_quick_start_not_available",
       ready: true,
       loginReady: true,
       terminal: true,
       instructionId: null,
       instructionStatus: null,
       instructionReady: false,
-      pendingInstructionId: null,
+      pendingInstructionId: pendingInstructionId3 ?? null,
       detail: current.detail
     };
   }
@@ -31396,8 +32887,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     throw authError("visa init exited without status=ready");
   }
   const pendingInstructionId2 = initialized.pendingInstructionId;
-  const quickActivationEligible = initialized.oauthMode === "REGISTER" && initialized.customerCreated === true && initialized.activationDriver === "PORTAL_AUTO_CARD_SETUP" && Boolean(pendingInstructionId2);
-  const instruction = quickActivationEligible && pendingInstructionId2 ? await resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) : void 0;
+  const instruction = pendingInstructionId2 ? await resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) : void 0;
   const instructionReady = instruction?.instructionReady ?? false;
   const instructionTerminal = instruction ? instructionReady || isTerminalInstructionStatus2(instruction.instructionStatus) : true;
   return {
@@ -31433,7 +32923,7 @@ async function resolveCurrentQuickInstruction(pendingInstructionId2, dependencie
   if (instruction) {
     assertExactInstruction2(instruction, pendingInstructionId2);
   }
-  const initialStatus = instruction ? instructionStatus(instruction) : void 0;
+  const initialStatus = instruction ? instructionStatus2(instruction) : void 0;
   if (!instruction || initialStatus !== "ACTIVE" && !isTerminalInstructionStatus2(initialStatus ?? "UNKNOWN")) {
     const wait = await dependencies.waitForInstructionActivation(pendingInstructionId2, QUICK_INSTRUCTION_WAIT_SECONDS);
     timedOut = wait.timedOut;
@@ -31442,7 +32932,7 @@ async function resolveCurrentQuickInstruction(pendingInstructionId2, dependencie
     instruction = await dependencies.getInstruction(pendingInstructionId2);
     assertExactInstruction2(instruction, pendingInstructionId2);
   }
-  const status = instructionStatus(instruction);
+  const status = instructionStatus2(instruction);
   return {
     instructionId: pendingInstructionId2,
     instructionStatus: status,
@@ -31459,1360 +32949,16 @@ function assertExactInstruction2(instruction, expectedInstructionId) {
   if (!instruction) {
     throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
   }
-  const observedInstructionId = optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  const observedInstructionId = optionalText7(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
   if (observedInstructionId !== expectedInstructionId) {
     throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
   }
 }
-function instructionStatus(instruction) {
-  return optionalText6(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
-}
-function optionalText6(value) {
-  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
-}
-
-// dist/visa/commerce-restriction.js
-var RESTRICTED_CATEGORIES = [
-  {
-    category: "ADULT_CONTENT",
-    label: "Adult content and services",
-    labelZh: "\u6210\u4EBA\u5185\u5BB9\u4E0E\u670D\u52A1",
-    merchantCategoryCodes: [],
-    keywords: [
-      "porn",
-      "pornography",
-      "pornhub",
-      "onlyfans",
-      "adult content",
-      "adult video",
-      "adult website",
-      "adult live",
-      "adult subscription",
-      "\u6210\u4EBA\u5185\u5BB9",
-      "\u6210\u4EBA\u7F51\u7AD9",
-      "\u6210\u4EBA\u89C6\u9891",
-      "\u6210\u4EBA\u76F4\u64AD",
-      "\u6210\u4EBA\u670D\u52A1",
-      "\u8272\u60C5",
-      "\u60C5\u8272",
-      "\u88F8\u804A"
-    ]
-  },
-  {
-    category: "DATING_COMPANIONSHIP",
-    label: "Dating and companionship services",
-    labelZh: "\u4EA4\u53CB\u53CA\u966A\u4F34\u670D\u52A1",
-    merchantCategoryCodes: ["7273"],
-    keywords: [
-      "dating site",
-      "dating website",
-      "dating app",
-      "dating service",
-      "dating subscription",
-      "escort",
-      "sugar dating",
-      "\u4EA4\u53CB\u7F51\u7AD9",
-      "\u4EA4\u53CB\u8F6F\u4EF6",
-      "\u4EA4\u53CB\u670D\u52A1",
-      "\u76F8\u4EB2",
-      "\u966A\u4F8D",
-      "\u4F34\u6E38",
-      "\u63F4\u4EA4",
-      "\u966A\u4F34\u670D\u52A1"
-    ]
-  },
-  {
-    category: "GAMBLING",
-    label: "Gambling and betting",
-    labelZh: "\u8D4C\u535A/\u535A\u5F69",
-    merchantCategoryCodes: ["7995"],
-    keywords: [
-      "gambling",
-      "casino",
-      "betting",
-      "sportsbook",
-      "wager",
-      "lottery",
-      "poker chips",
-      "slot machine",
-      "roulette",
-      "baccarat",
-      "blackjack",
-      "\u8D4C\u535A",
-      "\u535A\u5F69",
-      "\u8D4C\u573A",
-      "\u6295\u6CE8",
-      "\u4E0B\u6CE8",
-      "\u62BC\u6CE8",
-      "\u5F69\u7968",
-      "\u516D\u5408\u5F69",
-      "\u7B79\u7801",
-      "\u8D4C\u8D44"
-    ]
-  },
-  {
-    category: "PRESCRIPTION_DRUGS",
-    label: "Prescription drugs",
-    labelZh: "\u5904\u65B9\u836F",
-    merchantCategoryCodes: [],
-    keywords: [
-      "prescription drug",
-      "prescription medication",
-      "prescription medicine",
-      "prescription-only",
-      "rx only",
-      "viagra",
-      "cialis",
-      "sildenafil",
-      "ozempic",
-      "xanax",
-      "adderall",
-      "tramadol",
-      "\u5904\u65B9\u836F",
-      "\u51ED\u5904\u65B9",
-      "\u9700\u5904\u65B9",
-      "\u4F1F\u54E5"
-    ]
-  },
-  {
-    category: "CRYPTOCURRENCY",
-    label: "Cryptocurrency",
-    labelZh: "\u52A0\u5BC6\u8D27\u5E01",
-    merchantCategoryCodes: ["6051"],
-    keywords: [
-      "crypto",
-      "cryptocurrency",
-      "bitcoin",
-      "ethereum",
-      "stablecoin",
-      "usdt",
-      "usdc",
-      "btc",
-      "eth",
-      "initial coin offering",
-      "token sale",
-      "defi",
-      "binance",
-      "coinbase",
-      "\u52A0\u5BC6\u8D27\u5E01",
-      "\u865A\u62DF\u8D27\u5E01",
-      "\u6570\u5B57\u8D27\u5E01",
-      "\u6BD4\u7279\u5E01",
-      "\u4EE5\u592A\u574A",
-      "\u6CF0\u8FBE\u5E01",
-      "\u5145\u5E01",
-      "\u63D0\u5E01",
-      "\u7092\u5E01",
-      "\u5E01\u5708",
-      "\u4EE3\u5E01\u53D1\u884C",
-      "\u52A0\u5BC6\u94B1\u5305"
-    ]
-  },
-  {
-    category: "CYBERLOCKER_FILE_SHARING",
-    label: "Cyberlockers and public file sharing",
-    labelZh: "Cyberlocker / \u516C\u5171\u6587\u4EF6\u5206\u4EAB",
-    merchantCategoryCodes: [],
-    keywords: [
-      "cyberlocker",
-      "file locker",
-      "filelocker",
-      "rapidgator",
-      "pay per download",
-      "pay-per-download",
-      "upload rewards",
-      "\u516C\u5171\u6587\u4EF6\u5206\u4EAB",
-      "\u6309\u4E0B\u8F7D\u91CF\u5956\u52B1",
-      "\u4E0A\u4F20\u5956\u52B1",
-      "\u6587\u4EF6\u5206\u4EAB\u5956\u52B1"
-    ]
-  },
-  {
-    category: "SKILL_BASED_PRIZE_GAMES",
-    label: "Skill-based prize games",
-    labelZh: "\u6280\u5DE7\u578B\u6709\u5956\u6E38\u620F",
-    merchantCategoryCodes: [],
-    keywords: [
-      "daily fantasy",
-      "fantasy sports",
-      "draftkings",
-      "fanduel",
-      "skill gaming",
-      "skill-based prize",
-      "prize contest",
-      "cash tournament entry",
-      "paid tournament entry",
-      "\u6280\u5DE7\u578B\u6709\u5956",
-      "\u6709\u5956\u7ADE\u6280",
-      "\u4ED8\u8D39\u7ADE\u8D5B",
-      "\u68A6\u5E7B\u4F53\u80B2",
-      "\u5956\u91D1\u8D5B"
-    ]
-  },
-  {
-    category: "FINANCIAL_PRODUCTS_TRADING",
-    label: "Financial products and trading",
-    labelZh: "\u91D1\u878D\u4EA7\u54C1/\u91D1\u878D\u4EA4\u6613",
-    merchantCategoryCodes: ["6211"],
-    keywords: [
-      "stock trading",
-      "buy stocks",
-      "sell stocks",
-      "share trading",
-      "securities trading",
-      "securities brokerage",
-      "brokerage account",
-      "forex trading",
-      "foreign exchange trading",
-      "options trading",
-      "futures trading",
-      "margin trading",
-      "cfd trading",
-      "\u80A1\u7968\u4EA4\u6613",
-      "\u8D2D\u4E70\u80A1\u7968",
-      "\u4E70\u5165\u80A1\u7968",
-      "\u8BC1\u5238\u4EA4\u6613",
-      "\u8BC1\u5238\u5F00\u6237",
-      "\u80A1\u7968\u5F00\u6237",
-      "\u671F\u8D27\u4EA4\u6613",
-      "\u5916\u6C47\u4EA4\u6613",
-      "\u878D\u8D44\u878D\u5238",
-      "\u7ECF\u7EAA\u670D\u52A1",
-      "\u91D1\u878D\u884D\u751F\u54C1"
-    ]
-  },
-  {
-    category: "TELEMARKETING",
-    label: "Telemarketing",
-    labelZh: "\u7535\u8BDD\u8425\u9500",
-    merchantCategoryCodes: ["5966", "5967"],
-    keywords: [
-      "telemarketing",
-      "robocall",
-      "cold calling",
-      "outbound calling",
-      "\u7535\u8BDD\u8425\u9500",
-      "\u7535\u8BDD\u63A8\u9500",
-      "\u7535\u9500",
-      "\u5916\u547C\u8425\u9500"
-    ]
-  },
-  {
-    category: "TOBACCO",
-    label: "Tobacco products",
-    labelZh: "\u70DF\u8349\u4EA7\u54C1",
-    merchantCategoryCodes: ["5993"],
-    keywords: [
-      "tobacco",
-      "cigarette",
-      "cigarettes",
-      "cigar",
-      "cigars",
-      "e-cigarette",
-      "e-cig",
-      "vape",
-      "vaping",
-      "shisha",
-      "snus",
-      "\u70DF\u8349",
-      "\u9999\u70DF",
-      "\u5377\u70DF",
-      "\u7535\u5B50\u70DF",
-      "\u96EA\u8304",
-      "\u70DF\u4E1D",
-      "\u6C34\u70DF"
-    ]
-  },
-  {
-    category: "OTHER_REGULATED_GOODS",
-    label: "Other regulated goods",
-    labelZh: "\u5176\u4ED6\u53D7\u76D1\u7BA1\u5546\u54C1",
-    merchantCategoryCodes: [],
-    keywords: [
-      "firearm",
-      "firearms",
-      "ammunition",
-      "handgun",
-      "handguns",
-      "explosives",
-      "\u519B\u706B",
-      "\u67AA\u652F",
-      "\u5F39\u836F",
-      "\u7206\u70B8\u7269",
-      "\u7BA1\u5236\u5200\u5177"
-    ]
-  }
-];
-var CATEGORY_BY_NAME = new Map(RESTRICTED_CATEGORIES.map((entry) => [entry.category, entry]));
-var CATEGORY_BY_MCC = new Map(RESTRICTED_CATEGORIES.flatMap((entry) => entry.merchantCategoryCodes.map((code) => [code, entry])));
-function classifyVisaCommerceRestriction(context) {
-  const purchase = context.purchaseContext;
-  if (purchase.assertedCategory) {
-    const asserted = purchase.assertedCategory.trim().toUpperCase();
-    const entry = CATEGORY_BY_NAME.get(asserted);
-    if (entry) {
-      return blocked(entry, "asserted_category", entry.category);
-    }
-  }
-  const mccEntry = CATEGORY_BY_MCC.get(purchase.merchantCategoryCode);
-  if (mccEntry) {
-    return blocked(mccEntry, "merchant_category_code", purchase.merchantCategoryCode);
-  }
-  const text = restrictionText(context);
-  for (const entry of RESTRICTED_CATEGORIES) {
-    for (const keyword of [...entry.keywords].sort((left, right) => right.length - left.length)) {
-      if (keywordPattern(keyword).test(text)) {
-        return blocked(entry, "keyword", keyword);
-      }
-    }
-  }
-  return { allowed: true, reason: "no_restricted_category_match" };
-}
-function restrictionText(context) {
-  const purchase = context.purchaseContext;
-  const instruction = context.instructionContext;
-  const programCode = typeof purchase.programCode === "string" ? purchase.programCode : void 0;
-  const values = [
-    purchase.originalRequest,
-    purchase.title,
-    purchase.productId,
-    purchase.productQuery,
-    programCode,
-    purchase.merchantName,
-    purchase.merchantUrl,
-    instruction.title,
-    instruction.description,
-    ...instruction.mandates.flatMap((mandate) => [
-      mandate.title,
-      mandate.description,
-      mandate.preferredMerchantName,
-      mandate.merchantCategory
-    ])
-  ];
-  return values.filter((value) => typeof value === "string").flatMap((value) => {
-    const normalized = value.normalize("NFKC");
-    return [
-      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), ""),
-      normalized.replace(new RegExp("\\p{Default_Ignorable_Code_Point}+", "gu"), " ")
-    ];
-  }).map((value) => value.trim().replace(/\s+/gu, " ")).filter(Boolean).join("\n");
-}
-function keywordPattern(keyword) {
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return /^[\p{Script=Latin}0-9][\p{Script=Latin}0-9 .&'-]*$/u.test(keyword) ? new RegExp(`(?<![\\p{Script=Latin}\\p{N}])${escaped}(?![\\p{Script=Latin}\\p{N}])`, "iu") : new RegExp(escaped, "iu");
-}
-function blocked(entry, matchedBy, matchedValue) {
-  return {
-    allowed: false,
-    reason: `restricted_category_${entry.category.toLowerCase()}`,
-    category: entry.category,
-    categoryLabel: entry.label,
-    categoryLabelZh: entry.labelZh,
-    matchedBy,
-    matchedValue
-  };
-}
-
-// dist/visa/commerce-run.js
-var DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
-async function runVisaCommerce(context, options2, dependencies) {
-  if (context.mode === "prepare") {
-    if (options2.confirmedPurchase) {
-      throw validationError("visa commerce-run prepare mode does not accept purchase confirmation");
-    }
-    return runVisaCommercePreparation(context, options2, dependencies);
-  }
-  if (!options2.dryRun && !options2.confirmedPurchase) {
-    throw validationError("visa commerce-run purchase mode requires explicit purchase confirmation");
-  }
-  const waitDelivery = options2.waitDelivery ?? context.purchaseContext.digitalDeliveryExpected;
-  const maxWaitSeconds = options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS;
-  const restriction = classifyVisaCommerceRestriction(context);
-  if (!restriction.allowed) {
-    return {
-      command: "visa commerce-run",
-      stage: "restriction",
-      status: "refused",
-      terminal: true,
-      restriction
-    };
-  }
-  if (options2.dryRun) {
-    return buildDryRunPlan(context, {
-      confirmedPurchase: options2.confirmedPurchase,
-      waitDelivery,
-      maxWaitSeconds
-    });
-  }
-  let login;
-  try {
-    login = await dependencies.inspectLogin();
-  } catch (error) {
-    return workflowFailure("login_status", error);
-  }
-  if (!login.ready) {
-    return {
-      command: "visa commerce-run",
-      stage: "login",
-      status: "authentication_required",
-      terminal: true,
-      userActionRequired: true,
-      reason: "run_visa_commerce_login_before_purchase",
-      detail: login.detail
-    };
-  }
-  let resolvedPurchase;
-  try {
-    resolvedPurchase = await dependencies.resolvePurchase(context.purchaseContext);
-  } catch (error) {
-    return workflowFailure("product_resolution", error);
-  }
-  const cardResult = await ensureVisaCardReady(dependencies, context, maxWaitSeconds);
-  if (!cardResult.ready) {
-    return {
-      command: "visa commerce-run",
-      ...cardResult,
-      login: login.detail
-    };
-  }
-  const card = cardResult.card;
-  const paymentInstrumentId = card.paymentInstrumentId;
-  let instruction = cardResult.instruction;
-  if (!instruction) {
-    const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
-    if (!regular.instruction) {
-      return {
-        command: "visa commerce-run",
-        ...regular.result,
-        paymentInstrumentId,
-        card: safeCard(cardResult.card)
-      };
-    }
-    instruction = regular.instruction;
-  }
-  try {
-    resolvedPurchase = await dependencies.resolvePurchase(resolvedPurchase.purchaseContext);
-  } catch (error) {
-    return workflowFailure("product_revalidation", error, {
-      paymentInstrumentId,
-      instruction: publicInstruction(instruction)
-    });
-  }
-  let checkout;
-  try {
-    checkout = await dependencies.runCheckout({
-      paymentInstrumentId,
-      purchaseContext: resolvedPurchase.purchaseContext,
-      waitDelivery,
-      maxWaitSeconds
-    });
-  } catch (error) {
-    return workflowFailure("checkout", error, {
-      paymentInstrumentId,
-      instruction: publicInstruction(instruction)
-    });
-  }
-  const resumeCommand = typeof checkout.resumeCommand === "string" ? checkout.resumeCommand : void 0;
-  return {
-    command: "visa commerce-run",
-    stage: typeof checkout.stage === "string" ? checkout.stage : "checkout",
-    status: typeof checkout.status === "string" ? checkout.status : "unknown",
-    terminal: resumeCommand === void 0,
-    paymentInstrumentId,
-    card: safeCard(card),
-    route: resolvedPurchase.route,
-    product: resolvedPurchase.product,
-    instruction: publicInstruction(instruction),
-    ...resumeCommand ? {
-      resumeCommand,
-      resumeReadOnly: true,
-      paymentRetryAllowed: false
-    } : {},
-    checkout
-  };
-}
-async function runVisaCommercePreparation(context, options2, dependencies) {
-  if (options2.dryRun) {
-    return {
-      command: "visa commerce-run",
-      mode: "prepare",
-      target: context.target,
-      stage: "plan",
-      status: "dry_run",
-      dryRun: true,
-      sideEffects: false,
-      createsInstruction: false,
-      createsCheckout: false,
-      pays: false,
-      steps: context.target === "login" ? [{ stage: "login", effect: "check_or_complete_benefit_login" }] : [
-        { stage: "login", effect: "check_or_complete_benefit_login" },
-        {
-          stage: "card",
-          effect: "reuse_or_prepare_visa_card_and_verify_vic"
-        }
-      ]
-    };
-  }
-  let login;
-  try {
-    login = await dependencies.inspectLogin();
-    if (!login.ready) {
-      login = await dependencies.login();
-    }
-  } catch (error) {
-    return {
-      command: "visa commerce-run",
-      mode: "prepare",
-      target: context.target,
-      ...workflowFailure("login", error)
-    };
-  }
-  if (!login.ready) {
-    return {
-      command: "visa commerce-run",
-      mode: "prepare",
-      target: context.target,
-      stage: "login",
-      status: "authentication_pending",
-      terminal: false,
-      userActionRequired: true,
-      detail: login.detail
-    };
-  }
-  if (context.target === "login") {
-    return {
-      command: "visa commerce-run",
-      mode: "prepare",
-      target: "login",
-      stage: "login",
-      status: "ready",
-      terminal: true,
-      login: login.detail
-    };
-  }
-  const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS);
-  if (!cardResult.ready) {
-    return {
-      command: "visa commerce-run",
-      mode: "prepare",
-      target: "visa_card_ready",
-      ...cardResult,
-      login: login.detail
-    };
-  }
-  return {
-    command: "visa commerce-run",
-    mode: "prepare",
-    target: "visa_card_ready",
-    stage: "card",
-    status: "ready",
-    terminal: true,
-    login: login.detail,
-    card: safeCard(cardResult.card)
-  };
-}
-function buildDryRunPlan(context, options2) {
-  return {
-    command: "visa commerce-run",
-    mode: context.mode,
-    stage: "plan",
-    status: "dry_run",
-    dryRun: true,
-    sideEffects: false,
-    confirmedPurchase: options2.confirmedPurchase,
-    purchase: {
-      merchantUrl: context.purchaseContext.merchantUrl,
-      endpoint: context.purchaseContext.endpoint ?? null,
-      productId: context.purchaseContext.productId,
-      title: context.purchaseContext.title,
-      quantity: context.purchaseContext.quantity,
-      unitPrice: context.purchaseContext.price,
-      totalPrice: context.purchaseContext.totalPrice,
-      currency: context.purchaseContext.currency,
-      merchantCategoryCode: context.purchaseContext.merchantCategoryCode,
-      authorizedAvailability: context.purchaseContext.authorizedAvailability ?? null,
-      fulfillmentType: context.purchaseContext.fulfillmentType ?? null,
-      digitalDeliveryExpected: context.purchaseContext.digitalDeliveryExpected
-    },
-    retryPolicy: {
-      createCheckout: "never",
-      completeCheckout: "never"
-    },
-    steps: [
-      {
-        stage: "card",
-        effect: "reuse a VIC-ready Visa, or create/reuse one no-card PENDING Instruction and wait for Portal-owned card binding/VIC",
-        authority: "visaRegistrationSucceeded=true"
-      },
-      {
-        stage: "instruction",
-        effect: "use the exact Portal-activated PENDING Instruction, or select/create one regular Instruction for an already-ready card",
-        amountLimit: context.purchaseContext.totalPrice
-      },
-      {
-        stage: "product_revalidation",
-        effect: "revalidate exact product identity, availability, and authorized price immediately before checkout",
-        readOnly: true
-      },
-      {
-        stage: "checkout",
-        effect: "create_checkout_then_complete_exactly_once",
-        paymentRetry: false
-      },
-      {
-        stage: "delivery",
-        enabled: options2.waitDelivery,
-        readOnly: true,
-        maxWaitSeconds: options2.maxWaitSeconds
-      }
-    ]
-  };
-}
-async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS) {
-  let cards;
-  try {
-    cards = await dependencies.refreshCards();
-  } catch (error) {
-    if (purchaseContext) {
-      return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
-    }
-    return {
-      ready: false,
-      ...workflowFailure("card_refresh", error)
-    };
-  }
-  const selection = selectVisaCard(cards);
-  if (selection.action === "add") {
-    if (!purchaseContext) {
-      return {
-        ready: false,
-        stage: "card",
-        status: "pending_instruction_required",
-        terminal: true,
-        userActionRequired: false,
-        reason: "visa_card_setup_requires_a_frozen_purchase_instruction_context"
-      };
-    }
-    return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
-  }
-  if (selection.action === "select") {
-    return {
-      ready: false,
-      stage: "card_selection",
-      status: "ambiguous",
-      terminal: true,
-      reason: "multiple_enabled_visa_cards_without_one_default",
-      cards: selection.cards.map(safeCard)
-    };
-  }
-  if (selection.action === "unavailable") {
-    return {
-      ready: false,
-      stage: "card_selection",
-      status: "unavailable",
-      terminal: true,
-      reason: selection.reason
-    };
-  }
-  return { ready: true, card: selection.card };
-}
-async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSeconds) {
-  let pending;
-  try {
-    pending = await dependencies.preparePendingInstruction({
-      instructionContext: context.instructionContext,
-      maxWaitSeconds
-    });
-  } catch (error) {
-    return {
-      ready: false,
-      ...workflowFailure("pending_instruction_prepare", error)
-    };
-  }
-  if (pending.state === "CARD_READY") {
-    let cards2;
-    try {
-      cards2 = await dependencies.refreshCards();
-    } catch (error) {
-      return {
-        ready: false,
-        ...workflowFailure("card_ready_race_refresh", error)
-      };
-    }
-    const selection = selectVisaCard(cards2);
-    if (selection.action === "use") {
-      return { ready: true, card: selection.card };
-    }
-    if (selection.action === "select") {
-      return {
-        ready: false,
-        stage: "card_selection",
-        status: "ambiguous",
-        terminal: true,
-        reason: "multiple_enabled_visa_cards_without_one_default",
-        cards: selection.cards.map(safeCard)
-      };
-    }
-    return {
-      ready: false,
-      stage: "card_verification",
-      status: "failed",
-      terminal: true,
-      reason: "pending_endpoint_reported_card_ready_but_refresh_found_no_vic_ready_visa",
-      pendingStatus: pending.instructionStatus,
-      createsAnotherInstruction: false,
-      paymentRetryAllowed: false
-    };
-  }
-  const pendingInstructionId2 = pending.instructionId;
-  const pendingResumeCommand = pending.resumeCommand;
-  if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
-    return {
-      ready: false,
-      stage: "instruction_activation",
-      status: pending.state === "TERMINAL" ? pending.instructionStatus.toLowerCase() : pending.timedOut ? "timeout" : "pending",
-      terminal: pending.state === "TERMINAL",
-      userActionRequired: pending.state === "PENDING",
-      instructionId: pendingInstructionId2 ?? null,
-      instructionStatus: pending.instructionStatus,
-      eventTypes: pending.eventTypes,
-      bindingLinkPresented: pending.bindingLinkPresented,
-      ...pendingResumeCommand ? {
-        resumeCommand: pendingResumeCommand,
-        resumeReadOnly: true
-      } : {},
-      createsAnotherInstruction: false,
-      paymentRetryAllowed: false,
-      ...pending.bindingLinkError ? { bindingLinkError: pending.bindingLinkError } : {},
-      ...pending.waitError ? { waitError: pending.waitError } : {},
-      ...pending.exactGetError ? { exactGetError: pending.exactGetError } : {}
-    };
-  }
-  const paymentInstrumentId = instructionPaymentInstrumentId(pending.instruction);
-  if (!paymentInstrumentId || !pendingInstructionMatchesContext(pending.instruction, paymentInstrumentId, context)) {
-    return {
-      ready: false,
-      stage: "instruction_verification",
-      status: "failed",
-      terminal: true,
-      reason: "activated_pending_instruction_failed_exact_context_verification",
-      instructionId: pendingInstructionId2,
-      paymentInstrumentId: paymentInstrumentId ?? null,
-      resumeCommand: pendingResumeCommand,
-      resumeReadOnly: true,
-      createsAnotherInstruction: false,
-      paymentRetryAllowed: false
-    };
-  }
-  let cards;
-  try {
-    cards = await dependencies.refreshCards();
-  } catch (error) {
-    return {
-      ready: false,
-      ...workflowFailure("card_post_activation_refresh", error, {
-        instructionId: pendingInstructionId2,
-        paymentInstrumentId,
-        resumeCommand: pendingResumeCommand,
-        resumeReadOnly: true,
-        createsAnotherInstruction: false,
-        paymentRetryAllowed: false
-      })
-    };
-  }
-  const card = cards.find((candidate) => candidate.paymentInstrumentId === paymentInstrumentId);
-  if (!card || cardDisabled(card) || !cardIsVisa(card) || !cardVicReady(card)) {
-    return {
-      ready: false,
-      stage: "card_verification",
-      status: "failed",
-      terminal: true,
-      reason: "activated_pending_instruction_card_not_vic_ready",
-      instructionId: pendingInstructionId2,
-      paymentInstrumentId,
-      card: card ? safeCard(card) : null,
-      resumeCommand: pendingResumeCommand,
-      resumeReadOnly: true,
-      createsAnotherInstruction: false,
-      paymentRetryAllowed: false
-    };
-  }
-  return {
-    ready: true,
-    card,
-    instruction: {
-      instructionId: pendingInstructionId2,
-      source: "pending_activated",
-      detail: pending.instruction
-    }
-  };
-}
-function selectVisaCard(cards, requestedPaymentInstrumentId) {
-  const enabled = cards.filter((card) => !cardDisabled(card));
-  if (requestedPaymentInstrumentId) {
-    const selected = enabled.find((card) => card.paymentInstrumentId === requestedPaymentInstrumentId);
-    if (!selected) {
-      return { action: "unavailable", reason: "requested_payment_instrument_not_found" };
-    }
-    return cardIsVisa(selected) && cardVicReady(selected) ? { action: "use", card: selected } : {
-      action: "unavailable",
-      reason: cardIsVisa(selected) ? "requested_payment_instrument_not_vic_ready" : "requested_payment_instrument_not_visa"
-    };
-  }
-  const visaCards = enabled.filter(cardIsVisa);
-  const readyCards = visaCards.filter(cardVicReady);
-  if (readyCards.length === 0) {
-    return { action: "add" };
-  }
-  const defaultCards = readyCards.filter(cardDefault);
-  if (defaultCards.length === 1) {
-    return { action: "use", card: defaultCards[0] };
-  }
-  if (readyCards.length === 1) {
-    return { action: "use", card: readyCards[0] };
-  }
-  return { action: "select", cards: readyCards };
-}
-async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
-  let listed;
-  try {
-    listed = await dependencies.listInstructions(paymentInstrumentId);
-  } catch (error) {
-    return { result: workflowFailure("instruction_list", error) };
-  }
-  const selection = selectActiveInstruction(listed, paymentInstrumentId, context, Date.now());
-  if (selection.kind === "ambiguous") {
-    return {
-      result: {
-        stage: "instruction_selection",
-        status: "ambiguous",
-        terminal: true,
-        reason: selection.reason,
-        instructionIds: selection.instructionIds
-      }
-    };
-  }
-  if (selection.kind === "selected") {
-    const active = selection.candidate;
-    let verified;
-    try {
-      verified = await dependencies.getInstruction(active.instructionId);
-    } catch (error) {
-      return {
-        result: workflowFailure("instruction_active_verify", error, {
-          instructionId: active.instructionId,
-          resumeCommand: instructionGetResumeCommand(active.instructionId)
-        })
-      };
-    }
-    const exact = verified ? activeInstructionCandidate(verified, paymentInstrumentId, context, Date.now()) : void 0;
-    if (!exact || exact.instructionId !== active.instructionId || exact.amountMinorUnits !== active.amountMinorUnits || exact.createdAtMs !== active.createdAtMs) {
-      return {
-        result: {
-          stage: "instruction_selection",
-          status: "stale",
-          terminal: true,
-          reason: "selected_instruction_failed_exact_verification",
-          instructionId: active.instructionId,
-          resumeCommand: instructionGetResumeCommand(active.instructionId)
-        }
-      };
-    }
-    return {
-      instruction: {
-        instructionId: active.instructionId,
-        source: "existing_active",
-        detail: exact.detail,
-        amountLimit: active.amountLimit
-      },
-      result: {}
-    };
-  }
-  let created;
-  try {
-    created = await dependencies.createInstruction({
-      paymentInstrumentId,
-      instructionContext: context.instructionContext
-    });
-  } catch (error) {
-    return {
-      result: workflowFailure("instruction_create", error, {
-        resumeCommand: `${VISA_EXECUTABLE_NAME} instruction list --payment-instrument-id ${quoteShell(paymentInstrumentId)} --format json`
-      })
-    };
-  }
-  const authorized = await authorizeInstruction(dependencies, created.instructionId, paymentInstrumentId, context, maxWaitSeconds);
-  return authorized.instruction ? { instruction: authorized.instruction, result: {} } : { result: authorized.result };
-}
-async function authorizeInstruction(dependencies, instructionIdValue, paymentInstrumentId, context, maxWaitSeconds) {
-  const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId, instructionIdValue);
-  let browserLaunch;
-  try {
-    browserLaunch = await dependencies.openUserAction(passkeyUrl, "instruction_authorization");
-  } catch (error) {
-    return {
-      result: workflowFailure("instruction_authorization", error, {
-        instructionId: instructionIdValue,
-        paymentInstrumentId,
-        manualOpenUrl: passkeyUrl,
-        resumeCommand: instructionGetResumeCommand(instructionIdValue)
-      })
-    };
-  }
-  let wait;
-  try {
-    wait = await dependencies.waitForEvents({
-      type: "purchase_instruction.activated",
-      maxWaitSeconds,
-      expectedResource: {
-        instructionId: instructionIdValue,
-        purchaseInstructionId: instructionIdValue
-      }
-    });
-  } catch (error) {
-    return {
-      result: workflowFailure("instruction_activation_wait", error, {
-        instructionId: instructionIdValue,
-        ...browserActionOutput(passkeyUrl, browserLaunch),
-        resumeCommand: instructionGetResumeCommand(instructionIdValue)
-      })
-    };
-  }
-  let instruction;
-  try {
-    instruction = await dependencies.getInstruction(instructionIdValue);
-  } catch (error) {
-    return {
-      result: workflowFailure("instruction_final_get", error, {
-        instructionId: instructionIdValue,
-        resumeCommand: instructionGetResumeCommand(instructionIdValue)
-      })
-    };
-  }
-  if (instruction && instructionId(instruction) === instructionIdValue && createdInstructionMatchesContext(instruction, paymentInstrumentId, context)) {
-    return {
-      instruction: {
-        instructionId: instructionIdValue,
-        source: "created",
-        detail: instruction
-      },
-      result: {}
-    };
-  }
-  return {
-    result: {
-      stage: "instruction_activation",
-      status: wait.timedOut ? "timeout" : "pending",
-      terminal: false,
-      userActionRequired: true,
-      instructionId: instructionIdValue,
-      paymentInstrumentId,
-      ...browserActionOutput(passkeyUrl, browserLaunch),
-      resumeCommand: instructionGetResumeCommand(instructionIdValue)
-    }
-  };
-}
-function browserActionOutput(url, browserLaunch) {
-  return {
-    browserLaunch,
-    ...browserLaunch.status === "launched" ? {} : { manualOpenUrl: url }
-  };
-}
-function selectActiveInstruction(payload, paymentInstrumentId, context, nowMs) {
-  const candidates = instructionArray(payload).map((instruction) => activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs)).filter((candidate) => candidate !== void 0);
-  if (candidates.length === 0) {
-    return { kind: "none" };
-  }
-  const minimumAmount = candidates.reduce((minimum, candidate) => candidate.amountMinorUnits < minimum ? candidate.amountMinorUnits : minimum, candidates[0].amountMinorUnits);
-  const closest = candidates.filter((candidate) => candidate.amountMinorUnits === minimumAmount);
-  if (closest.some((candidate) => candidate.createdAtMs === void 0)) {
-    return {
-      kind: "ambiguous",
-      reason: "best_active_instruction_missing_trusted_creation_time",
-      instructionIds: closest.map((candidate) => candidate.instructionId).sort()
-    };
-  }
-  const latestCreatedAt = Math.max(...closest.map((candidate) => candidate.createdAtMs));
-  const latest = closest.filter((candidate) => candidate.createdAtMs === latestCreatedAt);
-  if (latest.length !== 1) {
-    return {
-      kind: "ambiguous",
-      reason: "best_active_instruction_creation_time_tied",
-      instructionIds: latest.map((candidate) => candidate.instructionId).sort()
-    };
-  }
-  return {
-    kind: "selected",
-    candidate: latest[0]
-  };
-}
-function activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs) {
-  if (instructionStatus2(instruction) !== "ACTIVE") {
-    return void 0;
-  }
-  const observedInstructionId = instructionId(instruction);
-  const observedPaymentInstrumentId = instructionPaymentInstrumentId(instruction);
-  if (!observedInstructionId || observedPaymentInstrumentId !== paymentInstrumentId || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
-    return void 0;
-  }
-  const expectedCurrency = normalizedText4(context.purchaseContext.currency);
-  const instructionCurrency = optionalNormalized(instruction.currencyCode ?? instruction.currency);
-  if (instructionCurrency && instructionCurrency !== expectedCurrency) {
-    return void 0;
-  }
-  const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
-  const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
-    const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText7(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText4(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText4(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText4(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
-      return [];
-    }
-    return [{
-      amountLimit: minorUnitsAmountText(amountMinorUnits, context.purchaseContext.currency),
-      amountMinorUnits
-    }];
-  });
-  if (eligibleMandates.length === 0) {
-    return void 0;
-  }
-  eligibleMandates.sort((left, right) => left.amountMinorUnits < right.amountMinorUnits ? -1 : left.amountMinorUnits > right.amountMinorUnits ? 1 : 0);
-  const bestMandate = eligibleMandates[0];
-  const createdAtMs = instructionCreatedAtMs(instruction);
-  return {
-    instructionId: observedInstructionId,
-    amountLimit: bestMandate.amountLimit,
-    amountMinorUnits: bestMandate.amountMinorUnits,
-    ...createdAtMs !== void 0 ? { createdAtMs } : {},
-    detail: instruction
-  };
-}
-function createdInstructionMatchesContext(instruction, paymentInstrumentId, context) {
-  const nowMs = Date.now();
-  if (instructionStatus2(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || normalizedText4(instruction.title) !== normalizedText4(context.instructionContext.title) || !isFutureTimestamp(instruction.effectiveUntilTime, nowMs)) {
-    return false;
-  }
-  const expectedMandates = context.instructionContext.mandates;
-  const observedMandates = mandateArray(instruction);
-  return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
-}
-function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context) {
-  const expected = context.instructionContext;
-  const nowMs = Date.now();
-  const instructionExpiryMs = parsedFutureTimestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time, nowMs);
-  const observedRecurring = normalizedBoolean(instruction.isRecurring ?? instruction.is_recurring);
-  if (instructionStatus2(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
-    return false;
-  }
-  const expectedMandates = expected.mandates;
-  const observedMandates = mandateArray(instruction);
-  if (observedMandates.length !== expectedMandates.length) {
-    return false;
-  }
-  const expectedFingerprints = expectedMandates.map((mandate) => pendingExpectedMandateFingerprint(mandate, expected.isRecurring === true));
-  const observedFingerprints = observedMandates.map((mandate) => pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs));
-  if (expectedFingerprints.some((value) => value === void 0) || observedFingerprints.some((value) => value === void 0)) {
-    return false;
-  }
-  const sortedExpected = expectedFingerprints.sort();
-  const sortedObserved = observedFingerprints.sort();
-  return sortedExpected.every((value, index) => value === sortedObserved[index]);
-}
-var PENDING_MANDATE_CONTEXT_FIELDS = /* @__PURE__ */ new Set([
-  "title",
-  "description",
-  "amountLimit",
-  "currencyCode",
-  "merchantCategory",
-  "merchantCategoryCode",
-  "preferredMerchantName",
-  "effectiveUntilTime",
-  "recurringFrequency",
-  "extra"
-]);
-function pendingExpectedMandateFingerprint(mandate, isRecurring) {
-  if (Object.keys(mandate).some((field) => !PENDING_MANDATE_CONTEXT_FIELDS.has(field))) {
-    return void 0;
-  }
-  const recurringFrequency = optionalNormalized(mandate.recurringFrequency);
-  if (isRecurring !== (recurringFrequency !== void 0) || !isStructuredMapOrAbsent(mandate.extra)) {
-    return void 0;
-  }
-  return stableJson({
-    title: exactText(mandate.title),
-    description: exactText(mandate.description),
-    amountLimit: comparableAmount2(mandate.amountLimit),
-    currencyCode: normalizedText4(mandate.currencyCode),
-    merchantCategoryCode: normalizedText4(mandate.merchantCategoryCode),
-    preferredMerchantName: optionalExactText(mandate.preferredMerchantName) ?? null,
-    merchantCategory: optionalExactText(mandate.merchantCategory) ?? null,
-    recurringFrequency: recurringFrequency ?? null,
-    extra: canonicalOptionalMap(mandate.extra, false)
-  });
-}
-function pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs) {
-  const mandateExpiryMs = parsedFutureTimestamp(mandate.effectiveUntilTime ?? mandate.effective_until_time, nowMs);
-  if (mandateExpiryMs === void 0 || mandateExpiryMs !== instructionExpiryMs || !zeroLike(mandate.reserveStatus ?? mandate.reserve_status) || !isStructuredMapOrAbsent(mandate.extra)) {
-    return void 0;
-  }
-  return stableJson({
-    title: exactText(mandate.title),
-    description: exactText(mandate.description),
-    amountLimit: comparableAmount2(mandate.amountLimit),
-    currencyCode: normalizedText4(mandate.currencyCode ?? mandate.currency),
-    merchantCategoryCode: normalizedText4(mandate.merchantCategoryCode ?? mandate.merchant_category_code),
-    preferredMerchantName: optionalExactText(mandate.preferredMerchantName ?? mandate.preferred_merchant_name) ?? null,
-    merchantCategory: optionalExactText(mandate.merchantCategory ?? mandate.merchant_category) ?? null,
-    recurringFrequency: optionalNormalized(mandate.recurringFrequency ?? mandate.recurring_frequency) ?? null,
-    extra: canonicalOptionalMap(mandate.extra, false)
-  });
-}
-function merchantScopeMatchesContext(candidate, context) {
-  return context.instructionContext.mandates.some((expected) => optionalNormalized(candidate.preferredMerchantName ?? candidate.preferred_merchant_name) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory ?? candidate.merchant_category) === optionalNormalized(expected.merchantCategory));
-}
-function mandatesEqual(candidate, expected) {
-  return normalizedText4(candidate.title) === normalizedText4(expected.title) && normalizedText4(candidate.description) === normalizedText4(expected.description) && comparableAmount2(candidate.amountLimit) === comparableAmount2(expected.amountLimit) && normalizedText4(candidate.currencyCode ?? candidate.currency) === normalizedText4(expected.currencyCode) && normalizedText4(candidate.merchantCategoryCode ?? candidate.merchant_category_code) === normalizedText4(expected.merchantCategoryCode) && optionalNormalized(candidate.preferredMerchantName) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory) === optionalNormalized(expected.merchantCategory);
-}
-function instructionArray(payload) {
-  if (Array.isArray(payload)) {
-    return payload.filter(isRecord28);
-  }
-  if (!isRecord28(payload)) {
-    return [];
-  }
-  for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
-    if (Array.isArray(payload[key])) {
-      return payload[key].filter(isRecord28);
-    }
-  }
-  return [];
-}
-function mandateArray(instruction) {
-  for (const key of ["mandates", "mandateList", "mandateVoList"]) {
-    if (Array.isArray(instruction[key])) {
-      return instruction[key].filter(isRecord28);
-    }
-  }
-  return [];
-}
-function instructionId(instruction) {
-  return optionalText7(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
-}
-function instructionPaymentInstrumentId(instruction) {
-  return optionalText7(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
-}
 function instructionStatus2(instruction) {
-  return normalizedText4(instruction.status ?? instruction.state);
-}
-function cardIsVisa(card) {
-  const brand = optionalText7(card.cardScheme) ?? optionalText7(card.cardBrand) ?? optionalText7(card.brand) ?? optionalText7(card.network) ?? "";
-  return brand.toUpperCase() === "VISA";
-}
-function cardVicReady(card) {
-  return card.visaRegistrationSucceeded === true;
-}
-function cardDisabled(card) {
-  return card.isDisabled === true || card.is_disabled === true;
-}
-function cardDefault(card) {
-  return card.isDefault === true || card.is_default === true || card.default === true;
-}
-function safeCard(card) {
-  return {
-    paymentInstrumentId: card.paymentInstrumentId,
-    cardScheme: optionalText7(card.cardScheme) ?? optionalText7(card.cardBrand) ?? null,
-    cardLastFour: optionalText7(card.cardLastFour) ?? optionalText7(card.card_last_four) ?? null,
-    isDefault: cardDefault(card),
-    visaRegistrationSucceeded: cardVicReady(card)
-  };
-}
-function publicInstruction(instruction) {
-  return {
-    instructionId: instruction.instructionId,
-    source: instruction.source,
-    status: instructionStatus2(instruction.detail),
-    ...instruction.amountLimit ? { amountLimit: instruction.amountLimit } : {}
-  };
-}
-function instructionGetResumeCommand(instructionIdValue) {
-  return `${VISA_EXECUTABLE_NAME} instruction get --purchase-instruction-id ${quoteShell(instructionIdValue)} --format json`;
-}
-function workflowFailure(stage, error, detail = {}) {
-  const value = error instanceof Error ? error : new Error(String(error));
-  return {
-    stage,
-    status: "failed",
-    terminal: true,
-    ...detail,
-    error: {
-      name: value.name,
-      message: renderCliCommandText(value.message, VISA_EXECUTABLE_NAME)
-    }
-  };
-}
-function quoteShell(value) {
-  return /^[A-Za-z0-9._:/=-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-function comparableAmount2(value) {
-  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!/^\d{1,18}(?:\.\d{1,2})?$/u.test(text)) {
-    return "";
-  }
-  const [integerPart = "0", fractionPart = ""] = text.split(".");
-  return `${BigInt(integerPart).toString()}.${fractionPart.padEnd(2, "0")}`;
-}
-function candidateAmountMinorUnits(value, currency) {
-  const text = typeof value === "number" && Number.isFinite(value) ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!text) {
-    return void 0;
-  }
-  try {
-    return majorAmountMinorUnits(text, currency);
-  } catch {
-    return void 0;
-  }
-}
-function minorUnitsAmountText(value, currency) {
-  return minorUnitsMajorAmount(value, currency);
-}
-function instructionCreatedAtMs(instruction) {
-  const values = [
-    optionalText7(instruction.createdAt),
-    optionalText7(instruction.createTime)
-  ].filter((value) => value !== void 0);
-  if (values.length === 0) {
-    return void 0;
-  }
-  const timestamps = values.map(parseTimestamp);
-  if (timestamps.some((value) => value === void 0) || new Set(timestamps).size !== 1) {
-    return void 0;
-  }
-  return timestamps[0];
-}
-function optionalNormalized(value) {
-  return optionalText7(value)?.normalize("NFKC").toUpperCase();
-}
-function optionalExactText(value) {
-  return optionalText7(value)?.normalize("NFKC");
-}
-function exactText(value) {
-  return optionalExactText(value) ?? "";
-}
-function normalizedText4(value) {
-  return optionalNormalized(value) ?? "";
+  return optionalText7(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
 }
 function optionalText7(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function isFutureTimestamp(value, nowMs) {
-  const text = optionalText7(value);
-  if (!text) {
-    return false;
-  }
-  const parsed = parseTimestamp(text);
-  return parsed !== void 0 && parsed > nowMs;
-}
-function parsedFutureTimestamp(value, nowMs) {
-  const text = optionalText7(value);
-  if (!text) {
-    return void 0;
-  }
-  const parsed = parseTimestamp(text);
-  return parsed !== void 0 && parsed > nowMs ? parsed : void 0;
-}
-function mandateIsUnexpired(mandate, instruction, nowMs) {
-  const mandateExpiry = optionalText7(mandate.effectiveUntilTime);
-  return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
-}
-function parseTimestamp(value) {
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(value) ? `${value.replace(" ", "T")}Z` : value;
-  const parsed = Date.parse(normalized);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function oneTimeInstruction(instruction) {
-  const value = instruction.isRecurring;
-  return !(value === true || value === 1 || value === "1" || normalizedText4(value) === "TRUE");
-}
-function zeroLike(value) {
-  return value === 0 || value === "0" || value === false;
-}
-function normalizedBoolean(value) {
-  if (value === true || value === 1 || value === "1") {
-    return true;
-  }
-  if (value === false || value === 0 || value === "0" || normalizedText4(value) === "FALSE") {
-    return false;
-  }
-  if (normalizedText4(value) === "TRUE") {
-    return true;
-  }
-  return void 0;
-}
-function optionalStructuredMapEquals(expected, observed, dropNullObjectFields) {
-  if (!isStructuredMapOrAbsent(expected) || !isStructuredMapOrAbsent(observed)) {
-    return false;
-  }
-  return stableJson(canonicalOptionalMap(expected, dropNullObjectFields)) === stableJson(canonicalOptionalMap(observed, dropNullObjectFields));
-}
-function isStructuredMapOrAbsent(value) {
-  if (value === void 0 || value === null) {
-    return true;
-  }
-  if (isRecord28(value)) {
-    return true;
-  }
-  if (typeof value !== "string" || !value.trim()) {
-    return false;
-  }
-  try {
-    return isRecord28(JSON.parse(value));
-  } catch {
-    return false;
-  }
-}
-function canonicalOptionalMap(value, dropNullObjectFields) {
-  const record = structuredMap(value);
-  if (!record) {
-    return null;
-  }
-  const canonical = canonicalStructuredValue(record, dropNullObjectFields);
-  return Object.keys(canonical).length === 0 ? null : canonical;
-}
-function structuredMap(value) {
-  if (isRecord28(value)) {
-    return value;
-  }
-  if (typeof value !== "string" || !value.trim()) {
-    return void 0;
-  }
-  try {
-    const parsed = JSON.parse(value);
-    return isRecord28(parsed) ? parsed : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function canonicalStructuredValue(value, dropNullObjectFields) {
-  if (Array.isArray(value)) {
-    return value.map((item) => canonicalStructuredValue(item, dropNullObjectFields));
-  }
-  if (isRecord28(value)) {
-    return Object.fromEntries(Object.keys(value).sort().flatMap((key) => {
-      const entry = value[key];
-      if (entry === void 0 || dropNullObjectFields && entry === null) {
-        return [];
-      }
-      return [[
-        key,
-        canonicalStructuredValue(entry, dropNullObjectFields)
-      ]];
-    }));
-  }
-  return typeof value === "string" ? value.normalize("NFKC") : value;
-}
-function stableJson(value) {
-  return JSON.stringify(value);
-}
-function isRecord28(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 
 // dist/visa/help.js
@@ -32928,6 +33074,11 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
+  A mode=selected_product purchaseContext returned by recommend-products is accepted unchanged
+  by both commerce-login and commerce-run. This path supports one product with quantity 1,
+  generates Instruction fields from the verified product, and never requires Agent-authored
+  Program fields. Missing optional MCC is omitted; supplied invalid MCC is rejected.
+
   The JSON object contains the selected environment, expected.amount/currency, and the complete
   frozen instructionContext. expected.amount is the exact purchase total in major currency units.
   Every mandate amountLimit and currencyCode must equal those expected values before config,
@@ -32941,13 +33092,12 @@ Behavior:
   config or touches Tokens or the network. Dry-run performs no login inspection, config mutation,
   browser launch, or network request.
 
-  Live execution first checks the local Visa Benefit login state. A ready login returns
-  CONTINUE_REGULAR_INSTRUCTION_FLOW with instructionId=null without restarting OAuth or guessing a
-  historical Quick Instruction. Otherwise it runs one foreground Visa Benefit login and sends the
-  exact instructionContext to the authorization request. Only a REGISTER response with
-  customerCreated=true, activationDriver=PORTAL_AUTO_CARD_SETUP, and pendingInstructionId starts
-  the bounded Quick wait. The CLI keeps running for up to 300 seconds, using the exact activation
-  event only as a wake-up, then exact-GETs that same ID. LOGIN, old responses, or missing fields
+  Live execution first checks the local Visa Benefit login state. A ready login checks card
+  readiness and prepares/reuses PENDING only when no eligible VIC-ready Visa exists, without
+  restarting OAuth. Otherwise it runs one foreground Visa Benefit login with the exact context.
+  A returned pendingInstructionId is followed for both LOGIN and REGISTER, without depending on
+  customerCreated or activationDriver. The CLI waits up to 300 seconds, using the activation
+  event only as a wake-up, then exact-GETs that same ID. Responses without an Instruction ID
   continue the regular Instruction flow without polling. Only status=ACTIVE returns ready=true and
   allows the purchase flow to continue; a remaining PENDING Instruction returns ready=false
   without opening another page.
@@ -33041,9 +33191,9 @@ Behavior:
   ready and exact-revalidate the frozen selected product. catalog_purchase does not perform or
   repeat Visa benefit discovery. Both modes then reuse one VIC-ready Visa card. When none exists,
   commerce-run
-  creates/reuses one no-card PENDING Instruction first, prints the existing Agent Portal card
-  binding link to stderr only after exact-ID Event Hub readiness and identity validation, without
-  opening it, and keeps waiting for activation of that exact ID.
+  creates/reuses one no-card PENDING Instruction first, provides an exact-purchase Portal
+  continuation after Event Hub readiness, and waits without requesting another Bind Card link
+  or opening a separate VIC page.
   Portal owns card binding, 3DS, and VIC. After activation, commerce-run exact-GETs the same
   Instruction, refreshes cards, and requires the attached paymentInstrumentId to be a same-card
   Visa with visaRegistrationSucceeded=true before continuing.
@@ -34164,10 +34314,10 @@ async function resolveVisaOfferProducts(context, offers, environment, language, 
   };
 }
 async function resolveVisaOfferProduct(context, offer, index, environment, language, merchants, query) {
-  const record = recommendationRecord(offer);
-  const code = recommendationProgramCode(record);
-  const title = recommendationOptionalString(record.title);
-  const url = recommendationOfferUrl(record);
+  const record2 = recommendationRecord(offer);
+  const code = recommendationProgramCode(record2);
+  const title = recommendationOptionalString(record2.title);
+  const url = recommendationOfferUrl(record2);
   if (!code || !title) {
     return { index, offer, routed: false, matched: false };
   }
@@ -34221,6 +34371,18 @@ async function resolveVisaOfferProduct(context, offer, index, environment, langu
     };
     const productResult = await runVisaProductSearch(productInput, dependencies);
     const productResults = await collectVerifiedVisaProductResults(productResult, productInput, dependencies);
+    const merchant = merchants.find((item) => item.merchant_id === internal.merchantId);
+    const ext = recommendationRecord(merchant?.ext);
+    const commerce = recommendationRecord(record2.commerce);
+    const configuredMcc = ext.merchantCategoryCode ?? ext.merchant_category_code ?? commerce.merchantCategoryCode ?? record2.merchantCategoryCode;
+    const digitalDeliveryExpected = visaBenefitCatalogProviderRoutes(environment, API_BASE_URLS[environment]).some((provider) => provider.merchantId === internal.merchantId);
+    for (const product of productResults) {
+      try {
+        product.purchaseContext = selectedProductPurchaseSnapshot(product, environment, query, configuredMcc, digitalDeliveryExpected);
+      } catch (error) {
+        product.purchaseContextUnavailable = safeVisaProductFailure(error);
+      }
+    }
     return {
       index,
       offer,
@@ -34889,6 +35051,10 @@ function mergeMatchedProduct(productsByKey, result, program2) {
     const programs = Array.isArray(existing.matchedPrograms) ? existing.matchedPrograms : [];
     programs.push(program2);
     existing.matchedPrograms = programs;
+    if (existing.purchaseContext && result.purchaseContext && JSON.stringify(existing.purchaseContext) !== JSON.stringify(result.purchaseContext)) {
+      delete existing.purchaseContext;
+      existing.purchaseContextUnavailable = "Conflicting purchase facts for the same merchant and product";
+    }
     return;
   }
   productsByKey.set(key, {
@@ -34898,6 +35064,8 @@ function mergeMatchedProduct(productsByKey, result, program2) {
     ...merchantId ? { merchantId } : {},
     ...result.endpoint ? { endpoint: result.endpoint } : {},
     product,
+    ...result.purchaseContext ? { purchaseContext: result.purchaseContext } : {},
+    ...result.purchaseContextUnavailable ? { purchaseContextUnavailable: result.purchaseContextUnavailable } : {},
     matchedPrograms: [program2]
   });
 }

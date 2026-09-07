@@ -79,6 +79,48 @@ function versionAtLeast(version, minimum) {
   return true;
 }
 
+test('one CLI-owned single-product context works for both aggregates without Program or MCC input', () => {
+  const context = {
+    mode: 'selected_product',
+    environment: 'uat',
+    requestText: 'Buy this Watsons gift card',
+    selectedProduct: {
+      state: 'PRODUCT_VERIFIED',
+      action: 'CONTINUE_TO_COMMERCE_LOGIN',
+      productResolution: 'internal-ucp-catalog',
+      merchantId: 'merchant_fixture',
+      endpoint: 'https://uat-api.clinkbill.com/agent/ucp/merchant_fixture',
+      digitalDeliveryExpected: true,
+      product: {
+        itemId: 'watsons-fixture',
+        sourceTitle: 'Watsons HKD 100 gift card',
+        merchantName: 'Merchant Fixture',
+        merchantUrl: 'https://merchant.example/',
+        quantity: 1,
+        unitPriceMajor: '1',
+        totalAmountMajor: '1',
+        currency: 'USD',
+        availability: 'in_stock',
+      },
+    },
+  };
+  for (const command of ['commerce-login', 'commerce-run']) {
+    const result = run([
+      'visa', command, '--context', JSON.stringify(context),
+      '--dry-run', '--format', 'json',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).data.sideEffects, false);
+  }
+  context.selectedProduct.product.quantity = 2;
+  const rejected = run([
+    'visa', 'commerce-run', '--context', JSON.stringify(context),
+    '--dry-run', '--format', 'json',
+  ]);
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stderr, /exactly one item with quantity 1/u);
+});
+
 test('launchers and Visa Edition provenance are exact', async () => {
   assert.ok(((await stat(cli)).mode & 0o111) !== 0);
   assert.match(await readFile(cli, 'utf8'), /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
@@ -87,11 +129,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.56');
+  assert.equal(vendorPackage.version, '0.2.57');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c92fd99b4b4b268dc23af8030e2bb6b2a8386477',
+    'cd9797ed83e0bf9cf6722ce518f1485d97b92a23',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',

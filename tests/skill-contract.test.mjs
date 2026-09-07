@@ -37,13 +37,13 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.72');
+  assert.equal(packageJson.version, '0.1.73');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
   });
-  assert.match(skill, /Visa Skill 0\.1\.72/u);
-  assert.match(skill, /version: "0\.1\.72"/u);
+  assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
+  assert.ok(skill.includes(`version: "${packageJson.version}"`));
   assert.ok(
     readme.includes(
       `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
@@ -568,7 +568,7 @@ test('direct shopping remains Visa-first without broad or Catalog-only routing',
 
   assert.match(
     routing,
-    /Every product, category, merchant, buy\/order\/checkout, and Benefit request[\s\S]*same Visa-first aggregate[\s\S]*never runs broad Catalog/iu,
+    /Every initial product, category, merchant, buy\/order\/checkout, and Benefit request[\s\S]*same Visa-first aggregate[\s\S]*never runs broad Catalog/iu,
   );
   assert.match(
     routing,
@@ -603,70 +603,32 @@ test('internal acceptance labels never leak into Skill-facing instructions', () 
   );
 });
 
-test('new Program purchase contexts omit program.code', () => {
-  const programPurchase = skill.slice(
-    skill.indexOf('Build one frozen purchase context from the same Program'),
-    skill.indexOf('Run exactly once in the foreground'),
-  );
-  assert.doesNotMatch(programPurchase, /"program"\s*:/u);
-  assert.doesNotMatch(programPurchase, /"programCode"\s*:/u);
-  assert.match(
-    programPurchase,
-    /Do not include a top-level `program` object or `metadata\.programCode`[\s\S]*compatibility/iu,
-  );
-  assert.match(
-    skill,
-    /New `mode=purchase` contexts[\s\S]*omit[\s\S]*top-level `program`[\s\S]*`metadata\.programCode`/iu,
-  );
-  assert.doesNotMatch(skill, /mode=catalog_purchase/u);
-});
-
-test('Visa Program MCC is authoritative-first with bounded inference', () => {
+test('purchase uses a generated snapshot without Agent-authored Program or Instruction fields', () => {
   const section = skill.slice(
     skill.indexOf('## Visa Purchase Fast Path'),
     skill.indexOf('### Visa Preparation'),
   );
+  assert.match(section, /purchaseContext` unchanged[\s\S]*mode=selected_product/u);
+  assert.match(section, /Do not build an Instruction context, infer MCC, copy Program fields/u);
+  assert.match(section, /purchaseContextUnavailable/u);
+  assert.doesNotMatch(section, /```json|program-currency|selected-program-title/u);
+  assert.match(agent, /same file in commerce-login and commerce-run/u);
+});
 
-  assert.match(
-    section,
-    /Resolve one four-digit MCC with this strict priority[\s\S]*valid Program-provided `commerce\.merchantCategoryCode` unchanged/iu,
-  );
-  assert.match(
-    section,
-    /Program omits MCC[\s\S]*exact frozen[\s\S]*Program[\s\S]*merchant ID[\s\S]*merchant URL[\s\S]*product title\/source[\s\S]*fulfillment context[\s\S]*high-confidence/iu,
-  );
-  assert.match(
-    section,
-    /Program `P2026080006`[\s\S]*merchant-list[\s\S]*`ext\.visa_program_id`[\s\S]*mcht_ftmse61a6az0[\s\S]*Wellcome supermarket gift-card[\s\S]*MCC `5411`/iu,
-  );
-  assert.match(
-    section,
-    /invalid or conflicting Program MCC[\s\S]*title-only guess[\s\S]*broad[\s\S]*common-MCC fallback[\s\S]*low-confidence[\s\S]*stops before login/iu,
-  );
-  assert.match(
-    section,
-    /Freeze the resolved MCC once[\s\S]*login[\s\S]*Instruction[\s\S]*purchase context[\s\S]*Checkout/iu,
-  );
-  assert.match(
-    section,
-    /"merchantCategoryCode": "<resolved-four-digit-mcc>"/u,
-  );
-  assert.doesNotMatch(
-    section,
-    /Missing, invalid, or ambiguous MCC stops[\s\S]*do not infer it from Catalog data/iu,
-  );
-  assert.match(
-    agent,
-    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*Program P2026080006[\s\S]*ext\.visa_program_id[\s\S]*mcht_ftmse61a6az0[\s\S]*MCC 5411[\s\S]*Freeze the\s+resolved MCC/iu,
-  );
+test('short purchase replies bind the unchanged order without restatement', () => {
+  for (const reply of ['买这个', '帮我下单', '确认购买', 'buy this', 'confirm purchase']) {
+    assert.ok(skill.includes(reply), reply);
+    assert.ok(agent.includes(reply), reply);
+  }
+  assert.match(skill, /one exact product and its displayed order facts are unchanged/u);
+  assert.match(skill, /Never require the user\s+to repeat the full order or follow a confirmation template/u);
+  assert.match(skill, /genuinely missing or materially changed facts/u);
+  assert.doesNotMatch(skill, /recommend-products -> ask to order/u);
+  assert.match(skill, /never silently reduce the quantity\s+or split the purchase/u);
+  assert.match(skill, /one product with quantity 1 only/u);
 });
 
 test('Visa fast path preserves aggregate order and never decomposes purchase', () => {
-  const route = skill.indexOf(
-    'visa recommend-products -> ask to order ->',
-  );
-  assert.ok(route >= 0);
-
   const section = skill.slice(
     skill.indexOf('## Visa Purchase Fast Path'),
     skill.indexOf('### Visa Preparation'),
@@ -686,40 +648,12 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
     agent,
     /explicitly authorizes buy, order, or checkout[\s\S]*directly to commerce-login[\s\S]*never run or refresh visa detail/iu,
   );
-  assert.match(
-    section,
-    /Program and Catalog identify the same merchant and product/iu,
-  );
-  assert.match(
-    section,
-    /productResolution=internal-ucp-catalog[\s\S]*external-page product is not\s+orderable/iu,
-  );
-  assert.match(
-    section,
-    /Catalog total and currency exactly equal[\s\S]*recommendation-backed/iu,
-  );
-  assert.match(
-    section,
-    /login context[\s\S]*"expected"[\s\S]*"amount": "<product\.totalAmountMajor>"[\s\S]*"currency": "<verified-currency>"[\s\S]*"amountLimit": "<product\.totalAmountMajor>"/iu,
-  );
-  assert.match(
-    section,
-    /Set login\/purchase `expected\.amount`[\s\S]*every `amountLimit`[\s\S]*`product\.totalAmountMajor`[\s\S]*Never copy `unitPriceMinor`[\s\S]*`totalAmountMinor`[\s\S]*quantity >1[\s\S]*`unitPriceMajor`/iu,
-  );
-  assert.match(
-    section,
-    /`totalAmountMinor=100`[\s\S]*`totalAmountMajor="1"`[\s\S]*all three major-unit fields[\s\S]*`"1"`/iu,
-  );
-  assert.doesNotMatch(section, /<exact-program-price>/u);
-  assert.match(
-    agent,
-    /Every commerce-login context includes expected\.amount[\s\S]*expected\.currency[\s\S]*product\.totalAmountMajor[\s\S]*every amountLimit[\s\S]*never copy unitPriceMinor[\s\S]*totalAmountMinor[\s\S]*quantity above 1[\s\S]*never use unitPriceMajor/iu,
-  );
+  assert.match(section, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN[\s\S]*productResolution=internal-ucp-catalog/u);
+  assert.equal((section.match(/--context-file <purchase-context\.json>/gu) ?? []).length, 2);
+  assert.match(section, /接下来可能需要登录。/u);
+  assert.match(section, /接下来可能需要你完成授权，请在页面中继续。/u);
+  assert.match(section, /notice, not another\s+purchase-confirmation question/u);
   assert.match(section, /single\s+purchase authorization/iu);
-  assert.match(
-    section,
-    /CLI\s+alone owns the Pending Instruction Card\s+Gate/iu,
-  );
   assert.match(
     section,
     /Never rerun `visa commerce-run` after it may have created a Checkout/iu,
@@ -734,44 +668,19 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   assert.doesNotMatch(section, atomicInvocation);
 });
 
-test('missing-card aggregate shows but never opens Bind Card and keeps exact PENDING wait', () => {
+test('Portal owns card setup and CLI waits for the exact purchase without another popup', () => {
   const gate = skill.slice(
     skill.indexOf('### Pending Instruction Card Gate'),
     skill.indexOf('## Intent Routing'),
   );
 
-  assert.match(
-    gate,
-    /eligible Visa Payment Instrument[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*creates or reuses exactly[\s\S]*one no-card `PENDING` Instruction/iu,
-  );
-  assert.match(
-    gate,
-    /exact returned ID[\s\S]*never select a latest or similar PENDING/iu,
-  );
-  assert.match(
-    gate,
-    /return one exact Bind Card link[\s\S]*Show it without opening it/iu,
-  );
-  assert.match(
-    gate,
-    /click it[\s\S]*already-open Agent Portal/iu,
-  );
-  assert.match(
-    gate,
-    /Showing the link is not[\s\S]*completion[\s\S]*same CLI process stays foreground/iu,
-  );
-  assert.match(
-    gate,
-    /Payment[\s\S]*Instrument reaches `visaRegistrationSucceeded=true`[\s\S]*CWallet[\s\S]*automatically activates/iu,
-  );
-  assert.match(
-    gate,
-    /Continue only after[\s\S]*same-card[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*exact Instruction[\s\S]*`ACTIVE`/iu,
-  );
-  assert.match(
-    gate,
-    /Timeout preserves that exact PENDING[\s\S]*read-only\s+continuation[\s\S]*Do not create another Instruction[\s\S]*retry payment/iu,
-  );
+  assert.match(gate, /Portal owns card binding and VIC/u);
+  assert.match(gate, /CLI never launches a separate\s+Bind Card or VIC page/u);
+  assert.match(gate, /exact PENDING before its VIC authorization starts/u);
+  assert.match(gate, /LOGIN and REGISTER both/u);
+  assert.match(gate, /same card to be VIC-ready and the bound Instruction to be ACTIVE/u);
+  assert.match(gate, /card-bound Instruction[\s\S]*ordinary Instruction authorization/u);
+  assert.match(gate, /timeout[\s\S]*read-only continuation[\s\S]*Never create a replacement or retry payment/iu);
 
   const cardCapability = skill.slice(
     skill.indexOf('### CAP-CARD:'),
@@ -843,7 +752,7 @@ test('restricted Instructions and generic Visa VIC UCP fail closed', () => {
   );
   assert.match(
     purchaseSection,
-    /complete purchase passes the Restricted Instruction Gate/iu,
+    /restricted-category enforcement/iu,
   );
 
   const ucpSection = skill.slice(
@@ -875,11 +784,9 @@ test('funds, browser, and result boundaries remain explicit', () => {
   assert.match(skill, /No payment, Tip, refund, Checkout completion[\s\S]*blindly retried/iu);
 });
 
-test('purchase context maps merchantUrl to the recommend-products merchant route, never the Program page', () => {
-  assert.match(skill, /"merchantUrl": "<verified-merchant-route-url>"/u);
-  assert.match(skill, /products\[\]\.product\.merchantUrl/u);
-  assert.match(skill, /products\[\]\.product\.productUrl/u);
-  assert.match(skill, /Never use the Program `url`/u);
+test('purchase route is preserved in the CLI snapshot instead of reconstructed by the Agent', () => {
+  assert.match(skill, /selected row's\s+`purchaseContext` unchanged/u);
+  assert.match(skill, /Do not build an Instruction context, infer MCC, copy Program fields/u);
   assert.doesNotMatch(skill, /authoritative-program-commerce-url/u);
 });
 
