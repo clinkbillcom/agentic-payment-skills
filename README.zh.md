@@ -44,7 +44,8 @@ visa commerce-run
 - 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
   `commerce-login`、`commerce-run`，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
-- 绑卡和 VIC 交给 Portal；CLI 准备或复用精确 PENDING 并等待，不另开绑卡/VIC 页面
+- 绑卡交给 Portal，CLI 不打开 Bind Card；只有浏览器操作前已存在、经复查明确未
+  VIC 的唯一/默认卡可打开一次现有 VIC 页面，新卡及未知/进行中状态继续等待
 
 首轮不使用 `--include-provider-products`、`--include-broad-catalog` 或
 `--broad-queries`，也不调用 standalone Catalog 或 Agent-managed merchant-list。
@@ -67,13 +68,13 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.73` 已 vendor 上游提交
-`cd9797ed83e0bf9cf6722ce518f1485d97b92a23` 的 Visa CLI `0.2.57`。本
+Skill `0.1.74` 已 vendor 上游提交
+`2f50a287bc6f9a7076fa8a3d91e65e3a173f066b` 的 Visa CLI `0.2.58`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
 聚合缺卡流程交给 Portal 处理，CLI 前台等待同一条 PENDING Instruction，
-不生成额外绑卡/VIC 入口，并且只在同卡 `visaRegistrationSucceeded=true` 且该
+不生成绑卡入口，已有未就绪卡可按条件打开一次现有 VIC 页，并且只在同卡 `visaRegistrationSucceeded=true` 且该
 精确 Instruction 为 `ACTIVE` 后继续。
 
 本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
@@ -93,7 +94,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.73`
+Skill 版本：`0.1.74`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

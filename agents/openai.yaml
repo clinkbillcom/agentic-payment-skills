@@ -99,7 +99,10 @@ interface:
     接下来可能需要你完成授权，请在页面中继续。 Use the locked language;
     these are notices, not confirmation questions.
     Portal owns card binding and VIC. CLI prepares/reuses the exact purchase
-    PENDING and waits, without launching another Bind Card or VIC page.
+    PENDING and never opens Bind Card. With login already ready, commerce-login
+    may open VIC once for a unique/default explicitly unready Visa present before
+    browser work, after same-card and progress checks. New cards or unknown/ongoing
+    state only wait in Portal; the Agent never opens another page.
     LOGIN and REGISTER both support PENDING; VIC-ready cards use ordinary
     Instruction authorization. Continue only with same-card VIC readiness and
     the correct ACTIVE Instruction. A timeout permits only the exact read-only

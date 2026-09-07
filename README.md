@@ -54,8 +54,9 @@ The lightweight shopping routes cover:
 - matched Program purchase directly from the unchanged `recommend-products`
   snapshot through `commerce-login` and `commerce-run`, without `visa detail`
 - direct shopping through the same Visa-only Offer and matched-merchant flow
-- Portal owns binding and VIC; CLI prepares/reuses the exact PENDING and waits
-  without launching an additional binding/VIC page
+- Portal owns binding and VIC; CLI never opens Bind Card. It may open existing
+  card-only VIC once for a verified pre-browser unready card; new cards and
+  unknown/in-progress state only wait
 
 Initial discovery never uses `--include-provider-products`,
 `--include-broad-catalog`, `--broad-queries`, standalone Catalog, or an
@@ -83,14 +84,14 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.73` vendors Visa CLI `0.2.57` from upstream commit
-`cd9797ed83e0bf9cf6722ce518f1485d97b92a23`. This product-match branch performs
+Skill `0.1.74` vendors Visa CLI `0.2.58` from upstream commit
+`2f50a287bc6f9a7076fa8a3d91e65e3a173f066b`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
 contexts. The aggregate missing-card flow waits for Portal on one exact PENDING
-Instruction without creating an additional binding/VIC entry, and continues after same-card
+Instruction, with conditional existing-card VIC opening and no new Portal route, and continues after same-card
 `visaRegistrationSucceeded=true` plus exact-Instruction `ACTIVE`.
 
 The vendored bundle was refreshed through the official `clink-cli`
@@ -114,7 +115,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.73`
+Skill version: `0.1.74`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

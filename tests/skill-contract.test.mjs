@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.73');
+  assert.equal(packageJson.version, '0.1.74');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -668,14 +668,17 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   assert.doesNotMatch(section, atomicInvocation);
 });
 
-test('Portal owns card setup and CLI waits for the exact purchase without another popup', () => {
+test('Portal owns binding and only the existing-card path may open VIC once', () => {
   const gate = skill.slice(
     skill.indexOf('### Pending Instruction Card Gate'),
     skill.indexOf('## Intent Routing'),
   );
 
   assert.match(gate, /Portal owns card binding and VIC/u);
-  assert.match(gate, /CLI never launches a separate\s+Bind Card or VIC page/u);
+  assert.match(gate, /CLI never opens Bind Card/u);
+  assert.match(gate, /login already ready[\s\S]*open the existing VIC page once/u);
+  assert.match(gate, /unique\/default Visa present before browser work/u);
+  assert.match(gate, /New cards, unknown state, or an ongoing ceremony only wait/u);
   assert.match(gate, /exact PENDING before its VIC authorization starts/u);
   assert.match(gate, /LOGIN and REGISTER both/u);
   assert.match(gate, /same card to be VIC-ready and the bound Instruction to be ACTIVE/u);

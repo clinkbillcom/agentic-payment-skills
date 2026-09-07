@@ -10738,7 +10738,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.57";
+var CLI_VERSION = "0.2.58";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -25767,8 +25767,6 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
 `);
       if (options2.portalManaged) {
         const portal = new URL(resolveAgentBaseUrl(context.runtimeConfig.baseUrl));
-        portal.searchParams.set("nextAction", "visa-card-ready");
-        portal.searchParams.set("instructionId", instructionId2);
         process.stderr.write(`Continue card setup and VIC in Agent Portal; do not start a second flow:
 ${portal.toString()}
 `);
@@ -29441,6 +29439,15 @@ function selectVisaCard(cards, requestedPaymentInstrumentId) {
   }
   return { action: "select", cards: readyCards };
 }
+function selectExistingVisaCardForVic(cards) {
+  const visaCards = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card));
+  if (visaCards.some(cardVicReady)) {
+    return void 0;
+  }
+  const defaults = visaCards.filter(cardDefault);
+  const selected = visaCards.length === 1 ? visaCards[0] : defaults.length === 1 ? defaults[0] : void 0;
+  return selected?.visaRegistrationSucceeded === false ? selected : void 0;
+}
 async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
   let listed;
   try {
@@ -32039,20 +32046,37 @@ ${url}
 function createVisaBenefitLoginCliDependencies(context, environment) {
   const baseUrl = visaCommerceApiBaseUrl(environment);
   assertCommerceEnvironment(context, environment, baseUrl);
+  const refreshCards = async () => {
+    const cards = await resolveBindingLink(context, CARD_SETUP_PATH2);
+    if (cards.dryRun) {
+      throw apiError("card readiness unexpectedly produced a dry-run response");
+    }
+    return normalizeCards(cards.data.paymentMethodsVoList);
+  };
   return {
+    refreshCards,
+    openCardVic: async (paymentInstrumentId) => {
+      const url = buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, void 0, context.runtimeConfig.email);
+      process.stderr.write(`Complete Visa card enrollment in your browser:
+${url}
+`);
+      return { url, browserLaunch: await openPortalWithBrowserHandoff(context, url) };
+    },
     preparePurchaseIntent: async (instructionContext) => {
-      const cards = await resolveBindingLink(context, CARD_SETUP_PATH2);
-      if (cards.dryRun) {
-        throw apiError("card readiness unexpectedly produced a dry-run response");
-      }
-      const selected = selectVisaCard(normalizeCards(cards.data.paymentMethodsVoList));
+      const cards = await refreshCards();
+      const selected = selectVisaCard(cards);
       if (selected.action === "use") {
         return { state: "VIC_READY" };
       }
       if (selected.action !== "add") {
         throw validationError("Select one eligible Visa card in Agent Portal before continuing");
       }
-      return createCommandPendingInstruction(context, instructionContext);
+      const existingCardId = selectExistingVisaCardForVic(cards)?.paymentInstrumentId;
+      const pending = await createCommandPendingInstruction(context, instructionContext);
+      return {
+        ...pending,
+        existingCardId
+      };
     },
     inspectLogin: async () => {
       const result = getVisaBenefitLoginReadiness({
@@ -32865,6 +32889,41 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
   if (current.ready) {
     const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
     const pendingInstructionId3 = optionalText7(prepared?.instructionId);
+    const existingCardId = optionalText7(prepared?.existingCardId);
+    if (existingCardId && pendingInstructionId3 && prepared?.state === "PENDING" && prepared.ceremonyInProgress === false && prepared.activationExpected === true && dependencies.refreshCards && dependencies.openCardVic) {
+      const refreshed = selectExistingVisaCardForVic(await dependencies.refreshCards());
+      const pending = await dependencies.getInstruction(pendingInstructionId3);
+      assertExactInstruction2(pending, pendingInstructionId3);
+      if (refreshed?.paymentInstrumentId === existingCardId && instructionStatus2(pending) === "PENDING" && !optionalText7(pending.paymentInstrumentId)) {
+        const launch = await dependencies.openCardVic(existingCardId);
+        const instruction2 = await resolveCurrentQuickInstruction(pendingInstructionId3, dependencies);
+        if (instruction2.instructionReady) {
+          const active = await dependencies.getInstruction(pendingInstructionId3);
+          assertExactInstruction2(active, pendingInstructionId3);
+          const selected = selectVisaCard(await dependencies.refreshCards(), existingCardId);
+          if (instructionStatus2(active) !== "ACTIVE" || active.paymentInstrumentId !== existingCardId || selected.action !== "use") {
+            throw apiError("VIC completion did not activate the exact purchase on the original Visa card", 502);
+          }
+        }
+        return {
+          command: "visa commerce-login",
+          operation: "visa-commerce-login",
+          environment: context.environment,
+          state: instruction2.instructionReady ? "INSTRUCTION_ACTIVE" : "INSTRUCTION_ACTIVATION_PENDING",
+          action: instruction2.instructionReady ? "CONTINUE_PURCHASE_FLOW" : "WAIT_FOR_QUICK_INSTRUCTION",
+          reason: "existing_visa_card_vic",
+          ready: instruction2.instructionReady,
+          loginReady: true,
+          terminal: instruction2.instructionReady || isTerminalInstructionStatus2(instruction2.instructionStatus),
+          ...instruction2,
+          pendingInstructionId: pendingInstructionId3,
+          paymentInstrumentId: existingCardId,
+          browserLaunch: launch.browserLaunch,
+          manualOpenUrl: launch.browserLaunch.status === "launched" ? null : launch.url,
+          detail: current.detail
+        };
+      }
+    }
     return {
       command: "visa commerce-login",
       operation: "visa-commerce-login",
@@ -33067,7 +33126,7 @@ Options:
   --context <json>             Login context with environment, expected, and instructionContext
   --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required before every live login check or initialization
-  --open                       Open the Visa Benefit authorization URL when login is required
+  --open                       Open required login or eligible existing-card VIC once
   --no-open                    Return manualOpenUrl without opening a browser
   --dry-run                    Validate and print the zero-side-effect login plan
   --timeout <ms>               Per-request timeout in milliseconds
@@ -33092,6 +33151,14 @@ Behavior:
   config or touches Tokens or the network. Dry-run performs no login inspection, config mutation,
   browser launch, or network request.
 
+  When login was already ready before any browser action, commerce-login can open the existing
+  card-only VIC page once for a unique/default Visa explicitly not VIC-ready. It prepares PENDING
+  first, requires ceremonyInProgress=false and activationExpected=true, and rechecks the same card.
+  No baseline, new cards, unknown readiness/progress, or an ongoing ceremony never triggers this
+  automatic opening. --no-open returns the manual link instead. Card-only VIC omits instructionId
+  to avoid the existing Portal's ordinary sign action; completion must still verify the original
+  exact PENDING is ACTIVE on that same VIC-ready card. These checks are not a cross-tab mutex.
+
   Live execution first checks the local Visa Benefit login state. A ready login checks card
   readiness and prepares/reuses PENDING only when no eligible VIC-ready Visa exists, without
   restarting OAuth. Otherwise it runs one foreground Visa Benefit login with the exact context.
@@ -33104,7 +33171,7 @@ Behavior:
   With --open, callers should tell the user to finish VSRP login and, when needed, card binding,
   VIC, and Passkey in the one opened browser flow while the CLI continues waiting. The command
   never persists an Instruction continuation and never calls the standalone Instruction create
-  API, resolves a merchant, searches Catalog, prepares a card, creates a Checkout, or pays.
+  API, resolves a merchant, searches Catalog, opens Bind Card, creates a Checkout, or pays.
 
 Examples:
   clink visa commerce-login --context-file login.json --dry-run --format pretty

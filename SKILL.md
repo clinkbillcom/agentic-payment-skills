@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.73. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.74. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.73"
+  version: "0.1.74"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -174,9 +174,12 @@ rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
 For every authorized `visa commerce-login` purchase:
 
-- Agent Portal owns card binding and VIC. The CLI never launches a separate
-  Bind Card or VIC page based on a card-state change. The user continues in the
-  existing Portal, or follows the exact CLI-returned Portal continuation link.
+- Agent Portal owns card binding and VIC. The CLI never opens Bind Card.
+  With login already ready, commerce-login may open the existing VIC page once
+  for a unique/default Visa present before browser work and explicitly not
+  VIC-ready, after preparing PENDING and rechecking the same card and progress.
+  New cards, unknown state, or an ongoing ceremony only wait in Portal.
+  The Agent never opens an additional page or decides this from card timestamps.
 - Without a VIC-ready Visa card, the CLI/CWallet prepare or reuse the purchase's
   exact PENDING before its VIC authorization starts. LOGIN and REGISTER both
   support this path. The CLI waits; the Agent does not inspect card timestamps,
@@ -652,8 +655,8 @@ general workflow engine.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC; the CLI prepares or reuses the exact PENDING
-  and waits without opening another binding/VIC flow.
+- Portal owns binding and VIC; CLI may open VIC once only for the verified
+  pre-existing card path above, never for newly bound cards or unknown progress.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
   Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.
