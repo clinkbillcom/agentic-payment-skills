@@ -20,13 +20,14 @@ Every request or `--filter-sets` object requires:
 }
 ```
 
-Add `purpose`, `reward_type`, `attribute`, `card_level`, or `card_issuer` only
+Add `purpose`, `attribute`, `card_level`, or `card_issuer` only
 when explicitly stated; otherwise omit it. Generic `优惠`,
 `权益`, `benefit`, or `offer` selects none. Never pass `type`, `keyword`,
 `limit`, or `page`. Add `--all` only for an explicit all request.
+Never fill `reward_type` or pass `--reward-type`.
 
 Flags: each axis maps to `--<axis>` with `_` written as `-`
-(`reward_type -> --reward-type`). Prefer one multi-category plan. Use
+(`card_level -> --card-level`). Prefer one multi-category plan. Use
 `--filter-sets` only for four genuinely different safe plans; each still
 requires region/category and every explicit constraint.
 
@@ -82,9 +83,6 @@ education
 other
   other_uncategorized
 
-reward_type:
-discount cashback coupon points privilege gift other
-
 attribute:
 new_customer limited_time limited_quantity no_threshold stackable online_only
 instore_only app_exclusive applepay reservation_required free_cancellation
@@ -104,6 +102,6 @@ CCBDB BOCDB CMBDB ABCDB CIBPLATINUM BOCAPP
 Examples:
 
 - `香港超市和百货优惠`: `region=hk`, `shopping_supermarket shopping_department_mall`.
-- `香港本地超市优惠券`: also `purpose=local`, `reward_type=coupon`.
+- `香港本地超市`: `region=hk`, `category=shopping_supermarket`, `purpose=local`.
 - `我想下单咖啡`: `region=<resolved>`, `category=dining_cafe_bakery`; no other
   axis unless stated.

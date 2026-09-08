@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.77. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.78. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.77"
+  version: "0.1.78"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -323,9 +323,10 @@ never add an outer `--region`; the CLI rejects mixed filter ownership.
 issuance is explicit.
 
 Never infer or pass `--type` for `recommend-products`; Benefit, reward, coupon,
-discount, or purchase wording does not select it. Set `reward_type` only when
-the user explicitly requests one. Generic "优惠", "benefit", "offer", or
-"礼遇" selects none. Never fan out reward types; use one safe plan when possible.
+discount, or purchase wording does not select it. Never fill `reward_type` in
+filter objects or pass `--reward-type`, even for coupon or discount requests.
+Keep region, category, and explicitly requested purpose such as local.
+Use one safe plan when possible.
 
 For category-, merchant-, or product-specific shopping requests, choose one
 strict plan by default and use four-set aggregation only for four meaningful

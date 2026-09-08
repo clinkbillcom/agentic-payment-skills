@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.77');
+  assert.equal(packageJson.version, '0.1.78');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -422,7 +422,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   );
   assert.match(
     filterReference,
-    /Add `purpose`, `reward_type`, `attribute`, `card_level`, or `card_issuer` only[\s\S]*explicitly stated[\s\S]*otherwise omit/iu,
+    /Add `purpose`, `attribute`, `card_level`, or `card_issuer` only[\s\S]*explicitly stated[\s\S]*otherwise omit/iu,
   );
   assert.match(
     filterReference,
@@ -467,8 +467,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
     'telecom_mobile', 'telecom_other', 'financial_service', 'fin_fx',
     'fin_installment', 'fin_insurance', 'fin_other', 'education',
     'edu_study_abroad', 'edu_course', 'edu_tuition', 'edu_student_living',
-    'edu_other', 'other', 'other_uncategorized', 'discount', 'cashback',
-    'coupon', 'points', 'privilege', 'gift', 'new_customer', 'limited_time',
+    'edu_other', 'other', 'other_uncategorized', 'new_customer', 'limited_time',
     'limited_quantity', 'no_threshold', 'stackable', 'online_only',
     'instore_only', 'app_exclusive', 'applepay', 'reservation_required',
     'free_cancellation', 'family_friendly', 'couple', 'group', 'pet_friendly',
@@ -487,12 +486,23 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市优惠券[\s\S]*purpose=local[\s\S]*reward_type=coupon[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery/iu,
+    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市[\s\S]*region=hk[\s\S]*category=shopping_supermarket[\s\S]*purpose=local[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery/iu,
   );
   assert.match(
     agent,
-    /Every plan must include region[\s\S]*at least one category[\s\S]*remembered search region[\s\S]*else hk[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*reward_type[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
+    /Every plan must include region[\s\S]*at least one category[\s\S]*remembered search region[\s\S]*else hk[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
   );
+});
+
+test('discovery never fills reward_type and keeps region, category, and explicit local purpose', () => {
+  assert.match(skill, /Never fill `reward_type`[\s\S]*filter objects or pass `--reward-type`/u);
+  assert.match(agent, /Never fill reward_type[\s\S]*objects or pass --reward-type/u);
+  assert.match(filterReference, /Never fill `reward_type` or pass `--reward-type`/u);
+  for (const text of [skill, agent, filterReference]) {
+    assert.doesNotMatch(text, /reward_type=coupon|Set `?reward_type`? only when/u);
+  }
+  assert.match(skill, /Keep region, category, and explicitly requested purpose such as local/u);
+  assert.doesNotMatch(filterReference, /^reward_type:/mu);
 });
 
 test('a Visa miss never starts Catalog fallback', () => {
