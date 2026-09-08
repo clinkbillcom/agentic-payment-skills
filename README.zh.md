@@ -1,5 +1,9 @@
 # Visa Skill
 
+登录/授权时通过宿主的短等待返回机制尽早获取进度，先展示 `manualOpenUrl`，
+再观察同一命令，不重启登录或支付。购买结果及订单查询直接展示 CLI 返回的
+`orderUrl` 为“查看订单”链接，不能拿 OMS/UCP 订单号自行拼 Portal URL。
+
 此分支是在 `agentic-payment-skills` 仓库中维护的轻量 Visa Skill 发行线。
 
 它只携带一份 Visa Edition：
@@ -68,8 +72,8 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.74` 已 vendor 上游提交
-`2f50a287bc6f9a7076fa8a3d91e65e3a173f066b` 的 Visa CLI `0.2.58`。本
+Skill `0.1.75` 已 vendor 上游提交
+`a55dea14b8562c30b47722e82b4cc1338a77ced1` 的 Visa CLI `0.2.59`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
@@ -94,7 +98,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.74`
+Skill 版本：`0.1.75`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

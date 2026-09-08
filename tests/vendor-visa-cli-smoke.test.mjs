@@ -129,11 +129,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.58');
+  assert.equal(vendorPackage.version, '0.2.59');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '2f50a287bc6f9a7076fa8a3d91e65e3a173f066b',
+    'a55dea14b8562c30b47722e82b4cc1338a77ced1',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -142,6 +142,17 @@ test('launchers and Visa Edition provenance are exact', async () => {
     createHash('sha256').update(vendorBundle).digest('hex'),
     vendorPackage.bundleSha256,
   );
+});
+
+test('vendored order lookup exposes a Portal link using the Clink payment ID rather than the UCP ID', () => {
+  const result = runWithMock([
+    'ucp-order', 'get', '--order-id', 'ord_fixture', '--format', 'json',
+  ], 'portal-order-link', { home: readyHome });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.id, 'ord_fixture');
+  assert.equal(output.clinkOrderId, 'order_fixture');
+  assert.equal(output.orderUrl, 'https://uat-agent.clinkbill.com/transaction/order_fixture');
 });
 
 test('Visa Edition exposes all fourteen Base Commands', () => {
@@ -1107,6 +1118,14 @@ function registeredCatalogResponse() {
 
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
+  if (scenario === 'portal-order-link') {
+    if (url.pathname === '/agent/ucp/orders/ord_fixture') {
+      return jsonResponse({
+        id: 'ord_fixture', checkout_id: 'chk_fixture', clink_order_id: 'order_fixture',
+      });
+    }
+    throw new Error('unexpected Portal order lookup request: ' + url.href);
+  }
   if (scenario === 'visa-only') {
     if (url.pathname.includes('/agent/ucp/')) {
       throw new Error('Visa-only recommendation must not request UCP');

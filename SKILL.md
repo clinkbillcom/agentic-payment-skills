@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.74. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.75. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.74"
+  version: "0.1.75"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -160,6 +160,19 @@ Never reroute a refused purchase through plain `pay` or UCP.
 OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
 belong in the user's browser. CLI `--open` may launch OAuth/login, Instruction,
 3DS, or risk; on failure, show only the exact CLI `manualOpenUrl`.
+
+For commerce-login and commerce-run, use the Host's supported short-yield or
+non-blocking tool-result mode so the Agent regains control while the CLI stays
+alive. Prefer a 1-2 second initial result window when supported; this is not a
+process timeout. Never use shell `&`, `nohup`, kill/restart, or invent CLI flags.
+On a running result containing `type=user_action_required` and `manualOpenUrl`,
+immediately show that exact link as a clickable "Open to log in/authorize" link
+in the locked language, before the next status query or wait. Tell the user to
+open it on their own phone/browser if automatic opening failed. Follow the same
+Host command/process ID until completion; do not re-run login or purchase.
+Deduplicate the same link and do not repeatedly ask for purchase confirmation.
+If the Host cannot return intermediate output, report that limitation rather
+than claiming the user has received the link. A progress record is not success.
 
 For standalone card-link requests, show but never auto-open an exact CLI-returned Bind Card
 link. The user may click it or use an already-open Agent Portal. Never inspect,
@@ -411,7 +424,9 @@ Before login say, in the locked language: "接下来可能需要登录。" Then 
   --format json
 ```
 
-Keep the process foreground until ready or a bound timeout. Do not copy
+Keep the same process alive until ready or a bound timeout, using the Host's
+running-command status tool between user messages. Do not hold the Agent inside
+one long blocking Shell call while the user needs a link. Do not copy
 login-returned Instruction IDs into the purchase file.
 
 Before commerce-run say, in the locked language:
@@ -628,6 +643,12 @@ general workflow engine.
   matched Program facts remain provenance, not a duplicate display row.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
+- Whenever the CLI returns `orderUrl`, include a clickable "View order" link in
+  the locked language in the purchase result or order-detail reply, without
+  another question. The CLI owns its environment and Clink payment-order identity.
+  Never build `/transaction/` from a UCP `order.id`, Checkout ID, or the example
+  in this Skill. If `orderUrlUnavailable` is returned, explain that the Portal
+  link is not available yet; do not invent an ID or retry the purchase.
 - Report digital delivery only when nonempty authoritative artifacts exist.
 - Preserve successful payment when delivery is pending, timed out, or failed.
 - Keep all user-facing text in the locked language and omit internal workflow

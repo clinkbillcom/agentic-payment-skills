@@ -1,5 +1,10 @@
 # Visa Skill
 
+During login/run, use the Host's early running-result mechanism: show the CLI's
+`manualOpenUrl` before the next wait, then observe the same command without restarting.
+Purchase and order-detail replies include the returned `orderUrl` as a clickable
+View order link; never construct a Portal URL from an OMS/UCP order ID.
+
 This branch is the lightweight Visa Skill distribution hosted in
 `agentic-payment-skills`.
 
@@ -84,8 +89,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.74` vendors Visa CLI `0.2.58` from upstream commit
-`2f50a287bc6f9a7076fa8a3d91e65e3a173f066b`. This product-match branch performs
+Skill `0.1.75` vendors Visa CLI `0.2.59` from upstream commit
+`a55dea14b8562c30b47722e82b4cc1338a77ced1`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
@@ -115,7 +120,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.74`
+Skill version: `0.1.75`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

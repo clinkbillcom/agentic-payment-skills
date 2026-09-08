@@ -98,6 +98,14 @@ interface:
     Before commerce-login say 接下来可能需要登录。 Before commerce-run say
     接下来可能需要你完成授权，请在页面中继续。 Use the locked language;
     these are notices, not confirmation questions.
+    Use the Host's supported short-yield/non-blocking tool result for login/run,
+    not a terminating process timeout or shell background job. Immediately show
+    manualOpenUrl from user_action_required progress as a clickable link before
+    waiting again; let the user open it on their phone when automatic opening
+    fails. Track the same command/process ID, never restart login or purchase.
+    Include returned orderUrl as a clickable 查看订单 / View order link in purchase
+    and order-detail replies. Never substitute UCP order IDs or Checkout IDs;
+    explain orderUrlUnavailable without inventing a link or retrying payment.
     Portal owns card binding and VIC. CLI prepares/reuses the exact purchase
     PENDING and never opens Bind Card. With login already ready, commerce-login
     may open VIC once for a unique/default explicitly unready Visa present before

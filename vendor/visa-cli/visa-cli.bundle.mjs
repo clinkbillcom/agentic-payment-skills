@@ -9725,6 +9725,105 @@ import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir } from "node:os";
 import { performance } from "node:perf_hooks";
 
+// dist/domains.js
+var API_BASE_URLS = {
+  sandbox: "https://uat-api.clinkbill.com",
+  test: "https://api.clinkbill.dev",
+  production: "https://api.clinkbill.com"
+};
+function clinkEnvironmentForApiBaseUrl(apiBaseUrl) {
+  let origin;
+  try {
+    origin = new URL(apiBaseUrl).origin;
+  } catch {
+    return void 0;
+  }
+  const entries = Object.entries(API_BASE_URLS);
+  return entries.find(([, baseUrl]) => new URL(baseUrl).origin === origin)?.[0];
+}
+var AGENT_BASE_URLS = {
+  sandbox: "https://uat-agent.clinkbill.com",
+  test: "https://agent.clinkbill.dev",
+  production: "https://agent.clinkbill.com"
+};
+var DASHBOARD_BASE_URLS = {
+  sandbox: "https://uat-dashboard.clinkbill.com",
+  test: "https://dashboard.clinkbill.dev",
+  production: "https://dashboard.clinkbill.com"
+};
+var DEFAULT_BASE_URL = API_BASE_URLS.production;
+
+// dist/portal-order-link.js
+var ORDER_ID = /^[A-Za-z0-9_-]{1,160}$/u;
+function portalOrderLink(apiBaseUrl, resources, paymentEvents = [], expectedCheckoutId) {
+  const environment = clinkEnvironmentForApiBaseUrl(apiBaseUrl);
+  if (!environment)
+    return {};
+  const origin = AGENT_BASE_URLS[environment];
+  const ids = /* @__PURE__ */ new Set();
+  let invalid = false;
+  const addId = (value) => {
+    if (value === void 0 || value === null)
+      return;
+    if (typeof value !== "string" || !ORDER_ID.test(value.trim())) {
+      invalid = true;
+    } else {
+      ids.add(value.trim());
+    }
+  };
+  const addUrl = (value) => {
+    if (typeof value !== "string")
+      return;
+    try {
+      const url = new URL(value);
+      if (url.origin !== origin || url.username || url.password)
+        return;
+      const match = /^\/transaction\/([^/]+)\/?$/u.exec(url.pathname);
+      if (match)
+        addId(decodeURIComponent(match[1]));
+    } catch {
+    }
+  };
+  for (const resource of resources) {
+    const value = object(resource);
+    const ucp = object(value.ucp);
+    for (const source of [value, ucp]) {
+      addId(source.clinkOrderId);
+      addId(source.clink_order_id);
+      addId(source.paymentOrderId);
+      addId(source.payment_order_id);
+    }
+    const order = object(value.order);
+    const success = object(ucp.success_info);
+    for (const source of [value, order, success]) {
+      addUrl(source.orderUrl);
+      addUrl(source.permalink_url);
+      addUrl(source.permalinkUrl);
+    }
+  }
+  for (const event of paymentEvents) {
+    if (!["agent_order.succeeded", "agent_order.failed"].includes(event.eventType))
+      continue;
+    if (!expectedCheckoutId || event.data.checkoutId !== expectedCheckoutId)
+      continue;
+    addId(event.resourceId);
+    addId(event.data.orderId);
+    addId(event.data.order_id);
+    addId(event.data.paymentOrderId);
+    addId(event.data.payment_order_id);
+  }
+  if (invalid || ids.size > 1)
+    return { orderUrlUnavailable: "conflicting_payment_order_identity" };
+  const id = [...ids][0];
+  return id ? {
+    clinkOrderId: id,
+    orderUrl: `${origin}/transaction/${encodeURIComponent(id)}`
+  } : {};
+}
+function object(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 // dist/browser-handoff.js
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
@@ -10239,36 +10338,6 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-
-// dist/domains.js
-var API_BASE_URLS = {
-  sandbox: "https://uat-api.clinkbill.com",
-  test: "https://api.clinkbill.dev",
-  production: "https://api.clinkbill.com"
-};
-function clinkEnvironmentForApiBaseUrl(apiBaseUrl) {
-  let origin;
-  try {
-    origin = new URL(apiBaseUrl).origin;
-  } catch {
-    return void 0;
-  }
-  const entries = Object.entries(API_BASE_URLS);
-  return entries.find(([, baseUrl]) => new URL(baseUrl).origin === origin)?.[0];
-}
-var AGENT_BASE_URLS = {
-  sandbox: "https://uat-agent.clinkbill.com",
-  test: "https://agent.clinkbill.dev",
-  production: "https://agent.clinkbill.com"
-};
-var DASHBOARD_BASE_URLS = {
-  sandbox: "https://uat-dashboard.clinkbill.com",
-  test: "https://dashboard.clinkbill.dev",
-  production: "https://dashboard.clinkbill.com"
-};
-var DEFAULT_BASE_URL = API_BASE_URLS.production;
-
-// dist/config.js
 var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
 var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
@@ -10738,7 +10807,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.58";
+var CLI_VERSION = "0.2.59";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -24605,7 +24674,7 @@ async function handleUcpOrderCommand(subcommand, context) {
 async function ucpOrderGet(context) {
   const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
   const result = await requestUcpOrder(context, orderId);
-  return finishApiCommand(result, context);
+  return finishApiCommand(result, context, void 0, true);
 }
 async function ucpOrderWaitDelivery(context) {
   const orderId = requireNonBlankFlag(context.args.flags, "order-id", "missing --order-id");
@@ -24616,6 +24685,7 @@ async function ucpOrderWaitDelivery(context) {
   const result = await waitForUcpOrderDigitalDelivery(context, orderId, maxWaitSeconds);
   printSuccess({
     ...result,
+    ...await resolvePortalOrderLink(context, [result.order]),
     ...result.timedOut ? {
       resumeCommand: buildUcpOrderDeliveryResumeCommand(orderId, maxWaitSeconds, context.globalOptions.format, context.runtimeConfig.baseUrl, context.executableName)
     } : {}
@@ -24721,6 +24791,16 @@ async function ucpCheckoutRun(context) {
   return EXIT_CODES.OK;
 }
 async function executeUcpCheckoutRun(context, options2 = {}) {
+  const result = await executeUcpCheckoutRunInternal(context, options2);
+  if (context.globalOptions.dryRun)
+    return result;
+  const attempts = isRecord18(result.attempts) ? result.attempts : {};
+  return {
+    ...result,
+    ...await resolvePortalOrderLink(context, [result, result.create, result.complete, result.checkout, result.order], attempts.complete === 1 ? asOptionalString(result.checkoutId) : void 0)
+  };
+}
+async function executeUcpCheckoutRunInternal(context, options2) {
   const flags = context.args.flags;
   rejectUcpCheckoutUnsupportedFlags(flags);
   if ("checkout-id" in flags) {
@@ -25268,7 +25348,7 @@ async function ucpCheckoutGet(context) {
   const maxWait = getStringFlag(flags, "max-wait");
   if (!waitDelivery && maxWait === void 0) {
     const result = await requestCommandUcpCheckout(context, checkoutId);
-    return finishApiCommand(result, context);
+    return finishApiCommand(result, context, void 0, true);
   }
   const maxWaitSeconds = parseIntFlag(maxWait, "--max-wait must be an integer of at least 1 second", 1) ?? DEFAULT_UCP_DELIVERY_WAIT_SECONDS;
   if (context.globalOptions.dryRun) {
@@ -25276,12 +25356,16 @@ async function ucpCheckoutGet(context) {
     return finishApiCommand(result, context);
   }
   const target = resolveUcpCheckoutRequestTarget(context, `/${encodeURIComponent(checkoutId)}`);
-  printSuccess(await continueUcpCheckoutReadOnly(context, {
+  const continued = await continueUcpCheckoutReadOnly(context, {
     checkoutId,
     endpoint: ucpCheckoutReadEndpointPrefix(target, checkoutId),
     waitDelivery,
     maxWaitSeconds
-  }), context.globalOptions.format);
+  });
+  printSuccess({
+    ...continued,
+    ...await resolvePortalOrderLink(context, [continued, continued.checkout, continued.order])
+  }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function requestCommandUcpCheckout(context, checkoutId) {
@@ -26287,15 +26371,74 @@ function stringifyRefreshError(error) {
   }
   return String(error);
 }
-async function finishApiCommand(result, context, paymentMethodsRefreshWarning) {
+async function finishApiCommand(result, context, paymentMethodsRefreshWarning, includePortalOrderLink = false) {
   if (isDryRun3(result)) {
     printSuccess(result, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
   assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
+  const rawData = unwrapApiData(result.body);
+  let data = rawData;
+  if (includePortalOrderLink && isRecord18(rawData)) {
+    const { orderUrl: _unverifiedOrderUrl, ...rest } = rawData;
+    data = { ...rest, ...await resolvePortalOrderLink(context, [rawData]) };
+  }
   printSuccess(paymentMethodsRefreshWarning && isRecord18(data) && !Array.isArray(data) ? addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) : data, context.globalOptions.format);
   return EXIT_CODES.OK;
+}
+async function resolvePortalOrderLink(context, resources, checkoutId) {
+  const records = resources.filter(isRecord18);
+  const aliases = records.flatMap((record2) => [record2.checkout_id, record2.checkoutId].filter((id) => id !== void 0 && id !== null));
+  if (checkoutId)
+    aliases.push(checkoutId);
+  if (context.args.positionals[0] === "ucp-checkout") {
+    const requested = getStringFlag(context.args.flags, "checkout-id");
+    if (requested)
+      aliases.push(requested);
+  }
+  const checkoutIds = new Set(aliases.filter((id) => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim()));
+  if (checkoutIds.size > 1 || aliases.length !== aliases.filter((id) => typeof id === "string" && Boolean(id.trim())).length) {
+    return { orderUrlUnavailable: "conflicting_checkout_identity" };
+  }
+  if (context.args.positionals[0] === "ucp-checkout") {
+    const requested = getStringFlag(context.args.flags, "checkout-id")?.trim();
+    const resourceId = records[0]?.id;
+    if (requested && typeof resourceId === "string" && resourceId.trim() !== requested) {
+      return { orderUrlUnavailable: "conflicting_checkout_identity" };
+    }
+  }
+  const direct = portalOrderLink(context.runtimeConfig.baseUrl, resources);
+  if (checkoutIds.size === 0 && !direct.orderUrl && !direct.orderUrlUnavailable)
+    return {};
+  if (context.args.positionals[0] === "ucp-order") {
+    const expected = getStringFlag(context.args.flags, "order-id")?.trim();
+    if (expected && records.some((record2) => typeof record2.id === "string" && record2.id.trim() !== expected)) {
+      return { orderUrlUnavailable: "conflicting_ucp_order_identity" };
+    }
+  }
+  if (direct.orderUrl || direct.orderUrlUnavailable)
+    return direct;
+  const boundCheckoutId = [...checkoutIds][0];
+  if (!boundCheckoutId)
+    return {};
+  const status = records.map((record2) => normalizedUcpCheckoutRunStatus(record2)).find((value) => ["completed", "failed", "canceled", "processing", "complete_in_progress"].includes(value));
+  if (!checkoutId && !status && context.args.positionals[0] !== "ucp-order")
+    return {};
+  try {
+    const events = await collectWebhookEvents({
+      runtimeConfig: context.runtimeConfig,
+      resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+      timeoutMs: Math.min(context.globalOptions.timeoutMs, 2e3),
+      maxDurationMs: 0,
+      ack: false,
+      type: status === "failed" || status === "canceled" ? "agent_order.failed" : "agent_order.succeeded",
+      checkoutId: boundCheckoutId
+    });
+    const resolved = portalOrderLink(context.runtimeConfig.baseUrl, resources, events.events, boundCheckoutId);
+    return resolved.orderUrl || resolved.orderUrlUnavailable ? resolved : { orderUrlUnavailable: "clink_payment_order_id_not_available" };
+  } catch {
+    return { orderUrlUnavailable: "clink_payment_order_id_lookup_unavailable" };
+  }
 }
 async function finishPublicCatalogCommand(result, context) {
   if (isDryRun3(result)) {
@@ -29089,6 +29232,9 @@ async function runVisaCommerce(context, options2, dependencies) {
     route: resolvedPurchase.route,
     product: resolvedPurchase.product,
     instruction: publicInstruction(instruction),
+    ...typeof checkout.orderUrl === "string" ? { orderUrl: checkout.orderUrl } : {},
+    ...typeof checkout.clinkOrderId === "string" ? { clinkOrderId: checkout.clinkOrderId } : {},
+    ...typeof checkout.orderUrlUnavailable === "string" ? { orderUrlUnavailable: checkout.orderUrlUnavailable } : {},
     ...resumeCommand ? {
       resumeCommand,
       resumeReadOnly: true,
@@ -29988,6 +30134,28 @@ function stableJson(value) {
 }
 function isRecord23(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// dist/manual-browser-action.js
+async function openManualBrowserAction(stage, manualOpenUrl, open9, write = (message) => {
+  process.stderr.write(message);
+}) {
+  const progress = (browserLaunch) => write(`${JSON.stringify({
+    type: "user_action_required",
+    stage,
+    manualOpenUrl,
+    processRunning: true,
+    nextAction: "show_link_before_waiting",
+    ...browserLaunch ? { browserLaunch: browserLaunch.status } : {}
+  })}
+`);
+  progress();
+  const result = await open9();
+  if (result.status !== "launched") {
+    write("Open the link in your own browser. The original command is still waiting; do not run it again.\n");
+    progress(result);
+  }
+  return result;
 }
 
 // dist/visa/service.js
@@ -32000,7 +32168,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
       process.stderr.write(`Complete Purchase Instruction authorization in your browser:
 ${url}
 `);
-      return openPortalWithBrowserHandoff(context, url);
+      return openManualBrowserAction("instruction_authorization", url, () => openPortalWithBrowserHandoff(context, url));
     },
     waitForEvents: async (options2) => {
       const result = await collectCommandEvents(context, options2);
@@ -32060,7 +32228,10 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
       process.stderr.write(`Complete Visa card enrollment in your browser:
 ${url}
 `);
-      return { url, browserLaunch: await openPortalWithBrowserHandoff(context, url) };
+      return {
+        url,
+        browserLaunch: await openManualBrowserAction("vic", url, () => openPortalWithBrowserHandoff(context, url))
+      };
     },
     preparePurchaseIntent: async (instructionContext) => {
       const cards = await refreshCards();
@@ -32105,7 +32276,7 @@ ${event.url}
           if (context.globalOptions.open) {
             process.stderr.write("Opening your browser...\n");
           }
-          browserLaunch = await openBrowserWithResult(context.globalOptions.open, event.url);
+          browserLaunch = await openManualBrowserAction("login", event.url, () => openBrowserWithResult(context.globalOptions.open, event.url));
           process.stderr.write("Waiting for authorization...\n");
         }
       });
@@ -33151,6 +33322,10 @@ Behavior:
   config or touches Tokens or the network. Dry-run performs no login inspection, config mutation,
   browser launch, or network request.
 
+  Progress on stderr includes type=user_action_required, manualOpenUrl, and processRunning=true
+  before browser work. The Host should return partial output early so the Agent can show the link
+  before waiting again. This does not terminate or restart the CLI; final stdout is still one JSON.
+
   When login was already ready before any browser action, commerce-login can open the existing
   card-only VIC page once for a unique/default Visa explicitly not VIC-ready. It prepares PENDING
   first, requires ceremonyInProgress=false and activationExpected=true, and rechecks the same card.
@@ -33264,6 +33439,9 @@ Behavior:
   Portal owns card binding, 3DS, and VIC. After activation, commerce-run exact-GETs the same
   Instruction, refreshes cards, and requires the attached paymentInstrumentId to be a same-card
   Visa with visaRegistrationSucceeded=true before continuing.
+  Authorization progress on stderr exposes manualOpenUrl before waiting; show it before querying
+  the same running command again. orderUrl, when returned, is the current Portal transaction page
+  for clinkOrderId, not the UCP orderId. Missing payment identity reports orderUrlUnavailable.
   It lists only that payment instrument's Instructions and considers ACTIVE candidates whose
   currency, MCC, merchant scope, Instruction expiry, Mandate expiry, and one-time reserve status
   still permit the actual total. It chooses the smallest amountLimit greater than or equal to the

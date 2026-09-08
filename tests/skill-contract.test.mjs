@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.74');
+  assert.equal(packageJson.version, '0.1.75');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -626,6 +626,23 @@ test('short purchase replies bind the unchanged order without restatement', () =
   assert.doesNotMatch(skill, /recommend-products -> ask to order/u);
   assert.match(skill, /never silently reduce the quantity\s+or split the purchase/u);
   assert.match(skill, /one product with quantity 1 only/u);
+});
+
+test('manual browser links are shown from running output before the next wait', () => {
+  assert.match(skill, /Host's supported short-yield or\s+non-blocking tool-result mode/u);
+  assert.match(skill, /1-2 second initial result window[\s\S]*not a\s+process timeout/u);
+  assert.match(skill, /user_action_required[\s\S]*manualOpenUrl[\s\S]*before the next status query or wait/u);
+  assert.match(skill, /same\s+Host command\/process ID[\s\S]*do not re-run login or purchase/u);
+  assert.match(skill, /progress record is not success/u);
+  assert.match(agent, /show\s+manualOpenUrl[\s\S]*before\s+waiting again/u);
+  assert.doesNotMatch(skill, /Keep the process foreground until ready/u);
+});
+
+test('order replies include the CLI Portal link and never substitute a UCP identity', () => {
+  assert.match(skill, /returns `orderUrl`[\s\S]*clickable "View order" link/u);
+  assert.match(skill, /Never build `\/transaction\/` from a UCP `order\.id`, Checkout ID/u);
+  assert.match(skill, /orderUrlUnavailable[\s\S]*do not invent an ID or retry/u);
+  assert.match(agent, /orderUrl as a clickable 查看订单 \/ View order link/u);
 });
 
 test('Visa fast path preserves aggregate order and never decomposes purchase', () => {
