@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.79');
+  assert.equal(packageJson.version, '0.1.81');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -648,6 +648,34 @@ test('pre-command notices distinguish optional login and authorization pages wit
   assert.match(agent, /notices, not questions; execute immediately without waiting for a reply/u);
 });
 
+test('no-card PENDING timeout requests card binding instead of Instruction activation', () => {
+  for (const text of [skill, agent]) {
+    const normalized = text.replace(/\s+/gu, ' ');
+    assert.match(normalized, /With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes/u);
+    assert.match(normalized, /On timeout, if there is still no Visa card, stop waiting and ask the user to bind a Visa card/u);
+    assert.match(normalized, /Agent Portal entry as a binding link; the Portal home page is allowed for binding only/u);
+    assert.match(normalized, /Do not ask the user to activate the Instruction or show a VIC\/Instruction activation link in this no-card state/u);
+    assert.match(normalized, /Preserve the same Quick Instruction ID; never create a second/u);
+  }
+});
+
+test('Quick Instruction continuation is exact and never falls back to a second Instruction', () => {
+  const normalizedAgent = agent.replace(/\s+/gu, ' ');
+  assert.match(skill, /`commerce-run` must not create a second Instruction/u);
+  assert.match(skill, /continue this exact Quick Instruction/u);
+  assert.match(normalizedAgent, /commerce-login creates a Quick Instruction/u);
+  assert.match(normalizedAgent, /commerce-run must continue that exact ID/u);
+  assert.match(normalizedAgent, /never create a second or regular replacement/u);
+  assert.match(skill, /With no Visa card[\s\S]*wait[\s\S]*Agent Portal entry as a binding link/u);
+  assert.match(skill, /exact VIC[\s\S]*URL/u);
+  assert.match(skill, /never the Portal home page/u);
+  assert.match(skill, /exact Instruction authorization URL/u);
+  assert.match(skill, /same frozen context/u);
+  assert.match(skill, /still-PENDING[\s\S]*exactly one card-bound Instruction/u);
+  assert.match(skill, /existing exact[\s\S]*ACTIVE Instruction[\s\S]*reused directly/u);
+  assert.doesNotMatch(skill, /eligible ACTIVE Instruction selection or exact-price regular Instruction\s+creation/u);
+});
+
 test('manual browser failure returns control and permits only an explicit pre-checkout continuation', () => {
   assert.match(skill, /Failed or explicitly disabled opening returns promptly with `manualOpenUrl`/u);
   assert.match(skill, /rerunAllowed=true[\s\S]*resumeMode=same_command[\s\S]*checkoutStarted=false/u);
@@ -722,7 +750,8 @@ test('Portal owns binding and only the existing-card path may open VIC once', ()
   assert.match(gate, /exact PENDING before its VIC authorization starts/u);
   assert.match(gate, /LOGIN and REGISTER both/u);
   assert.match(gate, /same card to be VIC-ready and the bound Instruction to be ACTIVE/u);
-  assert.match(gate, /card-bound Instruction[\s\S]*ordinary Instruction authorization/u);
+  assert.match(gate, /reuses the carried Quick[\s\S]*Instruction/u);
+  assert.match(gate, /exact matching ACTIVE Instruction/u);
   assert.match(gate, /timeout[\s\S]*read-only continuation[\s\S]*Never create a replacement or retry payment/iu);
 
   const cardCapability = skill.slice(

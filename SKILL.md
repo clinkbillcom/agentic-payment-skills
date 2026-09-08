@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.79. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.81. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.79"
+  version: "0.1.81"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -201,13 +201,29 @@ For every authorized `visa commerce-login` purchase:
   The Agent never opens an additional page or decides this from card timestamps.
 - Without a VIC-ready Visa card, the CLI/CWallet prepare or reuse the purchase's
   exact PENDING before its VIC authorization starts. LOGIN and REGISTER both
-  support this path. The CLI waits; the Agent does not inspect card timestamps,
-  choose a latest PENDING, or reconstruct card/Instruction commands.
+  support this path. `commerce-run` must continue this exact Quick Instruction;
+  it must never create a second Instruction because the card is not yet ready.
+  The CLI waits; the Agent does not inspect card timestamps, choose a latest
+  PENDING, or reconstruct card/Instruction commands.
+- With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes.
+  On timeout, if there is still no Visa card, stop waiting and ask the user to
+  bind a Visa card. Show the CLI-returned Agent Portal entry as a binding link;
+  the Portal home page is allowed for binding only. Do not ask the user to
+  activate the Instruction or show a VIC/Instruction activation link in this
+  no-card state. Preserve the same Quick Instruction ID; never create a second
+  in this no-card case. With a Visa card but no VIC, provide/open the exact VIC
+  URL, never the Portal home page. With a VIC-ready card and a still-PENDING
+  no-card Quick Instruction, do not wait for binding or try ordinary activation.
+  Create exactly one card-bound Instruction for the same frozen context and use
+  --open to open its exact Instruction authorization URL. An existing exact
+  ACTIVE Instruction is reused directly.
 - CWallet activates only the PENDING associated with that VIC flow. Completion
   requires the same card to be VIC-ready and the bound Instruction to be ACTIVE.
   An unrelated or already-running authorization must not be reused.
-- With a VIC-ready Visa card, the CLI uses an eligible card-bound Instruction
-  or requests ordinary Instruction authorization, without another card/VIC setup.
+- With a VIC-ready Visa card, `commerce-run` first reuses the carried Quick
+  Instruction or an exact matching ACTIVE Instruction. It must not create a
+  regular replacement. If the carried PENDING still needs authorization, the
+  CLI must open or return its exact supported Instruction authorization URL.
 - A timeout preserves the exact purchase and allows only the CLI-returned
   read-only continuation. Never create a replacement or retry payment.
 
@@ -453,8 +469,7 @@ Before the command, say once in the locked language:
 ```
 
 The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category enforcement,
-eligible ACTIVE Instruction selection or exact-price regular Instruction
-creation, product revalidation, one Checkout creation, at most one completion,
+exact Quick/ACTIVE Instruction reuse, product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
 Keep observing the original command until it reaches a terminal result or a
 documented timeout. After successful browser opening, remain silent while it
@@ -462,7 +477,10 @@ waits and automatically report the final result and orderUrl when available.
 Manual opening, missing/changed facts, or a real error, refusal, cancellation, or
 timeout require a user-facing interruption.
 
-Never rerun `visa commerce-run` after it may have created a Checkout. Execute
+`commerce-run` must not create a second Instruction after `commerce-login`
+created a Quick Instruction. If the exact Quick Instruction is still pending,
+continue that ID or return the supported card/VIC/Instruction handoff; do not
+fall back to ordinary Instruction creation. Never rerun `visa commerce-run` after it may have created a Checkout. Execute
 only an exact CLI-returned aggregate read-only continuation, once. Never
 reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 `ucp-order` component commands for this Visa Program purchase.

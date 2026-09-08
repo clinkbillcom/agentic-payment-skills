@@ -121,9 +121,23 @@ interface:
     may open VIC once for a unique/default explicitly unready Visa present before
     browser work, after same-card and progress checks. New cards or unknown/ongoing
     state only wait in Portal; the Agent never opens another page.
-    LOGIN and REGISTER both support PENDING; VIC-ready cards use ordinary
-    Instruction authorization. Continue only with same-card VIC readiness and
-    the correct ACTIVE Instruction. A timeout permits only the exact read-only
-    continuation, never another Instruction or payment retry. Keep deterministic steps
+    LOGIN and REGISTER both support PENDING. Once commerce-login creates a Quick
+    Instruction, commerce-run must continue that exact ID and must never create
+    a second or regular replacement. With no Visa card and a PENDING Quick
+    Instruction, wait at most 15 minutes. On timeout, if there is still no Visa
+    card, stop waiting and ask the user to bind a Visa card. Show the CLI-returned
+    Agent Portal entry as a binding link; the Portal home page is allowed for
+    binding only. Do not ask the user to activate the Instruction or show a
+    VIC/Instruction activation link in this no-card state. Preserve the same
+    Quick Instruction ID; never create a second in this no-card case. With a
+    Visa card but no VIC, provide/open the exact VIC URL, never the Portal home
+    page. With a VIC-ready card and a still-PENDING no-card Quick Instruction,
+    do not wait for binding or try ordinary activation. Create exactly one
+    card-bound Instruction for the same frozen context and use --open to open
+    its exact Instruction authorization URL. An existing exact ACTIVE
+    Instruction is reused directly.
+    Continue only with same-card VIC readiness and the correct ACTIVE Instruction.
+    A timeout permits only the exact read-only continuation, never another Instruction
+    or payment retry. Keep deterministic steps
     inside the CLI, never rerun commerce-run after possible Checkout creation,
     and do not read references or use runtime --help during ordinary execution.
