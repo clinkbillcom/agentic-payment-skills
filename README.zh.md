@@ -1,7 +1,10 @@
 # Visa Skill
 
-登录/授权时通过宿主的短等待返回机制尽早获取进度，先展示 `manualOpenUrl`，
-再观察同一命令，不重启登录或支付。购买结果及订单查询直接展示 CLI 返回的
+登录/授权成功打开浏览器时静默等待，不再问用户；只有打开失败或禁用自动打开时
+由 CLI 立即退出并返回 `manualOpenUrl`。展示链接后暂停，用户完成页面操作后，
+仅在返回 `rerunAllowed=true`、`resumeMode=same_command`、`checkoutStarted=false`
+时执行相同命令和上下文，续接原登录或精确 Instruction，不重复确认购买、不重试支付。
+购买结果及订单查询直接展示 CLI 返回的
 `orderUrl` 为“查看订单”链接，不能拿 OMS/UCP 订单号自行拼 Portal URL。
 
 此分支是在 `agentic-payment-skills` 仓库中维护的轻量 Visa Skill 发行线。
@@ -72,8 +75,8 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.75` 已 vendor 上游提交
-`a55dea14b8562c30b47722e82b4cc1338a77ced1` 的 Visa CLI `0.2.59`。本
+Skill `0.1.77` 已 vendor 上游提交
+`7c9423d707f2c61fc5b58c73da724fafddddb2ef` 的 Visa CLI `0.2.61`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本版还要求
@@ -89,7 +92,7 @@ product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商
 - Node.js 20 或更高版本
 - 始终按路径调用内置 launcher，不使用全局 CLI
 - OAuth、绑卡、Passkey、3DS、Instruction 和风控页面由用户在系统浏览器完成
-- 登录前提示可能需要登录，购买执行前提示可能需要授权；提示不构成第二次购买确认
+- 用户下单后自动完成登录与购买衔接，不插入新的聊天确认；用户只在浏览器中完成授权
 
 ## 验证
 
@@ -98,7 +101,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.75`
+Skill 版本：`0.1.77`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

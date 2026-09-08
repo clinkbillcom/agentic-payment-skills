@@ -58,6 +58,7 @@ function runWithMock(args, scenario, options = {}) {
     {
       cwd: root,
       encoding: 'utf8',
+      timeout: options.timeout,
       env: {
         ...process.env,
         HOME: options.home ?? defaultHome,
@@ -129,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.59');
+  assert.equal(vendorPackage.version, '0.2.61');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'a55dea14b8562c30b47722e82b4cc1338a77ced1',
+    '7c9423d707f2c61fc5b58c73da724fafddddb2ef',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -142,6 +143,41 @@ test('launchers and Visa Edition provenance are exact', async () => {
     createHash('sha256').update(vendorBundle).digest('hex'),
     vendorPackage.bundleSha256,
   );
+});
+
+test('manual login exits with its link in stdout and an identical command resumes the persisted flow', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'visa-manual-login-'));
+  const purchase = programPurchaseContext();
+  const args = [
+    'visa', 'commerce-login', '--context', JSON.stringify({
+      environment: purchase.environment,
+      expected: { amount: purchase.expected.amount, currency: purchase.expected.currency },
+      instructionContext: purchase.instructionContext,
+    }), '--confirm-purchase', '--no-open', '--format', 'json',
+  ];
+  try {
+    const first = runWithMock(args, 'manual-login-start', { home, timeout: 5000 });
+    assert.equal(first.status, 0, first.stderr);
+    const result = JSON.parse(first.stdout).data;
+    assert.equal(result.status, 'user_action_required');
+    assert.equal(result.manualOpenUrl, 'https://login.example/oauth?state=manual-state');
+    assert.equal(result.rerunAllowed, true);
+    assert.equal(result.resumeMode, 'same_command');
+    assert.equal(result.checkoutStarted, false);
+    assert.doesNotMatch(first.stderr, /manual-state/);
+    const configFile = join(home, '.clink-cli', 'config.json');
+    const pending = JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin;
+    assert.equal(pending.deviceCode, 'manual-device');
+    const repeat = runWithMock(args, 'manual-login-resume', { home, timeout: 5000 });
+    assert.equal(repeat.status, 0, repeat.stderr);
+    assert.equal(JSON.parse(repeat.stdout).data.manualOpenUrl, result.manualOpenUrl);
+    assert.equal(
+      JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin.resumeId,
+      pending.resumeId,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test('vendored order lookup exposes a Portal link using the Clink payment ID rather than the UCP ID', () => {
@@ -1118,6 +1154,22 @@ function registeredCatalogResponse() {
 
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
+  if (scenario === 'manual-login-start' || scenario === 'manual-login-resume') {
+    if (scenario === 'manual-login-start' && url.pathname.endsWith('/benefit/authorization')) {
+      return jsonResponse({ data: {
+        deviceCode: 'manual-device', state: 'manual-state',
+        authorizationUrl: 'https://login.example/oauth?state=manual-state',
+        expiresIn: 600, interval: 2,
+      } });
+    }
+    if (scenario === 'manual-login-resume' && url.pathname.endsWith('/benefit/token')) {
+      if (JSON.parse(init.body).deviceCode !== 'manual-device') throw new Error('wrong flow');
+      return new Response(JSON.stringify({ error: 'authorization_pending' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected manual login request: ' + url.pathname);
+  }
   if (scenario === 'portal-order-link') {
     if (url.pathname === '/agent/ucp/orders/ord_fixture') {
       return jsonResponse({

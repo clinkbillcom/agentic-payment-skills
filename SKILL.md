@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.75. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.77. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.75"
+  version: "0.1.77"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -161,18 +161,24 @@ OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
 belong in the user's browser. CLI `--open` may launch OAuth/login, Instruction,
 3DS, or risk; on failure, show only the exact CLI `manualOpenUrl`.
 
-For commerce-login and commerce-run, use the Host's supported short-yield or
-non-blocking tool-result mode so the Agent regains control while the CLI stays
-alive. Prefer a 1-2 second initial result window when supported; this is not a
-process timeout. Never use shell `&`, `nohup`, kill/restart, or invent CLI flags.
-On a running result containing `type=user_action_required` and `manualOpenUrl`,
-immediately show that exact link as a clickable "Open to log in/authorize" link
-in the locked language, before the next status query or wait. Tell the user to
-open it on their own phone/browser if automatic opening failed. Follow the same
-Host command/process ID until completion; do not re-run login or purchase.
-Deduplicate the same link and do not repeatedly ask for purchase confirmation.
-If the Host cannot return intermediate output, report that limitation rather
-than claiming the user has received the link. A progress record is not success.
+For commerce-login and commerce-run, successful browser opening stays silent:
+`browserLaunch=launched` does not call for a message, link, or "if it did not open"
+paragraph. Continue observing the same Host command/process ID until completion;
+do not ask for another purchase authorization or chat reply while it is running.
+Never kill/restart a running command or use shell background jobs.
+
+Failed or explicitly disabled opening returns promptly with `manualOpenUrl`.
+When the completed tool result also has `rerunAllowed=true`,
+`resumeMode=same_command`, and `checkoutStarted=false`, show that exact link once
+in the locked language and pause for the user to complete the page. After the user
+returns, execute the identical command with the unchanged context file. This is
+continuation of the existing login or exact Instruction, not a new purchase
+confirmation. Do not immediately loop the command before the user completes the
+page. No intermediate Shell output is required for this fallback.
+Without these explicit continuation fields, do not infer that a command is safe
+to rerun. After possible Checkout creation, only CLI-returned read-only recovery
+is allowed. Browser opening success is not proof that the page appeared on a phone;
+if the user reports that mismatch, explain it rather than claiming failure detection.
 
 For standalone card-link requests, show but never auto-open an exact CLI-returned Bind Card
 link. The user may click it or use an already-open Agent Portal. Never inspect,
@@ -414,7 +420,8 @@ recalculate amounts. The CLI constructs and validates these inputs. If
 `purchaseContext` is absent, report `purchaseContextUnavailable`; do not
 invent the missing data or use `visa detail` to repair it.
 
-Before login say, in the locked language: "接下来可能需要登录。" Then run once:
+After the user's purchase request, start login once without another conversation
+checkpoint. The CLI opens the required browser page; the user acts there:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
@@ -424,14 +431,13 @@ Before login say, in the locked language: "接下来可能需要登录。" Then 
   --format json
 ```
 
-Keep the same process alive until ready or a bound timeout, using the Host's
-running-command status tool between user messages. Do not hold the Agent inside
-one long blocking Shell call while the user needs a link. Do not copy
-login-returned Instruction IDs into the purchase file.
+Observe the same process until it returns. A manual-open result follows Browser
+Boundary: show the link and pause, then rerun the identical command after the user
+completes the page. Do not copy login-returned Instruction IDs into the purchase file.
 
-Before commerce-run say, in the locked language:
-"接下来可能需要你完成授权，请在页面中继续。" This is a notice, not another
-purchase-confirmation question. Run once with the same file:
+When login is ready, immediately run commerce-run once with the same file,
+without asking for authorization or another user reply. Browser authorization
+is completed on the opened page, not through a conversation checkpoint:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
@@ -445,6 +451,11 @@ The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category
 eligible ACTIVE Instruction selection or exact-price regular Instruction
 creation, product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
+Keep observing the original command until it reaches a terminal result or a
+documented timeout. After successful browser opening, remain silent while it
+waits and automatically report the final result and orderUrl when available.
+Manual opening, missing/changed facts, or a real error, refusal, cancellation, or
+timeout require a user-facing interruption.
 
 Never rerun `visa commerce-run` after it may have created a Checkout. Execute
 only an exact CLI-returned aggregate read-only continuation, once. Never

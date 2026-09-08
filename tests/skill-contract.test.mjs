@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.75');
+  assert.equal(packageJson.version, '0.1.77');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -628,14 +628,16 @@ test('short purchase replies bind the unchanged order without restatement', () =
   assert.match(skill, /one product with quantity 1 only/u);
 });
 
-test('manual browser links are shown from running output before the next wait', () => {
-  assert.match(skill, /Host's supported short-yield or\s+non-blocking tool-result mode/u);
-  assert.match(skill, /1-2 second initial result window[\s\S]*not a\s+process timeout/u);
-  assert.match(skill, /user_action_required[\s\S]*manualOpenUrl[\s\S]*before the next status query or wait/u);
-  assert.match(skill, /same\s+Host command\/process ID[\s\S]*do not re-run login or purchase/u);
-  assert.match(skill, /progress record is not success/u);
-  assert.match(agent, /show\s+manualOpenUrl[\s\S]*before\s+waiting again/u);
-  assert.doesNotMatch(skill, /Keep the process foreground until ready/u);
+test('manual browser failure returns control and permits only an explicit pre-checkout continuation', () => {
+  assert.match(skill, /Failed or explicitly disabled opening returns promptly with `manualOpenUrl`/u);
+  assert.match(skill, /rerunAllowed=true[\s\S]*resumeMode=same_command[\s\S]*checkoutStarted=false/u);
+  assert.match(skill, /After the user\s+returns, execute the identical command with the unchanged context file/u);
+  assert.match(skill, /Do not immediately loop the command/u);
+  assert.match(agent, /rerunAllowed=true[\s\S]*resumeMode=same_command[\s\S]*checkoutStarted=false/u);
+  assert.match(skill, /browserLaunch=launched[\s\S]*does not call for a message, link/u);
+  assert.match(skill, /No intermediate Shell output is required/u);
+  assert.match(skill, /After possible Checkout creation[\s\S]*read-only recovery/u);
+  assert.doesNotMatch(skill, /1-2 second initial result window|do not re-run login or purchase/u);
 });
 
 test('order replies include the CLI Portal link and never substitute a UCP identity', () => {
@@ -667,9 +669,10 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   );
   assert.match(section, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN[\s\S]*productResolution=internal-ucp-catalog/u);
   assert.equal((section.match(/--context-file <purchase-context\.json>/gu) ?? []).length, 2);
-  assert.match(section, /接下来可能需要登录。/u);
-  assert.match(section, /接下来可能需要你完成授权，请在页面中继续。/u);
-  assert.match(section, /notice, not another\s+purchase-confirmation question/u);
+  assert.match(section, /start login once without another conversation\s+checkpoint/u);
+  assert.match(section, /When login is ready, immediately run commerce-run/u);
+  assert.match(section, /without asking for authorization or another user reply/u);
+  assert.match(section, /After successful browser opening, remain silent/u);
   assert.match(section, /single\s+purchase authorization/iu);
   assert.match(
     section,

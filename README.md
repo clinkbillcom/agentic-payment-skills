@@ -1,7 +1,10 @@
 # Visa Skill
 
-During login/run, use the Host's early running-result mechanism: show the CLI's
-`manualOpenUrl` before the next wait, then observe the same command without restarting.
+During login/run, successful browser opening is silent and the CLI keeps waiting.
+Failed or explicitly disabled opening returns `manualOpenUrl` promptly. Show it
+once and pause; after the user completes the page, rerun the identical command
+only when `rerunAllowed=true`, `resumeMode=same_command`, and `checkoutStarted=false`.
+The CLI resumes the existing login or exact Instruction, never a possible Checkout.
 Purchase and order-detail replies include the returned `orderUrl` as a clickable
 View order link; never construct a Portal URL from an OMS/UCP order ID.
 
@@ -89,8 +92,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.75` vendors Visa CLI `0.2.59` from upstream commit
-`a55dea14b8562c30b47722e82b4cc1338a77ced1`. This product-match branch performs
+Skill `0.1.77` vendors Visa CLI `0.2.61` from upstream commit
+`7c9423d707f2c61fc5b58c73da724fafddddb2ef`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
@@ -110,8 +113,8 @@ missing purchase data or decomposing the purchase into atomic commands.
 - Invoke the bundled launcher by path; do not use a global CLI
 - Complete OAuth, card, Passkey, 3DS, Instruction, and risk pages in the user's
   system browser
-- Login and purchase execution have brief advance notices, not repeated purchase
-  confirmations; card binding and VIC remain in Portal
+- Login and purchase continue without another conversation checkpoint; browser
+  authorization stays in Portal, and only a failed opener needs a fallback link
 
 ## Verification
 
@@ -120,7 +123,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.75`
+Skill version: `0.1.77`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

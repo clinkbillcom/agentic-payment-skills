@@ -95,14 +95,19 @@ interface:
     and use the same file in commerce-login and commerce-run. Never build an
     Instruction context, infer MCC, or copy Program fields. If purchaseContext is
     missing, report purchaseContextUnavailable instead of inventing data.
-    Before commerce-login say 接下来可能需要登录。 Before commerce-run say
-    接下来可能需要你完成授权，请在页面中继续。 Use the locked language;
-    these are notices, not confirmation questions.
-    Use the Host's supported short-yield/non-blocking tool result for login/run,
-    not a terminating process timeout or shell background job. Immediately show
-    manualOpenUrl from user_action_required progress as a clickable link before
-    waiting again; let the user open it on their phone when automatic opening
-    fails. Track the same command/process ID, never restart login or purchase.
+    Once the user requests the unchanged purchase, run login and then commerce-run
+    without another conversation checkpoint. Do not ask the user to authorize in
+    chat, say done, or confirm continuation; they act on the CLI-opened browser page.
+    Successful browser opening stays silent; observe the same running command
+    until it returns, without asking for a chat reply or killing/restarting it.
+    Failed or explicitly disabled opening returns manualOpenUrl promptly. When
+    the completed result also has rerunAllowed=true, resumeMode=same_command,
+    and checkoutStarted=false, show the exact link once and pause for the user
+    to complete the page. After the user returns, execute the identical command
+    with the unchanged context file, without another purchase confirmation.
+    Do not immediately loop retries. The CLI resumes the persisted login or
+    exact Instruction; possible Checkout creation allows read-only recovery only.
+    Automatically continue after readiness and report the terminal result.
     Include returned orderUrl as a clickable 查看订单 / View order link in purchase
     and order-detail replies. Never substitute UCP order IDs or Checkout IDs;
     explain orderUrlUnavailable without inventing a link or retrying payment.
