@@ -37,7 +37,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.78');
+  assert.equal(packageJson.version, '0.1.79');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -636,6 +636,16 @@ test('short purchase replies bind the unchanged order without restatement', () =
   assert.doesNotMatch(skill, /recommend-products -> ask to order/u);
   assert.match(skill, /never silently reduce the quantity\s+or split the purchase/u);
   assert.match(skill, /one product with quantity 1 only/u);
+});
+
+test('pre-command notices distinguish optional login and authorization pages without asking again', () => {
+  for (const text of [skill, agent]) {
+    assert.ok(text.includes('现在启动登录流程，可能打开浏览器登录页面。'));
+    assert.ok(text.includes('登录已就绪，直接执行购买流程，可能打开浏览器授权页面。'));
+    assert.doesNotMatch(text, /现在启动登录流程，浏览器会打开授权页面/u);
+  }
+  assert.match(skill, /already-ready login does not\s+need another login page/u);
+  assert.match(agent, /notices, not questions; execute immediately without waiting for a reply/u);
 });
 
 test('manual browser failure returns control and permits only an explicit pre-checkout continuation', () => {

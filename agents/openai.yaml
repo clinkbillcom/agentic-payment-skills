@@ -98,6 +98,11 @@ interface:
     Once the user requests the unchanged purchase, run login and then commerce-run
     without another conversation checkpoint. Do not ask the user to authorize in
     chat, say done, or confirm continuation; they act on the CLI-opened browser page.
+    Before login, say once in the locked language:
+    "现在启动登录流程，可能打开浏览器登录页面。"
+    Before purchase after login readiness, say once:
+    "登录已就绪，直接执行购买流程，可能打开浏览器授权页面。"
+    These are notices, not questions; execute immediately without waiting for a reply.
     Successful browser opening stays silent; observe the same running command
     until it returns, without asking for a chat reply or killing/restarting it.
     Failed or explicitly disabled opening returns manualOpenUrl promptly. When

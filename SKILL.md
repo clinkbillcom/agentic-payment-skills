@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.78. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.79. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.78"
+  version: "0.1.79"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -422,7 +422,9 @@ recalculate amounts. The CLI constructs and validates these inputs. If
 invent the missing data or use `visa detail` to repair it.
 
 After the user's purchase request, start login once without another conversation
-checkpoint. The CLI opens the required browser page; the user acts there:
+checkpoint. Before the command, say once in the locked language:
+"现在启动登录流程，可能打开浏览器登录页面。" An already-ready login does not
+need another login page. This is a notice, not a question; execute immediately:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
@@ -438,7 +440,9 @@ completes the page. Do not copy login-returned Instruction IDs into the purchase
 
 When login is ready, immediately run commerce-run once with the same file,
 without asking for authorization or another user reply. Browser authorization
-is completed on the opened page, not through a conversation checkpoint:
+is completed on the opened page, not through a conversation checkpoint.
+Before the command, say once in the locked language:
+"登录已就绪，直接执行购买流程，可能打开浏览器授权页面。" Then execute immediately:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
