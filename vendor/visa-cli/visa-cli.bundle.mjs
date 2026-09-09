@@ -10807,7 +10807,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.61";
+var CLI_VERSION = "0.2.62";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -29174,7 +29174,8 @@ async function runVisaCommerce(context, options2, dependencies) {
     };
   }
   const continuation = await dependencies.getContinuation?.();
-  if (continuation?.phase === "checkout_started") {
+  const quick = await dependencies.getQuickContinuation?.();
+  if (continuation?.phase === "checkout_started" || quick?.phase === "checkout_started") {
     return {
       command: "visa commerce-run",
       stage: "checkout",
@@ -29182,9 +29183,26 @@ async function runVisaCommerce(context, options2, dependencies) {
       terminal: true,
       paymentRetryAllowed: false,
       rerunAllowed: false,
-      instructionId: continuation.instructionId,
+      instructionId: quick?.instructionId ?? continuation?.instructionId,
       reason: "This continuation already entered Checkout; inspect the existing order, do not run again."
     };
+  }
+  let quickInstruction;
+  if (quick) {
+    try {
+      quickInstruction = await dependencies.getInstruction(quick.instructionId);
+    } catch (error) {
+      return workflowFailure("quick_instruction_get", error, {
+        instructionId: quick.instructionId,
+        createsAnotherInstruction: false
+      });
+    }
+    if (!quickInstruction || instructionId(quickInstruction) !== quick.instructionId) {
+      return quickInstructionFailure(quick, "saved_quick_instruction_not_found_or_identity_mismatch");
+    }
+    if (!["ACTIVE", "PENDING"].includes(instructionStatus(quickInstruction))) {
+      return quickInstructionFailure(quick, "saved_quick_instruction_not_active_or_pending");
+    }
   }
   let resolvedPurchase;
   try {
@@ -29192,7 +29210,7 @@ async function runVisaCommerce(context, options2, dependencies) {
   } catch (error) {
     return workflowFailure("product_resolution", error);
   }
-  const cardResult = await ensureVisaCardReady(dependencies, context, maxWaitSeconds, continuation?.paymentInstrumentId);
+  const cardResult = quick && quickInstruction ? await resolveQuickVisaAuthorization(dependencies, context, quick, quickInstruction, maxWaitSeconds) : await ensureVisaCardReady(dependencies, context, maxWaitSeconds, continuation?.paymentInstrumentId);
   if (!cardResult.ready) {
     return {
       command: "visa commerce-run",
@@ -29225,7 +29243,13 @@ async function runVisaCommerce(context, options2, dependencies) {
   }
   let checkout;
   try {
-    if (continuation) {
+    if (quick) {
+      await dependencies.saveQuickContinuation?.({
+        ...quick,
+        paymentInstrumentId,
+        phase: "checkout_started"
+      });
+    } else if (continuation) {
       await dependencies.saveContinuation?.({ ...continuation, phase: "checkout_started" });
     }
     checkout = await dependencies.runCheckout({
@@ -29585,6 +29609,164 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
     }
   };
 }
+async function resolveQuickVisaAuthorization(dependencies, context, quick, instruction, maxWaitSeconds) {
+  const waitSeconds = Math.min(maxWaitSeconds, DEFAULT_WORKFLOW_WAIT_SECONDS);
+  const failure = (reason) => quickInstructionFailure(quick, reason);
+  const valid = (exact) => Boolean(exact && instructionId(exact) === quick.instructionId && ["PENDING", "ACTIVE"].includes(instructionStatus(exact)) && pendingInstructionMatchesContext(exact, instructionPaymentInstrumentId(exact), context, true));
+  if (!valid(instruction)) {
+    return failure("quick_instruction_failed_exact_context_verification");
+  }
+  const readExact = async () => dependencies.getInstruction(quick.instructionId);
+  const waitForExact = async () => dependencies.waitForEvents({
+    type: "purchase_instruction.activated",
+    maxWaitSeconds: waitSeconds,
+    expectedResource: {
+      instructionId: quick.instructionId,
+      purchaseInstructionId: quick.instructionId
+    }
+  });
+  const activeResult = (exact, cards) => {
+    const pi = instructionPaymentInstrumentId(exact);
+    const card = cards.find((item) => item.paymentInstrumentId === pi);
+    if (!pi || quick.paymentInstrumentId && quick.paymentInstrumentId !== pi || !card || cardDisabled(card) || !cardIsVisa(card) || !cardVicReady(card)) {
+      return failure("quick_instruction_active_card_not_vic_ready_or_mismatched");
+    }
+    return {
+      ready: true,
+      card,
+      instruction: {
+        instructionId: quick.instructionId,
+        source: "pending_activated",
+        detail: exact
+      }
+    };
+  };
+  try {
+    let cards = await dependencies.refreshCards();
+    if (instructionStatus(instruction) === "ACTIVE") {
+      return activeResult(instruction, cards);
+    }
+    let enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
+    if (enabledVisa.length === 0) {
+      const wait2 = await waitForExact();
+      const exact2 = await readExact();
+      if (!valid(exact2))
+        return failure("quick_instruction_changed_or_unavailable_after_wait");
+      instruction = exact2;
+      cards = await dependencies.refreshCards();
+      if (instructionStatus(instruction) === "ACTIVE")
+        return activeResult(instruction, cards);
+      enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
+      if (enabledVisa.length === 0) {
+        return {
+          ready: false,
+          stage: "card",
+          status: wait2.timedOut ? "timeout" : "pending",
+          terminal: false,
+          userActionRequired: true,
+          reason: "bind_a_visa_card_in_agent_portal",
+          instructionId: quick.instructionId,
+          bindCardUrl: dependencies.bindingPortalUrl?.() ?? null,
+          createsAnotherInstruction: false,
+          paymentRetryAllowed: false,
+          rerunAllowed: true,
+          resumeMode: "same_command",
+          checkoutStarted: false
+        };
+      }
+    }
+    const boundPi = instructionPaymentInstrumentId(instruction);
+    if (quick.paymentInstrumentId && boundPi && quick.paymentInstrumentId !== boundPi) {
+      return failure("quick_instruction_payment_instrument_changed");
+    }
+    const pinnedPi = quick.paymentInstrumentId || boundPi;
+    const readySelection = selectVisaCard(cards, pinnedPi);
+    const defaults = enabledVisa.filter(cardDefault);
+    const existingCard = enabledVisa.length === 1 ? enabledVisa[0] : defaults.length === 1 ? defaults[0] : void 0;
+    const card = pinnedPi ? enabledVisa.find((item) => item.paymentInstrumentId === pinnedPi) : readySelection.action === "use" ? readySelection.card : existingCard;
+    if (!card) {
+      return {
+        ...failure("select_one_eligible_visa_card"),
+        stage: "card_selection",
+        status: "ambiguous",
+        cards: enabledVisa.map(safeCard)
+      };
+    }
+    const stage = cardVicReady(card) ? "instruction" : "vic";
+    const url = dependencies.passkeyUrl(card.paymentInstrumentId, quick.instructionId);
+    const manual = {
+      ready: false,
+      ...manualInstructionResult(quick.instructionId, card.paymentInstrumentId, url),
+      stage: stage === "vic" ? "vic" : "instruction_authorization",
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+    if (quick.authorizationStage === stage || instruction.ceremonyInProgress === true || card.ceremonyInProgress === true) {
+      return { ...manual, reason: "authorization_already_started_continue_existing_page" };
+    }
+    if (stage === "vic" && (card.visaRegistrationSucceeded !== false || instruction.ceremonyInProgress !== false)) {
+      return { ...manual, reason: "vic_ceremony_state_unknown_use_existing_card_link" };
+    }
+    quick = {
+      ...quick,
+      paymentInstrumentId: card.paymentInstrumentId,
+      phase: "authorization",
+      authorizationStage: stage
+    };
+    await dependencies.saveQuickContinuation?.(quick);
+    let browserLaunch;
+    try {
+      browserLaunch = await dependencies.openUserAction(url, "instruction_authorization");
+    } catch (error) {
+      return { ...manual, error: error instanceof Error ? error.message : "browser_open_failed" };
+    }
+    if (browserLaunch.status !== "launched")
+      return { ...manual, browserLaunch };
+    const wait = await waitForExact();
+    const exact = await readExact();
+    if (!valid(exact))
+      return failure("quick_instruction_changed_or_unavailable_after_authorization");
+    if (instructionStatus(exact) === "ACTIVE") {
+      return activeResult(exact, await dependencies.refreshCards());
+    }
+    return {
+      ready: false,
+      stage: "instruction_activation",
+      status: wait.timedOut ? "timeout" : "pending",
+      terminal: false,
+      instructionId: quick.instructionId,
+      paymentInstrumentId: card.paymentInstrumentId,
+      browserLaunch,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false,
+      rerunAllowed: true,
+      resumeMode: "same_command",
+      checkoutStarted: false,
+      resumeCommand: instructionGetResumeCommand(quick.instructionId)
+    };
+  } catch (error) {
+    return {
+      ready: false,
+      ...workflowFailure("quick_instruction_continuation", error, {
+        instructionId: quick.instructionId,
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      })
+    };
+  }
+}
+function quickInstructionFailure(quick, reason) {
+  return {
+    ready: false,
+    stage: "instruction_verification",
+    status: "failed",
+    terminal: true,
+    reason,
+    instructionId: quick.instructionId,
+    createsAnotherInstruction: false,
+    paymentRetryAllowed: false
+  };
+}
 function selectVisaCard(cards, requestedPaymentInstrumentId) {
   const enabled = cards.filter((card) => !cardDisabled(card));
   if (requestedPaymentInstrumentId) {
@@ -29624,6 +29806,7 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
   const continuation = await dependencies.getContinuation?.();
   if (continuation) {
     const exact = await dependencies.getInstruction(continuation.instructionId);
+    const continuationStatus = exact ? optionalText5(exact.status ?? exact.state)?.toUpperCase() : void 0;
     if (continuation.paymentInstrumentId !== paymentInstrumentId || !exact || instructionId(exact) !== continuation.instructionId || exact.paymentInstrumentId !== paymentInstrumentId) {
       return { result: {
         stage: "instruction_authorization",
@@ -29639,7 +29822,7 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
         result: {}
       };
     }
-    const status = optionalText5(exact.status ?? exact.state)?.toUpperCase();
+    const status = continuationStatus;
     if (status !== "CREATED" && status !== "PENDING") {
       return { result: {
         stage: "instruction_authorization",
@@ -29897,12 +30080,12 @@ function createdInstructionMatchesContext(instruction, paymentInstrumentId, cont
   const observedMandates = mandateArray(instruction);
   return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
 }
-function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context) {
+function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context, allowPending = false) {
   const expected = context.instructionContext;
   const nowMs = Date.now();
   const instructionExpiryMs = parsedFutureTimestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time, nowMs);
   const observedRecurring = normalizedBoolean(instruction.isRecurring ?? instruction.is_recurring);
-  if (instructionStatus(instruction) !== "ACTIVE" || instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
+  if (instructionStatus(instruction) !== "ACTIVE" && !(allowPending && instructionStatus(instruction) === "PENDING") || paymentInstrumentId !== void 0 && instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
     return false;
   }
   const expectedMandates = expected.mandates;
@@ -30220,6 +30403,18 @@ function isRecord23(value) {
 
 // dist/visa/commerce-continuation.js
 import { createHash as createHash6 } from "node:crypto";
+function quickInstructionFingerprint(value) {
+  if (value.identity.type === "none" || !value.identity.customerId) {
+    throw authError("Quick Instruction continuation requires an authenticated customer");
+  }
+  return commerceFingerprint({
+    stage: "quick_instruction",
+    environment: value.environment === "sandbox" ? "uat" : value.environment,
+    instructionContext: value.instructionContext,
+    customerId: value.identity.customerId,
+    baseUrl: new URL(value.baseUrl).origin
+  });
+}
 function commerceFingerprint(value) {
   return createHash6("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 }
@@ -30345,6 +30540,9 @@ function cloneVisaState(state) {
     ...state.pendingBenefitLogin ? { pendingBenefitLogin: { ...state.pendingBenefitLogin } } : {},
     ...state.commerceContinuations ? {
       commerceContinuations: Object.fromEntries(Object.entries(state.commerceContinuations).map(([key, value]) => [key, { ...value }]))
+    } : {},
+    ...state.quickInstructionContinuations ? {
+      quickInstructionContinuations: Object.fromEntries(Object.entries(state.quickInstructionContinuations).map(([key, value]) => [key, { ...value }]))
     } : {}
   };
 }
@@ -30395,6 +30593,20 @@ function normalizeStoredVisaState(raw) {
           instructionId: continuation.instructionId,
           paymentInstrumentId: continuation.paymentInstrumentId,
           phase: continuation.phase
+        };
+      }
+    }
+  }
+  if (isRecord24(raw.quickInstructionContinuations)) {
+    state.quickInstructionContinuations = {};
+    for (const [key, continuation] of Object.entries(raw.quickInstructionContinuations)) {
+      if (isRecord24(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId)) {
+        state.quickInstructionContinuations[key] = {
+          fingerprint: continuation.fingerprint,
+          instructionId: continuation.instructionId,
+          phase: continuation.phase === "checkout_started" ? "checkout_started" : continuation.phase === "authorization" ? "authorization" : "pending",
+          ...nonEmptyString4(continuation.paymentInstrumentId) ? { paymentInstrumentId: continuation.paymentInstrumentId } : {},
+          ...continuation.authorizationStage === "vic" || continuation.authorizationStage === "instruction" ? { authorizationStage: continuation.authorizationStage } : {}
         };
       }
     }
@@ -32255,10 +32467,37 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     identity: runtimeAuthorizationIdentity(context.runtimeConfig),
     baseUrl: context.runtimeConfig.baseUrl
   });
+  const quickFingerprint = () => commerceContext.mode === "prepare" ? void 0 : quickInstructionFingerprint({
+    environment: commerceContext.environment,
+    instructionContext: commerceContext.instructionContext,
+    identity: runtimeAuthorizationIdentity(context.runtimeConfig),
+    baseUrl: context.runtimeConfig.baseUrl
+  });
   return {
     getContinuation: async () => {
       return (await readStoredConfig()).visa?.commerceContinuations?.[fingerprint];
     },
+    getQuickContinuation: async () => {
+      const key = quickFingerprint();
+      return key ? (await readStoredConfig()).visa?.quickInstructionContinuations?.[key] : void 0;
+    },
+    saveQuickContinuation: async (continuation) => {
+      const key = quickFingerprint();
+      if (!key)
+        throw validationError("Quick continuation requires a purchase context");
+      await updateStoredConfig((stored) => {
+        const saved = stored.visa?.quickInstructionContinuations?.[key];
+        if (!saved || saved.instructionId !== continuation.instructionId || saved.phase === "checkout_started") {
+          throw validationError("Quick Instruction changed or Checkout already started; use read-only recovery");
+        }
+        if (continuation.phase === "authorization" && saved.phase === "authorization" && saved.authorizationStage === continuation.authorizationStage) {
+          throw validationError("Quick Instruction authorization is already claimed; continue the existing browser flow");
+        }
+        stored.visa.quickInstructionContinuations[key] = { ...continuation, fingerprint: key };
+        return stored;
+      });
+    },
+    bindingPortalUrl: () => resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
     saveContinuation: async (continuation) => {
       await updateStoredConfig((stored) => {
         const visa = stored.visa ?? defaultVisaState();
@@ -32363,7 +32602,35 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
     environment,
     identity: runtimeAuthorizationIdentity(context.runtimeConfig)
   });
+  const quickFingerprint = (instructionContext) => quickInstructionFingerprint({
+    environment,
+    instructionContext,
+    identity: runtimeAuthorizationIdentity(context.runtimeConfig),
+    baseUrl: context.runtimeConfig.baseUrl
+  });
   return {
+    getQuickInstructionContinuation: async (instructionContext) => {
+      return (await readStoredConfig()).visa?.quickInstructionContinuations?.[quickFingerprint(instructionContext)];
+    },
+    saveQuickInstructionContinuation: async (instructionContext, instructionId2) => {
+      const fingerprint = quickFingerprint(instructionContext);
+      await updateStoredConfig((stored) => {
+        const visa = stored.visa ?? defaultVisaState();
+        const saved = visa.quickInstructionContinuations?.[fingerprint];
+        if (saved) {
+          if (saved.instructionId !== instructionId2) {
+            throw validationError("A different Quick Instruction is already saved for this purchase");
+          }
+          return stored;
+        }
+        visa.quickInstructionContinuations = {
+          ...visa.quickInstructionContinuations,
+          [fingerprint]: { fingerprint, instructionId: instructionId2, phase: "pending" }
+        };
+        stored.visa = visa;
+        return stored;
+      });
+    },
     getCardVicContinuation: async (instructionContext) => {
       const saved = (await readStoredConfig()).visa?.commerceContinuations?.[vicFingerprint(instructionContext)];
       return saved ? {
@@ -33175,14 +33442,6 @@ function deepFreeze2(value) {
 }
 
 // dist/visa/commerce-login.js
-var QUICK_INSTRUCTION_WAIT_SECONDS = 300;
-var TERMINAL_INSTRUCTION_STATUSES2 = /* @__PURE__ */ new Set([
-  "CANCELLED",
-  "CANCELED",
-  "EXPIRED",
-  "DECLINED",
-  "FAILED"
-]);
 async function runVisaCommerceLogin(context, options2, dependencies) {
   if (!options2.dryRun && !options2.confirmedPurchase) {
     throw validationError("visa commerce-login requires explicit --confirm-purchase before any live request");
@@ -33218,109 +33477,32 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
   }
   const current = await dependencies.inspectLogin();
   if (current.ready) {
+    const quick = await dependencies.getQuickInstructionContinuation?.(context.instructionContext);
+    if (quick) {
+      if (quick.phase === "checkout_started") {
+        return {
+          command: "visa commerce-login",
+          status: "read_only_recovery_required",
+          ready: false,
+          terminal: true,
+          rerunAllowed: false,
+          instructionId: quick.instructionId,
+          paymentRetryAllowed: false
+        };
+      }
+      return readyLoginResult(context, dependencies, quick.instructionId, current.detail);
+    }
     const saved = await dependencies.getCardVicContinuation?.(context.instructionContext);
     if (saved) {
-      const instruction2 = await dependencies.getInstruction(saved.instructionId);
-      assertExactInstruction2(instruction2, saved.instructionId);
-      const status = instructionStatus2(instruction2);
-      const ready = status === "ACTIVE" && instruction2.paymentInstrumentId === saved.paymentInstrumentId && dependencies.refreshCards && selectVisaCard(await dependencies.refreshCards(), saved.paymentInstrumentId).action === "use";
-      if (status === "ACTIVE" && !ready) {
-        throw apiError("VIC completion did not activate the exact purchase on the original Visa card", 502);
-      }
-      return {
-        command: "visa commerce-login",
-        stage: "vic",
-        state: ready ? "INSTRUCTION_ACTIVE" : "INSTRUCTION_ACTIVATION_PENDING",
-        status: ready ? "ready" : "user_action_required",
-        ready: Boolean(ready),
-        loginReady: true,
-        instructionId: saved.instructionId,
-        pendingInstructionId: saved.instructionId,
-        paymentInstrumentId: saved.paymentInstrumentId,
-        instructionStatus: status,
-        instructionReady: Boolean(ready),
-        terminal: Boolean(ready) || isTerminalInstructionStatus2(status),
-        ...!ready && !isTerminalInstructionStatus2(status) ? {
-          userActionRequired: true,
-          manualOpenUrl: saved.url,
-          rerunAllowed: true,
-          resumeMode: "same_command",
-          checkoutStarted: false
-        } : {}
-      };
+      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, saved.instructionId);
+      return readyLoginResult(context, dependencies, saved.instructionId, current.detail);
     }
     const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
     const pendingInstructionId3 = optionalText7(prepared?.instructionId);
-    const existingCardId = optionalText7(prepared?.existingCardId);
-    if (existingCardId && pendingInstructionId3 && prepared?.state === "PENDING" && prepared.ceremonyInProgress === false && prepared.activationExpected === true && dependencies.refreshCards && dependencies.openCardVic) {
-      const refreshed = selectExistingVisaCardForVic(await dependencies.refreshCards());
-      const pending = await dependencies.getInstruction(pendingInstructionId3);
-      assertExactInstruction2(pending, pendingInstructionId3);
-      if (refreshed?.paymentInstrumentId === existingCardId && instructionStatus2(pending) === "PENDING" && !optionalText7(pending.paymentInstrumentId)) {
-        const launch = await dependencies.openCardVic(existingCardId);
-        if (launch.browserLaunch.status !== "launched") {
-          await dependencies.saveCardVicContinuation?.(context.instructionContext, pendingInstructionId3, existingCardId);
-          return {
-            command: "visa commerce-login",
-            stage: "vic",
-            status: "user_action_required",
-            ready: false,
-            loginReady: true,
-            terminal: false,
-            userActionRequired: true,
-            manualOpenUrl: launch.url,
-            browserLaunch: launch.browserLaunch,
-            instructionId: pendingInstructionId3,
-            paymentInstrumentId: existingCardId,
-            rerunAllowed: true,
-            resumeMode: "same_command",
-            checkoutStarted: false
-          };
-        }
-        const instruction2 = await resolveCurrentQuickInstruction(pendingInstructionId3, dependencies);
-        if (instruction2.instructionReady) {
-          const active = await dependencies.getInstruction(pendingInstructionId3);
-          assertExactInstruction2(active, pendingInstructionId3);
-          const selected = selectVisaCard(await dependencies.refreshCards(), existingCardId);
-          if (instructionStatus2(active) !== "ACTIVE" || active.paymentInstrumentId !== existingCardId || selected.action !== "use") {
-            throw apiError("VIC completion did not activate the exact purchase on the original Visa card", 502);
-          }
-        }
-        return {
-          command: "visa commerce-login",
-          operation: "visa-commerce-login",
-          environment: context.environment,
-          state: instruction2.instructionReady ? "INSTRUCTION_ACTIVE" : "INSTRUCTION_ACTIVATION_PENDING",
-          action: instruction2.instructionReady ? "CONTINUE_PURCHASE_FLOW" : "WAIT_FOR_QUICK_INSTRUCTION",
-          reason: "existing_visa_card_vic",
-          ready: instruction2.instructionReady,
-          loginReady: true,
-          terminal: instruction2.instructionReady || isTerminalInstructionStatus2(instruction2.instructionStatus),
-          ...instruction2,
-          pendingInstructionId: pendingInstructionId3,
-          paymentInstrumentId: existingCardId,
-          browserLaunch: launch.browserLaunch,
-          manualOpenUrl: launch.browserLaunch.status === "launched" ? null : launch.url,
-          detail: current.detail
-        };
-      }
+    if (pendingInstructionId3) {
+      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3);
     }
-    return {
-      command: "visa commerce-login",
-      operation: "visa-commerce-login",
-      environment: context.environment,
-      state: "LOGIN_READY",
-      action: "CONTINUE_REGULAR_INSTRUCTION_FLOW",
-      reason: pendingInstructionId3 ? "purchase_pending_prepared_for_portal" : "visa_login_already_ready_quick_start_not_available",
-      ready: true,
-      loginReady: true,
-      terminal: true,
-      instructionId: null,
-      instructionStatus: null,
-      instructionReady: false,
-      pendingInstructionId: pendingInstructionId3 ?? null,
-      detail: current.detail
-    };
+    return readyLoginResult(context, dependencies, pendingInstructionId3, current.detail);
   }
   const initialized = await dependencies.initializeLogin(context.instructionContext);
   if (!initialized.ready) {
@@ -33343,63 +33525,50 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     };
   }
   const pendingInstructionId2 = initialized.pendingInstructionId;
-  const instruction = pendingInstructionId2 ? await resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) : void 0;
-  const instructionReady = instruction?.instructionReady ?? false;
-  const instructionTerminal = instruction ? instructionReady || isTerminalInstructionStatus2(instruction.instructionStatus) : true;
+  if (pendingInstructionId2) {
+    await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId2);
+  }
   return {
-    command: "visa commerce-login",
-    operation: "visa-commerce-login",
-    environment: context.environment,
-    state: instruction ? instructionReady ? "INSTRUCTION_ACTIVE" : "INSTRUCTION_ACTIVATION_PENDING" : "LOGIN_READY",
-    action: instruction ? instructionReady ? "CONTINUE_PURCHASE_FLOW" : "WAIT_FOR_QUICK_INSTRUCTION" : "CONTINUE_REGULAR_INSTRUCTION_FLOW",
-    reason: instruction ? instructionReady ? "current_quick_instruction_active" : instruction.timedOut ? "current_quick_instruction_activation_timed_out" : "current_quick_instruction_not_active" : "visa_benefit_login_required_without_quick_instruction",
-    ready: instruction ? instructionReady : true,
-    loginReady: true,
-    terminal: instructionTerminal,
-    instructionId: instruction?.instructionId ?? null,
-    instructionStatus: instruction?.instructionStatus ?? null,
-    instructionReady,
-    pendingInstructionId: instruction ? pendingInstructionId2 : null,
-    ...instruction?.eventTypes.length ? { eventTypes: instruction.eventTypes } : {},
-    ...instruction?.resumeCommand ? { resumeCommand: instruction.resumeCommand } : {},
+    ...await readyLoginResult(context, dependencies, pendingInstructionId2, initialized.detail),
     manualOpenUrl: initialized.browserLaunch?.status === "launched" ? null : initialized.manualOpenUrl ?? null,
     browserLaunch: initialized.browserLaunch ?? null,
     detail: initialized.detail
   };
 }
-async function resolveCurrentQuickInstruction(pendingInstructionId2, dependencies) {
-  let instruction;
-  let timedOut = false;
-  let eventTypes = [];
-  let resumeCommand;
-  try {
-    instruction = await dependencies.getInstruction(pendingInstructionId2);
-  } catch {
+async function readyLoginResult(context, dependencies, quickId, detail) {
+  let status = null;
+  if (quickId) {
+    const instruction = await dependencies.getInstruction(quickId);
+    assertExactInstruction2(instruction, quickId);
+    status = instructionStatus2(instruction);
+    const expiry = optionalText7(instruction.effectiveUntilTime ?? instruction.effective_until_time);
+    if (expiry) {
+      const utcExpiry = /(?:Z|[+-]\d{2}:?\d{2})$/iu.test(expiry) ? expiry : `${expiry.replace(" ", "T")}Z`;
+      const expiryMs = Date.parse(utcExpiry);
+      if (!Number.isFinite(expiryMs) || expiryMs <= Date.now())
+        status = "EXPIRED";
+    }
   }
-  if (instruction) {
-    assertExactInstruction2(instruction, pendingInstructionId2);
-  }
-  const initialStatus = instruction ? instructionStatus2(instruction) : void 0;
-  if (!instruction || initialStatus !== "ACTIVE" && !isTerminalInstructionStatus2(initialStatus ?? "UNKNOWN")) {
-    const wait = await dependencies.waitForInstructionActivation(pendingInstructionId2, QUICK_INSTRUCTION_WAIT_SECONDS);
-    timedOut = wait.timedOut;
-    eventTypes = wait.eventTypes;
-    resumeCommand = wait.resumeCommand;
-    instruction = await dependencies.getInstruction(pendingInstructionId2);
-    assertExactInstruction2(instruction, pendingInstructionId2);
-  }
-  const status = instructionStatus2(instruction);
+  const ready = status === null || status === "PENDING" || status === "ACTIVE";
   return {
-    instructionId: pendingInstructionId2,
+    command: "visa commerce-login",
+    operation: "visa-commerce-login",
+    environment: context.environment,
+    stage: "login",
+    status: ready ? "ready" : "read_only_recovery_required",
+    state: status === "ACTIVE" ? "INSTRUCTION_ACTIVE" : "LOGIN_READY",
+    ready,
+    loginReady: true,
+    terminal: true,
+    action: !ready ? "READ_ONLY_RECOVERY_REQUIRED" : quickId ? "CONTINUE_PURCHASE_FLOW" : "CONTINUE_REGULAR_INSTRUCTION_FLOW",
+    reason: !ready ? "quick_instruction_not_usable" : quickId ? "quick_instruction_saved_continue_commerce_run" : "visa_login_ready_without_quick_instruction",
+    instructionId: quickId ?? null,
+    pendingInstructionId: quickId ?? null,
     instructionStatus: status,
     instructionReady: status === "ACTIVE",
-    timedOut,
-    eventTypes,
-    ...resumeCommand ? { resumeCommand } : {}
+    ...!ready ? { rerunAllowed: false, paymentRetryAllowed: false } : {},
+    detail
   };
-}
-function isTerminalInstructionStatus2(status) {
-  return TERMINAL_INSTRUCTION_STATUSES2.has(status);
 }
 function assertExactInstruction2(instruction, expectedInstructionId) {
   if (!instruction) {
@@ -33552,28 +33721,22 @@ Behavior:
   explicitly disabled opening returns promptly with status=user_action_required, manualOpenUrl,
   rerunAllowed=true, resumeMode=same_command, and checkoutStarted=false. Show the link and pause.
   After the user completes the page, execute the identical command with the unchanged context.
-  The CLI resumes the persisted login or exact VIC Instruction without starting another flow.
-
-  When login was already ready before any browser action, commerce-login can open the existing
-  card-only VIC page once for a unique/default Visa explicitly not VIC-ready. It prepares PENDING
-  first, requires ceremonyInProgress=false and activationExpected=true, and rechecks the same card.
-  No baseline, new cards, unknown readiness/progress, or an ongoing ceremony never triggers this
-  automatic opening. --no-open returns the manual link instead. Card-only VIC omits instructionId
-  to avoid the existing Portal's ordinary sign action; completion must still verify the original
-  exact PENDING is ACTIVE on that same VIC-ready card. These checks are not a cross-tab mutex.
+  The CLI resumes the persisted login without starting another flow. Card/VIC and Instruction
+  authorization belong to commerce-run; commerce-login never opens a separate VIC page.
 
   Live execution first checks the local Visa Benefit login state. A ready login checks card
   readiness and prepares/reuses PENDING only when no eligible VIC-ready Visa exists, without
   restarting OAuth. Otherwise it runs one foreground Visa Benefit login with the exact context.
   A returned pendingInstructionId is followed for both LOGIN and REGISTER, without depending on
-  customerCreated or activationDriver. The CLI waits up to 300 seconds, using the activation
-  event only as a wake-up, then exact-GETs that same ID. Responses without an Instruction ID
-  continue the regular Instruction flow without polling. Only status=ACTIVE returns ready=true and
-  allows the purchase flow to continue; a remaining PENDING Instruction returns ready=false
-  without opening another page.
-  With successful --open, the user finishes VSRP login and, when needed, card binding,
-  VIC, and Passkey in the one opened browser flow while the CLI continues waiting. The command
-  persists a continuation on browser failure and never calls the standalone Instruction create
+  customerCreated or activationDriver. The CLI saves the exact ID under the authenticated
+  customer, environment and frozen instructionContext, then exact-GETs that same ID once.
+  Authenticated PENDING and ACTIVE return ready=true and loginReady=true immediately so
+  commerce-run can continue. instructionReady is true only for ACTIVE. Expired, terminal,
+  missing or mismatched Quick Instructions fail closed. All activation waiting is in commerce-run.
+  Responses without an Instruction ID continue the regular Instruction flow without polling.
+  Quick IDs are not written into purchase-context files and survive process restart and Token
+  refresh. With successful --open, the user finishes VSRP login in the one opened browser flow.
+  The command persists a continuation on browser failure and never calls the standalone Instruction create
   API, resolves a merchant, searches Catalog, opens Bind Card, creates a Checkout, or pays.
 
 Examples:
@@ -33589,8 +33752,8 @@ Options:
   --context <json>             Preparation or frozen purchase context JSON
   --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required for live purchase modes; forbidden for mode=prepare
-  --open                       Open regular Purchase Instruction authorization when required
-  --no-open                    Do not open regular Purchase Instruction authorization
+  --open                       Open the required Visa purchase authorization page
+  --no-open                    Return the exact authorization link without opening
   --wait-delivery              Wait for digital delivery even when context does not require it
   --max-wait <seconds>         Event and delivery wait bound, defaults to 900
   --dry-run                    Validate and print the no-side-effect execution plan
@@ -33605,7 +33768,7 @@ Context:
   mode=purchase accepts the Visa Skill frozen shape: environment, requestText, optional program.code,
   selection.merchantUrl/productId/productQuery/quantity, expected.merchantName/itemTitle/amount/
   currency, instructionContext, and digitalDeliveryExpected. Top-level instructionId is rejected;
-  commerce-run selects a usable ACTIVE Instruction from the VIC-ready payment instrument.
+  commerce-run resumes the saved Quick ID, or selects a usable ACTIVE Instruction when no Quick exists.
   selection.merchantUrl must be the merchant route URL returned as product.merchantUrl (or
   product.productUrl), never a Visa Program offer page. When merchantUrl is not routable but the
   frozen merchantId/endpoint come from an authoritative product resolution, the internal route is
@@ -33659,8 +33822,18 @@ Behavior:
 
   mode=purchase and mode=catalog_purchase both require the separate commerce-login stage to be
   ready and exact-revalidate the frozen selected product. catalog_purchase does not perform or
-  repeat Visa benefit discovery. Both modes then reuse one VIC-ready Visa card. When none exists,
-  commerce-run
+  repeat Visa benefit discovery. A saved Quick Instruction is always exact-GET first and is never
+  replaced. ACTIVE requires exact context and same-card VIC readiness before Checkout. PENDING with
+  a ready Visa opens /passkey-auth/{paymentInstrumentId}?type=visa&instructionId={originalQuickId}.
+  Failed or disabled opening returns the original manual URL and exits; a repeat never reopens it.
+  Without a Visa card, wait for that same ID for at most 900 seconds, then refresh cards. A no-card
+  timeout returns only bindCardUrl (Portal binding entry), rerunAllowed=true, resumeMode=same_command
+  and checkoutStarted=false. For an unready or unknown-VIC card, return that card's exact Quick URL;
+  unknown progress or an ongoing ceremony does not auto-open. Local atomic claims prevent two CLI
+  processes opening the same authorization stage, but do not lock independent Portal tabs.
+  Once Checkout starts, the saved Quick is blocked from another purchase attempt.
+
+  Without a saved Quick, both modes reuse one VIC-ready Visa card. When none exists, commerce-run
   creates/reuses one no-card PENDING Instruction first, provides an exact-purchase Portal
   continuation after Event Hub readiness, and waits without requesting another Bind Card link
   or opening a separate VIC page.
@@ -33683,12 +33856,12 @@ Behavior:
   The chosen ID is exact-GET again and every condition is revalidated before Checkout.
 
   For an already VIC-ready card, the regular flow remains unchanged.
-  Historical PENDING or draft Instructions are never authorized by commerce-run. When no usable
+  Unrelated historical PENDING or draft Instructions are never authorized by the regular flow. When no usable
   ACTIVE candidate exists, the CLI creates one regular Instruction for the exact actual price and
   authorizes only that new ID. The no-card PENDING flow is different:
   CWallet returns the exact ID before the binding link is shown, supersedes safely on the server,
   and activates that same ID after Portal card/VIC completion. Timeout returns only an exact
-  instruction get continuation; commerce-run does not create another Instruction or start Checkout.
+  instruction get continuation; this legacy no-Quick path does not create another Instruction or start Checkout.
   Restricted categories are refused deterministically before any Instruction selection or creation.
 
   Before card or Instruction work, both purchase modes use internal-first merchant routing by
@@ -33701,6 +33874,8 @@ Behavior:
 
   Checkout uses the shared ucp-checkout run implementation: create and complete are each attempted
   once, payment is never retried, and non-terminal payment states return a read-only resumeCommand.
+  The complete request carries the card ID, brand and VIC state, not a purchase-instruction-id.
+  The backend resolves Instruction/Mandate from that card; CLI validation is not ID passthrough.
   Digital delivery polling starts only after an authoritative completed Checkout with an order ID;
   ready output includes the order and digital_delivery artifacts such as voucher codes.
   A non-terminal Checkout or delivery result exposes resumeReadOnly=true with one bound read-only

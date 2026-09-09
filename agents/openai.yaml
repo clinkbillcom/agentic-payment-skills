@@ -117,11 +117,11 @@ interface:
     and order-detail replies. Never substitute UCP order IDs or Checkout IDs;
     explain orderUrlUnavailable without inventing a link or retrying payment.
     Portal owns card binding and VIC. CLI prepares/reuses the exact purchase
-    PENDING and never opens Bind Card. With login already ready, commerce-login
-    may open VIC once for a unique/default explicitly unready Visa present before
-    browser work, after same-card and progress checks. In that commerce-login
-    auto-opening path, new cards or unknown/ongoing state do not trigger another
-    automatic VIC opening; the Agent never opens another page.
+    PENDING and never opens Bind Card. commerce-login saves the Quick ID and
+    returns login-ready for a valid PENDING or ACTIVE Quick, without waiting
+    for activation or opening VIC. commerce-run owns card/VIC/Instruction waiting
+    and handoffs. Unknown or ongoing VIC state must not trigger another automatic
+    VIC opening; the Agent never opens another page.
     LOGIN and REGISTER both support PENDING. Once commerce-login creates a Quick
     Instruction, commerce-run continues that exact ID in every card/VIC state.
     With an existing Quick, exact-GET and validate the original ID against the
@@ -160,7 +160,7 @@ interface:
     command and frozen context with the original Quick ID and zero creates.
     If the installed CLI cannot provide this path, report the limitation; never
     fall back to creating or selecting another Instruction.
-    A timeout permits only the exact read-only continuation, never another Instruction
-    or payment retry. Keep deterministic steps
+    After a timeout, follow only explicit CLI pre-Checkout same-command permission
+    or read-only recovery, never another Instruction or payment retry. Keep deterministic steps
     inside the CLI, never rerun commerce-run after possible Checkout creation,
     and do not read references or use runtime --help during ordinary execution.

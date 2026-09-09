@@ -785,15 +785,16 @@ test('Portal owns binding and only the existing-card path may open VIC once', ()
 
   assert.match(gate, /Portal owns card binding and VIC/u);
   assert.match(gate, /CLI never opens Bind Card/u);
-  assert.match(gate, /login already ready[\s\S]*open the existing VIC page once/u);
-  assert.match(gate, /unique\/default Visa present before browser work/u);
-  assert.match(gate, /commerce-login auto-opening path, new cards, unknown state, or an\s+ongoing ceremony do not trigger another automatic VIC opening/u);
+  assert.match(gate, /`commerce-login` saves the Quick ID and returns login-ready for a valid\s+PENDING or ACTIVE Quick/u);
+  assert.match(gate, /without waiting for activation or opening VIC/u);
+  assert.match(gate, /`commerce-run` owns card\/VIC\/Instruction waiting and handoffs/u);
+  assert.match(gate, /ongoing VIC state must not trigger another automatic VIC opening/u);
   assert.match(gate, /exact PENDING before its VIC authorization starts/u);
   assert.match(gate, /LOGIN and REGISTER both/u);
   assert.match(gate, /same card to be VIC-ready and the original Quick to be ACTIVE/u);
   assert.match(gate, /existing matching Quick already ACTIVE, reuse that exact ID directly/u);
   assert.match(gate, /Never switch an existing Quick to any other ACTIVE/u);
-  assert.match(gate, /timeout[\s\S]*read-only continuation[\s\S]*Never create a replacement or retry payment/iu);
+  assert.match(gate, /timeout[\s\S]*explicit pre-Checkout same-command permission or read-only[\s\S]*timeout alone never permits another Instruction or payment retry/iu);
 
   const cardCapability = skill.slice(
     skill.indexOf('### CAP-CARD:'),

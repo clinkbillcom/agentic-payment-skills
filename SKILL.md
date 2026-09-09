@@ -199,11 +199,10 @@ For every authorized `visa commerce-login` purchase:
   Instruction, even when it matches the same purchase. Missing or mismatched
   Quick state requires a stop, not a new selection.
 - Agent Portal owns card binding and VIC. The CLI never opens Bind Card.
-  With login already ready, commerce-login may open the existing VIC page once
-  for a unique/default Visa present before browser work and explicitly not
-  VIC-ready, after preparing PENDING and rechecking the same card and progress.
-  In that commerce-login auto-opening path, new cards, unknown state, or an
-  ongoing ceremony do not trigger another automatic VIC opening.
+  `commerce-login` saves the Quick ID and returns login-ready for a valid
+  PENDING or ACTIVE Quick, without waiting for activation or opening VIC.
+  `commerce-run` owns card/VIC/Instruction waiting and handoffs. Unknown or
+  ongoing VIC state must not trigger another automatic VIC opening.
   The Agent never opens an additional page or decides this from card timestamps.
 - Without a VIC-ready Visa card, the CLI/CWallet prepare or reuse the purchase's
   exact PENDING before its VIC authorization starts. LOGIN and REGISTER both
@@ -244,8 +243,9 @@ For every authorized `visa commerce-login` purchase:
   command and frozen context with the original Quick ID and zero creates.
   If the installed CLI cannot provide this path, report the limitation; never
   fall back to creating or selecting another Instruction.
-- A timeout preserves the exact purchase and allows only the CLI-returned
-  read-only continuation. Never create a replacement or retry payment.
+- A timeout preserves the exact purchase. Follow only the CLI-returned
+  continuation: explicit pre-Checkout same-command permission or read-only
+  recovery. A timeout alone never permits another Instruction or payment retry.
 
 ## Intent Routing
 
