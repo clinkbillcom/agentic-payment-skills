@@ -15,3 +15,4 @@ tests/*
 !tests/uat-wrapper-environment.test.mjs
 !tests/payment-intent-contract-v2.test.mjs
 !tests/release-artifact.test.mjs
+!tests/wallet-login-contract.test.mjs
