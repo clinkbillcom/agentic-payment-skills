@@ -10620,7 +10620,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.31";
+var CLI_VERSION = "0.2.32";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -12780,10 +12780,11 @@ Behavior:
 Examples:
   clink tool internal-ucp get-merchant-list --format json
 `;
-var WALLET_HELP = `clink wallet
+function walletHelp(emailOptional) {
+  return `clink wallet
 
 Usage:
-  clink wallet init --email <email> [options]
+  clink wallet init ${emailOptional ? "[--email <email>]" : "--email <email>"} [options]
   clink wallet logout [options]
   clink wallet status [options]
 
@@ -12793,19 +12794,21 @@ Subcommands:
   status       Show effective wallet configuration without network request
 
 Examples:
-  clink wallet init --email alice@example.com
+${emailOptional ? "  clink wallet init --open\n" : ""}  clink wallet init --email alice@example.com
   clink wallet init --sandbox --email alice@example.com
   clink wallet init --test --email alice@example.com
   clink wallet logout
   clink wallet status --format pretty
 `;
-var WALLET_INIT_HELP = `clink wallet init
+}
+function walletInitHelp(emailOptional) {
+  return `clink wallet init
 
 Usage:
-  clink wallet init --email <email> [options]
+  clink wallet init ${emailOptional ? "[--email <email>]" : "--email <email>"} [options]
 
 Arguments:
-  --email <email>              Customer email verified in the browser
+  --email <email>              ${emailOptional ? "Optional; use the existing browser email OTP flow" : "Customer email verified in the browser"}
 
 Options:
   --sandbox                    Use sandbox API base from domains.ts
@@ -12827,14 +12830,22 @@ Device Authorization:
   An explicit --sandbox/--test or a distribution-fixed environment takes precedence. Otherwise
   wallet init uses CLINK_BASE_URL when present and production when absent. A successful initialization
   saves the selected base URL for every later command. Re-run wallet init to switch environments.
-  The CLI keeps user_code in the browser URL query and carries email/derived name in its fragment.
+${emailOptional ? `  Without --email, the CLI uses the server-issued verification URL unchanged, adding no email
+  or name, so the Portal can offer Google login. The token response must include the verified
+  email; the CLI saves it locally and never infers it from old config or Access Token claims.
+  With --email, the existing email OTP flow is unchanged: the CLI keeps user_code in the URL
+  query and carries the supplied email/derived name in its fragment.` : `  The CLI keeps user_code in the browser URL query and carries email/derived name in its fragment.`}
   The Portal removes those values from the address bar immediately after reading them.
   The CLI prints the URL, opens it only when --open or default-open-links is enabled, then polls
   until authorization completes. --no-open always disables browser launch. If launch fails, open
   the displayed URL manually while polling continues.
-  Email OTP entry and confirmation happen in the browser.
+${emailOptional ? `  Login and confirmation happen in the browser. Tokens are stored locally, never printed.
+  Without --email, the local name uses the server name when provided, otherwise the verified
+  email text before @. With --email, it still uses the supplied email text before @; --name is rejected.
+  The email OTP flow still supplies that initial name for new customers and leaves existing
+  server-side names unchanged. Use \`config set name\` to change the local name later.` : `  Email OTP entry and confirmation happen in the browser.
   Existing customers keep their server-side name. New customers get the email text before @ as
-  their initial name; --name is rejected. Use \`config set name\` to change the local name later.
+  their initial name; --name is rejected. Use \`config set name\` to change the local name later.`}
 
 Quick Instruction:
   Passing any Quick Instruction option sends instruction_context with Device Authorization;
@@ -12857,12 +12868,13 @@ Payment Methods:
   discarded. A refresh failure is reported in output but does not fail wallet initialization.
 
 Examples:
-  clink wallet init --email alice@example.com
+${emailOptional ? "  clink wallet init --open\n" : ""}  clink wallet init --email alice@example.com
   clink wallet init --sandbox --email alice@example.com
   clink wallet init --test --email alice@example.com
   clink wallet init --test --email alice@example.com --title "Buy running shoes" \\
     --mandates '[{"description":"Running shoes","amountLimit":"25.50","currencyCode":"USD"}]'
 `;
+}
 var WALLET_LOGOUT_HELP = `clink wallet logout
 
 Usage:
@@ -14124,10 +14136,10 @@ function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXE
   process.stdout.write(output);
 }
 function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
-  const help = getRawHelpText(command, subcommand, nestedCommand);
+  const help = getRawHelpText(command, subcommand, nestedCommand, executableName === MAIN_EXECUTABLE_NAME);
   return renderCliCommandText(help, executableName);
 }
-function getRawHelpText(command, subcommand, nestedCommand) {
+function getRawHelpText(command, subcommand, nestedCommand, walletInitEmailOptional = false) {
   switch (command) {
     case "install":
       return INSTALL_HELP;
@@ -14149,13 +14161,13 @@ function getRawHelpText(command, subcommand, nestedCommand) {
     case "wallet":
       switch (subcommand) {
         case "init":
-          return WALLET_INIT_HELP;
+          return walletInitHelp(walletInitEmailOptional);
         case "logout":
           return WALLET_LOGOUT_HELP;
         case "status":
           return WALLET_STATUS_HELP;
         default:
-          return WALLET_HELP;
+          return walletHelp(walletInitEmailOptional);
       }
     case "card":
       switch (subcommand) {
@@ -14798,8 +14810,12 @@ async function createDeviceAuthorization(options2) {
     interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
   };
 }
-function buildVerificationUrl(authorization, email, name) {
+function buildVerificationUrl(authorization, ...identity) {
   const url = new URL(authorization.verificationUriComplete);
+  if (identity.length === 0) {
+    return authorization.verificationUriComplete;
+  }
+  const [email, name] = identity;
   if (!url.searchParams.has("user_code")) {
     url.searchParams.set("user_code", authorization.userCode);
   }
@@ -14824,6 +14840,7 @@ async function pollDeviceToken(options2) {
         baseUrl: options2.baseUrl,
         timeoutMs: options2.timeoutMs,
         requireAgentClientId: true,
+        includeIdentity: options2.includeIdentity ?? false,
         body: {
           grant_type: OAUTH_DEVICE_GRANT_TYPE,
           client_id: OAUTH_CLIENT_ID,
@@ -15019,6 +15036,8 @@ async function requestToken(options2) {
   const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
   const pendingInstructionId = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
+  const email = options2.includeIdentity ? optionalString(data.email) : void 0;
+  const name = options2.includeIdentity ? optionalString(data.name) : void 0;
   return {
     tokenType: "Bearer",
     accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
@@ -15026,6 +15045,8 @@ async function requestToken(options2) {
     refreshToken: requiredString2(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
     refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
     customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
+    ...email ? { email } : {},
+    ...name ? { name } : {},
     ...agentClientId ? { agentClientId } : {},
     ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
     ...pendingInstructionId ? { pendingInstructionId } : {},
@@ -22080,7 +22101,7 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
 function printContextHelp(context, command, subcommand, nestedCommand) {
   printHelp(command, subcommand, nestedCommand, context.executableName);
 }
-async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = {}) {
+async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = { walletInitEmailOptional: true }) {
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
@@ -22123,6 +22144,7 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     globalOptions,
     startedAt,
     oauthScope: edition.oauthScope ?? OAUTH_DEFAULT_SCOPE,
+    walletInitEmailOptional: edition.walletInitEmailOptional ?? false,
     executableName: edition.executableName ?? MAIN_EXECUTABLE_NAME,
     configLifecycle: edition.configLifecycle ?? {}
   };
@@ -23136,24 +23158,11 @@ async function handleWalletCommand(subcommand, context) {
   }
 }
 async function walletInit(context) {
-  const email = requireStringFlag(context.args.flags, "missing --email", "email").trim();
+  const requestedEmail = context.walletInitEmailOptional && getStringFlag(context.args.flags, "email") === void 0 ? void 0 : requireStringFlag(context.args.flags, "missing --email", "email").trim();
   if (getStringFlag(context.args.flags, "name") !== void 0) {
     throw validationError("--name is no longer used by wallet init; the initial name comes from the email text before @, use `config set name` to change it");
   }
-  if (!email) {
-    throw validationError("email must not be blank");
-  }
-  if (email.length > 255) {
-    throw validationError("email must be at most 255 characters");
-  }
-  const emailSeparatorIndex = email.indexOf("@");
-  const name = emailSeparatorIndex > 0 ? email.slice(0, emailSeparatorIndex).trim() : "";
-  if (!name) {
-    throw validationError("email must include a name before @");
-  }
-  if (name.length > 50) {
-    throw validationError("email name before @ must be at most 50 characters; use `config set name` to change it after initialization");
-  }
+  const requestedName = requestedEmail === void 0 ? void 0 : walletInitName(requestedEmail);
   if (getStringFlag(context.args.flags, "otp")) {
     throw validationError("--otp is no longer used by wallet init; complete email verification in the browser");
   }
@@ -23174,7 +23183,7 @@ async function walletInit(context) {
     printSuccess(authorization, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  const verificationUrl = buildVerificationUrl(authorization, email, name);
+  const verificationUrl = requestedEmail === void 0 ? buildVerificationUrl(authorization) : buildVerificationUrl(authorization, requestedEmail, requestedName);
   const walletInitGeneration = await beginWalletInit(context.startedAt);
   if (!walletInitGeneration) {
     throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
@@ -23197,17 +23206,25 @@ ${verificationUrl}
     interval: authorization.interval,
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false,
+    includeIdentity: requestedEmail === void 0,
     isCurrent
   });
   const storedAuthorization = toStoredAuthorization(deviceId, token, baseUrl);
   let nextConfig;
+  let email = requestedEmail;
+  let name = requestedName;
   try {
+    email ??= token.email;
+    if (!email) {
+      throw apiError("OAuth response is missing email; email-free wallet login requires a server-verified email");
+    }
+    name ??= token.name ?? walletInitName(email);
+    const loginIdentity = { email, name };
     nextConfig = await updateStoredConfig(async (current) => {
       await assertWalletInitCurrent(isCurrent);
       const merged = mergeOAuthLoginConfig(current, {
         baseUrl,
-        email,
-        name,
+        ...loginIdentity,
         customerId: token.customerId,
         authorization: storedAuthorization
       });
@@ -23240,6 +23257,23 @@ ${verificationUrl}
     throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
   }
   return EXIT_CODES.OK;
+}
+function walletInitName(email) {
+  if (!email) {
+    throw validationError("email must not be blank");
+  }
+  if (email.length > 255) {
+    throw validationError("email must be at most 255 characters");
+  }
+  const emailSeparatorIndex = email.indexOf("@");
+  const name = emailSeparatorIndex > 0 ? email.slice(0, emailSeparatorIndex).trim() : "";
+  if (!name) {
+    throw validationError("email must include a name before @");
+  }
+  if (name.length > 50) {
+    throw validationError("email name before @ must be at most 50 characters; use `config set name` to change it after initialization");
+  }
+  return name;
 }
 async function assertWalletInitCurrent(isCurrent) {
   if (!await isCurrent()) {
