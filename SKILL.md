@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.81. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.82. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.81"
+  version: "0.1.82"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -128,6 +128,8 @@ display it as `USD 100` or rewrite the title denomination.
 
 - Run a payment, Checkout completion, Tip, refund creation, Skill install, or
   Instruction mutation at most once for one authorization.
+  The Pending Instruction Card Gate allows one new card-bound Instruction
+  only for its VIC-ready/PENDING exception; this is not a payment retry.
 - Timeout, transport failure, an unknown result, or exit code 6 never authorizes
   resubmission. Verify through a bound read-only status or continuation.
 - An event is a wake-up hint, not final truth. Refresh the authoritative
@@ -211,19 +213,23 @@ For every authorized `visa commerce-login` purchase:
   the Portal home page is allowed for binding only. Do not ask the user to
   activate the Instruction or show a VIC/Instruction activation link in this
   no-card state. Preserve the same Quick Instruction ID; never create a second
-  in this no-card case. With a Visa card but no VIC, provide/open the exact VIC
-  URL, never the Portal home page. With a VIC-ready card and a still-PENDING
-  no-card Quick Instruction, do not wait for binding or try ordinary activation.
-  Create exactly one card-bound Instruction for the same frozen context and use
-  --open to open its exact Instruction authorization URL. An existing exact
-  ACTIVE Instruction is reused directly.
+  in this no-card case.
+- With a Visa card but no VIC, return the CLI's exact VIC URL, never the Portal
+  home page as a VIC link. Do not create a second Instruction.
 - CWallet activates only the PENDING associated with that VIC flow. Completion
   requires the same card to be VIC-ready and the bound Instruction to be ACTIVE.
   An unrelated or already-running authorization must not be reused.
-- With a VIC-ready Visa card, `commerce-run` first reuses the carried Quick
-  Instruction or an exact matching ACTIVE Instruction. It must not create a
-  regular replacement. If the carried PENDING still needs authorization, the
-  CLI must open or return its exact supported Instruction authorization URL.
+- With a VIC-ready Visa card, first reuse an exact matching ACTIVE Instruction
+  (including the activated Quick); do not create or authorize another one.
+- Exception: Quick is still PENDING, the Visa card is VIC-ready, and no matching
+  usable ACTIVE Instruction exists. The CLI creates exactly one card-bound
+  Instruction for the same frozen context and uses `--open` to open the new
+  Instruction's exact authorization URL. Do not wait for binding or attempt
+  ordinary activation of the no-card PENDING. The CLI opens the browser, not
+  an Agent browser tool; the Portal home page is not an activation link.
+  After a successful opening, wait without another chat confirmation. On
+  opener failure, return the new Instruction's exact manual link and exit.
+  Continue with the new ID; never create a third Instruction.
 - A timeout preserves the exact purchase and allows only the CLI-returned
   read-only continuation. Never create a replacement or retry payment.
 
@@ -477,10 +483,10 @@ waits and automatically report the final result and orderUrl when available.
 Manual opening, missing/changed facts, or a real error, refusal, cancellation, or
 timeout require a user-facing interruption.
 
-`commerce-run` must not create a second Instruction after `commerce-login`
-created a Quick Instruction. If the exact Quick Instruction is still pending,
-continue that ID or return the supported card/VIC/Instruction handoff; do not
-fall back to ordinary Instruction creation. Never rerun `visa commerce-run` after it may have created a Checkout. Execute
+After `commerce-login` creates a Quick Instruction, apply the Pending Instruction
+Card Gate: preserve the exact ID, except for the one allowed VIC-ready/PENDING
+replacement. Never create another Instruction merely because a wait timed out.
+Never rerun `visa commerce-run` after it may have created a Checkout. Execute
 only an exact CLI-returned aggregate read-only continuation, once. Never
 reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
 `ucp-order` component commands for this Visa Program purchase.

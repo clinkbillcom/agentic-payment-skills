@@ -122,8 +122,8 @@ interface:
     browser work, after same-card and progress checks. New cards or unknown/ongoing
     state only wait in Portal; the Agent never opens another page.
     LOGIN and REGISTER both support PENDING. Once commerce-login creates a Quick
-    Instruction, commerce-run must continue that exact ID and must never create
-    a second or regular replacement. With no Visa card and a PENDING Quick
+    Instruction, commerce-run continues that exact ID except for the single
+    VIC-ready/PENDING replacement below. With no Visa card and a PENDING Quick
     Instruction, wait at most 15 minutes. On timeout, if there is still no Visa
     card, stop waiting and ask the user to bind a Visa card. Show the CLI-returned
     Agent Portal entry as a binding link; the Portal home page is allowed for
@@ -131,11 +131,17 @@ interface:
     VIC/Instruction activation link in this no-card state. Preserve the same
     Quick Instruction ID; never create a second in this no-card case. With a
     Visa card but no VIC, provide/open the exact VIC URL, never the Portal home
-    page. With a VIC-ready card and a still-PENDING no-card Quick Instruction,
-    do not wait for binding or try ordinary activation. Create exactly one
-    card-bound Instruction for the same frozen context and use --open to open
-    its exact Instruction authorization URL. An existing exact ACTIVE
-    Instruction is reused directly.
+    page. With a VIC-ready Visa card, first reuse an exact matching ACTIVE
+    Instruction (including the activated Quick); do not create or authorize another one.
+    Exception: Quick is still PENDING, the Visa card is VIC-ready, and no matching
+    usable ACTIVE Instruction exists. The CLI creates exactly one card-bound
+    Instruction for the same frozen context and uses --open to open the new
+    Instruction's exact authorization URL. Do not wait for binding or attempt
+    ordinary activation of the no-card PENDING. The CLI opens the browser, not
+    an Agent browser tool; the Portal home page is not an activation link.
+    After a successful opening, wait without another chat confirmation. On
+    opener failure, return the new Instruction's exact manual link and exit.
+    Continue with the new ID; never create a third Instruction.
     Continue only with same-card VIC readiness and the correct ACTIVE Instruction.
     A timeout permits only the exact read-only continuation, never another Instruction
     or payment retry. Keep deterministic steps
