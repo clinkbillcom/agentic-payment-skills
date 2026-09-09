@@ -6,23 +6,68 @@ Do not read or execute this workflow merely because the user is discovering a pr
 
 ## Wallet Setup
 
-Select and lock the `clink` environment during wallet initialization (see `references/clink-cli-invocation.md`). Wallet init requires the email; the display name is optional:
+Select and lock the `clink` environment during wallet initialization (see `references/clink-cli-invocation.md`). This login contract covers `agentic-payment-skills` `main`/`uat` and matching Main Edition from `clinkbillcom/clink-cli` only, not `visa-skill`. Portal implementation is owned by the Portal team.
+
+### Delivery Gate
+
+The local Main Skill classifiers support both login paths and have focused regression coverage. The no-email path still requires the matching Main CLI bundle and Portal/backend integration verification; local classifier tests do not prove a deployed Google login. Keep the existing email/OTP flow valid. If the user requests Google while this gate is pending, report that limitation; do not silently switch them to OTP.
+
+Before enabling the no-email recipes:
+
+- Refresh the vendor artifact through the official Main Edition build/sync workflow after the source CLI change is ready. Verify its actual `edition=main`, version, `upstreamCommit`, and bundle hash; do not hand-edit the bundle or invent provenance.
+- Verify both email/OTP compatibility and no-email Portal/Google through the actual wrapper with the new bundle, including fresh re-login, system-browser handoff, launch-failure URL handoff, and the original Clink token poll. Verify server-side email verification and that the same verified email retains `customerId`. Portal/backend readiness is a separate dependency to confirm with its owning team.
+
+### Login Choice
+
+Preserve an explicit email/OTP choice and existing commands:
 
 ```bash
 clink wallet init --email <email> --open --format json
 ```
 
-The CLI derives the display name from the email text before `@`. There is no `--name` flag on `wallet init`; passing it exits 2. Use `config set name` to change the local name afterwards.
+Passing `--email` preserves the old email/OTP flow; it does not select Google. For this path, the CLI derives the display name from the email text before `@`.
+
+After the delivery gate passes, omit `--email` when no email was supplied or the user chose Google. Portal presents a Google button; the user completes Google login in their own browser:
+
+```bash
+clink wallet init --open --format json
+```
+
+Do not require an email in chat for this path, copy a cached wallet email into it, or invent an email/name before authorization. If the user explicitly chose email/OTP, use their current-request email first and the current wallet-status email second; ask only when neither is available. An explicit Google choice takes priority over a cached email. There is no `--name` flag on either path; passing it exits 2. Use `config set name` to change the local display name afterwards.
+
+### Classifier Inputs
+
+For `classifyWalletIntent` in `lib/wallet-intent-fsm.mjs`, semantically resolve the user's login choice into the optional internal `loginMethod` field:
+
+| Input | Classification |
+| --- | --- |
+| `loginMethod: "email"` or `"otp"` | Preserve email/OTP: current-request email first, then cached email; `ASK_FOR_WALLET_EMAIL` if unavailable. |
+| `loginMethod: "portal"` or `"google"` | `START_FRESH_WALLET_INIT` with `loginMethod: "portal"` and no `email` field, even if an email or cached identity is present. |
+| No `loginMethod`, but a current-request email | Preserve email/OTP. Request email comes from the text or `email`, `walletEmail`, or `wallet_email`; do not populate these fields from cached state. |
+| No `loginMethod` and no current-request email | Start Portal without email. `currentEmail`, `current_email`, and wallet-status email are cache only and cannot select OTP. |
+| Any other explicit `loginMethod` value | `DO_NOT_START_WALLET_INIT` with `wallet_login_method_invalid`; clarify the login choice without running a command. |
+
+The result normalizes `loginMethod` to `"email"` or `"portal"`. Preserve it for the current init attempt and pass it to `classifyWalletInitObservation` in `lib/wallet-workflow-fsm.mjs`. Include `--email` only for the email result; `loginMethod` is Skill-local context, not a CLI flag, URL parameter, or backend field. Explicit Google/OTP wording is interpreted by the host before classification, not inferred from provider keywords or an email domain by the classifier. A login method alone never authorizes a login; existing negation, question, hypothetical, historical, discussion, and explicit-denial checks still run first.
+
+For an explicit `loginMethod: "portal"` or `"google"` observation, the URL classifier accepts the complete HTTP(S) URL emitted by the current Clink init process verbatim. The Main CLI preserves server-issued query/fragment context, so this URL need not contain `user_code` and may contain an opaque fragment. Do not reconstruct it or append identity. Explicit email/OTP observations still require `user_code` and the complete `email` plus `name` fragment. Callers without `loginMethod` retain the compatibility check: require `user_code` and either no fragment or both identity fields; do not reinterpret partial email fragments as Portal. Always wait for the same attempt's browser result and Clink polling marker before user handoff.
+
+### Identity And Polling
+
+Google login identifies the customer only by the server-verified email. An existing email reuses its `customerId`; a new verified email follows Clink's existing customer-creation path. The CLI and Skill consume Clink's result, not a browser-provided email or Google `sub` as customer identity. There is no `sub` binding table, `login_ui`, `expectedEmail`, or extra Google OTP step in this contract. Do not ask the user to send a Google token, password, or OTP to the agent.
+
+The original CLI process still polls Clink's device-token endpoint, not Google. Portal and its server-side login own Google authorization; the Skill neither handles a Google callback nor adds provider polling. A Google success page alone is not Clink authorization evidence. Both login choices converge on the existing Clink OAuth result and card-readiness flow.
+
+For no-email login, the matching Main CLI requires a non-empty top-level `email` in Clink's successful `/agent/cwallet/oauth/token` response, alongside the existing token and customer fields. It uses the server's optional `name`, otherwise derives a local name from that verified email. Missing email is a CLI error, not permission to reuse old config, decode Access Token claims, or ask for an extra Google OTP. Backend integration must verify this response contract and same-email customer reuse.
 
 This distribution pins `wallet init` to production, so `--sandbox` and `--test` exit 2 here; other distributions pin sandbox/UAT or test the same way. The selected environment is saved, so later commands carry no environment flag. Verify it through `wallet status` and use credentials that belong to that environment, never mixing production with sandbox/UAT/test credentials.
 
-Before the ordinary status-first setup path, classify wallet-login language with `classifyWalletIntent` from `lib/wallet-intent-fsm.mjs`. An affirmative request such as `重新登录`, `再登录一次`, `重新授权钱包`, `登录链接过期了`, `忘记登录了`, `log in again`, or `fresh login link` is `WALLET_RELOGIN`: start a fresh init even if `wallet status` is ready or an older init is pending. Prefer an email stated in the current request, then the current wallet-status email; ask only for email when neither exists. Negated, questioned, hypothetical, historical, and bug/test discussion language starts no command.
+Before the ordinary status-first setup path, classify wallet-login language with `classifyWalletIntent` from `lib/wallet-intent-fsm.mjs`, respecting the delivery gate above. An affirmative request such as `重新登录`, `再登录一次`, `重新授权钱包`, `登录链接过期了`, `忘记登录了`, `log in again`, or `fresh login link` is `WALLET_RELOGIN`: start a fresh init even if `wallet status` is ready or an older init is pending. Apply Login Choice above instead of forcing an email onto every re-login. Negated, questioned, hypothetical, historical, and bug/test discussion language starts no command.
 
 `START_FRESH_WALLET_INIT` always creates one new process. The CLI records that generation and cancels an older wallet-init attempt, so do not preserve or resend any earlier login URL. Capture stderr from the new child process rather than terminal scrollback or chat history. Do not start another init merely to recover the URL for the same active attempt; explicit re-login, expiry, or terminal process exit is what authorizes a fresh attempt.
 
 `wallet init` starts OAuth Device Authorization and polls until authorization completes. Always pass `--open`; it requests that the system browser handle the authorization URL. The original process prints live progress to stderr. Stream that stderr while the process is running.
 
-When the current process prints `Complete authorization in your browser:` followed by `Opening your browser...`, keep reading progress without repeating the URL or claiming either that a visible window was confirmed or that login monitoring is active. Only after the current attempt also prints the complete `Waiting for authorization...` marker may you set `oauthDevicePollActive=true`, tell the user the CLI requested the system browser, and ask them to complete email verification and click Confirm while keeping that same token-polling process alive. If browser launch fails, wait for that same marker, then read the verified URL only from the latest `Starting wallet login; this attempt takes precedence over any earlier one.` segment of the process's live stderr and send it once. This is OAuth device-token polling, not Event Hub listening; never start `events poll` for it. Do not navigate to, preview, or prefetch the URL with an Agent browser — built-in, headless, CDP/Playwright/Puppeteer, a browser MCP server, computer-use, an embedded webview, or link unfurling all count and can trigger duplicate verification-code sends or resend throttling. The user completes email verification and confirmation in the browser; never ask them to send an OTP to the agent and never add `--otp`.
+When the current process prints `Complete authorization in your browser:` followed by `Opening your browser...`, keep reading progress without repeating the URL or claiming either that a visible window was confirmed or that login monitoring is active. Only after the current attempt also prints the complete `Waiting for authorization...` marker may you set `oauthDevicePollActive=true`, tell the user the CLI requested the system browser, and ask them to complete the selected login while keeping that same token-polling process alive. Email/OTP users complete email verification and confirmation; Google users complete Google login without an extra OTP step. If browser launch fails, wait for that same marker, then read the verified URL only from the latest `Starting wallet login; this attempt takes precedence over any earlier one.` segment of the process's live stderr and send it once. Preserve the URL verbatim, including a fragment only when returned; never add email/name, `login_ui`, or `expectedEmail`. This is Clink OAuth device-token polling, not Google polling or Event Hub listening; never start `events poll` for it. Do not navigate to, preview, or prefetch the URL with an Agent browser — built-in, headless, CDP/Playwright/Puppeteer, a browser MCP server, computer-use, an embedded webview, or link unfurling all count. On the email path, extra loads can trigger duplicate verification-code sends or resend throttling. Never ask the user to send an OTP to the agent and never add `--otp`.
 
 Successful initialization stores `customerId`, `email`, `name`, an environment-bound OAuth authorization, and sticky `oauthRequired=true` in the single local config. Final init output requires `hasAuthorization=true`, `authorizationType=oauth`, `hasCustomerApiKey=false`, and a non-empty `customerId`; it no longer echoes `oauthRequired`. Use `wallet status` to classify the persisted credential policy. The CLI refreshes expiring Access Tokens and atomically rotates Refresh Tokens. Never read, print, copy, or refresh either token directly.
 
@@ -31,7 +76,7 @@ After OAuth succeeds, `wallet init` calls the card binding-link endpoint only to
 Classify live stderr and final init output with `classifyWalletInitObservation` from `lib/wallet-workflow-fsm.mjs`:
 
 - `WAIT_FOR_WALLET_INIT_PROGRESS`: keep the original process running and do not show the URL while stderr is incomplete or the browser-open result has not been reported.
-- `TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT`: use only after the current attempt prints both `Opening your browser...` and `Waiting for authorization...`; return `oauthDevicePollActive=true`. The original process is polling the OAuth device-token endpoint, not Event Hub. Do not show the URL or claim the page opened; ask the user to complete email verification and click Confirm, keep that process alive, and do not start `events poll`.
+- `TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT`: use only after the current attempt prints both `Opening your browser...` and `Waiting for authorization...`; return `oauthDevicePollActive=true`. The original process is polling the Clink OAuth device-token endpoint, not Google or Event Hub. Do not show the URL or claim the page opened; ask the user to complete the selected Portal login, keep that process alive, and do not start `events poll`.
 - `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`: use only after browser-launch failure plus the current attempt's complete `Waiting for authorization...` marker; return `oauthDevicePollActive=true`. Read the URL only from that attempt's live stderr, send it once, keep the same OAuth polling process alive, and do not start `events poll`.
 - `RETURN_WALLET_PLAN`: report `--dry-run` as planned, not initialized.
 - `START_WATCHED_CARD_BINDING`: accept the final OAuth evidence above only with `paymentMethodsCached=true`, `paymentMethodCount=0`, and a non-empty `bindingUrl`; keep `walletReady=true`, set `bindingUrlRequired=true`, and do not emit the unprotected init copy or mark the workflow terminal. Start the watched binding command first, require its `watchReady=true` handshake, then return its watched `bindingUrl` as a mandatory handoff.
@@ -39,6 +84,8 @@ Classify live stderr and final init output with `classifyWalletInitObservation` 
 - `SURFACE_ERROR`: return the terminal CLI error without inventing recovery.
 
 ## Quick Instruction Setup
+
+Login choice follows the same delivery gate: retain `--email <email>` for email/OTP, or omit it for Portal/Google once verified. This changes neither the frozen purchase context nor any instruction, card, or activation guard.
 
 When a resolved, authorized purchase target has `walletGate=REQUIRE_STATUS` and meets an uninitialized wallet, first run `classifyInstructionRestriction` over the complete intent and its nested `instructionContext`; only `CONTINUE_INSTRUCTION_CREATION` may proceed. Never start Quick setup for `CATALOG_SEARCH` or for `CATALOG_PURCHASE` before selection. Then pass the instruction context through `clink wallet init` so login, first-card binding, and instruction activation can complete in one browser journey. Context flags: `--title`, `--description`, `--mandates`, `--is-recurring`, `--shipping-address`, `--effective-until-time`. When any context flag is present, `--title` and `--mandates` become required together. `wallet init` deliberately rejects `--payment-instrument-id` and `--extra`: no card exists yet, and the unauthenticated entry point keeps its input surface tight.
 

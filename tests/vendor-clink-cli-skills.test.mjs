@@ -4,7 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -12,6 +12,8 @@ import {
   PageHandoffKind,
   classifyPageHandoff,
 } from '../lib/page-handoff.mjs';
+import { classifyWalletIntent } from '../lib/wallet-intent-fsm.mjs';
+import { classifyWalletInitObservation } from '../lib/wallet-workflow-fsm.mjs';
 
 const testTlsPrivateKey = `-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgZGKP+ev1O+iv4wNm
@@ -145,14 +147,14 @@ function runBundleAsync(args, env = {}) {
   });
 }
 
-function spawnBundleLive(args, env = {}) {
+function spawnBundleLive(args, env = {}, executableBundle = bundlePath) {
   const childEnv = { ...testEnv, ...env };
   for (const [key, value] of Object.entries(childEnv)) {
     if (value === undefined) {
       delete childEnv[key];
     }
   }
-  const child = spawn(process.execPath, [bundlePath, ...args], {
+  const child = spawn(process.execPath, [executableBundle, ...args], {
     env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -244,6 +246,237 @@ async function stopLiveProcess(live) {
     );
   }
 }
+
+test('Main Google candidate bundle preserves login identity and Skill FSM handoff', {
+  skip: process.platform === 'win32' ? 'Browser opener stubs require a POSIX shell' : false,
+}, async (context) => {
+  const configuredBundle = process.env.CLINK_GOOGLE_TEST_BUNDLE;
+  const candidateBundle = configuredBundle === undefined ? bundlePath : resolve(configuredBundle);
+  const probeHome = await mkdtemp(join(tmpdir(), 'clink-google-bundle-probe-'));
+  context.after(() => rm(probeHome, { recursive: true, force: true }));
+  const isolatedEnv = {
+    ...testEnv,
+    HOME: probeHome,
+    CLINK_BASE_URL: 'https://127.0.0.1:1',
+  };
+  const clearedEnvKeys = [
+    'CLINK_CUSTOMER_ID', 'CLINK_CUSTOMER_API_KEY', 'CLINK_WALLET_INIT_ENVIRONMENT',
+    'NODE_OPTIONS', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY',
+    'http_proxy', 'https_proxy', 'all_proxy',
+  ];
+  for (const key of clearedEnvKeys) {
+    delete isolatedEnv[key];
+  }
+  const probe = spawnSync(process.execPath, [
+    candidateBundle, 'wallet', 'init', '--no-open', '--dry-run', '--format', 'json',
+  ], { encoding: 'utf8', env: isolatedEnv, timeout: 10_000 });
+  if (configuredBundle === undefined && probe.status === 2 && /missing --email/u.test(probe.stderr)) {
+    context.skip('Shipped vendor requires --email; set CLINK_GOOGLE_TEST_BUNDLE to a candidate Main bundle');
+    return;
+  }
+  assert.equal(
+    probe.status,
+    0,
+    `Candidate Main bundle must support no-email init: ${probe.error?.message ?? probe.stderr}`,
+  );
+  assert.equal(JSON.parse(probe.stdout).data.dryRun, true);
+  context.diagnostic(`Candidate Main bundle: ${candidateBundle}`);
+
+  for (const fixture of [
+    { name: 'no email with server name and opaque fragment', loginMethod: 'google', serverName: 'Verified User', openExit: 1 },
+    { name: 'no email with server session URL and derived name', loginMethod: 'portal', sessionUrl: true, openExit: 0 },
+    { name: 'original explicit email OTP without token identity fields', loginMethod: 'email', openExit: 1 },
+  ]) {
+    await context.test(fixture.name, async () => {
+      const home = await mkdtemp(join(tmpdir(), 'clink-google-bundle-login-'));
+      const requests = [];
+      let baseUrl;
+      let verificationUrl;
+      let tokenRequests = 0;
+      let releaseToken = false;
+      let live;
+      const email = 'login.user@example.com';
+      const customerId = 'cus_google_bundle_contract';
+      const accessToken = 'access_google_bundle_fixture';
+      const refreshToken = 'refresh_google_bundle_fixture';
+      const otp = fixture.loginMethod === 'email';
+      const server = createServer(async (request, response) => {
+        const body = await readRequestJson(request);
+        requests.push({ path: request.url, body, authorization: request.headers.authorization });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        if (request.url === '/agent/cwallet/oauth/device/authorization') {
+          response.end(JSON.stringify({
+            device_code: 'device_google_bundle_fixture',
+            user_code: 'GOOGLE-TEST',
+            verification_uri: `${baseUrl}/login`,
+            verification_uri_complete: verificationUrl,
+            expires_in: 60,
+            interval: 1,
+          }));
+        } else if (request.url === '/agent/cwallet/oauth/token') {
+          tokenRequests += 1;
+          response.end(JSON.stringify(releaseToken ? {
+            token_type: 'Bearer',
+            access_token: accessToken,
+            expires_in: 3600,
+            refresh_token: refreshToken,
+            refresh_expires_in: 2592000,
+            customer_id: customerId,
+            agent_client_id: 'acl_google_bundle_contract',
+            visa_registration_status: 'UNKNOWN',
+            scope: 'wallet:read wallet:setup offline_access',
+            ...(!otp ? { email, ...(fixture.serverName ? { name: fixture.serverName } : {}) } : {}),
+          } : { error: 'authorization_pending' }));
+        } else if (request.url === '/agent/cwallet/card/bindingLink') {
+          response.end(JSON.stringify({
+            code: 200,
+            data: {
+              bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+              paymentMethodsVoList: fixture.openExit === 0 ? [{ paymentInstrumentId: 'pi_google_fixture' }] : [],
+            },
+          }));
+        } else {
+          response.statusCode = 404;
+          response.end(JSON.stringify({ code: 404, message: 'Unexpected mock request' }));
+        }
+      });
+
+      try {
+        const address = await listen(server);
+        baseUrl = `https://127.0.0.1:${address.port}`;
+        verificationUrl = fixture.sessionUrl
+          ? `${baseUrl}/login?session=server-issued#server-context`
+          : `${baseUrl}/login?user_code=GOOGLE-TEST&return_to=%2Fwallet%20home#server-context`;
+        const configDirectory = join(home, '.clink-cli');
+        await mkdir(configDirectory, { recursive: true });
+        await writeFile(join(configDirectory, 'config.json'), JSON.stringify({
+          baseUrl,
+          customerId: 'cus_previous_fixture',
+          email: 'cached@example.com',
+          name: 'Cached User',
+          defaultOpenLinks: true,
+        }));
+        const stubBin = join(home, 'bin');
+        const openedUrlPath = join(home, 'opener-arguments');
+        await mkdir(stubBin);
+        for (const executable of ['open', 'xdg-open', 'gio']) {
+          const stubPath = join(stubBin, executable);
+          await writeFile(stubPath, `#!/bin/sh\nprintf '%s\\n' "$@" >> "$CLINK_TEST_OPEN_URL"\nexit ${fixture.openExit}\n`);
+          await chmod(stubPath, 0o755);
+        }
+        const env = {
+          ...isolatedEnv,
+          ...Object.fromEntries(clearedEnvKeys.map((key) => [key, undefined])),
+          HOME: home,
+          CLINK_BASE_URL: baseUrl,
+          CLINK_TEST_OPEN_URL: openedUrlPath,
+          PATH: stubBin,
+        };
+        const intent = classifyWalletIntent({
+          intent: 'wallet_relogin',
+          loginMethod: fixture.loginMethod,
+          ...(otp ? { email } : {}),
+          currentEmail: 'cached@example.com',
+        });
+        assert.equal(intent.action, 'START_FRESH_WALLET_INIT');
+        if (!otp) assert.equal(Object.hasOwn(intent, 'email'), false);
+        live = spawnBundleLive([
+          'wallet', 'init',
+          ...(intent.email ? ['--email', intent.email] : []),
+          '--open', '--format', 'json',
+        ], env, candidateBundle);
+
+        const pending = await live.waitFor(
+          ({ stderr }) => stderr.includes('Waiting for authorization...')
+            && tokenRequests >= 1
+            && (fixture.openExit === 0 || /Could not open (?:a|the) browser automatically/iu.test(stderr)),
+          'Candidate did not reach Clink OAuth polling',
+          10_000,
+        );
+        assert.equal(pending.status, undefined);
+        assert.equal(pending.stdout, '');
+        const expectedUrl = otp ? new URL(verificationUrl) : null;
+        if (otp) {
+          expectedUrl.searchParams.delete('email');
+          expectedUrl.searchParams.delete('name');
+          const fragment = new URLSearchParams(expectedUrl.hash.slice(1));
+          fragment.set('email', email);
+          fragment.set('name', 'login.user');
+          expectedUrl.hash = fragment.toString();
+        }
+        const expectedVerificationUrl = otp ? expectedUrl.href : verificationUrl;
+        assert.ok(pending.stderr.split(/\r?\n/u).includes(expectedVerificationUrl));
+        assert.ok((await readFile(openedUrlPath, 'utf8')).split('\n').includes(expectedVerificationUrl));
+        const handoff = classifyWalletInitObservation({
+          loginMethod: intent.loginMethod,
+          running: true,
+          stderr: pending.stderr,
+          stdout: pending.stdout,
+        });
+        assert.equal(handoff.oauthDevicePollActive, true);
+        assert.equal(handoff.action, fixture.openExit === 0
+          ? 'TELL_USER_BROWSER_OPEN_REQUESTED_AND_WAIT'
+          : 'SHOW_OAUTH_VERIFICATION_URL_AND_WAIT');
+        assert.equal(handoff.authorizationUrl, fixture.openExit === 0 ? undefined : expectedVerificationUrl);
+        assert.equal(requests.some(({ path }) => path.includes('card/') || path.includes('event-hub')), false);
+
+        releaseToken = true;
+        const completed = await live.waitFor(
+          ({ status }) => status !== undefined,
+          'Candidate login did not finish after mock authorization',
+          10_000,
+        );
+        assert.equal(completed.status, 0, completed.stderr);
+        const output = JSON.parse(completed.stdout);
+        const stored = JSON.parse(await readFile(join(configDirectory, 'config.json'), 'utf8'));
+        const expectedName = fixture.serverName ?? 'login.user';
+        for (const identity of [output.data, stored]) {
+          assert.equal(identity.customerId, customerId);
+          assert.equal(identity.email, email);
+          assert.equal(identity.name, expectedName);
+        }
+        assert.equal(output.data.hasAuthorization, true);
+        assert.equal(output.data.authorizationType, 'oauth');
+        assert.equal(output.data.hasCustomerApiKey, false);
+        assert.equal(stored.authorization.customerId, customerId);
+        assert.equal(stored.authorization.issuerOrigin, baseUrl);
+        assert.equal(stored.baseUrl, baseUrl);
+        assert.equal(stored.oauthRequired, true);
+        assert.ok(tokenRequests >= 2);
+        assert.equal(requests.filter(({ path }) => path.endsWith('/authorization')).length, 1);
+        assert.equal(requests.filter(({ path }) => path.endsWith('/card/bindingLink')).length, 1);
+        assert.ok(requests.every(({ path }) => [
+          '/agent/cwallet/oauth/device/authorization',
+          '/agent/cwallet/oauth/token',
+          '/agent/cwallet/card/bindingLink',
+        ].includes(path)));
+        assert.equal(requests.at(-1).authorization, `Bearer ${accessToken}`);
+        for (const { body } of requests.filter(({ path }) => path.includes('/oauth/'))) {
+          for (const key of ['email', 'name', 'login_ui', 'expectedEmail']) {
+            assert.equal(Object.hasOwn(body, key), false);
+          }
+        }
+        const finalState = classifyWalletInitObservation({
+          loginMethod: intent.loginMethod,
+          exitCode: completed.status,
+          stdout: completed.stdout,
+          stderr: completed.stderr,
+        });
+        assert.equal(finalState.action, fixture.openExit === 0 ? 'RETURN_WALLET_READY' : 'START_WATCHED_CARD_BINDING');
+        assert.equal(finalState.terminal, fixture.openExit === 0);
+        for (const secret of [accessToken, refreshToken, 'cached@example.com', 'Cached User']) {
+          assert.equal(`${completed.stdout}\n${completed.stderr}`.includes(secret), false);
+        }
+      } finally {
+        releaseToken = true;
+        await stopLiveProcess(live);
+        server.closeAllConnections();
+        await new Promise((done) => server.close(done));
+        await rm(home, { recursive: true, force: true });
+      }
+    });
+  }
+});
 
 test('vendored wallet init keeps polling OAuth without starting an Event Hub watch', async () => {
   const requestPaths = [];
@@ -1451,7 +1684,7 @@ test('vendored malformed OAuth config cannot downgrade to environment or stored 
 
 test('vendored CLI discovers skills list and tip commands', () => {
   assert.match(runBundle(['--help']), /skills\s+Discover, install, and tip skills/u);
-  assert.match(runBundle(['skills', '--help']), /skills <list\|install\|tip>/u);
+  assert.match(runBundle(['skills', '--help']), /skills <list\|install\|(?:sync\|)?tip>/u);
   const listHelp = runBundle(['skills', 'list', '--help']);
   assert.match(listHelp, /skills list --all/u);
   assert.match(listHelp, /--tippable/u);
@@ -2156,11 +2389,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.30');
+  assert.equal(vendorPackage.version, '0.2.32');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '8dc6eacb13936885c892763aceaabe0eeb78007f',
+    '6c3b7c6e3184938489d3c2fd55292dd4d726e0a8',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal('bundleSha256' in vendorPackage, false);

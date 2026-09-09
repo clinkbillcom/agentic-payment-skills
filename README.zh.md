@@ -2,12 +2,16 @@
 
 适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、VIC 授权、退款和风控规则操作。
 
+Skill 版本：`1.14.4`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
+
 ## 环境要求
 
 - Node.js >= 20
 - Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 钉在生产环境
 - **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续认证命令都会读到 UAT 的 `baseUrl`
-- 新的钱包初始化使用 OAuth Device Authorization，并默认取邮箱 `@` 前部分作为姓名；仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
+- 新的钱包初始化使用 OAuth Device Authorization；邮箱/OTP 路径默认取邮箱 `@` 前部分作为姓名。仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
+
+**Google 交付门禁：**本地 Main Skill 分类器已支持邮箱/OTP 和无邮箱 Portal 登录。仍需新的 Main vendor bundle 及 Portal/后端集成验证，本地测试不代表 Google 登录已部署可用。内部 `loginMethod` 契约及集成检查详见 `references/clink-wallet-config.md`。旧邮箱/OTP 流程保持可用；Google 未就绪时应说明限制，不得擅自改用 OTP。
 
 ## 安装 Clink Payment Skills
 
@@ -22,11 +26,13 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-sk
 只有验证后的路由返回 `walletGate=REQUIRE_STATUS` 时，才进入以下 status-first 初始化流程：明确的钱包操作可立即进入；商品购买必须先完成匿名发现、语义授权与用户选品，形成已解析的结账目标后再进入。仅有商品描述不是初始化钱包的理由。
 
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
-2. 否则向用户询问邮箱地址（唯一必填项；显示名取邮箱 `@` 前的部分，无需询问姓名）。
-3. 执行 `clink wallet init --email <email> --open --format json`。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 OAuth device-token 轮询已启动，不是 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成授权；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
+2. 保留用户明确选择的邮箱/OTP 路径，使用已提供的邮箱，仅缺失时询问。交付门禁通过后，未提供邮箱或明确选择 Google 时进入 Portal，不要求在聊天中先提供邮箱，也不向这条路径注入缓存邮箱。
+3. 邮箱/OTP 继续执行 `clink wallet init --email <email> --open --format json`。交付门禁通过后，Portal/Google 使用 `clink wallet init --open --format json`，打开带 Google 按钮的 Portal。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 Clink device-token 轮询已启动，不是 Google 轮询或 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成所选登录；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
 4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含受信 Agent Portal 上精确的 `/payment-method-setup` `bindingUrl`（只允许受控的可选 `email` 参数）、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
+
+Google 登录仅以服务端验证后的邮箱识别客户；已有邮箱复用原 `customerId`。契约不引入 Google `sub` 绑定表、`login_ui`、`expectedEmail` 或额外的 Google OTP。CLI 仍轮询 Clink 并使用其授权结果，不能把 Google 成功页面或浏览器自报身份当作 Clink 授权成功。
 
 ## 构建 fallback 发布工件
 
@@ -75,9 +81,9 @@ https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
 
 ## 必须由用户自己打开的页面
 
-这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱验证页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
+这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱/OTP 或 Portal/Google 登录页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
 
-由于完成与否只由 webhook 事件证明，而不是由浏览器回报，用户可以在任意浏览器或设备上完成（包括手机），流程照样收敛。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
+OAuth 完成由原进程的 Clink device-token 轮询证明；其他异步流程使用匹配的 webhook 事件，而不是浏览器回报。原进程仍在运行且链接有效时，用户可以在其他浏览器或设备上完成。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
 
 Agent 支付宝二维码不属于这些页面。Skill 使用 `--terminal-qr` 调用 `clink pay`，原样展示 CLI 生成的 UTF-8 字符二维码，并保留本地 `image/png` 文件动作作为兜底；不得通过 Agent Browser 打开图片、打印 Base64 或暴露原始二维码内容。Skill 会立即启动订单事件等待，并在成功、失败、过期、超时或监听错误后递归删除由调用方负责的临时目录。
 

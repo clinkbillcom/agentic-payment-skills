@@ -184,14 +184,14 @@ test('Agent Pay account event monitoring is optional, correlated, and user-visib
   assert.match(asyncEvents, /timeout[\s\S]*poll error[\s\S]*AMBIGUOUS[\s\S]*PAID/iu);
 });
 
-test('wallet init documents OAuth browser authorization without OTP recovery', () => {
+test('wallet init preserves browser email OTP and gates the new no-email login', () => {
   assert.match(walletConfig, /OAuth Device Authorization/u);
   assert.match(
     walletConfig,
     /clink wallet init --email <email> --open --format json/u,
   );
   assert.match(walletConfig, /derives the display name from the email text before `@`/u);
-  assert.match(walletConfig, /There is no `--name` flag on `wallet init`/u);
+  assert.match(walletConfig, /There is no `--name` flag on either path/u);
   assert.match(walletConfig, /Complete authorization in your browser/u);
   assert.match(walletConfig, /only from the latest .* segment of the process's live stderr/u);
   assert.match(walletConfig, /keeping that same token-polling process alive/u);
@@ -214,9 +214,12 @@ test('wallet init documents OAuth browser authorization without OTP recovery', (
   assert.match(skill, /claim that a visible window was confirmed/iu);
   assert.match(skill, /wallet init --email <email> --open --format json/u);
   assert.doesNotMatch(skill, /wallet init --email <email> \[--name/u);
-  assert.match(skill, /there is no `--name` flag/u);
+  assert.match(skill, /there is no `--name` flag/iu);
   assert.match(skill, /Only after both browser-launch failure and that wait marker/u);
-  assert.match(cliInvocation, /pass `--email` and `--open`/u);
+  assert.match(cliInvocation, /For every wallet initialization, pass `--open`/u);
+  assert.match(cliInvocation, /Pass `--email <email>` to preserve the old email\/OTP flow/u);
+  assert.match(cliInvocation, /after the delivery gate passes, omit `--email`/u);
+  assert.match(cliInvocation, /Never poll Google or start Event Hub polling for OAuth/u);
   assert.match(cliInvocation, /OAuth verification URL[\s\S]*live progress message on stderr/iu);
   assert.doesNotMatch(walletConfig, /attempts to open it|Automatic browser launch may fail/u);
   assert.doesNotMatch(skill, /Automatic browser-open failure/u);
@@ -239,7 +242,8 @@ test('explicit wallet relogin starts a fresh attempt and never reuses an old URL
   assert.match(skill, /Never reuse a URL from prior chat messages, terminal scrollback, logs, or another process/iu);
 
   assert.match(walletConfig, /重新登录[\s\S]*log in again[\s\S]*fresh login link/iu);
-  assert.match(walletConfig, /Prefer an email stated in the current request, then the current wallet-status email/iu);
+  assert.match(walletConfig, /explicitly chose email\/OTP, use their current-request email first and the current wallet-status email second/u);
+  assert.match(walletConfig, /An explicit Google choice takes priority over a cached email/u);
   assert.match(walletConfig, /Capture stderr from the new child process rather than terminal scrollback or chat history/iu);
   assert.match(walletConfig, /latest `Starting wallet login;/u);
 
@@ -403,7 +407,7 @@ test('wallet init starts the watch and then requires returning the binding URL',
 });
 
 test('wallet OAuth polling is distinguished from Event Hub listening', () => {
-  assert.match(skill, /`oauthDevicePollActive=true` means that same process is polling the OAuth device-token endpoint/u);
+  assert.match(skill, /`oauthDevicePollActive=true` means that same process is polling the Clink OAuth device-token endpoint, not Google or Event Hub/u);
   assert.match(skill, /never start `events poll` for OAuth/u);
   assert.match(walletConfig, /`Waiting for authorization\.\.\.`[\s\S]*`oauthDevicePollActive=true`/u);
   assert.match(asyncEvents, /Consider that poll active only after[\s\S]*`Waiting for authorization\.\.\.`/u);
@@ -649,8 +653,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.3');
-  assert.equal(packageJson.version, '1.14.3');
+  assert.equal(skillVersion, '1.14.4');
+  assert.equal(packageJson.version, '1.14.4');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -1364,11 +1368,12 @@ test('the 3DS challenge is handed to the user rather than loaded by the agent', 
   assert.match(paymentRefund, /clink-browser-handoff\.md/u);
 });
 
-// The event, not the browser, is what proves completion — which is exactly why the flow survives the
-// user finishing on a phone, a second machine, or an hour later. Verifying by loading the page is
-// both unnecessary and the failure mode.
-test('the event stays the proof and no page is verified by loading it', () => {
-  assert.match(browserHandoff, /proven by a webhook event, never by anything a browser reports/u);
+// OAuth uses the original Clink token poll; other async flows use matching events.
+// Neither requires the agent to load the user's browser page.
+test('OAuth polling and matching events stay the proof without loading browser pages', () => {
+  assert.match(browserHandoff, /OAuth completion is proven by the original CLI process polling Clink's device-token endpoint, not Google or Event Hub/u);
+  assert.match(browserHandoff, /Other async flows use their matching webhook event/u);
+  assert.match(browserHandoff, /Neither is proven by what a browser reports/u);
   assert.match(browserHandoff, /looking is the failure mode/u);
   assert.match(skill, /Never add browser-side verification that a page opened/u);
   assert.match(asyncEvents, /never verify a page by loading it from the Agent runtime/u);
@@ -1394,7 +1399,8 @@ test('the prohibition never spills onto merchant product pages', () => {
 // fallback, and final exact instruction+card verification.
 test('quick instruction setup is documented end to end', () => {
   assert.match(skill, /classifyQuickInstructionActivationGate/u);
-  assert.match(skill, /wallet init --email <email> --title <title> --mandates/u);
+  assert.match(skill, /wallet init \[--email <email>\] --title <title> --mandates/u);
+  assert.match(skill, /Omit email only for Portal\/Google after the delivery gate/u);
   assert.match(skill, /null is ambiguous between deliberate skip and swallowed creation failure/u);
   assert.match(skill, /never means “list unconditionally(?:\.”|”\.)/u);
   assert.match(skill, /WAIT_VIC_READINESS/u);

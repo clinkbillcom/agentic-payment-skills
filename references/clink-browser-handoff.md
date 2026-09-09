@@ -9,14 +9,14 @@ This skill is installed by many different host agents. Some drive a browser them
 - **Passkey pages (registration and signing).** WebAuthn requires a platform authenticator bound to the user's device keychain, scoped to the relying-party origin. An agent browser has none. The only way to make one "work" is a CDP virtual authenticator, which forges precisely the proof the page exists to collect. Even when a credential is created in an agent browser profile, it does not exist in the user's own browser, so later signing fails there.
 - **3DS challenge.** The issuer ACS fingerprints the device and scores automation; the one-time code reaches the user's phone. An agent browser gets soft-declined or stepped up.
 - **Card binding/setup/modify.** The page collects a card number. An agent that reads or fills it moves the PAN into model context and agent logs.
-- **OAuth device verification.** An agent load races the user's page load and triggers duplicate verification-code sends or resend throttling.
+- **OAuth device verification (email/OTP or Portal/Google).** Both belong in the user's own browser. On the email/OTP path an agent load races the user's page load and can trigger duplicate verification-code sends or resend throttling. Google login does not add an OTP step and must not be automated by the agent.
 - **Any of them, opened by the CLI.** Browser launch happens on the host where `clink` runs. `wallet init --open` is an explicit system-browser handoff; all other link commands remain suppressed with `--no-open`.
 
 The fix is not to support every browser. It is to label each URL with who must act on it, and to keep every automatic-open path closed.
 
 ## What Makes This Host-Agnostic Already
 
-Completion of these flows is proven by a webhook event, never by anything a browser reports — see `references/clink-async-events.md`. The listener starts the moment the URL is emitted, so a user who opens the link on a phone, on a second machine, or hours later still converges.
+OAuth completion is proven by the original CLI process polling Clink's device-token endpoint, not Google or Event Hub. Other async flows use their matching webhook event — see `references/clink-async-events.md`. Neither is proven by what a browser reports. A user may act on another device while the corresponding process remains active and the link remains valid.
 
 That is the real portability guarantee: the skill does not care which browser the user chose. So do not add browser-side verification to "confirm the page opened". There is nothing to confirm, and looking is the failure mode.
 
@@ -32,7 +32,7 @@ Classify every URL with `classifyPageHandoff` from `lib/page-handoff.mjs` before
 
 | Page | Kind | Actor | Completion event |
 | --- | --- | --- | --- |
-| OAuth device verification (`wallet init` live stderr) | `OAUTH_DEVICE_VERIFICATION` | `USER_DEVICE_ONLY`, single load | none; the original init process polls the OAuth device-token endpoint and resolves |
+| OAuth device verification, email/OTP or Portal/Google (`wallet init` live stderr) | `OAUTH_DEVICE_VERIFICATION` | `USER_DEVICE_ONLY`, single load | none; the original init process polls the Clink OAuth device-token endpoint, not Google, and resolves |
 | First card binding (`card binding-link`) | `CARD_BINDING` | `USER_DEVICE_ONLY` | `payment_method.added` |
 | Add a payment method (`card setup-link`) | `CARD_SETUP` | `USER_DEVICE_ONLY` | `payment_method.added` / `payment_method.update` |
 | Manage payment methods (`card modify-link`) | `CARD_MODIFY` | `USER_DEVICE_ONLY` | `payment_method.update` / `payment_method.default_change` |
@@ -75,6 +75,8 @@ clink config set default-open-links false --format json
 
 ## Handoff Payload
 
+For Portal/Google, apply the Main-only delivery gate and login choice in `references/clink-wallet-config.md`. Use the CLI-returned URL unchanged; an email/name fragment is not something the agent should add to a no-email login. Do not append `login_ui` or `expectedEmail`, extract a Google token, or request an extra Google OTP. The Portal/server-side login verifies email and returns the Clink identity; no Google `sub` binding table belongs in the Skill.
+
 The skill cannot know whether the host renders clickable links, runs in a terminal, posts to a chat surface, or is read on a phone. For every `USER_DEVICE_ONLY` and `USER_PREFERRED` page other than OAuth while `wallet init --open` manages the system-browser request, emit:
 
 1. The URL **verbatim on its own line** — no shortening, re-encoding, origin reduction, or dropped query/fragment.
@@ -112,5 +114,5 @@ This is why VIC authorization is collected before a schedule exists (`references
 - Never automate a `USER_DEVICE_ONLY` page through any channel, including "just checking that it loads".
 - Never use a virtual authenticator or fabricated Passkey payload.
 - Emit non-OAuth single-load URLs exactly once; emit OAuth only once after a reported system-browser launch failure.
-- Proof of completion is the event, never the browser.
+- Proof of OAuth completion is the original Clink token poll; other async flows use the matching event, never the browser.
 - An unattended run that needs a browser page is a reported gap, not a wait.

@@ -25,7 +25,11 @@ for (const text of [
   'the login link expired',
 ]) {
   test(`explicit relogin language starts a fresh wallet init: ${text}`, () => {
-    const result = classifyWalletIntent({ text, currentEmail: 'user@example.com' });
+    const result = classifyWalletIntent({
+      text,
+      loginMethod: 'email',
+      currentEmail: 'user@example.com',
+    });
 
     assert.equal(result.state, WalletIntentState.WALLET_RELOGIN_SELECTED);
     assert.equal(result.route, WalletIntentRoute.WALLET_RELOGIN);
@@ -46,9 +50,10 @@ test('explicit relogin uses an email supplied in the current request', () => {
   assert.equal(result.email, 'new-user@example.com');
 });
 
-test('structured relogin uses the current wallet status email', () => {
+test('structured email relogin uses the current wallet status email', () => {
   const result = classifyWalletIntent({
     intent: 'wallet_relogin',
+    loginMethod: 'email',
     walletStatus: { data: { email: 'status-user@example.com' } },
   });
 
@@ -56,8 +61,8 @@ test('structured relogin uses the current wallet status email', () => {
   assert.equal(result.email, 'status-user@example.com');
 });
 
-test('explicit relogin asks only for email when none is available', () => {
-  const result = classifyWalletIntent({ text: '重新登录' });
+test('explicit email relogin asks only for email when none is available', () => {
+  const result = classifyWalletIntent({ text: '重新登录', loginMethod: 'email' });
 
   assert.equal(result.state, WalletIntentState.WALLET_RELOGIN_INPUT_MISSING);
   assert.equal(result.route, WalletIntentRoute.INPUT_REQUIRED);
@@ -287,7 +292,7 @@ test('a truncated current URL never falls back to an older complete URL', () => 
       'Opening your browser...',
       'Starting wallet login; this attempt takes precedence over any earlier one.',
       'Complete authorization in your browser:',
-      'https://agent.example.com/oauth?user_code=NEW-CODE',
+      'https://agent.example.com/oauth?user_code=NEW-CODE#email=user%40example.com',
       'Waiting for authorization...',
     ].join('\n'),
   });
@@ -315,12 +320,12 @@ test('wallet init classifier rejects authorization polling that omitted --open',
   assert.equal(result.authorizationUrl, undefined);
 });
 
-test('wallet init classifier rejects a truncated OAuth URL instead of surfacing it', () => {
+test('wallet init classifier rejects a partial email fragment instead of surfacing it', () => {
   const result = classifyWalletInitObservation({
     running: true,
     stderr: [
       'Complete authorization in your browser:',
-      'https://agent.example.com/oauth?user_code=ABCD-EFGH',
+      'https://agent.example.com/oauth?user_code=ABCD-EFGH#email=user%40example.com',
       'Waiting for authorization...',
     ].join('\n'),
   });
