@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.83. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.84. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.83"
+  version: "0.1.84"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -190,26 +190,33 @@ An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
 exactly, or use the CLI-returned private `imagePath` only when terminal QR
 rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
-### Pending Instruction Card Gate
+### Quick Instruction Card Gate
 
 For every authorized `visa commerce-login` purchase:
 
+- At Quick creation, an eligible selected VIC-ready Visa card yields a CREATED
+  Quick bound to its `paymentInstrumentId`, without activation; otherwise the
+  new Quick is PENDING. LOGIN and REGISTER both support these outcomes.
+- The legacy response field `pendingInstructionId` carries an ID, not a status.
+  Use the actual Instruction `status` from the response and exact-GET;
+  never infer PENDING from the field name. Preserve existing matching Quicks
+  as-is; do not relabel a historical PENDING when card readiness changes.
 - With an existing Quick, exact-GET and validate the original ID against the
   frozen purchase and card. Never switch an existing Quick to any other ACTIVE
   Instruction, even when it matches the same purchase. Missing or mismatched
   Quick state requires a stop, not a new selection.
 - Agent Portal owns card binding and VIC. The CLI never opens Bind Card.
   `commerce-login` saves the Quick ID and returns login-ready for a valid
-  PENDING or ACTIVE Quick, without waiting for activation or opening VIC.
+  CREATED, PENDING, or ACTIVE Quick, without waiting for activation or opening VIC.
   `commerce-run` owns card/VIC/Instruction waiting and handoffs. Unknown or
   ongoing VIC state must not trigger another automatic VIC opening.
   The Agent never opens an additional page or decides this from card timestamps.
 - Without a VIC-ready Visa card, the CLI/CWallet prepare or reuse the purchase's
-  exact PENDING before its VIC authorization starts. LOGIN and REGISTER both
-  support this path. `commerce-run` must continue this exact Quick Instruction;
+  exact PENDING before its VIC authorization starts, only when no Quick already
+  exists. `commerce-run` must continue an existing Quick Instruction as-is;
   it must never create a second Instruction because the card is not yet ready.
-  The CLI waits; the Agent does not inspect card timestamps, choose a latest
-  PENDING, or reconstruct card/Instruction commands.
+  Only the PENDING card path waits; the Agent does not inspect card timestamps,
+  choose a latest PENDING, or reconstruct card/Instruction commands.
 - With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes.
   On timeout, if there is still no Visa card, stop waiting and ask the user to
   bind a Visa card. Show the CLI-returned Agent Portal entry as a binding link;
@@ -217,15 +224,24 @@ For every authorized `visa commerce-login` purchase:
   activate the Instruction or show a VIC/Instruction activation link in this
   no-card state. Preserve the same Quick Instruction ID; never create a second
   in this no-card case.
-- With a Visa card but no VIC, return the CLI's exact VIC URL for that card,
-  never the Portal home page as a VIC link. The same ceremony must be associated
-  with the original Quick ID; if that association is unknown, do not promise
+- With a PENDING Quick and a Visa card but no VIC, return the CLI's exact VIC URL
+  for that card, never the Portal home page as a VIC link. The same ceremony
+  must be associated with the original Quick ID; if that association is unknown, do not promise
   automatic activation. Do not create another Instruction.
 - CWallet activates only the PENDING associated with that VIC flow. Completion
   requires the same card to be VIC-ready and the original Quick to be ACTIVE.
   An unrelated or already-running authorization must not be reused, and an
   unknown ceremony association is not proof of activation.
-- With a VIC-ready Visa card and a PENDING Quick, CLI `--open` opens the exact
+- With a CREATED Quick, immediately have CLI `--open` open the exact
+  CLI-returned `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}`
+  URL using the original Quick ID and its bound `paymentInstrumentId`.
+  Do not wait for binding or VIC. Never substitute a different card.
+  Validate that the bound card is the same eligible VIC-ready Visa card;
+  a missing or mismatched binding requires a stop, not selection by list order.
+  Portal's existing `/sign` activates that same CREATED Quick.
+  CREATED is not ACTIVE and does not permit Checkout before authorization.
+- With a VIC-ready Visa card and a historical PENDING Quick, CLI `--open` opens
+  the exact
   `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL.
   Use only the CLI-returned URL: `{pi}` is the selected `paymentInstrumentId`
   and `instructionId` is the original Quick ID. Never construct this URL.
@@ -498,7 +514,7 @@ waits and automatically report the final result and orderUrl when available.
 Manual opening, missing/changed facts, or a real error, refusal, cancellation, or
 timeout require a user-facing interruption.
 
-After `commerce-login` creates a Quick Instruction, apply the Pending Instruction
+After `commerce-login` creates a Quick Instruction, apply the Quick Instruction
 Card Gate: preserve the exact ID in every card/VIC state. Never create another
 Instruction merely because a wait timed out, a card became VIC-ready, or
 another ACTIVE Instruction exists.

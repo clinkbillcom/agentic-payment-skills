@@ -22,7 +22,7 @@ const documents = [skill, readme, readmeZh, agent, filterReference];
 const combined = documents.join('\n');
 const quickContracts = [
   skill.slice(
-    skill.indexOf('### Pending Instruction Card Gate'),
+    skill.indexOf('### Quick Instruction Card Gate'),
     skill.indexOf('## Intent Routing'),
   ),
   agent.slice(agent.indexOf('Portal owns card binding and VIC.')),
@@ -44,7 +44,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.83');
+  assert.equal(packageJson.version, '0.1.84');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -122,7 +122,11 @@ test('old workflow runtime, scripts, and docs are absent and filter reference is
   }
   assert.deepEqual(
     (await walk(join(root, 'references'))).map((path) => relative(root, path)),
-    ['references/visa-recommend-filters.md'],
+    [
+      'references/change-log.md',
+      'references/quick-instruction-cases.md',
+      'references/visa-recommend-filters.md',
+    ],
   );
   assert.ok(
     (await stat(join(root, 'references', 'visa-recommend-filters.md'))).size
@@ -656,6 +660,31 @@ test('pre-command notices distinguish optional login and authorization pages wit
 });
 
 // These assertions validate the written contracts, not CLI or backend execution.
+test('Quick contract: creation follows card readiness, never the legacy ID field name', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /At Quick creation, an eligible selected VIC-ready Visa card yields a CREATED Quick bound to its paymentInstrumentId, without activation; otherwise the new Quick is PENDING/u);
+    assert.match(normalized, /LOGIN and REGISTER both support these outcomes/u);
+    assert.match(normalized, /legacy response field pendingInstructionId carries an ID, not a status/u);
+    assert.match(normalized, /Use the actual Instruction status from the response and exact-GET; never infer PENDING from the field name/u);
+    assert.match(normalized, /Preserve existing matching Quicks as-is; do not relabel a historical PENDING when card readiness changes/u);
+    assert.match(normalized, /returns login-ready for a valid CREATED, PENDING, or ACTIVE Quick, without waiting for activation or opening VIC/u);
+  }
+});
+
+test('Quick contract: CREATED opens original ID with its bound card without binding or VIC wait', () => {
+  for (const normalized of quickContracts) {
+    const created = normalized.slice(
+      normalized.indexOf('With a CREATED Quick,'),
+      normalized.indexOf('With a VIC-ready Visa card and a historical PENDING Quick,'),
+    );
+    assert.match(created, /immediately have CLI --open open the exact CLI-returned \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL using the original Quick ID and its bound paymentInstrumentId/u);
+    assert.match(created, /Do not wait for binding or VIC\. Never substitute a different card/u);
+    assert.match(created, /missing or mismatched binding requires a stop, not selection by list order/u);
+    assert.match(created, /Portal's existing \/sign activates that same CREATED Quick/u);
+    assert.match(created, /CREATED is not ACTIVE and does not permit Checkout before authorization/u);
+  }
+});
+
 test('Quick contract: no-card PENDING timeout requests binding only within 15 minutes', () => {
   for (const normalized of quickContracts) {
     assert.match(normalized, /With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes/u);
@@ -668,15 +697,15 @@ test('Quick contract: no-card PENDING timeout requests binding only within 15 mi
 
 test('Quick contract: exact card VIC URL requires original-ID ceremony association', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /With a Visa card but no VIC, return the CLI's exact VIC URL for that card, never the Portal home page as a VIC link/u);
+    assert.match(normalized, /With a PENDING Quick and a Visa card but no VIC, return the CLI's exact VIC URL for that card, never the Portal home page as a VIC link/u);
     assert.match(normalized, /same ceremony must be associated with the original Quick ID; if that association is unknown, do not promise automatic activation/u);
     assert.match(normalized, /Do not create another Instruction/u);
   }
 });
 
-test('Quick contract: VIC-ready PENDING uses original-ID Passkey URL and existing sign', () => {
+test('Quick contract: historical VIC-ready PENDING keeps original-ID Passkey URL and existing sign', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /With a VIC-ready Visa card and a PENDING Quick, CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL/u);
+    assert.match(normalized, /With a VIC-ready Visa card and a historical PENDING Quick, CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL/u);
     assert.match(normalized, /Use only the CLI-returned URL: \{pi\} is the selected paymentInstrumentId and instructionId is the original Quick ID\. Never construct this URL/u);
     assert.match(normalized, /required backend contract is CWallet compatibility for Portal's existing \/sign: authorization activates the original Quick ID in this state/u);
     assert.match(normalized, /Never create another Instruction or wait for binding/u);
@@ -779,13 +808,13 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
 
 test('Portal owns binding and only the existing-card path may open VIC once', () => {
   const gate = skill.slice(
-    skill.indexOf('### Pending Instruction Card Gate'),
+    skill.indexOf('### Quick Instruction Card Gate'),
     skill.indexOf('## Intent Routing'),
   );
 
   assert.match(gate, /Portal owns card binding and VIC/u);
   assert.match(gate, /CLI never opens Bind Card/u);
-  assert.match(gate, /`commerce-login` saves the Quick ID and returns login-ready for a valid\s+PENDING or ACTIVE Quick/u);
+  assert.match(gate, /`commerce-login` saves the Quick ID and returns login-ready for a valid\s+CREATED, PENDING, or ACTIVE Quick/u);
   assert.match(gate, /without waiting for activation or opening VIC/u);
   assert.match(gate, /`commerce-run` owns card\/VIC\/Instruction waiting and handoffs/u);
   assert.match(gate, /ongoing VIC state must not trigger another automatic VIC opening/u);

@@ -10807,7 +10807,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.62";
+var CLI_VERSION = "0.2.63";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -13057,13 +13057,15 @@ Device Authorization:
 Quick Instruction:
   Passing any Quick Instruction option sends instruction_context with Device Authorization;
   --title and one of --mandates/--mandates-file are then required. --payment-instrument-id and
-  --extra are rejected because no card exists yet and the context is intentionally bounded.
+  --extra are rejected because card selection belongs to CWallet and the context is intentionally bounded.
   Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
   contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
   requires description, a positive amountLimit with at most two decimals, and currencyCode.
   Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  After browser authorization, the server attempts to create a PENDING purchase instruction and
-  reports pendingInstructionId. A null value means no usable Quick ID was returned and does not
+  After browser authorization, CWallet creates/reuses a Quick: CREATED bound to a selected
+  VIC-ready Visa when available, otherwise no-card PENDING. The legacy pendingInstructionId
+  field can refer to CREATED, PENDING or ACTIVE; exact-GET its actual status and keep the original ID.
+  A null value means no usable Quick ID was returned and does not
   distinguish a deliberate skip from creation failure. The PENDING instruction activates after
   VIC card binding completes and emits purchase_instruction.activated; it does not appear in
   \`instruction list --valid-only\` until it is ACTIVE.
@@ -14069,7 +14071,7 @@ Usage:
   clink instruction <prepare|create|sign-url|list|get|update|cancel> [options]
 
 Actions:
-  prepare   Create/reuse a no-card PENDING instruction, prompt for Portal card binding, and wait
+  prepare   Create/reuse a Quick: bound CREATED authorization or no-card PENDING binding wait
   create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
   sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
   list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
@@ -14085,6 +14087,8 @@ Notes:
   waiting in the foreground. It never opens that link or a standalone VIC page. Activation is
   exact-GET verified and timeout returns an instruction get continuation bound to the original ID;
   it never creates a second Instruction or retries Checkout/payment.
+  A CREATED response returns the exact backend-bound card's manual authorization URL and a
+  read-only instruction get continuation, without opening a browser or waiting for binding.
   create POSTs /agent/cwallet/instructions and creates the instruction in CREATED (draft) state,
   then prints the Passkey page URL for the returned instructionId.
   An instruction turns ACTIVE only after the Passkey/FIDO signature completes on the agent page
@@ -14145,6 +14149,11 @@ Endpoint:
 Behavior:
   Sends the complete restricted instructionContext without paymentInstrumentId or extra. CWallet
   creates or reuses one no-card PENDING Instruction and returns its exact instructionId/status.
+  If a VIC-ready card is selected at creation, /pending may instead return CREATED with its
+  backend-bound paymentInstrumentId. The CLI exact-GETs that ID and returns user_action_required,
+  the same card's manualOpenUrl for authorization, and a read-only instruction get continuation.
+  It does not wait for binding, open a browser, replace the bound card, or create another ID.
+  Only ACTIVE is ready for use.
   The CLI then obtains the existing card binding link but withholds it until the first successful
   Event Hub poll and identity validation. At readiness it writes the stable English prompt to stderr
   and stdout emits a structured handoff envelope:
@@ -19842,7 +19851,8 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
   if (initialStatus === "UNKNOWN") {
     throw apiError("missing status in pending instruction response", 502);
   }
-  if (initialStatus === "CARD_READY" || initialStatus === "VIC_READY") {
+  const cardReady = initialStatus === "CARD_READY" || initialStatus === "VIC_READY";
+  if (cardReady && !created.instructionId) {
     return {
       instructionStatus: initialStatus,
       state: "CARD_READY",
@@ -19854,10 +19864,10 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
     };
   }
   const instructionId2 = requiredText(created.instructionId, "missing instructionId in pending instruction response");
-  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus)) {
+  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && initialStatus !== "CREATED" && !cardReady && !isTerminalInstructionStatus(initialStatus)) {
     throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
   }
-  if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus) || dependencies.portalManaged && created.detail.activationExpected === false) {
+  if (initialStatus === "ACTIVE" || initialStatus === "CREATED" || cardReady || isTerminalInstructionStatus(initialStatus) || dependencies.portalManaged && created.detail.activationExpected === false) {
     return finalizePendingInstruction({
       instructionId: instructionId2,
       initialStatus,
@@ -19926,7 +19936,15 @@ async function finalizePendingInstruction(input, dependencies) {
     assertExactInstruction(instruction, input.instructionId);
   }
   const instructionStatus3 = instruction ? normalizedStatus(instruction.status ?? instruction.state) : input.initialStatus;
-  const state = instructionStatus3 === "ACTIVE" ? "ACTIVE" : isTerminalInstructionStatus(instructionStatus3) ? "TERMINAL" : "PENDING";
+  let state = instructionStatus3 === "ACTIVE" ? "ACTIVE" : instructionStatus3 === "CREATED" ? "CREATED" : instructionStatus3 === "PENDING" ? "PENDING" : "TERMINAL";
+  if (input.initialStatus === "CREATED" || instructionStatus3 === "CREATED") {
+    const pi = instruction && optionalText(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+    const createdPi = optionalText(input.createdDetail.paymentInstrumentId ?? input.createdDetail.payment_instrument_id);
+    if (!instruction || !pi || createdPi && createdPi !== pi || !["CREATED", "ACTIVE"].includes(instructionStatus3)) {
+      state = "TERMINAL";
+      exactGetError ??= "CREATED requires the exact Instruction and unchanged backend-bound paymentInstrumentId";
+    }
+  }
   return {
     instructionId: input.instructionId,
     instructionStatus: instructionStatus3,
@@ -25802,7 +25820,7 @@ async function instructionPrepare(context) {
     return EXIT_CODES.OK;
   }
   const result = await prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, { emitPendingEnvelope: true });
-  printSuccess(pendingInstructionCommandOutput(result), context.globalOptions.format);
+  printSuccess(pendingInstructionCommandOutput(result, context), context.globalOptions.format);
   return EXIT_CODES.OK;
 }
 async function prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, options2 = {}) {
@@ -25810,6 +25828,7 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
     ...options2.portalManaged ? { portalManaged: true } : {},
     createPendingInstruction: async (input) => {
       const detail = await createCommandPendingInstruction(context, input);
+      await options2.onInstructionCreated?.(detail);
       const instructionId2 = asOptionalString(detail.instructionId ?? detail.purchaseInstructionId);
       return {
         ...instructionId2 ? { instructionId: instructionId2 } : {},
@@ -25910,12 +25929,12 @@ async function createCommandPendingInstruction(context, instructionContext) {
   }
   return result;
 }
-function pendingInstructionCommandOutput(result) {
+function pendingInstructionCommandOutput(result, context) {
   const terminal = result.state !== "PENDING";
   return {
     command: "instruction prepare",
     stage: "instruction_activation",
-    status: result.state === "ACTIVE" ? "ready" : result.state === "CARD_READY" ? "card_ready" : result.state === "TERMINAL" ? result.instructionStatus.toLowerCase() : result.timedOut ? "timeout" : "pending",
+    status: result.state === "ACTIVE" ? "ready" : result.state === "CREATED" ? "user_action_required" : result.state === "CARD_READY" ? "card_ready" : result.state === "TERMINAL" ? result.instructionStatus.toLowerCase() : result.timedOut ? "timeout" : "pending",
     terminal,
     instructionId: result.instructionId ?? null,
     instructionStatus: result.instructionStatus,
@@ -25923,7 +25942,11 @@ function pendingInstructionCommandOutput(result) {
     eventTypes: result.eventTypes,
     watchReady: result.watchReady,
     bindingLinkPresented: result.bindingLinkPresented,
-    ...result.state === "PENDING" && result.resumeCommand ? {
+    ...result.state === "CREATED" && result.instruction ? {
+      paymentInstrumentId: result.instruction.paymentInstrumentId ?? result.instruction.payment_instrument_id,
+      manualOpenUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), asRequiredString(result.instruction.paymentInstrumentId ?? result.instruction.payment_instrument_id, "CREATED requires a backend-bound paymentInstrumentId"), result.instructionId, context.runtimeConfig.email)
+    } : {},
+    ...(result.state === "PENDING" || result.state === "CREATED") && result.resumeCommand ? {
       userActionRequired: true,
       resumeCommand: result.resumeCommand,
       resumeReadOnly: true,
@@ -29174,7 +29197,7 @@ async function runVisaCommerce(context, options2, dependencies) {
     };
   }
   const continuation = await dependencies.getContinuation?.();
-  const quick = await dependencies.getQuickContinuation?.();
+  let quick = await dependencies.getQuickContinuation?.();
   if (continuation?.phase === "checkout_started" || quick?.phase === "checkout_started") {
     return {
       command: "visa commerce-run",
@@ -29200,8 +29223,8 @@ async function runVisaCommerce(context, options2, dependencies) {
     if (!quickInstruction || instructionId(quickInstruction) !== quick.instructionId) {
       return quickInstructionFailure(quick, "saved_quick_instruction_not_found_or_identity_mismatch");
     }
-    if (!["ACTIVE", "PENDING"].includes(instructionStatus(quickInstruction))) {
-      return quickInstructionFailure(quick, "saved_quick_instruction_not_active_or_pending");
+    if (!["ACTIVE", "CREATED", "PENDING"].includes(instructionStatus(quickInstruction))) {
+      return quickInstructionFailure(quick, "saved_quick_instruction_not_active_created_or_pending");
     }
   }
   let resolvedPurchase;
@@ -29219,6 +29242,7 @@ async function runVisaCommerce(context, options2, dependencies) {
     };
   }
   const card = cardResult.card;
+  quick ??= await dependencies.getQuickContinuation?.();
   const paymentInstrumentId = card.paymentInstrumentId;
   let instruction = cardResult.instruction;
   if (!instruction) {
@@ -29528,13 +29552,29 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
   }
   const pendingInstructionId2 = pending.instructionId;
   const pendingResumeCommand = pending.resumeCommand;
+  if (pending.state === "CREATED" && pending.instruction && pendingInstructionId2) {
+    const quick = await dependencies.getQuickContinuation?.();
+    if (!quick || quick.instructionId !== pendingInstructionId2) {
+      return {
+        ready: false,
+        stage: "instruction_verification",
+        status: "failed",
+        terminal: true,
+        instructionId: pendingInstructionId2,
+        reason: "created_quick_continuation_not_saved",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
+    return resolveQuickVisaAuthorization(dependencies, context, quick, pending.instruction, maxWaitSeconds);
+  }
   if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
     return {
       ready: false,
       stage: "instruction_activation",
       status: pending.state === "TERMINAL" ? pending.instructionStatus.toLowerCase() : pending.timedOut ? "timeout" : "pending",
       terminal: pending.state === "TERMINAL",
-      userActionRequired: pending.state === "PENDING",
+      userActionRequired: pending.state === "PENDING" || pending.state === "CREATED",
       instructionId: pendingInstructionId2 ?? null,
       instructionStatus: pending.instructionStatus,
       eventTypes: pending.eventTypes,
@@ -29612,7 +29652,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
 async function resolveQuickVisaAuthorization(dependencies, context, quick, instruction, maxWaitSeconds) {
   const waitSeconds = Math.min(maxWaitSeconds, DEFAULT_WORKFLOW_WAIT_SECONDS);
   const failure = (reason) => quickInstructionFailure(quick, reason);
-  const valid = (exact) => Boolean(exact && instructionId(exact) === quick.instructionId && ["PENDING", "ACTIVE"].includes(instructionStatus(exact)) && pendingInstructionMatchesContext(exact, instructionPaymentInstrumentId(exact), context, true));
+  const valid = (exact) => Boolean(exact && instructionId(exact) === quick.instructionId && quickInstructionMatchesContext(exact, context.instructionContext) && (!quick.paymentInstrumentId || !instructionPaymentInstrumentId(exact) || quick.paymentInstrumentId === instructionPaymentInstrumentId(exact)));
   if (!valid(instruction)) {
     return failure("quick_instruction_failed_exact_context_verification");
   }
@@ -29646,6 +29686,10 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
     if (instructionStatus(instruction) === "ACTIVE") {
       return activeResult(instruction, cards);
     }
+    const createdCardReady = () => instructionStatus(instruction) !== "CREATED" || selectVisaCard(cards, instructionPaymentInstrumentId(instruction)).action === "use";
+    if (!createdCardReady()) {
+      return failure("created_quick_instruction_bound_card_not_vic_ready_or_mismatched");
+    }
     let enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
     if (enabledVisa.length === 0) {
       const wait2 = await waitForExact();
@@ -29656,6 +29700,9 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
       cards = await dependencies.refreshCards();
       if (instructionStatus(instruction) === "ACTIVE")
         return activeResult(instruction, cards);
+      if (!createdCardReady()) {
+        return failure("created_quick_instruction_bound_card_not_vic_ready_or_mismatched");
+      }
       enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
       if (enabledVisa.length === 0) {
         return {
@@ -30080,12 +30127,19 @@ function createdInstructionMatchesContext(instruction, paymentInstrumentId, cont
   const observedMandates = mandateArray(instruction);
   return expectedMandates.every((expected) => observedMandates.some((candidate) => mandatesEqual(candidate, expected) && mandateIsUnexpired(candidate, instruction, nowMs) && (!oneTimeInstruction(instruction) || zeroLike(candidate.reserveStatus))));
 }
-function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context, allowPending = false) {
+function quickInstructionMatchesContext(instruction, instructionContext) {
+  const status = instructionStatus(instruction);
+  const pi = instructionPaymentInstrumentId(instruction);
+  if (status === "PENDING" ? pi !== void 0 : !["CREATED", "ACTIVE"].includes(status) || !pi)
+    return false;
+  return pendingInstructionMatchesContext(instruction, pi, { instructionContext }, true, status === "CREATED");
+}
+function pendingInstructionMatchesContext(instruction, paymentInstrumentId, context, allowPending = false, allowCreated = false) {
   const expected = context.instructionContext;
   const nowMs = Date.now();
   const instructionExpiryMs = parsedFutureTimestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time, nowMs);
   const observedRecurring = normalizedBoolean(instruction.isRecurring ?? instruction.is_recurring);
-  if (instructionStatus(instruction) !== "ACTIVE" && !(allowPending && instructionStatus(instruction) === "PENDING") || paymentInstrumentId !== void 0 && instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
+  if (instructionStatus(instruction) !== "ACTIVE" && !(allowCreated && instructionStatus(instruction) === "CREATED") && !(allowPending && instructionStatus(instruction) === "PENDING") || paymentInstrumentId !== void 0 && instructionPaymentInstrumentId(instruction) !== paymentInstrumentId || exactText(instruction.title) !== exactText(expected.title) || optionalExactText(instruction.description) !== optionalExactText(expected.description) || observedRecurring === void 0 || observedRecurring !== (expected.isRecurring === true) || instructionExpiryMs === void 0 || !optionalStructuredMapEquals(void 0, instruction.extra, false) || !optionalStructuredMapEquals(expected.shippingAddress, instruction.shippingAddress ?? instruction.shipping_address ?? instruction.shippingAddressJson, true)) {
     return false;
   }
   const expectedMandates = expected.mandates;
@@ -32490,6 +32544,9 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
         if (!saved || saved.instructionId !== continuation.instructionId || saved.phase === "checkout_started") {
           throw validationError("Quick Instruction changed or Checkout already started; use read-only recovery");
         }
+        if (saved.paymentInstrumentId && saved.paymentInstrumentId !== continuation.paymentInstrumentId) {
+          throw validationError("Quick Instruction backend-bound card changed; use read-only recovery");
+        }
         if (continuation.phase === "authorization" && saved.phase === "authorization" && saved.authorizationStage === continuation.authorizationStage) {
           throw validationError("Quick Instruction authorization is already claimed; continue the existing browser flow");
         }
@@ -32539,6 +32596,13 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     },
     preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
       portalManaged: true,
+      onInstructionCreated: async (detail) => {
+        if (optionalText6(detail.status ?? detail.state)?.toUpperCase() !== "PENDING") {
+          const id = optionalText6(detail.instructionId ?? detail.purchaseInstructionId);
+          if (id)
+            await loginDependencies.saveQuickInstructionContinuation?.(instructionContext, id, optionalText6(detail.paymentInstrumentId ?? detail.payment_instrument_id));
+        }
+      },
       ...bindingResolution ? { bindingResolution } : {}
     }),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
@@ -32612,7 +32676,7 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
     getQuickInstructionContinuation: async (instructionContext) => {
       return (await readStoredConfig()).visa?.quickInstructionContinuations?.[quickFingerprint(instructionContext)];
     },
-    saveQuickInstructionContinuation: async (instructionContext, instructionId2) => {
+    saveQuickInstructionContinuation: async (instructionContext, instructionId2, paymentInstrumentId) => {
       const fingerprint = quickFingerprint(instructionContext);
       await updateStoredConfig((stored) => {
         const visa = stored.visa ?? defaultVisaState();
@@ -32621,11 +32685,22 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
           if (saved.instructionId !== instructionId2) {
             throw validationError("A different Quick Instruction is already saved for this purchase");
           }
+          if (paymentInstrumentId) {
+            if (saved.paymentInstrumentId && saved.paymentInstrumentId !== paymentInstrumentId) {
+              throw validationError("The backend-bound Quick card changed; use read-only recovery");
+            }
+            saved.paymentInstrumentId = paymentInstrumentId;
+          }
           return stored;
         }
         visa.quickInstructionContinuations = {
           ...visa.quickInstructionContinuations,
-          [fingerprint]: { fingerprint, instructionId: instructionId2, phase: "pending" }
+          [fingerprint]: {
+            fingerprint,
+            instructionId: instructionId2,
+            phase: "pending",
+            ...paymentInstrumentId ? { paymentInstrumentId } : {}
+          }
         };
         stored.visa = visa;
         return stored;
@@ -33500,7 +33575,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
     const pendingInstructionId3 = optionalText7(prepared?.instructionId);
     if (pendingInstructionId3) {
-      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3);
+      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3, optionalText7(prepared?.paymentInstrumentId ?? prepared?.payment_instrument_id));
     }
     return readyLoginResult(context, dependencies, pendingInstructionId3, current.detail);
   }
@@ -33537,10 +33612,24 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
 }
 async function readyLoginResult(context, dependencies, quickId, detail) {
   let status = null;
+  let paymentInstrumentId;
+  let valid = true;
   if (quickId) {
     const instruction = await dependencies.getInstruction(quickId);
     assertExactInstruction2(instruction, quickId);
     status = instructionStatus2(instruction);
+    paymentInstrumentId = optionalText7(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+    const saved = await dependencies.getQuickInstructionContinuation?.(context.instructionContext);
+    if (saved?.paymentInstrumentId && status !== "PENDING" && paymentInstrumentId !== saved.paymentInstrumentId)
+      valid = false;
+    if (status === "PENDING" && paymentInstrumentId)
+      valid = false;
+    if (status === "CREATED") {
+      valid &&= quickInstructionMatchesContext(instruction, context.instructionContext);
+      if (valid && paymentInstrumentId) {
+        await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, quickId, paymentInstrumentId);
+      }
+    }
     const expiry = optionalText7(instruction.effectiveUntilTime ?? instruction.effective_until_time);
     if (expiry) {
       const utcExpiry = /(?:Z|[+-]\d{2}:?\d{2})$/iu.test(expiry) ? expiry : `${expiry.replace(" ", "T")}Z`;
@@ -33549,7 +33638,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
         status = "EXPIRED";
     }
   }
-  const ready = status === null || status === "PENDING" || status === "ACTIVE";
+  const ready = valid && (status === null || status === "CREATED" || status === "PENDING" || status === "ACTIVE");
   return {
     command: "visa commerce-login",
     operation: "visa-commerce-login",
@@ -33565,7 +33654,8 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     instructionId: quickId ?? null,
     pendingInstructionId: quickId ?? null,
     instructionStatus: status,
-    instructionReady: status === "ACTIVE",
+    paymentInstrumentId: paymentInstrumentId ?? null,
+    instructionReady: ready && status === "ACTIVE",
     ...!ready ? { rerunAllowed: false, paymentRetryAllowed: false } : {},
     detail
   };
@@ -33730,9 +33820,14 @@ Behavior:
   A returned pendingInstructionId is followed for both LOGIN and REGISTER, without depending on
   customerCreated or activationDriver. The CLI saves the exact ID under the authenticated
   customer, environment and frozen instructionContext, then exact-GETs that same ID once.
-  Authenticated PENDING and ACTIVE return ready=true and loginReady=true immediately so
-  commerce-run can continue. instructionReady is true only for ACTIVE. Expired, terminal,
-  missing or mismatched Quick Instructions fail closed. All activation waiting is in commerce-run.
+  The legacy pendingInstructionId field can identify CREATED bound to a backend-selected
+  VIC-ready Visa, or no-card PENDING. Never infer status from the field name.
+  Authenticated valid CREATED, PENDING and ACTIVE return ready=true and loginReady=true immediately so
+  commerce-run can continue. instructionReady is true only for ACTIVE.
+  CREATED login checks context and pins the nonempty bound PI from exact GET without another
+  card query; commerce-run still verifies card/VIC readiness. The binding alone is not VIC proof.
+  Expired, terminal, missing or mismatched Quick Instructions fail closed.
+  All activation waiting is in commerce-run.
   Responses without an Instruction ID continue the regular Instruction flow without polling.
   Quick IDs are not written into purchase-context files and survive process restart and Token
   refresh. With successful --open, the user finishes VSRP login in the one opened browser flow.
@@ -33823,10 +33918,13 @@ Behavior:
   mode=purchase and mode=catalog_purchase both require the separate commerce-login stage to be
   ready and exact-revalidate the frozen selected product. catalog_purchase does not perform or
   repeat Visa benefit discovery. A saved Quick Instruction is always exact-GET first and is never
-  replaced. ACTIVE requires exact context and same-card VIC readiness before Checkout. PENDING with
+  replaced. ACTIVE requires exact context and same-card VIC readiness before Checkout.
+  CREATED requires its backend-bound VIC-ready card: missing PI/card, changed binding, unready
+  card or context mismatch fails closed. Never substitute another ready/default card or wait
+  for binding in CREATED. CREATED with that bound card, or historical no-card PENDING with
   a ready Visa opens /passkey-auth/{paymentInstrumentId}?type=visa&instructionId={originalQuickId}.
   Failed or disabled opening returns the original manual URL and exits; a repeat never reopens it.
-  Without a Visa card, wait for that same ID for at most 900 seconds, then refresh cards. A no-card
+  With no-card PENDING and without a Visa card, wait for that same ID for at most 900 seconds, then refresh cards. A no-card
   timeout returns only bindCardUrl (Portal binding entry), rerunAllowed=true, resumeMode=same_command
   and checkoutStarted=false. For an unready or unknown-VIC card, return that card's exact Quick URL;
   unknown progress or an ongoing ceremony does not auto-open. Local atomic claims prevent two CLI
@@ -33837,6 +33935,8 @@ Behavior:
   creates/reuses one no-card PENDING Instruction first, provides an exact-purchase Portal
   continuation after Event Hub readiness, and waits without requesting another Bind Card link
   or opening a separate VIC page.
+  If /pending instead returns CREATED, save its original ID and backend-bound card and continue
+  that same authorization URL without another create. Legacy ID-less VIC_READY stays supported.
   Portal owns card binding, 3DS, and VIC. After activation, commerce-run exact-GETs the same
   Instruction, refreshes cards, and requires the attached paymentInstrumentId to be a same-card
   Visa with visaRegistrationSucceeded=true before continuing.

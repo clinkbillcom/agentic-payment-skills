@@ -62,9 +62,9 @@ The lightweight shopping routes cover:
 - matched Program purchase directly from the unchanged `recommend-products`
   snapshot through `commerce-login` and `commerce-run`, without `visa detail`
 - direct shopping through the same Visa-only Offer and matched-merchant flow
-- Portal owns binding and VIC; CLI never opens Bind Card. It may open existing
-  card-only VIC once for a verified pre-browser unready card; new cards and
-  unknown/in-progress state only wait
+- Portal owns binding and VIC; CLI never opens Bind Card. For a PENDING Quick,
+  return the exact VIC URL for a verified unready card; unknown/in-progress
+  ceremonies must not trigger another automatic opening
 
 Initial discovery never uses `--include-provider-products`,
 `--include-broad-catalog`, `--broad-queries`, standalone Catalog, or an
@@ -92,20 +92,59 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.83` vendors Visa CLI `0.2.62` from upstream commit
-`aed0fd1e2778d80b3c5f7363945fcb871c6cad35`. This product-match branch performs
+Skill `0.1.84` vendors Visa CLI `0.2.63` from upstream commit
+`811e2d6ef322c9b741e59b0adc14315ea93d8661`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
-contexts. The aggregate missing-card flow waits for Portal on one exact PENDING
-Instruction, with conditional existing-card VIC opening and no new Portal route, and continues after same-card
-`visaRegistrationSucceeded=true` plus exact-Instruction `ACTIVE`.
+contexts. The bundle is unchanged in this rules-only update; the contract
+below is not a claim of new CLI runtime acceptance or backend deployment.
 
 The vendored bundle was refreshed through the official `clink-cli`
 synchronization flow. If another distribution does not implement the required
 purchase-snapshot contract, it must report the limitation instead of inferring
 missing purchase data or decomposing the purchase into atomic commands.
+
+## Quick Instruction Contract
+
+- At Quick creation, an eligible selected VIC-ready Visa card yields a CREATED
+  Quick bound to its `paymentInstrumentId`, without activation; otherwise the
+  new Quick is PENDING. LOGIN and REGISTER both support these outcomes.
+- The legacy response field `pendingInstructionId` carries an ID, not a status.
+  Use the actual Instruction `status` from the response and exact-GET;
+  never infer PENDING from the field name. Preserve existing matching Quicks
+  as-is; do not relabel a historical PENDING when card readiness changes.
+- Login saves the original ID and returns ready for CREATED, PENDING, or ACTIVE
+  without waiting for activation. `commerce-run` owns continuation.
+- CREATED opens the CLI-returned
+  `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL immediately,
+  with the original Quick ID and its bound `paymentInstrumentId`.
+  Do not wait for binding or VIC or substitute a different card. Portal's
+  existing `/sign` activates that same original ID.
+- No-card PENDING waits at most 15 minutes. If still cardless at timeout, ask
+  only for card binding and show the CLI-returned Portal binding entry, never
+  a VIC/Instruction activation link.
+- PENDING with a card but no VIC returns that card's exact CLI VIC URL, never
+  Portal home as a VIC link. Verify the ceremony association and original ID
+  after activation; unknown association does not prove automatic activation.
+- A historical PENDING with a VIC-ready card opens the original ID's exact
+  CLI Passkey URL without binding wait or replacement.
+- ACTIVE reuses the original ID without another authorization. Another matching
+  ACTIVE never replaces an existing Quick. Checkout requires exact-GET proof
+  of the original Quick ACTIVE and bound to the same VIC-ready card.
+- With an existing Quick, create zero additional Instructions in every case.
+  Without a Quick, normal matching ACTIVE reuse and ordinary Instruction
+  creation remain unchanged. Do not discard a Quick ID to enter that path.
+- Only the CLI opens authorization pages. Success waits silently; failure
+  returns the original exact manual link. An explicitly permitted pre-Checkout
+  rerun preserves the same command, context, and ID with zero creates.
+  Possible Checkout creation permits read-only recovery only.
+
+Maintainers: the regression matrix is in
+[quick-instruction-cases.md](references/quick-instruction-cases.md); rule changes
+are recorded first in [change-log.md](references/change-log.md). These are
+maintenance references, not extra runtime steps.
 
 ## Requirements
 
@@ -123,7 +162,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.83`
+Skill version: `0.1.84`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

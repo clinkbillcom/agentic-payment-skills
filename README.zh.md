@@ -51,8 +51,8 @@ visa commerce-run
 - 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
   `commerce-login`、`commerce-run`，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
-- 绑卡交给 Portal，CLI 不打开 Bind Card；只有浏览器操作前已存在、经复查明确未
-  VIC 的唯一/默认卡可打开一次现有 VIC 页面，新卡及未知/进行中状态继续等待
+- 绑卡交给 Portal，CLI 不打开 Bind Card；PENDING Quick 有卡但未 VIC 时返回
+  CLI 给出的该卡精确 VIC URL，未知/进行中的授权不能重复自动打开
 
 首轮不使用 `--include-provider-products`、`--include-broad-catalog` 或
 `--broad-queries`，也不调用 standalone Catalog 或 Agent-managed merchant-list。
@@ -75,17 +75,45 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.83` 已 vendor 上游提交
-`aed0fd1e2778d80b3c5f7363945fcb871c6cad35` 的 Visa CLI `0.2.62`。本
+Skill `0.1.84` 已刷新 vendor，来源提交
+`811e2d6ef322c9b741e59b0adc14315ea93d8661` 的 Visa CLI `0.2.63`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
-新购买上下文仍不发送 `program.code`。本版还要求
-聚合缺卡流程交给 Portal 处理，CLI 前台等待同一条 PENDING Instruction，
-不生成绑卡入口，已有未就绪卡可按条件打开一次现有 VIC 页，并且只在同卡 `visaRegistrationSucceeded=true` 且该
-精确 Instruction 为 `ACTIVE` 后继续。
+新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；
+以下契约不等于 CLI 新流程已通过运行时验收或后端已部署。
 
 本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
 购买快照合同，应报告限制，不猜测缺失字段，也不拆成原子命令执行购买。
+
+## Quick Instruction 契约
+
+- 新建 Quick 时，有符合条件且已选中的 VIC-ready Visa 卡则返回 `CREATED`，
+  绑定其 `paymentInstrumentId`，尚未激活；否则返回 `PENDING`。LOGIN 和
+  REGISTER 均支持这两种结果。
+- `pendingInstructionId` 是历史字段名，不代表状态。必须读取真实响应和
+  exact-GET 的 Instruction `status`。保留已有 Quick，不因卡就绪而将历史
+  PENDING 改名或替换。登录保存原 ID，CREATED、PENDING、ACTIVE 均可返回就绪，
+  授权等待交给 `commerce-run`。
+- CREATED 立即由 CLI `--open` 打开 CLI 返回的精确
+  `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL，
+  使用原 Quick ID 和已绑定的 `paymentInstrumentId`，不等绑卡/VIC，不换卡。
+  Portal 现有 `/sign` 激活同一原 ID；CREATED 本身不允许 Checkout。
+- 无卡 PENDING 最多等待 15 分钟；超时仍无卡只请求绑卡并展示 CLI 返回的
+  Portal 绑卡入口，不给 VIC/Instruction 激活链接。
+- PENDING 有卡但未 VIC 返回该卡精确 VIC URL，不用 Portal 首页替代。
+  核对授权与原 ID 的关联，未知关联不承诺自动激活；激活后 exact-GET 原 ID。
+- 历史 PENDING 的卡已 VIC-ready 时，打开原 ID 的精确 Passkey URL，
+  不等绑卡、不创建替代 Instruction。
+- ACTIVE 直接复用原 ID，不重复授权。另一条匹配 ACTIVE 也不能替代已有 Quick。
+  只有原 Quick 精确状态为 ACTIVE 且绑定同一 VIC-ready 卡才可开始 Checkout。
+- 已有 Quick 的所有分支创建次数均为零；无 Quick 时普通 ACTIVE 选择/复用和
+  创建保持不变，不能丢弃 Quick ID 进入该路径。
+- 授权页仅由 CLI 打开；成功后静默等待，失败返回同一精确手动链接。
+  仅 CLI 明确允许的 Checkout 前续跑可复用原命令、上下文和 ID，零新增创建；
+  可能已创建 Checkout 后只允许只读恢复。
+
+维护案例见 [quick-instruction-cases.md](references/quick-instruction-cases.md)，
+规则变更先记入 [change-log.md](references/change-log.md)，不增加运行时读取步骤。
 
 ## 环境要求
 
@@ -101,7 +129,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.83`
+Skill 版本：`0.1.84`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
