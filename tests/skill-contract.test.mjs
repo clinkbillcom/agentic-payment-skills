@@ -20,6 +20,13 @@ const vendorPackage = JSON.parse(
 );
 const documents = [skill, readme, readmeZh, agent, filterReference];
 const combined = documents.join('\n');
+const quickContracts = [
+  skill.slice(
+    skill.indexOf('### Pending Instruction Card Gate'),
+    skill.indexOf('## Intent Routing'),
+  ),
+  agent.slice(agent.indexOf('Portal owns card binding and VIC.')),
+].map((text) => text.replace(/`/gu, '').replace(/\s+/gu, ' '));
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -37,7 +44,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.82');
+  assert.equal(packageJson.version, '0.1.83');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -648,9 +655,9 @@ test('pre-command notices distinguish optional login and authorization pages wit
   assert.match(agent, /notices, not questions; execute immediately without waiting for a reply/u);
 });
 
-test('no-card PENDING timeout requests card binding instead of Instruction activation', () => {
-  for (const text of [skill, agent]) {
-    const normalized = text.replace(/\s+/gu, ' ');
+// These assertions validate the written contracts, not CLI or backend execution.
+test('Quick contract: no-card PENDING timeout requests binding only within 15 minutes', () => {
+  for (const normalized of quickContracts) {
     assert.match(normalized, /With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes/u);
     assert.match(normalized, /On timeout, if there is still no Visa card, stop waiting and ask the user to bind a Visa card/u);
     assert.match(normalized, /Agent Portal entry as a binding link; the Portal home page is allowed for binding only/u);
@@ -659,17 +666,54 @@ test('no-card PENDING timeout requests card binding instead of Instruction activ
   }
 });
 
-test('VIC-ready PENDING permits one CLI-opened replacement only after ACTIVE reuse is excluded', () => {
+test('Quick contract: exact card VIC URL requires original-ID ceremony association', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /With a Visa card but no VIC, return the CLI's exact VIC URL for that card, never the Portal home page as a VIC link/u);
+    assert.match(normalized, /same ceremony must be associated with the original Quick ID; if that association is unknown, do not promise automatic activation/u);
+    assert.match(normalized, /Do not create another Instruction/u);
+  }
+});
+
+test('Quick contract: VIC-ready PENDING uses original-ID Passkey URL and existing sign', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /With a VIC-ready Visa card and a PENDING Quick, CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL/u);
+    assert.match(normalized, /Use only the CLI-returned URL: \{pi\} is the selected paymentInstrumentId and instructionId is the original Quick ID\. Never construct this URL/u);
+    assert.match(normalized, /required backend contract is CWallet compatibility for Portal's existing \/sign: authorization activates the original Quick ID in this state/u);
+    assert.match(normalized, /Never create another Instruction or wait for binding/u);
+  }
+});
+
+test('Quick contract: browser failure exits and allowed rerun preserves original ID without creates', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /CLI opens the browser, not an Agent browser tool; the Portal home page is not an activation link/u);
+    assert.match(normalized, /After a successful opening, wait without another chat confirmation/u);
+    assert.match(normalized, /On opener failure, return the original Quick's exact manual link and exit/u);
+    assert.match(normalized, /CLI-permitted pre-Checkout rerun resumes the identical command and frozen context with the original Quick ID and zero creates/u);
+    assert.match(normalized, /If the installed CLI cannot provide this path, report the limitation; never fall back to creating or selecting another Instruction/u);
+  }
+});
+
+test('Quick contract: original matching ACTIVE is reused and another ACTIVE cannot displace it', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /With an existing Quick, exact-GET and validate the original ID against the frozen purchase and card/u);
+    assert.match(normalized, /Never switch an existing Quick to any other ACTIVE Instruction, even when it matches the same purchase/u);
+    assert.match(normalized, /Missing or mismatched Quick state requires a stop, not a new selection/u);
+    assert.match(normalized, /With an existing matching Quick already ACTIVE, reuse that exact ID directly\. Do not create an Instruction or request another authorization/u);
+  }
+});
+
+test('Quick contract: only the no-Quick path retains normal ACTIVE reuse and ordinary create', () => {
+  for (const normalized of quickContracts) {
+    assert.match(normalized, /Without a Quick, normal matching ACTIVE reuse and ordinary Instruction creation remain unchanged/u);
+    assert.match(normalized, /Do not discard a Quick ID to enter that path/u);
+  }
   for (const text of [skill, agent]) {
     const normalized = text.replace(/`/gu, '').replace(/\s+/gu, ' ');
-    assert.match(normalized, /first reuse an exact matching ACTIVE Instruction \(including the activated Quick\); do not create or authorize another one/u);
-    assert.match(normalized, /Exception: Quick is still PENDING, the Visa card is VIC-ready, and no matching usable ACTIVE Instruction exists/u);
-    assert.match(normalized, /CLI creates exactly one card-bound Instruction for the same frozen context and uses --open to open the new Instruction's exact authorization URL/u);
-    assert.match(normalized, /Do not wait for binding or attempt ordinary activation of the no-card PENDING/u);
-    assert.match(normalized, /CLI opens the browser, not an Agent browser tool; the Portal home page is not an activation link/u);
-    assert.match(normalized, /On opener failure, return the new Instruction's exact manual link and exit/u);
-    assert.match(normalized, /Continue with the new ID; never create a third Instruction/u);
-    assert.doesNotMatch(normalized, /must never create a second or regular replacement|It must not create a regular replacement|exact supported Instruction authorization URL/u);
+    assert.match(normalized, /With an existing Quick, create zero additional Instructions in every case/u);
+    assert.doesNotMatch(
+      normalized,
+      /VIC-ready\/PENDING (?:exception|replacement)|Case C permits|unless Case C|except for the (?:one|single)|one (?:new|replacement) card-bound|creates exactly one card-bound|third Instruction|Continue with the new ID|first reuse an exact matching ACTIVE|ordinary activation of the no-card PENDING/u,
+    );
   }
 });
 
@@ -743,12 +787,12 @@ test('Portal owns binding and only the existing-card path may open VIC once', ()
   assert.match(gate, /CLI never opens Bind Card/u);
   assert.match(gate, /login already ready[\s\S]*open the existing VIC page once/u);
   assert.match(gate, /unique\/default Visa present before browser work/u);
-  assert.match(gate, /New cards, unknown state, or an ongoing ceremony only wait/u);
+  assert.match(gate, /commerce-login auto-opening path, new cards, unknown state, or an\s+ongoing ceremony do not trigger another automatic VIC opening/u);
   assert.match(gate, /exact PENDING before its VIC authorization starts/u);
   assert.match(gate, /LOGIN and REGISTER both/u);
-  assert.match(gate, /same card to be VIC-ready and the bound Instruction to be ACTIVE/u);
-  assert.match(gate, /including the activated Quick/u);
-  assert.match(gate, /exact matching ACTIVE Instruction/u);
+  assert.match(gate, /same card to be VIC-ready and the original Quick to be ACTIVE/u);
+  assert.match(gate, /existing matching Quick already ACTIVE, reuse that exact ID directly/u);
+  assert.match(gate, /Never switch an existing Quick to any other ACTIVE/u);
   assert.match(gate, /timeout[\s\S]*read-only continuation[\s\S]*Never create a replacement or retry payment/iu);
 
   const cardCapability = skill.slice(

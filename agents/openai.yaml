@@ -119,30 +119,47 @@ interface:
     Portal owns card binding and VIC. CLI prepares/reuses the exact purchase
     PENDING and never opens Bind Card. With login already ready, commerce-login
     may open VIC once for a unique/default explicitly unready Visa present before
-    browser work, after same-card and progress checks. New cards or unknown/ongoing
-    state only wait in Portal; the Agent never opens another page.
+    browser work, after same-card and progress checks. In that commerce-login
+    auto-opening path, new cards or unknown/ongoing state do not trigger another
+    automatic VIC opening; the Agent never opens another page.
     LOGIN and REGISTER both support PENDING. Once commerce-login creates a Quick
-    Instruction, commerce-run continues that exact ID except for the single
-    VIC-ready/PENDING replacement below. With no Visa card and a PENDING Quick
+    Instruction, commerce-run continues that exact ID in every card/VIC state.
+    With an existing Quick, exact-GET and validate the original ID against the
+    frozen purchase and card. Never switch an existing Quick to any other ACTIVE
+    Instruction, even when it matches the same purchase. Missing or mismatched
+    Quick state requires a stop, not a new selection.
+    With an existing Quick, create zero additional Instructions in every case.
+    With no Visa card and a PENDING Quick
     Instruction, wait at most 15 minutes. On timeout, if there is still no Visa
     card, stop waiting and ask the user to bind a Visa card. Show the CLI-returned
     Agent Portal entry as a binding link; the Portal home page is allowed for
     binding only. Do not ask the user to activate the Instruction or show a
     VIC/Instruction activation link in this no-card state. Preserve the same
-    Quick Instruction ID; never create a second in this no-card case. With a
-    Visa card but no VIC, provide/open the exact VIC URL, never the Portal home
-    page. With a VIC-ready Visa card, first reuse an exact matching ACTIVE
-    Instruction (including the activated Quick); do not create or authorize another one.
-    Exception: Quick is still PENDING, the Visa card is VIC-ready, and no matching
-    usable ACTIVE Instruction exists. The CLI creates exactly one card-bound
-    Instruction for the same frozen context and uses --open to open the new
-    Instruction's exact authorization URL. Do not wait for binding or attempt
-    ordinary activation of the no-card PENDING. The CLI opens the browser, not
-    an Agent browser tool; the Portal home page is not an activation link.
-    After a successful opening, wait without another chat confirmation. On
-    opener failure, return the new Instruction's exact manual link and exit.
-    Continue with the new ID; never create a third Instruction.
-    Continue only with same-card VIC readiness and the correct ACTIVE Instruction.
+    Quick Instruction ID; never create a second in this no-card case.
+    With a Visa card but no VIC, return the CLI's exact VIC URL for that card,
+    never the Portal home page as a VIC link. The same ceremony must be associated
+    with the original Quick ID; if that association is unknown, do not promise
+    automatic activation. Do not create another Instruction.
+    Continue only after exact-GET verifies the original Quick ACTIVE and bound
+    to the same VIC-ready card. Card readiness alone is not proof of activation.
+    With a VIC-ready Visa card and a PENDING Quick, CLI --open opens the exact
+    /passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID} URL.
+    Use only the CLI-returned URL: {pi} is the selected paymentInstrumentId
+    and instructionId is the original Quick ID. Never construct this URL.
+    The required backend contract is CWallet compatibility for Portal's existing
+    /sign: authorization activates the original Quick ID in this state.
+    Never create another Instruction or wait for binding.
+    With an existing matching Quick already ACTIVE, reuse that exact ID directly.
+    Do not create an Instruction or request another authorization.
+    Without a Quick, normal matching ACTIVE reuse and ordinary Instruction
+    creation remain unchanged. Do not discard a Quick ID to enter that path.
+    The CLI opens the browser, not an Agent browser tool; the Portal home page is
+    not an activation link. After a successful opening, wait without another
+    chat confirmation. On opener failure, return the original Quick's exact
+    manual link and exit. A CLI-permitted pre-Checkout rerun resumes the identical
+    command and frozen context with the original Quick ID and zero creates.
+    If the installed CLI cannot provide this path, report the limitation; never
+    fall back to creating or selecting another Instruction.
     A timeout permits only the exact read-only continuation, never another Instruction
     or payment retry. Keep deterministic steps
     inside the CLI, never rerun commerce-run after possible Checkout creation,
