@@ -226,22 +226,31 @@ For every authorized `visa commerce-login` purchase:
 - On that exit, follow the `recovery` object returned by `commerce-run`, or run
   `visa pending-instructions --instruction-id {ORIGINAL_QUICK_ID}`, and act only
   on its `status`:
-  `activation_link`: the default or unique VIC-ready Visa card is known; the
-  CLI `--open` opens the exact
+  `activation_ready`: one Instruction and one VIC-ready Visa card are
+  determined (a CREATED Quick uses its bound card; a PENDING Quick uses the
+  single default VIC-ready Visa, else the only VIC-ready Visa, or the user's
+  `--payment-instrument-id`); the CLI `--open` opens the exact
   `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL directly,
-  with no Portal page in between. On opener failure, give the returned
-  `activationUrl` as the manual link.
+  with no Portal page in between. Only a failed or disabled opening returns
+  `manualOpenUrl`; give that as the manual link. After the user completes
+  Passkey, rerun the same `visa commerce-run` command.
   `card_selection_required`: several VIC-ready Visa cards qualify and none is
-  default; ask the user which returned card to use, then rerun with
+  default; ask the user which card in `cards[]` to use, then rerun with
   `--payment-instrument-id`. Never pick by list order.
-  `bind_in_portal`: no VIC-ready Visa card exists; give the returned
-  `portalUrl` (`{agent portal}/agent-authorization`) and name the exact
-  Instruction so the user binds a card and authorizes it there.
+  `portal_binding_required`: no VIC-ready Visa card exists, or the bound card is
+  missing or unready; give the returned `portalUrl`
+  (`{agent portal}/agent-authorization`) and name the exact `instructionId` so
+  the user re-binds a card and authorizes it there.
+  `instruction_not_activatable`: the given `--instruction-id` is not in the
+  pending list; tell the user, exact-GET the original ID, and never pick another
+  from `pendingInstructions[]`.
   `select_in_portal`: the context does not identify one Instruction; show the
-  returned `pendingInstructions` with the `portalUrl` and let the user pick and
+  returned `pendingInstructions[]` with the `portalUrl` and let the user pick and
   activate in that list. Never guess which one.
   `none_pending`: nothing awaits activation; exact-GET the original Quick
   before any other step.
+  Every outcome carries `context` (`exact` or `unknown`) and `portalUrl`.
+  `recovery.status: "unavailable"` with `error` means run the command manually.
 - Do not provide a VIC URL, a Bind Card link, or the Portal home page as the
   recovery exit; the `/agent-authorization` list page is the only sanctioned
   Portal recovery link. CWallet activates only the Instruction associated with
@@ -281,22 +290,28 @@ For every authorized `visa commerce-login` purchase:
 ### Pending Instruction Recovery
 
 Run `visa pending-instructions [--open] [--instruction-id <id>]
-[--payment-instrument-id <id>] --format json` after any `commerce-run`
-timeout or not-ready exit, when the user returns to finish or activate an
-earlier purchase, or when the user reports a binding, VIC, or Passkey problem.
-The CLI reads `GET /agent/cwallet/instructions/pending`, refreshes cards, and
-returns one `status` from `activation_link`, `card_selection_required`,
-`bind_in_portal`, `select_in_portal`, or `none_pending`, with `instructionId`,
-`paymentInstrumentId`, `activationUrl`, `portalUrl`, `cards`,
-`pendingInstructions`, and `browserLaunch` as applicable. Pass
-`--instruction-id` whenever the original Quick ID is known; pass
-`--payment-instrument-id` only with the card the user chose from the returned
-list. The command creates nothing and mutates nothing; only its `--open` may
-open the browser. Tell the user plainly what the status means: which
-Instruction is waiting, which card the CLI opened, which cards to choose from,
-or that the list page is where they pick and activate. Never construct the
-Passkey or Portal URL, never present the Portal home page as the activation
-link, and never fall back to creating or selecting another Instruction.
+[--payment-instrument-id <id>] [--format json]` after any `commerce-run`
+not-ready exit (stages card, vic, card_selection, card_verification,
+instruction_activation, instruction_authorization), when the user returns to
+finish or activate an earlier purchase, or when the user reports a binding,
+VIC, or Passkey problem. The CLI reads `GET /agent/cwallet/instructions/pending`
+(PENDING and CREATED Instructions that can still be activated), refreshes cards,
+and returns one `status` from `activation_ready`, `card_selection_required`,
+`portal_binding_required`, `instruction_not_activatable`, `select_in_portal`,
+or `none_pending`, always with `context` (`exact` or `unknown`) and `portalUrl`,
+plus `instructionId`, `instructionStatus`, `paymentInstrumentId`, `card`,
+`cards[]`, `pendingInstructions[]`, `activationUrl`, `browserLaunch`,
+`manualOpenUrl`, `reason`, and `nextAction` as applicable. Exact context is
+`--instruction-id`, else the pending row matching a saved Quick continuation,
+else the only pending row. Pass `--instruction-id` whenever the original Quick
+ID is known; pass `--payment-instrument-id` only with the card the user chose
+from `cards[]`. The command creates nothing and mutates nothing; only its
+`--open` may open the browser. Tell the user plainly what the status means:
+which Instruction is waiting, which card the CLI opened, which cards to choose
+from, or that the list page is where they pick and activate. Never construct
+the Passkey or Portal URL, never present the Portal home page as the
+activation link, and never fall back to creating or selecting another
+Instruction.
 
 ## Intent Routing
 

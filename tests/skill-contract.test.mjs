@@ -697,10 +697,14 @@ test('Quick contract: card/VIC/Passkey waits cap at 10 minutes and share one rec
 
 test('Quick contract: recovery statuses map to direct Passkey opening, card choice, or the Portal list', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /activation_link: the default or unique VIC-ready Visa card is known; the CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL directly, with no Portal page in between/u);
-    assert.match(normalized, /card_selection_required: several VIC-ready Visa cards qualify and none is default; ask the user which returned card to use, then rerun with --payment-instrument-id\. Never pick by list order/u);
-    assert.match(normalized, /bind_in_portal: no VIC-ready Visa card exists; give the returned portalUrl \(\{agent portal\}\/agent-authorization\) and name the exact Instruction/u);
-    assert.match(normalized, /select_in_portal: the context does not identify one Instruction; show the returned pendingInstructions with the portalUrl and let the user pick and activate in that list\. Never guess which one/u);
+    assert.match(normalized, /activation_ready: one Instruction and one VIC-ready Visa card are determined \(a CREATED Quick uses its bound card; a PENDING Quick uses the single default VIC-ready Visa, else the only VIC-ready Visa, or the user's --payment-instrument-id\); the CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL directly, with no Portal page in between/u);
+    assert.match(normalized, /Only a failed or disabled opening returns manualOpenUrl; give that as the manual link\. After the user completes Passkey, rerun the same visa commerce-run command/u);
+    assert.match(normalized, /card_selection_required: several VIC-ready Visa cards qualify and none is default; ask the user which card in cards\[\] to use, then rerun with --payment-instrument-id\. Never pick by list order/u);
+    assert.match(normalized, /portal_binding_required: no VIC-ready Visa card exists, or the bound card is missing or unready; give the returned portalUrl \(\{agent portal\}\/agent-authorization\) and name the exact instructionId/u);
+    assert.match(normalized, /instruction_not_activatable: the given --instruction-id is not in the pending list; tell the user, exact-GET the original ID, and never pick another from pendingInstructions\[\]/u);
+    assert.match(normalized, /select_in_portal: the context does not identify one Instruction; show the returned pendingInstructions\[\] with the portalUrl and let the user pick and activate in that list\. Never guess which one/u);
+    assert.match(normalized, /Every outcome carries context \(exact or unknown\) and portalUrl\. recovery\.status: "unavailable" with error means run the command manually/u);
+    assert.doesNotMatch(normalized, /activation_link|bind_in_portal/u);
     assert.match(normalized, /none_pending: nothing awaits activation; exact-GET the original Quick before any other step/u);
     assert.match(normalized, /Do not provide a VIC URL, a Bind Card link, or the Portal home page as the recovery exit; the \/agent-authorization list page is the only sanctioned Portal recovery link/u);
     assert.doesNotMatch(normalized, /exact VIC URL|binding link|Portal binding entry/u);
@@ -712,9 +716,11 @@ test('Quick contract: SKILL documents the pending-instructions recovery command 
     skill.indexOf('### Pending Instruction Recovery'),
     skill.indexOf('## Intent Routing'),
   ).replace(/`/gu, '').replace(/\s+/gu, ' ');
-  assert.match(section, /visa pending-instructions \[--open\] \[--instruction-id <id>\] \[--payment-instrument-id <id>\] --format json/u);
+  assert.match(section, /visa pending-instructions \[--open\] \[--instruction-id <id>\] \[--payment-instrument-id <id>\] \[--format json\]/u);
+  assert.match(section, /Exact context is --instruction-id, else the pending row matching a saved Quick continuation, else the only pending row/u);
+  assert.match(section, /always with context \(exact or unknown\) and portalUrl/u);
   assert.match(section, /GET \/agent\/cwallet\/instructions\/pending/u);
-  for (const status of ['activation_link', 'card_selection_required', 'bind_in_portal', 'select_in_portal', 'none_pending']) {
+  for (const status of ['activation_ready', 'card_selection_required', 'portal_binding_required', 'instruction_not_activatable', 'select_in_portal', 'none_pending']) {
     assert.ok(section.includes(status), status);
   }
   assert.match(section, /creates nothing and mutates nothing; only its --open may open the browser/u);

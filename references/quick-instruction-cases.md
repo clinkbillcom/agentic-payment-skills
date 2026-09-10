@@ -19,8 +19,8 @@ These cases define the minimum regression matrix for Visa Skill development.
 
 - Status: the original Quick is `PENDING`; no Visa card exists.
 - Wait at most 10 minutes. Binding failure cannot be observed; the timeout is
-  the failure. Exit through the unified recovery: `bind_in_portal` returns the
-  `{agent portal}/agent-authorization` list link and names the exact
+  the failure. Exit through the unified recovery: `portal_binding_required`
+  returns the `{agent portal}/agent-authorization` list link and names the exact
   Instruction so the user binds a card and authorizes it there.
 - Preserve the original ID, create zero Instructions, and start no Checkout.
   Do not provide a VIC link, a Bind Card link, or the Portal home page.
@@ -31,12 +31,12 @@ These cases define the minimum regression matrix for Visa Skill development.
   VIC-ready.
 - Wait at most 10 minutes. Whether the card cannot support VIC or the ceremony
   was never finished is indistinguishable; the timeout is the failure. Exit
-  through the same recovery as Case A (`bind_in_portal` with the
+  through the same recovery as Case A (`portal_binding_required` with the
   `/agent-authorization` link); never return the card's VIC URL, never create
   another Instruction.
-- If another VIC-ready Visa card exists, recovery returns `activation_link`
+- If another VIC-ready Visa card exists, recovery returns `activation_ready`
   (default or unique ready card, CLI `--open`) or `card_selection_required`
-  (ask the user which returned card; never choose by list order).
+  (ask the user which card in `cards[]`; never choose by list order).
 - Continue only after the original Quick is verified `ACTIVE` and bound to the
   same card. If the card becomes VIC-ready while it remains `PENDING`, use
   the historical PENDING path in Case C.
@@ -74,10 +74,12 @@ These cases define the minimum regression matrix for Visa Skill development.
   `pendingInstructions` and the `{agent portal}/agent-authorization` link; show
   both and let the user pick and activate in that list. Never guess, never
   create, never select a card by list order.
-- With one identifiable Instruction the same command resolves to
-  `activation_link`, `card_selection_required`, or `bind_in_portal` as in
-  Cases A-C. `none_pending` means nothing awaits activation; exact-GET the
-  original Quick before any other step.
+- With one identifiable Instruction (`--instruction-id`, the row matching a
+  saved Quick, or the only pending row) the same command resolves to
+  `activation_ready`, `card_selection_required`, or `portal_binding_required`
+  as in Cases A-C. `instruction_not_activatable` (the given ID is not pending)
+  and `none_pending` mean exact-GET the original Quick before any other step;
+  never pick another Instruction.
 
 ## No Quick
 

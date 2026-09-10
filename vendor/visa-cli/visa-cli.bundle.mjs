@@ -10807,7 +10807,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.63";
+var CLI_VERSION = "0.2.64";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -26148,6 +26148,21 @@ async function listCommandInstructions(context, paymentInstrumentId) {
   assertApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
 }
+async function listCommandPendingInstructions(context) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: `${INSTRUCTION_PATH2}/pending`,
+    headers: buildInstructionHeaders(runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("pending instruction list unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  return unwrapApiData(result.body);
+}
 async function createCommandInstruction(context, body) {
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
@@ -29148,8 +29163,220 @@ function blocked(entry, matchedBy, matchedValue) {
   };
 }
 
+// dist/visa/pending-recovery.js
+var PORTAL_INSTRUCTION_LIST_PATH = "/agent-authorization";
+var ACTIVATABLE_STATUSES = /* @__PURE__ */ new Set(["PENDING", "CREATED"]);
+function portalInstructionListUrl(portalBaseUrl) {
+  return new URL(PORTAL_INSTRUCTION_LIST_PATH, portalBaseUrl).toString();
+}
+function publicPendingInstruction(instruction) {
+  return {
+    instructionId: instructionIdOf(instruction),
+    status: instructionStatus(instruction),
+    paymentInstrumentId: instructionPaymentInstrumentId(instruction) ?? null,
+    title: optionalText5(instruction.title) ?? null,
+    totalAmountLimit: optionalText5(instruction.totalAmountLimit) ?? null,
+    currencyCode: optionalText5(instruction.currencyCode) ?? null,
+    effectiveUntilTime: optionalText5(instruction.effectiveUntilTime) ?? null,
+    createTime: optionalText5(instruction.createTime ?? instruction.createdAt) ?? null
+  };
+}
+function normalizePendingInstructions(payload) {
+  const list = Array.isArray(payload) ? payload : isRecord23(payload) && Array.isArray(payload.records) ? payload.records : isRecord23(payload) && Array.isArray(payload.instructions) ? payload.instructions : void 0;
+  if (!list) {
+    throw validationError("invalid pending instruction list response");
+  }
+  return list.filter((item) => isRecord23(item) && instructionIdOf(item) !== "" && ACTIVATABLE_STATUSES.has(instructionStatus(item)));
+}
+function resolvePendingRecovery(input) {
+  const portalUrl = portalInstructionListUrl(input.portalBaseUrl);
+  const pending = normalizePendingInstructions(input.pendingInstructions);
+  const publicList = pending.map(publicPendingInstruction);
+  const requestedId = input.requestedInstructionId?.trim() || void 0;
+  let exact;
+  if (requestedId) {
+    exact = pending.find((item) => instructionIdOf(item) === requestedId);
+    if (!exact) {
+      return {
+        status: "instruction_not_activatable",
+        context: "exact",
+        instructionId: requestedId,
+        portalUrl,
+        pendingInstructions: publicList,
+        reason: "requested_instruction_not_in_pending_list"
+      };
+    }
+  } else {
+    const known = new Set((input.knownInstructionIds ?? []).map((id) => id.trim()).filter(Boolean));
+    const owned = pending.filter((item) => known.has(instructionIdOf(item)));
+    if (owned.length === 1) {
+      exact = owned[0];
+    } else if (owned.length === 0 && pending.length === 1) {
+      exact = pending[0];
+    }
+  }
+  if (!exact) {
+    if (pending.length === 0) {
+      return { status: "none_pending", context: "unknown", portalUrl, pendingInstructions: [] };
+    }
+    return {
+      status: "select_in_portal",
+      context: "unknown",
+      portalUrl,
+      pendingInstructions: publicList,
+      reason: "multiple_pending_instructions_without_exact_context"
+    };
+  }
+  const instructionId2 = instructionIdOf(exact);
+  const status = instructionStatus(exact);
+  const enabledVisa = input.cards.filter((card) => !cardDisabled(card) && cardIsVisa(card));
+  const requestedPi = input.requestedPaymentInstrumentId?.trim() || void 0;
+  const boundPi = instructionPaymentInstrumentId(exact);
+  if (boundPi) {
+    if (requestedPi && requestedPi !== boundPi) {
+      throw validationError(`Instruction ${instructionId2} is bound to ${boundPi}; --payment-instrument-id must match or be omitted`);
+    }
+    const bound = enabledVisa.find((card) => card.paymentInstrumentId === boundPi);
+    if (!bound || !cardVicReady(bound)) {
+      return {
+        status: "portal_binding_required",
+        context: "exact",
+        instructionId: instructionId2,
+        instructionStatus: status,
+        portalUrl,
+        reason: "bound_card_missing_or_not_vic_ready",
+        cards: enabledVisa.map(safeCard)
+      };
+    }
+    return activation(input, instructionId2, status, bound, portalUrl);
+  }
+  if (requestedPi) {
+    const selection2 = selectVisaCard(input.cards, requestedPi);
+    if (selection2.action !== "use") {
+      throw validationError(`--payment-instrument-id ${requestedPi} is not an enabled VIC-ready Visa card` + (selection2.action === "unavailable" ? ` (${selection2.reason})` : ""));
+    }
+    return activation(input, instructionId2, status, selection2.card, portalUrl);
+  }
+  const selection = selectVisaCard(input.cards);
+  if (selection.action === "use") {
+    return activation(input, instructionId2, status, selection.card, portalUrl);
+  }
+  if (selection.action === "select") {
+    return {
+      status: "card_selection_required",
+      context: "exact",
+      instructionId: instructionId2,
+      instructionStatus: status,
+      cards: selection.cards.map(safeCard),
+      portalUrl,
+      reason: "multiple_vic_ready_visa_cards_without_one_default"
+    };
+  }
+  return {
+    status: "portal_binding_required",
+    context: "exact",
+    instructionId: instructionId2,
+    instructionStatus: status,
+    portalUrl,
+    reason: "no_vic_ready_visa_card",
+    cards: enabledVisa.map(safeCard)
+  };
+}
+function activation(input, instructionId2, status, card, portalUrl) {
+  return {
+    status: "activation_ready",
+    context: "exact",
+    instructionId: instructionId2,
+    instructionStatus: status,
+    paymentInstrumentId: card.paymentInstrumentId,
+    card: safeCard(card),
+    activationUrl: input.passkeyUrl(card.paymentInstrumentId, instructionId2),
+    portalUrl
+  };
+}
+async function runVisaPendingInstructions(options2, dependencies) {
+  const [pendingInstructions, cards, knownInstructionIds] = await Promise.all([
+    dependencies.listPendingInstructions(),
+    dependencies.refreshCards(),
+    dependencies.knownInstructionIds()
+  ]);
+  const recovery = resolvePendingRecovery({
+    pendingInstructions,
+    cards,
+    knownInstructionIds,
+    ...options2.instructionId ? { requestedInstructionId: options2.instructionId } : {},
+    ...options2.paymentInstrumentId ? { requestedPaymentInstrumentId: options2.paymentInstrumentId } : {},
+    portalBaseUrl: dependencies.portalBaseUrl(),
+    passkeyUrl: dependencies.passkeyUrl
+  });
+  const base = {
+    command: "visa pending-instructions",
+    stage: "pending_recovery",
+    createsAnotherInstruction: false,
+    ...recovery
+  };
+  if (recovery.status !== "activation_ready") {
+    return {
+      ...base,
+      terminal: true,
+      userActionRequired: recovery.status !== "none_pending"
+    };
+  }
+  if (!options2.open) {
+    return {
+      ...base,
+      terminal: false,
+      userActionRequired: true,
+      manualOpenUrl: recovery.activationUrl,
+      browserLaunch: { requested: false, status: "not_requested", opener: null, attempts: [] }
+    };
+  }
+  let browserLaunch;
+  try {
+    browserLaunch = await dependencies.openUserAction(recovery.activationUrl);
+  } catch (error) {
+    return {
+      ...base,
+      terminal: false,
+      userActionRequired: true,
+      manualOpenUrl: recovery.activationUrl,
+      browserOpenError: error instanceof Error ? error.message : String(error)
+    };
+  }
+  return {
+    ...base,
+    terminal: false,
+    userActionRequired: true,
+    browserLaunch,
+    ...browserLaunch.status === "launched" ? {} : { manualOpenUrl: recovery.activationUrl },
+    nextAction: "complete_passkey_then_rerun_commerce_run"
+  };
+}
+function optionalText5(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : void 0;
+}
+function isRecord23(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 // dist/visa/commerce-run.js
 var DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
+var USER_AUTHORIZATION_WAIT_SECONDS = 600;
+var RECOVERY_STAGES = /* @__PURE__ */ new Set([
+  "card",
+  "vic",
+  "card_selection",
+  "card_verification",
+  "instruction_activation",
+  "instruction_authorization"
+]);
 async function runVisaCommerce(context, options2, dependencies) {
   if (context.mode === "prepare") {
     if (options2.confirmedPurchase) {
@@ -29238,6 +29465,7 @@ async function runVisaCommerce(context, options2, dependencies) {
     return {
       command: "visa commerce-run",
       ...cardResult,
+      ...await recoveryFor(dependencies, cardResult),
       login: login.detail
     };
   }
@@ -29252,7 +29480,8 @@ async function runVisaCommerce(context, options2, dependencies) {
         command: "visa commerce-run",
         ...regular.result,
         paymentInstrumentId,
-        card: safeCard(cardResult.card)
+        card: safeCard(cardResult.card),
+        ...await recoveryFor(dependencies, regular.result)
       };
     }
     instruction = regular.instruction;
@@ -29507,7 +29736,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
   try {
     pending = await dependencies.preparePendingInstruction({
       instructionContext: context.instructionContext,
-      maxWaitSeconds
+      maxWaitSeconds: Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS)
     });
   } catch (error) {
     return {
@@ -29650,7 +29879,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
   };
 }
 async function resolveQuickVisaAuthorization(dependencies, context, quick, instruction, maxWaitSeconds) {
-  const waitSeconds = Math.min(maxWaitSeconds, DEFAULT_WORKFLOW_WAIT_SECONDS);
+  const waitSeconds = Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS);
   const failure = (reason) => quickInstructionFailure(quick, reason);
   const valid = (exact) => Boolean(exact && instructionId(exact) === quick.instructionId && quickInstructionMatchesContext(exact, context.instructionContext) && (!quick.paymentInstrumentId || !instructionPaymentInstrumentId(exact) || quick.paymentInstrumentId === instructionPaymentInstrumentId(exact)));
   if (!valid(instruction)) {
@@ -29853,7 +30082,7 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
   const continuation = await dependencies.getContinuation?.();
   if (continuation) {
     const exact = await dependencies.getInstruction(continuation.instructionId);
-    const continuationStatus = exact ? optionalText5(exact.status ?? exact.state)?.toUpperCase() : void 0;
+    const continuationStatus = exact ? optionalText6(exact.status ?? exact.state)?.toUpperCase() : void 0;
     if (continuation.paymentInstrumentId !== paymentInstrumentId || !exact || instructionId(exact) !== continuation.instructionId || exact.paymentInstrumentId !== paymentInstrumentId) {
       return { result: {
         stage: "instruction_authorization",
@@ -29982,7 +30211,7 @@ async function authorizeInstruction(dependencies, instructionIdValue, paymentIns
   try {
     wait = await dependencies.waitForEvents({
       type: "purchase_instruction.activated",
-      maxWaitSeconds,
+      maxWaitSeconds: Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS),
       expectedResource: {
         instructionId: instructionIdValue,
         purchaseInstructionId: instructionIdValue
@@ -30096,7 +30325,7 @@ function activeInstructionCandidate(instruction, paymentInstrumentId, context, n
   const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
   const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
     const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText5(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+    if (!optionalText6(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
       return [];
     }
     return [{
@@ -30213,14 +30442,14 @@ function mandatesEqual(candidate, expected) {
 }
 function instructionArray(payload) {
   if (Array.isArray(payload)) {
-    return payload.filter(isRecord23);
+    return payload.filter(isRecord24);
   }
-  if (!isRecord23(payload)) {
+  if (!isRecord24(payload)) {
     return [];
   }
   for (const key of ["records", "list", "items", "instructions", "purchaseInstructions"]) {
     if (Array.isArray(payload[key])) {
-      return payload[key].filter(isRecord23);
+      return payload[key].filter(isRecord24);
     }
   }
   return [];
@@ -30228,22 +30457,22 @@ function instructionArray(payload) {
 function mandateArray(instruction) {
   for (const key of ["mandates", "mandateList", "mandateVoList"]) {
     if (Array.isArray(instruction[key])) {
-      return instruction[key].filter(isRecord23);
+      return instruction[key].filter(isRecord24);
     }
   }
   return [];
 }
 function instructionId(instruction) {
-  return optionalText5(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
+  return optionalText6(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id) ?? "";
 }
 function instructionPaymentInstrumentId(instruction) {
-  return optionalText5(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+  return optionalText6(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
 }
 function instructionStatus(instruction) {
   return normalizedText3(instruction.status ?? instruction.state);
 }
 function cardIsVisa(card) {
-  const brand = optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? optionalText5(card.brand) ?? optionalText5(card.network) ?? "";
+  const brand = optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? optionalText6(card.brand) ?? optionalText6(card.network) ?? "";
   return brand.toUpperCase() === "VISA";
 }
 function cardVicReady(card) {
@@ -30258,8 +30487,8 @@ function cardDefault(card) {
 function safeCard(card) {
   return {
     paymentInstrumentId: card.paymentInstrumentId,
-    cardScheme: optionalText5(card.cardScheme) ?? optionalText5(card.cardBrand) ?? null,
-    cardLastFour: optionalText5(card.cardLastFour) ?? optionalText5(card.card_last_four) ?? null,
+    cardScheme: optionalText6(card.cardScheme) ?? optionalText6(card.cardBrand) ?? null,
+    cardLastFour: optionalText6(card.cardLastFour) ?? optionalText6(card.card_last_four) ?? null,
     isDefault: cardDefault(card),
     visaRegistrationSucceeded: cardVicReady(card)
   };
@@ -30288,6 +30517,39 @@ function workflowFailure(stage, error, detail = {}) {
     }
   };
 }
+function instructionIdOf(instruction) {
+  return instructionId(instruction);
+}
+async function recoveryFor(dependencies, result) {
+  if (typeof result.stage !== "string" || !RECOVERY_STAGES.has(result.stage) || !dependencies.listPendingInstructions || !dependencies.bindingPortalUrl) {
+    return {};
+  }
+  const exactInstructionId = typeof result.instructionId === "string" && result.instructionId.trim() ? result.instructionId : void 0;
+  try {
+    const [pendingInstructions, cards, quick] = await Promise.all([
+      dependencies.listPendingInstructions(),
+      dependencies.refreshCards(),
+      dependencies.getQuickContinuation?.()
+    ]);
+    return {
+      recovery: resolvePendingRecovery({
+        pendingInstructions,
+        cards,
+        knownInstructionIds: quick ? [quick.instructionId] : [],
+        ...exactInstructionId ? { requestedInstructionId: exactInstructionId } : {},
+        portalBaseUrl: dependencies.bindingPortalUrl(),
+        passkeyUrl: dependencies.passkeyUrl
+      })
+    };
+  } catch (error) {
+    return {
+      recovery: {
+        status: "unavailable",
+        error: error instanceof Error ? renderCliCommandText(error.message, VISA_EXECUTABLE_NAME) : String(error)
+      }
+    };
+  }
+}
 function quoteShell(value) {
   return /^[A-Za-z0-9._:/=-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'"'"'`)}'`;
 }
@@ -30315,8 +30577,8 @@ function minorUnitsAmountText(value, currency) {
 }
 function instructionCreatedAtMs(instruction) {
   const values = [
-    optionalText5(instruction.createdAt),
-    optionalText5(instruction.createTime)
+    optionalText6(instruction.createdAt),
+    optionalText6(instruction.createTime)
   ].filter((value) => value !== void 0);
   if (values.length === 0) {
     return void 0;
@@ -30328,10 +30590,10 @@ function instructionCreatedAtMs(instruction) {
   return timestamps[0];
 }
 function optionalNormalized(value) {
-  return optionalText5(value)?.normalize("NFKC").toUpperCase();
+  return optionalText6(value)?.normalize("NFKC").toUpperCase();
 }
 function optionalExactText(value) {
-  return optionalText5(value)?.normalize("NFKC");
+  return optionalText6(value)?.normalize("NFKC");
 }
 function exactText(value) {
   return optionalExactText(value) ?? "";
@@ -30339,11 +30601,11 @@ function exactText(value) {
 function normalizedText3(value) {
   return optionalNormalized(value) ?? "";
 }
-function optionalText5(value) {
+function optionalText6(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function isFutureTimestamp(value, nowMs) {
-  const text2 = optionalText5(value);
+  const text2 = optionalText6(value);
   if (!text2) {
     return false;
   }
@@ -30351,7 +30613,7 @@ function isFutureTimestamp(value, nowMs) {
   return parsed !== void 0 && parsed > nowMs;
 }
 function parsedFutureTimestamp(value, nowMs) {
-  const text2 = optionalText5(value);
+  const text2 = optionalText6(value);
   if (!text2) {
     return void 0;
   }
@@ -30359,7 +30621,7 @@ function parsedFutureTimestamp(value, nowMs) {
   return parsed !== void 0 && parsed > nowMs ? parsed : void 0;
 }
 function mandateIsUnexpired(mandate, instruction, nowMs) {
-  const mandateExpiry = optionalText5(mandate.effectiveUntilTime);
+  const mandateExpiry = optionalText6(mandate.effectiveUntilTime);
   return isFutureTimestamp(mandateExpiry ?? instruction.effectiveUntilTime, nowMs);
 }
 function parseTimestamp(value) {
@@ -30396,14 +30658,14 @@ function isStructuredMapOrAbsent(value) {
   if (value === void 0 || value === null) {
     return true;
   }
-  if (isRecord23(value)) {
+  if (isRecord24(value)) {
     return true;
   }
   if (typeof value !== "string" || !value.trim()) {
     return false;
   }
   try {
-    return isRecord23(JSON.parse(value));
+    return isRecord24(JSON.parse(value));
   } catch {
     return false;
   }
@@ -30417,7 +30679,7 @@ function canonicalOptionalMap(value, dropNullObjectFields) {
   return Object.keys(canonical2).length === 0 ? null : canonical2;
 }
 function structuredMap(value) {
-  if (isRecord23(value)) {
+  if (isRecord24(value)) {
     return value;
   }
   if (typeof value !== "string" || !value.trim()) {
@@ -30425,7 +30687,7 @@ function structuredMap(value) {
   }
   try {
     const parsed = JSON.parse(value);
-    return isRecord23(parsed) ? parsed : void 0;
+    return isRecord24(parsed) ? parsed : void 0;
   } catch {
     return void 0;
   }
@@ -30434,7 +30696,7 @@ function canonicalStructuredValue(value, dropNullObjectFields) {
   if (Array.isArray(value)) {
     return value.map((item) => canonicalStructuredValue(item, dropNullObjectFields));
   }
-  if (isRecord23(value)) {
+  if (isRecord24(value)) {
     return Object.fromEntries(Object.keys(value).sort().flatMap((key) => {
       const entry = value[key];
       if (entry === void 0 || dropNullObjectFields && entry === null) {
@@ -30451,7 +30713,7 @@ function canonicalStructuredValue(value, dropNullObjectFields) {
 function stableJson(value) {
   return JSON.stringify(value);
 }
-function isRecord23(value) {
+function isRecord24(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -30601,7 +30863,7 @@ function cloneVisaState(state) {
   };
 }
 function normalizeStoredVisaState(raw) {
-  if (!isRecord24(raw)) {
+  if (!isRecord25(raw)) {
     return void 0;
   }
   const defaults = defaultVisaState();
@@ -30615,14 +30877,14 @@ function normalizeStoredVisaState(raw) {
   assignString(state, "fsmUpdatedAt", raw.fsmUpdatedAt);
   assignString(state, "deviceId", raw.deviceId);
   assignString(state, "pendingBenefitLoginGeneration", raw.pendingBenefitLoginGeneration);
-  if (isRecord24(raw.lastError)) {
+  if (isRecord25(raw.lastError)) {
     const code = nonEmptyString4(raw.lastError.code);
     const at = nonEmptyString4(raw.lastError.at);
     if (code && at) {
       state.lastError = { code, at };
     }
   }
-  if (isRecord24(raw.benefitConnection)) {
+  if (isRecord25(raw.benefitConnection)) {
     const customerId = nonEmptyString4(raw.benefitConnection.customerId);
     const issuerOrigin = httpOrigin2(raw.benefitConnection.issuerOrigin);
     const connectedAt = nonEmptyString4(raw.benefitConnection.connectedAt);
@@ -30638,10 +30900,10 @@ function normalizeStoredVisaState(raw) {
   if (pendingBenefitLogin) {
     state.pendingBenefitLogin = pendingBenefitLogin;
   }
-  if (isRecord24(raw.commerceContinuations)) {
+  if (isRecord25(raw.commerceContinuations)) {
     state.commerceContinuations = {};
     for (const [key, continuation] of Object.entries(raw.commerceContinuations)) {
-      if (isRecord24(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId) && nonEmptyString4(continuation.paymentInstrumentId) && (continuation.phase === "authorization" || continuation.phase === "checkout_started")) {
+      if (isRecord25(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId) && nonEmptyString4(continuation.paymentInstrumentId) && (continuation.phase === "authorization" || continuation.phase === "checkout_started")) {
         state.commerceContinuations[key] = {
           fingerprint: continuation.fingerprint,
           instructionId: continuation.instructionId,
@@ -30651,10 +30913,10 @@ function normalizeStoredVisaState(raw) {
       }
     }
   }
-  if (isRecord24(raw.quickInstructionContinuations)) {
+  if (isRecord25(raw.quickInstructionContinuations)) {
     state.quickInstructionContinuations = {};
     for (const [key, continuation] of Object.entries(raw.quickInstructionContinuations)) {
-      if (isRecord24(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId)) {
+      if (isRecord25(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId)) {
         state.quickInstructionContinuations[key] = {
           fingerprint: continuation.fingerprint,
           instructionId: continuation.instructionId,
@@ -30733,13 +30995,13 @@ function normalizeVisaMarket(value) {
   return market;
 }
 function normalizeVsraTokens(raw) {
-  if (!isRecord24(raw)) {
+  if (!isRecord25(raw)) {
     return {};
   }
   const tokens = {};
   for (const market of ["cn", "hk", "tw"]) {
     const value = raw[market];
-    if (!isRecord24(value)) {
+    if (!isRecord25(value)) {
       continue;
     }
     const apiToken = nonEmptyString4(value.apiToken);
@@ -30751,7 +31013,7 @@ function normalizeVsraTokens(raw) {
   return tokens;
 }
 function normalizePendingVsraLogin(raw) {
-  if (!isRecord24(raw)) {
+  if (!isRecord25(raw)) {
     return void 0;
   }
   const market = normalizeVisaMarketValue(raw.market);
@@ -30779,7 +31041,7 @@ function normalizePendingVsraLogin(raw) {
   };
 }
 function normalizePendingBenefitLogin(raw) {
-  if (!isRecord24(raw)) {
+  if (!isRecord25(raw)) {
     return void 0;
   }
   const baseUrl = absoluteHttpUrl(raw.baseUrl);
@@ -30854,7 +31116,7 @@ function positiveNumber3(value) {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) && number > 0 ? number : void 0;
 }
-function isRecord24(value) {
+function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -31144,7 +31406,7 @@ function shouldFetchAllOffers(query, explicitAll, filters = {}, explicitPaginati
   return BROAD_CHINESE_PATTERN.test(text2) || BROAD_ENGLISH_PATTERN.test(text2);
 }
 function collectTaxonomyEntries(value, target, ancestorCodes = []) {
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return;
   }
   for (const [code, rawEntry] of Object.entries(value)) {
@@ -31152,7 +31414,7 @@ function collectTaxonomyEntries(value, target, ancestorCodes = []) {
       collectTaxonomyEntries(rawEntry, target, ancestorCodes);
       continue;
     }
-    if (!isRecord25(rawEntry)) {
+    if (!isRecord26(rawEntry)) {
       continue;
     }
     const aliases = [
@@ -31167,7 +31429,7 @@ function collectTaxonomyEntries(value, target, ancestorCodes = []) {
       mergeTaxonomyEntry(target, code, aliases, ancestorCodes);
       childAncestorCodes = [...ancestorCodes, code];
     }
-    if (isRecord25(rawEntry.children)) {
+    if (isRecord26(rawEntry.children)) {
       collectTaxonomyEntries(rawEntry.children, target, childAncestorCodes);
     }
   }
@@ -31287,15 +31549,15 @@ function stringValue3(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function unwrapRecord2(value) {
-  if (!isRecord25(value)) {
+  if (!isRecord26(value)) {
     return {};
   }
-  if (isRecord25(value.data)) {
+  if (isRecord26(value.data)) {
     return value.data;
   }
   return value;
 }
-function isRecord25(value) {
+function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -32189,7 +32451,7 @@ async function fetchRecommendationPages(options2) {
   };
 }
 function replaceResponseItems(body, items) {
-  if (!isRecord26(body)) {
+  if (!isRecord27(body)) {
     return {
       data: {
         total: items.length,
@@ -32200,7 +32462,7 @@ function replaceResponseItems(body, items) {
       }
     };
   }
-  if (isRecord26(body.data)) {
+  if (isRecord27(body.data)) {
     return {
       ...body,
       data: {
@@ -32223,10 +32485,10 @@ function replaceResponseItems(body, items) {
   };
 }
 function enrichRecommendationCommerce(body) {
-  if (!isRecord26(body)) {
+  if (!isRecord27(body)) {
     return body;
   }
-  if (isRecord26(body.data) && Array.isArray(body.data.items)) {
+  if (isRecord27(body.data) && Array.isArray(body.data.items)) {
     return {
       ...body,
       data: {
@@ -32244,13 +32506,13 @@ function enrichRecommendationCommerce(body) {
   return body;
 }
 function enrichProgramCommerce(value) {
-  if (!isRecord26(value)) {
+  if (!isRecord27(value)) {
     return value;
   }
-  if (value.commerce !== void 0 && !isRecord26(value.commerce)) {
+  if (value.commerce !== void 0 && !isRecord27(value.commerce)) {
     return value;
   }
-  const commerce = isRecord26(value.commerce) ? value.commerce : {};
+  const commerce = isRecord27(value.commerce) ? value.commerce : {};
   const commerceMerchantCategoryCode = merchantCategoryCode(commerce.merchantCategoryCode);
   if (commerceMerchantCategoryCode) {
     return {
@@ -32292,10 +32554,10 @@ function withoutMerchantCategoryCode(commerce) {
   return result;
 }
 function responseDataRecord(body) {
-  if (!isRecord26(body)) {
+  if (!isRecord27(body)) {
     return {};
   }
-  return isRecord26(body.data) ? body.data : body;
+  return isRecord27(body.data) ? body.data : body;
 }
 function appendUniqueItems(target, seenKeys, values) {
   for (const value of values) {
@@ -32308,7 +32570,7 @@ function appendUniqueItems(target, seenKeys, values) {
   }
 }
 function offerKey(value) {
-  if (isRecord26(value)) {
+  if (isRecord27(value)) {
     for (const key of ["code", "id", "programCode", "program_code"]) {
       const candidate = value[key];
       if (typeof candidate === "string" && candidate.length > 0) {
@@ -32498,7 +32760,7 @@ function reportedPageSize(data, fallback) {
 function arrayValue(value) {
   return Array.isArray(value) ? value : [];
 }
-function isRecord26(value) {
+function isRecord27(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function isDryRun5(value) {
@@ -32597,10 +32859,10 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
       portalManaged: true,
       onInstructionCreated: async (detail) => {
-        if (optionalText6(detail.status ?? detail.state)?.toUpperCase() !== "PENDING") {
-          const id = optionalText6(detail.instructionId ?? detail.purchaseInstructionId);
+        if (optionalText7(detail.status ?? detail.state)?.toUpperCase() !== "PENDING") {
+          const id = optionalText7(detail.instructionId ?? detail.purchaseInstructionId);
           if (id)
-            await loginDependencies.saveQuickInstructionContinuation?.(instructionContext, id, optionalText6(detail.paymentInstrumentId ?? detail.payment_instrument_id));
+            await loginDependencies.saveQuickInstructionContinuation?.(instructionContext, id, optionalText7(detail.paymentInstrumentId ?? detail.payment_instrument_id));
         }
       },
       ...bindingResolution ? { bindingResolution } : {}
@@ -32624,6 +32886,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     },
     getInstruction: (instructionId2) => getCommandInstruction(context, instructionId2),
     listInstructions: (paymentInstrumentId) => listCommandInstructions(context, paymentInstrumentId),
+    listPendingInstructions: () => listCommandPendingInstructions(context),
     createInstruction: async ({ paymentInstrumentId, instructionContext }) => {
       const detail = await createCommandInstruction(context, {
         paymentInstrumentId,
@@ -32634,7 +32897,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
         ...instructionContext.isRecurring ? { isRecurring: true } : {},
         ...instructionContext.shippingAddress ? { shippingAddress: instructionContext.shippingAddress } : {}
       });
-      const instructionId2 = optionalText6(detail.instructionId ?? detail.purchaseInstructionId);
+      const instructionId2 = optionalText7(detail.instructionId ?? detail.purchaseInstructionId);
       if (!instructionId2) {
         throw apiError("missing instructionId in instruction create response", 502);
       }
@@ -32648,6 +32911,25 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
         maxWaitSeconds: input.maxWaitSeconds
       }
     })
+  };
+}
+function createVisaPendingRecoveryCliDependencies(context) {
+  return {
+    listPendingInstructions: () => listCommandPendingInstructions(context),
+    refreshCards: async () => {
+      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
+      if (prepared.dryRun) {
+        throw apiError("card refresh unexpectedly produced a dry-run response");
+      }
+      return normalizeCards(prepared.data.paymentMethodsVoList);
+    },
+    knownInstructionIds: async () => {
+      const continuations = (await readStoredConfig()).visa?.quickInstructionContinuations ?? {};
+      return Object.values(continuations).filter((continuation) => continuation.phase !== "checkout_started").map((continuation) => continuation.instructionId);
+    },
+    portalBaseUrl: () => resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
+    passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
+    openUserAction: (url) => openPortalWithBrowserHandoff(context, url, { reportOpenFailure: false })
   };
 }
 function createVisaBenefitLoginCliDependencies(context, environment) {
@@ -32780,14 +33062,14 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
         }
       });
       applyStoredConfig(context, storedConfig);
-      const detail = isRecord27(result) ? result : { status: "unknown" };
+      const detail = isRecord28(result) ? result : { status: "unknown" };
       if (detail.status !== "ready" && typeof detail.authorizationUrl === "string") {
         manualOpenUrl = detail.authorizationUrl;
       }
-      const pendingInstructionId2 = optionalText6(detail.pendingInstructionId);
-      const oauthMode = optionalText6(detail.oauthMode);
+      const pendingInstructionId2 = optionalText7(detail.pendingInstructionId);
+      const oauthMode = optionalText7(detail.oauthMode);
       const customerCreated = optionalBoolean2(detail.customerCreated);
-      const activationDriver = optionalText6(detail.activationDriver);
+      const activationDriver = optionalText7(detail.activationDriver);
       return {
         ready: detail.status === "ready",
         ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
@@ -33142,10 +33424,10 @@ function verifyInternalProduct(payload, purchase, internalMerchantId, requireMer
 }
 function assertInternalCatalogMerchant(product, variant, internalMerchantId, frozenMerchantName) {
   const merchantIds = [
-    optionalText6(variant?.merchantId),
-    optionalText6(variant?.merchant_id),
-    optionalText6(product.merchantId),
-    optionalText6(product.merchant_id)
+    optionalText7(variant?.merchantId),
+    optionalText7(variant?.merchant_id),
+    optionalText7(product.merchantId),
+    optionalText7(product.merchant_id)
   ].filter((value) => value !== void 0);
   if (merchantIds.some((merchantId) => merchantId !== internalMerchantId)) {
     throw validationError("current Catalog merchant ID differs from the resolved internal merchant");
@@ -33162,9 +33444,9 @@ function internalCatalogMerchantName(value) {
   if (!value) {
     return void 0;
   }
-  const merchant = isRecord27(value.merchant) ? value.merchant : void 0;
-  const seller = isRecord27(value.seller) ? value.seller : void 0;
-  return optionalText6(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
+  const merchant = isRecord28(value.merchant) ? value.merchant : void 0;
+  const seller = isRecord28(value.seller) ? value.seller : void 0;
+  return optionalText7(value.merchantName ?? value.merchant_name ?? value.sellerName ?? value.seller_name ?? merchant?.name ?? seller?.name);
 }
 function internalProductVariants(product) {
   if (product.variants === void 0 || product.variants === null) {
@@ -33277,11 +33559,11 @@ function productAvailability(product) {
   return typeof available === "boolean" ? available : null;
 }
 function productAvailabilitySignals(product) {
-  const availability = isRecord27(product.availability) ? product.availability : void 0;
+  const availability = isRecord28(product.availability) ? product.availability : void 0;
   const signals = [];
   for (const value of [
     product.available,
-    isRecord27(product.availability) ? void 0 : product.availability,
+    isRecord28(product.availability) ? void 0 : product.availability,
     availability?.available,
     availability?.status,
     product.inventoryStatus,
@@ -33316,7 +33598,7 @@ function requiredProductText(value, message) {
   return value.normalize("NFKC").trim();
 }
 function requireRecord3(value, message) {
-  if (!isRecord27(value)) {
+  if (!isRecord28(value)) {
     throw validationError(message);
   }
   return value;
@@ -33404,18 +33686,18 @@ function applyStoredConfig(context, storedConfig) {
   context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
 }
 function normalizeCards(value) {
-  if (!Array.isArray(value) || !value.every((card) => isRecord27(card) && typeof card.paymentInstrumentId === "string" && card.paymentInstrumentId.trim())) {
+  if (!Array.isArray(value) || !value.every((card) => isRecord28(card) && typeof card.paymentInstrumentId === "string" && card.paymentInstrumentId.trim())) {
     throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
   }
   return value.map((card) => ({ ...card }));
 }
-function optionalText6(value) {
+function optionalText7(value) {
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
 function optionalBoolean2(value) {
   return typeof value === "boolean" ? value : void 0;
 }
-function isRecord27(value) {
+function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -33427,7 +33709,7 @@ async function readVisaCommerceLoginContext(flags) {
   return normalizeVisaCommerceLoginContext(await readVisaContextInput(flags, "visa commerce-login"));
 }
 function normalizeVisaCommerceLoginContext(raw) {
-  if (!isRecord28(raw)) {
+  if (!isRecord29(raw)) {
     throw validationError("commerce login context must be a JSON object");
   }
   if (raw.mode === "selected_product") {
@@ -33466,7 +33748,7 @@ function normalizeVisaCommerceLoginContext(raw) {
   return deepFreeze2(context);
 }
 function normalizeVisaCommerceLoginExpected(value) {
-  if (!isRecord28(value)) {
+  if (!isRecord29(value)) {
     throw validationError("expected must be a JSON object");
   }
   const unknown = Object.keys(value).find((field) => field !== "amount" && field !== "currency");
@@ -33503,7 +33785,7 @@ function requiredText6(value, field) {
 function visaCommerceLoginApiBaseUrl(context) {
   return visaCommerceApiBaseUrl(context.environment);
 }
-function isRecord28(value) {
+function isRecord29(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function deepFreeze2(value) {
@@ -33573,9 +33855,9 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
       return readyLoginResult(context, dependencies, saved.instructionId, current.detail);
     }
     const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
-    const pendingInstructionId3 = optionalText7(prepared?.instructionId);
+    const pendingInstructionId3 = optionalText8(prepared?.instructionId);
     if (pendingInstructionId3) {
-      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3, optionalText7(prepared?.paymentInstrumentId ?? prepared?.payment_instrument_id));
+      await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3, optionalText8(prepared?.paymentInstrumentId ?? prepared?.payment_instrument_id));
     }
     return readyLoginResult(context, dependencies, pendingInstructionId3, current.detail);
   }
@@ -33618,7 +33900,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     const instruction = await dependencies.getInstruction(quickId);
     assertExactInstruction2(instruction, quickId);
     status = instructionStatus2(instruction);
-    paymentInstrumentId = optionalText7(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+    paymentInstrumentId = optionalText8(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
     const saved = await dependencies.getQuickInstructionContinuation?.(context.instructionContext);
     if (saved?.paymentInstrumentId && status !== "PENDING" && paymentInstrumentId !== saved.paymentInstrumentId)
       valid = false;
@@ -33630,7 +33912,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
         await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, quickId, paymentInstrumentId);
       }
     }
-    const expiry = optionalText7(instruction.effectiveUntilTime ?? instruction.effective_until_time);
+    const expiry = optionalText8(instruction.effectiveUntilTime ?? instruction.effective_until_time);
     if (expiry) {
       const utcExpiry = /(?:Z|[+-]\d{2}:?\d{2})$/iu.test(expiry) ? expiry : `${expiry.replace(" ", "T")}Z`;
       const expiryMs = Date.parse(utcExpiry);
@@ -33664,15 +33946,15 @@ function assertExactInstruction2(instruction, expectedInstructionId) {
   if (!instruction) {
     throw apiError(`Visa Benefit login returned Instruction ${expectedInstructionId}, but exact GET did not find it`, 502);
   }
-  const observedInstructionId = optionalText7(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+  const observedInstructionId = optionalText8(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
   if (observedInstructionId !== expectedInstructionId) {
     throw apiError("Visa Benefit login Instruction identity mismatch during exact GET", 502);
   }
 }
 function instructionStatus2(instruction) {
-  return optionalText7(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
+  return optionalText8(instruction.status ?? instruction.state)?.toUpperCase() ?? "UNKNOWN";
 }
-function optionalText7(value) {
+function optionalText8(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
 
@@ -33693,6 +33975,7 @@ Usage:
   clink visa product-search --merchant-url <url> --query <text> [options]
   clink visa commerce-login --context <json> [options]
   clink visa commerce-run --context <json> [options]
+  clink visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>]
 
 Subcommands:
   init         Open direct VSRP OAuth and persist the resulting Clink OAuth authorization
@@ -33706,6 +33989,7 @@ Subcommands:
   product-search Resolve one purchasable product through internal-first routing
   commerce-login Check Benefit login and initialize it with a frozen Instruction context
   commerce-run Complete Card/VIC, Instruction, Checkout, payment, and delivery
+  pending-instructions List still-activatable Instructions and open the exact Passkey activation page
 
 Examples:
   clink visa init --sandbox --open
@@ -33721,6 +34005,57 @@ Examples:
   clink visa commerce-login --context-file login.json --confirm-purchase --open
   clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
   clink visa commerce-run --context-file purchase.json --confirm-purchase --open
+  clink visa pending-instructions --open
+  clink visa pending-instructions --instruction-id ins_xxx --payment-instrument-id pi_xxx --open
+`;
+var VISA_PENDING_INSTRUCTIONS_HELP = `clink visa pending-instructions
+
+Usage:
+  clink visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>] [options]
+
+Options:
+  --open                       Open the exact Passkey activation page when one Instruction and one
+                               VIC-ready Visa are determined
+  --no-open                    Return the exact activation link without opening
+  --instruction-id <id>        Activate this exact Instruction; it must be in the pending list
+  --payment-instrument-id <id> Use this VIC-ready Visa card after the user chose it
+  --dry-run                    Print the read-only plan without network access
+  --timeout <ms>               Per-request timeout in milliseconds
+${OUTPUT_OPTIONS2}
+
+Behavior:
+  This is the single recovery exit for every Visa card/VIC/Passkey branch that did not finish:
+  binding not completed, card without VIC, Passkey not completed, or a 600-second wait timeout.
+  Failures are not observable; only the timeout is.
+  It reads GET /agent/cwallet/instructions/pending (PENDING and CREATED Instructions that can still
+  be activated) and the current cards. It never creates, cancels, or replaces an Instruction.
+
+  Exact context: --instruction-id, or the one pending Instruction that matches a saved Quick
+  continuation, or the only pending Instruction.
+    status=activation_ready       A VIC-ready Visa was determined: a CREATED Instruction uses its
+                                  bound card; a PENDING Instruction uses the single default VIC-ready
+                                  Visa, else the only VIC-ready Visa, or --payment-instrument-id.
+                                  activationUrl is /passkey-auth/{pi}?type=visa&instructionId={id};
+                                  --open opens it directly without any Portal page in between.
+    status=card_selection_required Several VIC-ready Visa cards and no single default: ask the user
+                                  which card in cards[], then rerun with --payment-instrument-id.
+    status=portal_binding_required No VIC-ready Visa (no card, or card without VIC, or the bound card
+                                  is missing/unready): send the user to portalUrl
+                                  ({agent-portal}/agent-authorization) to re-bind and authorize
+                                  instructionId there.
+    status=instruction_not_activatable --instruction-id is not in the pending list.
+  Unknown context (no exact ID and zero or several pending Instructions):
+    status=select_in_portal       Return pendingInstructions[] and portalUrl; the user picks the
+                                  Instruction to activate in the Portal list.
+    status=none_pending           Nothing to activate.
+
+  Successful opening is silent; failed or disabled opening returns manualOpenUrl. After the user
+  completes Passkey, rerun the same visa commerce-run command to continue the original Instruction.
+
+Examples:
+  clink visa pending-instructions --format json
+  clink visa pending-instructions --open
+  clink visa pending-instructions --instruction-id ins_xxx --payment-instrument-id pi_xxx --open
 `;
 var VISA_PRODUCT_SEARCH_HELP = `clink visa product-search
 
@@ -33850,7 +34185,8 @@ Options:
   --open                       Open the required Visa purchase authorization page
   --no-open                    Return the exact authorization link without opening
   --wait-delivery              Wait for digital delivery even when context does not require it
-  --max-wait <seconds>         Event and delivery wait bound, defaults to 900
+  --max-wait <seconds>         Checkout and delivery wait bound, defaults to 900; card/VIC/Passkey
+                               user waits are additionally capped at 600 seconds
   --dry-run                    Validate and print the no-side-effect execution plan
   --timeout <ms>               Per-request timeout in milliseconds
 ${OUTPUT_OPTIONS2}
@@ -33924,9 +34260,15 @@ Behavior:
   for binding in CREATED. CREATED with that bound card, or historical no-card PENDING with
   a ready Visa opens /passkey-auth/{paymentInstrumentId}?type=visa&instructionId={originalQuickId}.
   Failed or disabled opening returns the original manual URL and exits; a repeat never reopens it.
-  With no-card PENDING and without a Visa card, wait for that same ID for at most 900 seconds, then refresh cards. A no-card
+  With no-card PENDING and without a Visa card, wait for that same ID for at most 600 seconds, then refresh cards. A no-card
   timeout returns only bindCardUrl (Portal binding entry), rerunAllowed=true, resumeMode=same_command
-  and checkoutStarted=false. For an unready or unknown-VIC card, return that card's exact Quick URL;
+  and checkoutStarted=false. Every card, VIC, and Passkey activation wait is capped at 600 seconds;
+  failures are not observable, so the timeout is the failure signal. Each card/VIC/activation exit
+  that did not finish carries a read-only recovery object computed like visa pending-instructions:
+  recovery.status is activation_ready (activationUrl for the exact Instruction and VIC-ready card),
+  card_selection_required (cards[] to ask the user), portal_binding_required or select_in_portal
+  (portalUrl = {agent-portal}/agent-authorization), or none_pending. commerce-run never opens
+  the recovery link itself; use visa pending-instructions --open for that. For an unready or unknown-VIC card, return that card's exact Quick URL;
   unknown progress or an ongoing ceremony does not auto-open. Local atomic claims prevent two CLI
   processes opening the same authorization stage, but do not lock independent Portal tabs.
   Once Checkout starts, the saved Quick is blocked from another purchase attempt.
@@ -34291,6 +34633,9 @@ function getVisaEditionHelpText(command, subcommand, nestedCommand) {
     case "commerce-run":
       help = VISA_COMMERCE_RUN_HELP;
       break;
+    case "pending-instructions":
+      help = VISA_PENDING_INSTRUCTIONS_HELP;
+      break;
     default:
       help = VISA_HELP;
   }
@@ -34476,6 +34821,8 @@ async function handleVisaEditionCommand(command, subcommand, context) {
       return visaCommerceRun(context);
     case "commerce-login":
       return visaCommerceLogin(context);
+    case "pending-instructions":
+      return visaPendingInstructions(context);
     case "product-search":
       return visaProductSearch(context);
     default:
@@ -34606,6 +34953,35 @@ async function visaCommerceRun(context) {
     } : {},
     ...maxWait !== void 0 ? { maxWaitSeconds: maxWait } : {}
   }, createVisaCommerceCliDependencies(context, commerceContext));
+  printSuccess(result, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function visaPendingInstructions(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>] [options]`);
+  const instructionId2 = optionalNonBlankFlag(context.args.flags, "instruction-id");
+  const paymentInstrumentId = optionalNonBlankFlag(context.args.flags, "payment-instrument-id");
+  if (context.globalOptions.dryRun) {
+    printSuccess({
+      command: "visa pending-instructions",
+      status: "dry_run",
+      sideEffects: false,
+      apiBaseUrl: context.runtimeConfig.baseUrl,
+      ...instructionId2 ? { instructionId: instructionId2 } : {},
+      ...paymentInstrumentId ? { paymentInstrumentId } : {},
+      steps: [
+        "list_pending_instructions",
+        "refresh_cards",
+        "resolve_exact_instruction_and_vic_ready_card",
+        context.globalOptions.open ? "open_exact_passkey_activation_page" : "return_exact_passkey_activation_link_or_portal_list"
+      ]
+    }, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const result = await runVisaPendingInstructions({
+    open: context.globalOptions.open,
+    ...instructionId2 ? { instructionId: instructionId2 } : {},
+    ...paymentInstrumentId ? { paymentInstrumentId } : {}
+  }, createVisaPendingRecoveryCliDependencies(context));
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }

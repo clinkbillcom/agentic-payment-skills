@@ -47,7 +47,7 @@ test('Quick artifacts retain the 10-minute cap, unified recovery and original AC
     assert.doesNotMatch(text, /15 minutes/u, path);
     assert.match(text, /pending-instructions/u, path);
     assert.match(text, /\/agent-authorization/u, path);
-    for (const status of ['activation_link', 'card_selection_required', 'bind_in_portal', 'select_in_portal']) {
+    for (const status of ['activation_ready', 'card_selection_required', 'portal_binding_required', 'instruction_not_activatable', 'select_in_portal', 'none_pending']) {
       assert.ok(text.includes(status), `${path} ${status}`);
     }
     assert.doesNotMatch(text, /(?:exact VIC URL|exact CLI VIC URL|exact CLI-returned VIC URL|Portal binding entry)/u, path);

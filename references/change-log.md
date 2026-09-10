@@ -8,13 +8,17 @@
   failure, and every such exit goes through one recovery.
 - Recovery follows the `commerce-run` `recovery` object or the new
   `visa pending-instructions` command (`GET /agent/cwallet/instructions/pending`
-  plus card refresh). Statuses: `activation_link` (CLI `--open` opens the
-  original ID's exact Passkey URL with the default/unique VIC-ready card, no
-  Portal page in between), `card_selection_required` (ask the user which card,
-  rerun with `--payment-instrument-id`), `bind_in_portal` and `select_in_portal`
-  (return `{agent portal}/agent-authorization` so the user binds, picks, and
-  activates in the list; the frontend adds an activate button there), and
-  `none_pending`.
+  plus card refresh). Statuses: `activation_ready` (CLI `--open` opens the
+  original ID's exact Passkey URL with the bound/default/unique VIC-ready card,
+  no Portal page in between; `manualOpenUrl` only when not launched),
+  `card_selection_required` (ask the user which card in `cards[]`, rerun with
+  `--payment-instrument-id`), `portal_binding_required` and `select_in_portal`
+  (return `{agent portal}/agent-authorization` so the user re-binds, picks, and
+  activates in the list; the frontend adds an activate button there),
+  `instruction_not_activatable` (the given ID is not pending; exact-GET it,
+  never pick another), and `none_pending`. Every outcome carries `context`
+  (`exact`/`unknown`) and `portalUrl`; `commerce-run` not-ready exits carry the
+  same object under `recovery`.
 - Supersedes the 2026-09-09 Case A exit (15 minutes, then a binding link only)
   and Case B exit (the card's exact VIC URL). Case C direct `--open` for CREATED
   or historical PENDING with a VIC-ready card is unchanged, as are zero creates,

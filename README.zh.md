@@ -76,7 +76,7 @@ events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-close
 Capability Contract 提供。
 
 Skill `0.1.85` 已刷新 vendor，来源提交
-`811e2d6ef322c9b741e59b0adc14315ea93d8661` 的 Visa CLI `0.2.63`。本
+`c8efadefd003c8a248cb563eb21e4aff26e75411` 的 Visa CLI `0.2.64`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；
@@ -101,10 +101,11 @@ product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商
 - 绑卡、VIC、Passkey 等待上限 10 分钟。绑卡失败、卡不支持 VIC、Passkey 未完成
   无法区分，只有超时视为失败，且全部走同一恢复出口：按 `commerce-run` 返回的
   `recovery` 或运行 `visa pending-instructions --instruction-id {原 Quick ID}`。
-  `activation_link` 用默认/唯一 VIC-ready 卡直接打开原 ID 的 Passkey 页面；
-  `card_selection_required` 询问用户选哪张返回的卡；`bind_in_portal` 与
-  `select_in_portal` 返回 `{agent portal}/agent-authorization` 列表链接，由用户
-  在列表中绑卡、选择并激活。不再以 VIC URL、Bind Card 链接或 Portal 首页作为出口。
+  `activation_ready` 用已绑定/默认/唯一 VIC-ready 卡直接打开原 ID 的 Passkey 页面；
+  `card_selection_required` 询问用户选 `cards[]` 中哪张卡；`portal_binding_required`
+  与 `select_in_portal` 返回 `{agent portal}/agent-authorization` 列表链接，由用户
+  在列表中重新绑卡、选择并激活；`instruction_not_activatable` 与 `none_pending`
+  只能 exact-GET 原 ID，不能改选别的。不再以 VIC URL、Bind Card 链接或 Portal 首页作为出口。
 - 历史 PENDING 的卡已 VIC-ready 时，打开原 ID 的精确 Passkey URL，
   不等绑卡、不创建替代 Instruction。
 - ACTIVE 直接复用原 ID，不重复授权。另一条匹配 ACTIVE 也不能替代已有 Quick。
