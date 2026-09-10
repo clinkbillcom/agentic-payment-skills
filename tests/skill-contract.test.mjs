@@ -44,7 +44,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.84');
+  assert.equal(packageJson.version, '0.1.85');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -685,22 +685,40 @@ test('Quick contract: CREATED opens original ID with its bound card without bind
   }
 });
 
-test('Quick contract: no-card PENDING timeout requests binding only within 15 minutes', () => {
+test('Quick contract: card/VIC/Passkey waits cap at 10 minutes and share one recovery exit', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes/u);
-    assert.match(normalized, /On timeout, if there is still no Visa card, stop waiting and ask the user to bind a Visa card/u);
-    assert.match(normalized, /Agent Portal entry as a binding link; the Portal home page is allowed for binding only/u);
-    assert.match(normalized, /Do not ask the user to activate the Instruction or show a VIC\/Instruction activation link in this no-card state/u);
-    assert.match(normalized, /Preserve the same Quick Instruction ID; never create a second/u);
+    assert.match(normalized, /Card binding, VIC readiness, and Passkey authorization waits inside commerce-run are capped at 10 minutes each/u);
+    assert.match(normalized, /Binding failure, a card that does not support VIC, and an unfinished Passkey authorization cannot be told apart; only the CLI-reported timeout counts as failure/u);
+    assert.match(normalized, /Preserve the same Quick Instruction ID; never create a second Instruction because a wait timed out/u);
+    assert.match(normalized, /follow the recovery object returned by commerce-run, or run visa pending-instructions --instruction-id \{ORIGINAL_QUICK_ID\}, and act only on its status/u);
+    assert.doesNotMatch(normalized, /15 minutes/u);
   }
 });
 
-test('Quick contract: exact card VIC URL requires original-ID ceremony association', () => {
+test('Quick contract: recovery statuses map to direct Passkey opening, card choice, or the Portal list', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /With a PENDING Quick and a Visa card but no VIC, return the CLI's exact VIC URL for that card, never the Portal home page as a VIC link/u);
-    assert.match(normalized, /same ceremony must be associated with the original Quick ID; if that association is unknown, do not promise automatic activation/u);
-    assert.match(normalized, /Do not create another Instruction/u);
+    assert.match(normalized, /activation_link: the default or unique VIC-ready Visa card is known; the CLI --open opens the exact \/passkey-auth\/\{pi\}\?type=visa&instructionId=\{ORIGINAL_QUICK_ID\} URL directly, with no Portal page in between/u);
+    assert.match(normalized, /card_selection_required: several VIC-ready Visa cards qualify and none is default; ask the user which returned card to use, then rerun with --payment-instrument-id\. Never pick by list order/u);
+    assert.match(normalized, /bind_in_portal: no VIC-ready Visa card exists; give the returned portalUrl \(\{agent portal\}\/agent-authorization\) and name the exact Instruction/u);
+    assert.match(normalized, /select_in_portal: the context does not identify one Instruction; show the returned pendingInstructions with the portalUrl and let the user pick and activate in that list\. Never guess which one/u);
+    assert.match(normalized, /none_pending: nothing awaits activation; exact-GET the original Quick before any other step/u);
+    assert.match(normalized, /Do not provide a VIC URL, a Bind Card link, or the Portal home page as the recovery exit; the \/agent-authorization list page is the only sanctioned Portal recovery link/u);
+    assert.doesNotMatch(normalized, /exact VIC URL|binding link|Portal binding entry/u);
   }
+});
+
+test('Quick contract: SKILL documents the pending-instructions recovery command read-only', () => {
+  const section = skill.slice(
+    skill.indexOf('### Pending Instruction Recovery'),
+    skill.indexOf('## Intent Routing'),
+  ).replace(/`/gu, '').replace(/\s+/gu, ' ');
+  assert.match(section, /visa pending-instructions \[--open\] \[--instruction-id <id>\] \[--payment-instrument-id <id>\] --format json/u);
+  assert.match(section, /GET \/agent\/cwallet\/instructions\/pending/u);
+  for (const status of ['activation_link', 'card_selection_required', 'bind_in_portal', 'select_in_portal', 'none_pending']) {
+    assert.ok(section.includes(status), status);
+  }
+  assert.match(section, /creates nothing and mutates nothing; only its --open may open the browser/u);
+  assert.match(section, /Never construct the Passkey or Portal URL, never present the Portal home page as the activation link, and never fall back to creating or selecting another Instruction/u);
 });
 
 test('Quick contract: historical VIC-ready PENDING keeps original-ID Passkey URL and existing sign', () => {
@@ -714,7 +732,7 @@ test('Quick contract: historical VIC-ready PENDING keeps original-ID Passkey URL
 
 test('Quick contract: browser failure exits and allowed rerun preserves original ID without creates', () => {
   for (const normalized of quickContracts) {
-    assert.match(normalized, /CLI opens the browser, not an Agent browser tool; the Portal home page is not an activation link/u);
+    assert.match(normalized, /CLI opens the browser, not an Agent browser tool; the Portal home page is not an activation link and \/agent-authorization is the only Portal recovery link/u);
     assert.match(normalized, /After a successful opening, wait without another chat confirmation/u);
     assert.match(normalized, /On opener failure, return the original Quick's exact manual link and exit/u);
     assert.match(normalized, /CLI-permitted pre-Checkout rerun resumes the identical command and frozen context with the original Quick ID and zero creates/u);
@@ -806,7 +824,7 @@ test('Visa fast path preserves aggregate order and never decomposes purchase', (
   assert.doesNotMatch(section, atomicInvocation);
 });
 
-test('Portal owns binding and only the existing-card path may open VIC once', () => {
+test('Portal owns binding and the Card Gate never opens Bind Card', () => {
   const gate = skill.slice(
     skill.indexOf('### Quick Instruction Card Gate'),
     skill.indexOf('## Intent Routing'),
@@ -820,7 +838,7 @@ test('Portal owns binding and only the existing-card path may open VIC once', ()
   assert.match(gate, /ongoing VIC state must not trigger another automatic VIC opening/u);
   assert.match(gate, /exact PENDING before its VIC authorization starts/u);
   assert.match(gate, /LOGIN and REGISTER both/u);
-  assert.match(gate, /same card to be VIC-ready and the original Quick to be ACTIVE/u);
+  assert.match(gate, /CWallet activates only the Instruction associated with\s+the Passkey ceremony; card readiness alone is not proof of activation/u);
   assert.match(gate, /existing matching Quick already ACTIVE, reuse that exact ID directly/u);
   assert.match(gate, /Never switch an existing Quick to any other ACTIVE/u);
   assert.match(gate, /timeout[\s\S]*explicit pre-Checkout same-command permission or read-only[\s\S]*timeout alone never permits another Instruction or payment retry/iu);

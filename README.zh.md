@@ -51,8 +51,8 @@ visa commerce-run
 - 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
   `commerce-login`、`commerce-run`，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
-- 绑卡交给 Portal，CLI 不打开 Bind Card；PENDING Quick 有卡但未 VIC 时返回
-  CLI 给出的该卡精确 VIC URL，未知/进行中的授权不能重复自动打开
+- 绑卡交给 Portal，CLI 不打开 Bind Card；绑卡/VIC/Passkey 等待上限 10 分钟，
+  超时统一走 `visa pending-instructions` 恢复出口，未知/进行中的授权不能重复自动打开
 
 首轮不使用 `--include-provider-products`、`--include-broad-catalog` 或
 `--broad-queries`，也不调用 standalone Catalog 或 Agent-managed merchant-list。
@@ -75,7 +75,7 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.84` 已刷新 vendor，来源提交
+Skill `0.1.85` 已刷新 vendor，来源提交
 `811e2d6ef322c9b741e59b0adc14315ea93d8661` 的 Visa CLI `0.2.63`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
@@ -98,10 +98,13 @@ product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商
   `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL，
   使用原 Quick ID 和已绑定的 `paymentInstrumentId`，不等绑卡/VIC，不换卡。
   Portal 现有 `/sign` 激活同一原 ID；CREATED 本身不允许 Checkout。
-- 无卡 PENDING 最多等待 15 分钟；超时仍无卡只请求绑卡并展示 CLI 返回的
-  Portal 绑卡入口，不给 VIC/Instruction 激活链接。
-- PENDING 有卡但未 VIC 返回该卡精确 VIC URL，不用 Portal 首页替代。
-  核对授权与原 ID 的关联，未知关联不承诺自动激活；激活后 exact-GET 原 ID。
+- 绑卡、VIC、Passkey 等待上限 10 分钟。绑卡失败、卡不支持 VIC、Passkey 未完成
+  无法区分，只有超时视为失败，且全部走同一恢复出口：按 `commerce-run` 返回的
+  `recovery` 或运行 `visa pending-instructions --instruction-id {原 Quick ID}`。
+  `activation_link` 用默认/唯一 VIC-ready 卡直接打开原 ID 的 Passkey 页面；
+  `card_selection_required` 询问用户选哪张返回的卡；`bind_in_portal` 与
+  `select_in_portal` 返回 `{agent portal}/agent-authorization` 列表链接，由用户
+  在列表中绑卡、选择并激活。不再以 VIC URL、Bind Card 链接或 Portal 首页作为出口。
 - 历史 PENDING 的卡已 VIC-ready 时，打开原 ID 的精确 Passkey URL，
   不等绑卡、不创建替代 Instruction。
 - ACTIVE 直接复用原 ID，不重复授权。另一条匹配 ACTIVE 也不能替代已有 Quick。
@@ -129,7 +132,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.84`
+Skill 版本：`0.1.85`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.84. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.85. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.84"
+  version: "0.1.85"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -217,21 +217,35 @@ For every authorized `visa commerce-login` purchase:
   it must never create a second Instruction because the card is not yet ready.
   Only the PENDING card path waits; the Agent does not inspect card timestamps,
   choose a latest PENDING, or reconstruct card/Instruction commands.
-- With no Visa card and a PENDING Quick Instruction, wait at most 15 minutes.
-  On timeout, if there is still no Visa card, stop waiting and ask the user to
-  bind a Visa card. Show the CLI-returned Agent Portal entry as a binding link;
-  the Portal home page is allowed for binding only. Do not ask the user to
-  activate the Instruction or show a VIC/Instruction activation link in this
-  no-card state. Preserve the same Quick Instruction ID; never create a second
-  in this no-card case.
-- With a PENDING Quick and a Visa card but no VIC, return the CLI's exact VIC URL
-  for that card, never the Portal home page as a VIC link. The same ceremony
-  must be associated with the original Quick ID; if that association is unknown, do not promise
-  automatic activation. Do not create another Instruction.
-- CWallet activates only the PENDING associated with that VIC flow. Completion
-  requires the same card to be VIC-ready and the original Quick to be ACTIVE.
-  An unrelated or already-running authorization must not be reused, and an
-  unknown ceremony association is not proof of activation.
+- Card binding, VIC readiness, and Passkey authorization waits inside
+  `commerce-run` are capped at 10 minutes each. Binding failure, a card that
+  does not support VIC, and an unfinished Passkey authorization cannot be told
+  apart; only the CLI-reported timeout counts as failure, and all of them exit
+  through the same recovery below. Preserve the same Quick Instruction ID;
+  never create a second Instruction because a wait timed out.
+- On that exit, follow the `recovery` object returned by `commerce-run`, or run
+  `visa pending-instructions --instruction-id {ORIGINAL_QUICK_ID}`, and act only
+  on its `status`:
+  `activation_link`: the default or unique VIC-ready Visa card is known; the
+  CLI `--open` opens the exact
+  `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL directly,
+  with no Portal page in between. On opener failure, give the returned
+  `activationUrl` as the manual link.
+  `card_selection_required`: several VIC-ready Visa cards qualify and none is
+  default; ask the user which returned card to use, then rerun with
+  `--payment-instrument-id`. Never pick by list order.
+  `bind_in_portal`: no VIC-ready Visa card exists; give the returned
+  `portalUrl` (`{agent portal}/agent-authorization`) and name the exact
+  Instruction so the user binds a card and authorizes it there.
+  `select_in_portal`: the context does not identify one Instruction; show the
+  returned `pendingInstructions` with the `portalUrl` and let the user pick and
+  activate in that list. Never guess which one.
+  `none_pending`: nothing awaits activation; exact-GET the original Quick
+  before any other step.
+- Do not provide a VIC URL, a Bind Card link, or the Portal home page as the
+  recovery exit; the `/agent-authorization` list page is the only sanctioned
+  Portal recovery link. CWallet activates only the Instruction associated with
+  the Passkey ceremony; card readiness alone is not proof of activation.
 - With a CREATED Quick, immediately have CLI `--open` open the exact
   CLI-returned `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}`
   URL using the original Quick ID and its bound `paymentInstrumentId`.
@@ -253,7 +267,8 @@ For every authorized `visa commerce-login` purchase:
 - Without a Quick, normal matching ACTIVE reuse and ordinary Instruction
   creation remain unchanged. Do not discard a Quick ID to enter that path.
 - The CLI opens the browser, not an Agent browser tool; the Portal home page is
-  not an activation link. After a successful opening, wait without another
+  not an activation link and `/agent-authorization` is the only Portal
+  recovery link. After a successful opening, wait without another
   chat confirmation. On opener failure, return the original Quick's exact
   manual link and exit. A CLI-permitted pre-Checkout rerun resumes the identical
   command and frozen context with the original Quick ID and zero creates.
@@ -262,6 +277,26 @@ For every authorized `visa commerce-login` purchase:
 - A timeout preserves the exact purchase. Follow only the CLI-returned
   continuation: explicit pre-Checkout same-command permission or read-only
   recovery. A timeout alone never permits another Instruction or payment retry.
+
+### Pending Instruction Recovery
+
+Run `visa pending-instructions [--open] [--instruction-id <id>]
+[--payment-instrument-id <id>] --format json` after any `commerce-run`
+timeout or not-ready exit, when the user returns to finish or activate an
+earlier purchase, or when the user reports a binding, VIC, or Passkey problem.
+The CLI reads `GET /agent/cwallet/instructions/pending`, refreshes cards, and
+returns one `status` from `activation_link`, `card_selection_required`,
+`bind_in_portal`, `select_in_portal`, or `none_pending`, with `instructionId`,
+`paymentInstrumentId`, `activationUrl`, `portalUrl`, `cards`,
+`pendingInstructions`, and `browserLaunch` as applicable. Pass
+`--instruction-id` whenever the original Quick ID is known; pass
+`--payment-instrument-id` only with the card the user chose from the returned
+list. The command creates nothing and mutates nothing; only its `--open` may
+open the browser. Tell the user plainly what the status means: which
+Instruction is waiting, which card the CLI opened, which cards to choose from,
+or that the list page is where they pick and activate. Never construct the
+Passkey or Portal URL, never present the Portal home page as the activation
+link, and never fall back to creating or selecting another Instruction.
 
 ## Intent Routing
 
@@ -748,8 +783,9 @@ general workflow engine.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC; CLI may open VIC once only for the verified
-  pre-existing card path above, never for newly bound cards or unknown progress.
+- Portal owns binding and VIC; the CLI never opens Bind Card. Timed-out card,
+  VIC, or Passkey waits (10 minutes) exit through the pending-instruction
+  recovery, never through a VIC URL or the Portal home page.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
   Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.

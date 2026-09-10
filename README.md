@@ -62,9 +62,10 @@ The lightweight shopping routes cover:
 - matched Program purchase directly from the unchanged `recommend-products`
   snapshot through `commerce-login` and `commerce-run`, without `visa detail`
 - direct shopping through the same Visa-only Offer and matched-merchant flow
-- Portal owns binding and VIC; CLI never opens Bind Card. For a PENDING Quick,
-  return the exact VIC URL for a verified unready card; unknown/in-progress
-  ceremonies must not trigger another automatic opening
+- Portal owns binding and VIC; CLI never opens Bind Card. Card/VIC/Passkey
+  waits are capped at 10 minutes and exit through `visa pending-instructions`
+  recovery; unknown/in-progress ceremonies must not trigger another automatic
+  opening
 
 Initial discovery never uses `--include-provider-products`,
 `--include-broad-catalog`, `--broad-queries`, standalone Catalog, or an
@@ -92,7 +93,7 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.84` vendors Visa CLI `0.2.63` from upstream commit
+Skill `0.1.85` vendors Visa CLI `0.2.63` from upstream commit
 `811e2d6ef322c9b741e59b0adc14315ea93d8661`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
@@ -122,12 +123,16 @@ missing purchase data or decomposing the purchase into atomic commands.
   with the original Quick ID and its bound `paymentInstrumentId`.
   Do not wait for binding or VIC or substitute a different card. Portal's
   existing `/sign` activates that same original ID.
-- No-card PENDING waits at most 15 minutes. If still cardless at timeout, ask
-  only for card binding and show the CLI-returned Portal binding entry, never
-  a VIC/Instruction activation link.
-- PENDING with a card but no VIC returns that card's exact CLI VIC URL, never
-  Portal home as a VIC link. Verify the ceremony association and original ID
-  after activation; unknown association does not prove automatic activation.
+- Card binding, VIC, and Passkey waits are capped at 10 minutes. Binding
+  failure, a non-VIC card, and an unfinished Passkey cannot be told apart; only
+  the timeout counts as failure and every case exits through the same
+  recovery: follow the `commerce-run` `recovery` object or run
+  `visa pending-instructions --instruction-id {ORIGINAL_QUICK_ID}`.
+  `activation_link` opens the original ID's Passkey URL directly with the
+  default/unique VIC-ready card; `card_selection_required` asks the user which
+  returned card to use; `bind_in_portal` and `select_in_portal` return the
+  `{agent portal}/agent-authorization` list link where the user binds, picks,
+  and activates. No VIC URL, Bind Card link, or Portal home page is the exit.
 - A historical PENDING with a VIC-ready card opens the original ID's exact
   CLI Passkey URL without binding wait or replacement.
 - ACTIVE reuses the original ID without another authorization. Another matching
@@ -162,7 +167,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.84`
+Skill version: `0.1.85`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
