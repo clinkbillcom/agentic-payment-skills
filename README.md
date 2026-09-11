@@ -93,8 +93,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.85` vendors Visa CLI `0.2.64` from upstream commit
-`c8efadefd003c8a248cb563eb21e4aff26e75411`. This product-match branch performs
+Skill `0.1.85` vendors Visa CLI `0.2.65` from upstream commit
+`25458a7d20d4cdecfc6ea3ef5c3053924ccb7a80`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog

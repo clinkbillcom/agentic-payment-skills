@@ -76,7 +76,7 @@ events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-close
 Capability Contract 提供。
 
 Skill `0.1.85` 已刷新 vendor，来源提交
-`c8efadefd003c8a248cb563eb21e4aff26e75411` 的 Visa CLI `0.2.64`。本
+`25458a7d20d4cdecfc6ea3ef5c3053924ccb7a80` 的 Visa CLI `0.2.65`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；

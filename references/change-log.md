@@ -1,5 +1,27 @@
 # Visa Skill Change Log
 
+## 2026-09-11: VIC readiness reads the card-level signal
+
+- Vendored CLI `0.2.65`. CWallet's device strong-auth change made the card
+  list's `visaRegistrationSucceeded` a mirror of `strongAuthReady`, which
+  describes the device issuing the request. A CLI process is never the browser
+  that ran the Passkey/VIC ceremony, so on UAT every card read as not
+  VIC-registered: an ACTIVE Quick Instruction bound to a fully registered card
+  failed terminally, card selection never found a ready card, and UCP checkout
+  forwarded `visa_registration_succeeded=false` for a VIC Visa.
+- The CLI now resolves VIC registration from the card-level, cross-device
+  `strongAuthRegistered` (with `authProtocol=VISA`), falling back to
+  `visaRegistrationSucceeded` on backends that predate it.
+- `quick_instruction_active_card_not_vic_ready_or_mismatched` is replaced by one
+  reason per condition: `quick_instruction_active_card_not_vic_ready`,
+  `..._card_disabled`, `..._card_not_visa`, `..._card_missing_from_card_list`,
+  `..._card_changed_by_backend`, and
+  `quick_instruction_active_without_payment_instrument`. A rebound card still
+  surfaces as `quick_instruction_failed_exact_context_verification`. Each
+  failure carries `paymentInstrumentId`, the judged `card`, and read-only
+  `recovery`. Agents must not pattern-match the retired reason.
+- Skill contract, FSM, prompts, and safety rules are unchanged.
+
 ## 2026-09-10: Unified VIC boundary-case recovery
 
 - Card binding, VIC readiness, and Passkey authorization waits are capped at
