@@ -10,24 +10,30 @@ interface:
     preflight. Check wallet environment only after an exact product selection
     and explicit purchase authorization, immediately before authenticated
     purchase preparation.
-    Visa recommend/detail/taxonomy never take --sandbox or --test. Before Visa
-    discovery, resolve and remember HK/CN in the recommend call. A unique
-    --region hk or --region cn automatically selects that endpoint and persists
-    it as the next default. With no HK/CN region, omit --market so recommend
-    uses saved config and defaults missing config to hk. When source and
-    destination are explicitly different, pass both --market <source> and
-    --region <destination>; explicit market wins. Never run visa region get/set
-    as a search preflight. Other or multi-value destinations do not update the
-    saved source.
+    Visa recommend/detail/taxonomy never take --sandbox or --test. Omit --market
+    in every search: recommend uses saved config and defaults missing config to
+    hk, and a search never switches the HK/CN source. A taxonomy --region is a
+    destination, never a source, so --region hk, --region cn, and --region jp
+    all leave the saved market unchanged. Run visa region set <hk|cn> only when
+    the user explicitly asks to switch markets and visa region get only when the
+    user asks which market is active; neither is a search preflight, and asking
+    for offers in a place is not asking to switch markets. Pass --market only
+    when the user explicitly names the card-issuing market for that one call;
+    it overrides that call only and persists nothing.
     Route every initial product, category, merchant, buy/order/checkout, and Benefit
     request through exactly one visa recommend-products. This product-match
     branch never runs broad Catalog: never pass --include-broad-catalog or
     --broad-queries and never call standalone catalog search as fallback. Read only
     references/visa-recommend-filters.md and choose the smallest safe filter
-    shape. Every plan must include region and at least one category. Use the
-    user's region, else the remembered search region, else hk. Category accepts
-    multiple values as OR; prefer specific child codes and one multi-category
-    plan. Add purpose, attribute, card_level, or card_issuer only
+    shape. Every plan must include region; use the user's region, else the
+    remembered search region, else hk. Include at least one category whenever
+    the request names a category, merchant, brand, or product, and omit category
+    only for a generic regional ask such as 日本有什么优惠 or any offers, which
+    returns that region's first page. Never guess a category: the server relaxes
+    an unsupported one and the CLI then fails with "relaxed explicitly requested
+    filters", which means that region has no Benefit in that category. Category
+    accepts multiple values as OR; prefer specific child codes and one
+    multi-category plan. Add purpose, attribute, card_level, or card_issuer only
     when explicitly stated by the current user; otherwise omit them. Never
     choose limit or page. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve

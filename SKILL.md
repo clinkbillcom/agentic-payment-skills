@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.85. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.86. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.85"
+  version: "0.1.86"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -70,23 +70,24 @@ on the bundled launcher.
 
 ### Benefit Source Region
 
-Resolve and remember the HK/CN source inside the Benefit search itself:
+Only the user changes the HK/CN Benefit source. A search never changes it:
 
-- A unique taxonomy `--region hk` or `--region cn` automatically selects that
-  endpoint and persists it as the next default.
-- With no HK/CN region, omit `--market`; recommend uses the saved value and
-  initializes missing config to `hk`.
-- When source and destination are explicitly different, pass both
-  `--market <source>` and `--region <destination>`; explicit market wins.
-- Never run `visa region get` or `visa region set` as a search preflight. Use
-  them only when the user separately asks to inspect or change the default
-  without performing a Benefit search.
+- Omit `--market` in every Benefit search. Recommend uses the saved source and
+  defaults missing config to `hk`.
+- A taxonomy `--region` is a destination, never a source. `--region hk`,
+  `--region cn`, and `--region jp` all leave the saved source unchanged, and the
+  CLI writes no config during a search.
+- Run `visa region set <hk|cn>` only when the user explicitly asks to switch the
+  Benefit market, and `visa region get` only when the user asks which market is
+  active. Neither is ever a search preflight, and a request to see offers in a
+  place is not a request to switch markets.
+- Pass `--market <source>` only when the user explicitly names the card-issuing
+  market for that one call; it overrides the source for that call only and
+  persists nothing.
 - Benefit source region is independent of wallet environment and never requires
   a wallet preflight.
 - Require returned `sourceRegion` and `sourceEndpoint` to match the selection.
-
-Taxonomy `--region` still means where a Benefit is usable. A unique HK/CN value
-also becomes the next source default; other or multi-value destinations do not.
+  `sourceRegionReason` is `explicit_market` or `saved_or_default`.
 
 ### Catalog Money
 
@@ -366,19 +367,26 @@ Use one strict explicit-filter request by default:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
-  --region <region> --category <category> \
+  --region <region> [--category <category>] \
   --anonymous \
   --lang <language-tag> \
   --format json
 ```
 
-Natural language never replaces the category flag: every strict call carries
-`--region` and at least one `--category`. Supermarket / grocery / 超市 / 街市 map
-to `shopping_supermarket`, department store / mall / 百货 / 商场 to
-`shopping_department_mall`, coffee / 咖啡 to `dining_cafe_bakery`. A region-only
-browse must add `--all`. The CLI rejects a call with neither (`filters
-incomplete`, exit code 2); treat that error as a missing category and rerun
-with one, never as "no results".
+Every call carries `--region`. `--category` is required whenever the request
+names a category, merchant, brand, or product, and natural language never
+replaces that flag: supermarket / grocery / 超市 / 街市 map to
+`shopping_supermarket`, department store / mall / 百货 / 商场 to
+`shopping_department_mall`, coffee / 咖啡 to `dining_cafe_bakery`. Omit
+`--category` only for a genuinely generic regional request such as
+`日本有什么优惠`, `有什么权益`, or `any offers`, which names no category,
+merchant, brand, or product; that call returns the region's first page.
+
+Never invent a category for a generic request. An unsupported category makes
+the server relax it, and the CLI then fails the call with `Visa recommendation
+relaxed explicitly requested filters`. Treat that error as "this category has
+no Benefit in this region" and answer from a region-only rerun, never as a
+missing category to guess again.
 
 Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:
@@ -422,7 +430,7 @@ For a Hong Kong destination, use `--region hk` in a single-filter call. In
 four-set aggregate mode, include `"region": ["hk"]` in every filter object and
 never add an outer `--region`; the CLI rejects mixed filter ownership.
 `--market hk` remains a source selector and is used only when Hong Kong card
-issuance is explicit.
+issuance is explicit; it never becomes the saved market.
 
 Never infer or pass `--type` for `recommend-products`; Benefit, reward, coupon,
 discount, or purchase wording does not select it. Never fill `reward_type` in

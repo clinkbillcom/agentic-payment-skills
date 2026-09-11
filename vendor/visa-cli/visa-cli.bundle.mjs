@@ -34485,8 +34485,9 @@ ${OUTPUT_OPTIONS2}
 Behavior:
   Stores the default Visa Benefit source region in ~/.clink-cli/config.json as
   visa.activeMarket. HK and CN use different VSRA endpoints. Missing config initializes to hk.
-  This source region is distinct from visa recommend --region, which filters where a Benefit is
-  usable. The command never logs in or makes a Visa API request.
+  This command is the only explicit market switch: a recommendation never changes the saved
+  source. The source region is distinct from visa recommend --region, which filters where a
+  Benefit is usable. The command never logs in or makes a Visa API request.
 `;
 var VISA_RECOMMEND_HELP = `clink visa recommend
 
@@ -34534,11 +34535,11 @@ Behavior:
   and is never converted into filters or sent to Visa. This mode cannot be combined with
   personalized mode, provider aggregation, or individual recommendation filter flags.
 
-  A live recommend selects its source by explicit --market first, otherwise by one unambiguous
-  destination filter of --region hk or --region cn, otherwise by saved config/default hk. The
-  selected HK/CN source is persisted as visa.activeMarket. Output includes sourceRegion,
-  sourceEndpoint, and sourceRegionReason. Other or multi-value destination regions do not change
-  the saved source.
+  A recommend selects its source by explicit --market for that call only, otherwise by saved
+  config, otherwise by default hk. It never writes visa.activeMarket: a --region destination,
+  including a unique hk or cn, never re-points the saved source. Change it with visa region set.
+  Output includes sourceRegion, sourceEndpoint, and sourceRegionReason (explicit_market or
+  saved_or_default).
 
   Without --include-provider-products, output is unchanged. With the flag, the command concurrently
   searches the existing Visa recommendation service and every provider identity configured for the
@@ -34601,11 +34602,10 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  Filters are validated before any request: without --include-broad-catalog, recommend-products
-  requires at least one --category (or category inside at least one --filter-sets entry) unless --all is
-  passed for an explicit region-wide browse. A region-only request would only see Visa's first page
-  and could report zero products for a Program on a later page, so it fails with exit code 2
-  ("filters incomplete") instead of returning ok=true with no products.
+  --region is required. --category is optional: a generic regional request may pass --region alone
+  and keeps ordinary first-page paging, while a category, merchant, or product request should still
+  pass --category so a matching Program on a later page is not missed. --all remains the explicit
+  region-wide browse that fetches every page.
 
   Visa recommendation uses taxonomy filters only and never sends a keyword. The required original
   query is used for every matched merchant Catalog search and as the first broad Catalog query when
@@ -35214,9 +35214,6 @@ async function visaRegion(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
-function hasVisaCategoryFilter(filters) {
-  return Array.isArray(filters.category) && filters.category.length > 0;
-}
 async function visaRecommend(context) {
   const execution = await executeVisaRecommendation(context);
   printSuccess(execution.result, context.globalOptions.format);
@@ -35290,20 +35287,9 @@ async function executeVisaRecommendation(context, options2 = {}) {
   if (filterSets.length === 0 && !all && Object.keys(filters).length === 0) {
     throw validationError("visa recommend requires explicit filters, --all, or --filter-sets; natural-language filter inference is handled by the Agent");
   }
-  if (options2.requireCategoryOrAll === true && !all) {
-    const hasCategory = filterSets.length > 0 ? filterSets.some((filterSet) => hasVisaCategoryFilter(filterSet)) : hasVisaCategoryFilter(filters);
-    if (!hasCategory) {
-      throw validationError("recommend-products requires --category for a category search; use --all for an explicit region-wide browse (filters incomplete)" + (filterSets.length > 0 ? "; at least one --filter-sets entry must include category" : ""));
-    }
-  }
-  const inferredRegion = inferVisaBenefitSourceRegion(filters, filterSets);
-  const sourceRegionReason = explicitMarket !== void 0 ? "explicit_market" : inferredRegion !== void 0 ? "destination_region" : "saved_or_default";
-  const market = parseVisaMarket(explicitMarket ?? inferredRegion, context.storedConfig);
+  const sourceRegionReason = explicitMarket !== void 0 ? "explicit_market" : "saved_or_default";
+  const market = parseVisaMarket(explicitMarket, context.storedConfig);
   const sourceEndpoint = resolveVsraBaseUrl(market);
-  const savedMarket = normalizeStoredVisaState(context.storedConfig.visa)?.activeMarket;
-  if (!context.globalOptions.dryRun && (context.storedConfig.visa === void 0 || savedMarket !== market)) {
-    applyVisaStoredConfig(context, await setVisaActiveMarket(market));
-  }
   const runRecommendation = (recommendationFilters, taxonomyPayload) => recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
@@ -35363,8 +35349,7 @@ async function visaRecommendProducts(context) {
   const broadCatalogPromise = includeBroadCatalog && !context.globalOptions.dryRun ? Promise.all(broadQueries.map((query2) => runBroadCatalogSearch(context, query2, normalizeVisaLocale(getStringFlag(context.args.flags, "lang"))))) : Promise.resolve(void 0);
   const execution = await executeVisaRecommendation(context, {
     explicitFilterRelaxation: includeBroadCatalog ? "no_match" : "error",
-    forbidKeyword: true,
-    requireCategoryOrAll: !includeBroadCatalog
+    forbidKeyword: true
   });
   if (context.globalOptions.dryRun) {
     printSuccess({

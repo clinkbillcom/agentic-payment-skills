@@ -130,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.65');
+  assert.equal(vendorPackage.version, '0.2.66');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '25458a7d20d4cdecfc6ea3ef5c3053924ccb7a80',
+    '820b09e676b711f6b68a7543acd41ddb16d435f4',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -258,7 +258,7 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   );
 });
 
-test('Visa region persists HK/CN source selection for later recommendations', async () => {
+test('Visa region switches the source only on an explicit set', async () => {
   const home = await mkdtemp(join(tmpdir(), 'visa-skill-region-home-'));
   const env = {
     VSRA_BASE_URL: '',
@@ -341,12 +341,12 @@ test('Visa region persists HK/CN source selection for later recommendations', as
     });
     assert.equal(hkSearch.status, 0, hkSearch.stderr);
     const hkSearchData = JSON.parse(hkSearch.stdout).data;
-    assert.equal(hkSearchData.sourceRegion, 'hk');
-    assert.equal(hkSearchData.sourceRegionReason, 'destination_region');
+    assert.equal(hkSearchData.sourceRegion, 'cn');
+    assert.equal(hkSearchData.sourceRegionReason, 'saved_or_default');
     const updatedConfig = JSON.parse(
       await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
     );
-    assert.equal(updatedConfig.visa.activeMarket, 'hk');
+    assert.equal(updatedConfig.visa.activeMarket, 'cn');
 
     const remembered = run([
       'visa',
@@ -361,7 +361,7 @@ test('Visa region persists HK/CN source selection for later recommendations', as
     ], { home, env });
     assert.equal(remembered.status, 0, remembered.stderr);
     const rememberedData = JSON.parse(remembered.stdout).data;
-    assert.equal(rememberedData.sourceRegion, 'hk');
+    assert.equal(rememberedData.sourceRegion, 'cn');
     assert.equal(rememberedData.sourceRegionReason, 'saved_or_default');
 
     const unsupported = run(['visa', 'region', 'set', 'tw'], { home, env });
@@ -601,6 +601,30 @@ test('Visa Program code resolves through merchant-list metadata', () => {
       title: '香港本地超市現金券優惠',
     }]);
   }
+});
+
+test('recommend-products accepts a region-only request without --category', () => {
+  const result = runWithMock([
+    'visa',
+    'recommend-products',
+    '\u65e5\u672c\u6709\u4ec0\u4e48\u4f18\u60e0',
+    '--region',
+    'jp',
+    '--anonymous',
+    '--lang',
+    'zh-CN',
+    '--sandbox',
+    '--format',
+    'json',
+  ], 'visa-program-merchant-match');
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.allOffers, false);
+  assert.equal(output.pagesFetched, 1);
+  assert.deepEqual(output.filters.region, ['jp']);
+  assert.equal(output.filters.category, undefined);
+  assert.equal(output.sourceRegionReason, 'saved_or_default');
 });
 
 test('recommend-products rejects Visa keyword input', () => {

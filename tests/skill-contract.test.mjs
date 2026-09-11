@@ -44,7 +44,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.85');
+  assert.equal(packageJson.version, '0.1.86');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -199,7 +199,7 @@ test('initial Visa discovery runs one matched-merchant aggregate without broad C
   );
   assert.match(
     singleCommand,
-    /visa recommend-products "<original-current-user-query>"[\s\S]*--region <region> --category <category>[\s\S]*--anonymous[\s\S]*--lang/iu,
+    /visa recommend-products "<original-current-user-query>"[\s\S]*--region <region> \[--category <category>\][\s\S]*--anonymous[\s\S]*--lang/iu,
   );
   assert.doesNotMatch(singleCommand, /--filter-sets/u);
   assert.doesNotMatch(
@@ -288,19 +288,23 @@ test('Benefit source region resolves inside recommend without a preflight', () =
 
   assert.match(
     sourceRegion,
-    /unique taxonomy `--region hk`[\s\S]*`--region cn`[\s\S]*selects that[\s\S]*endpoint[\s\S]*persists it as the next default/iu,
+    /Only the user changes the HK\/CN Benefit source[\s\S]*A search never changes it/iu,
   );
   assert.match(
     sourceRegion,
-    /no HK\/CN region[\s\S]*omit `--market`[\s\S]*saved value[\s\S]*initializes missing config to `hk`/iu,
+    /Omit `--market` in every Benefit search[\s\S]*saved source[\s\S]*defaults missing config to `hk`/iu,
   );
   assert.match(
     sourceRegion,
-    /source and destination are explicitly different[\s\S]*`--market <source>`[\s\S]*`--region <destination>`[\s\S]*Explicit market[\s\S]*wins/iu,
+    /taxonomy `--region` is a destination, never a source[\s\S]*`--region jp`[\s\S]*leave the saved source unchanged[\s\S]*writes no config during a search/iu,
   );
   assert.match(
     sourceRegion,
-    /Never run `visa region get` or `visa region set` as a search preflight[\s\S]*only when the user separately asks/iu,
+    /`visa region set <hk\|cn>` only when the user explicitly asks to switch[\s\S]*not a request to switch markets/iu,
+  );
+  assert.match(
+    sourceRegion,
+    /Pass `--market <source>` only when the user explicitly names[\s\S]*that call only and\s+persists nothing/iu,
   );
   assert.match(
     sourceRegion,
@@ -308,15 +312,19 @@ test('Benefit source region resolves inside recommend without a preflight', () =
   );
   assert.match(
     sourceRegion,
-    /Taxonomy `--region`[\s\S]*where a Benefit is usable[\s\S]*unique HK\/CN value[\s\S]*next source default[\s\S]*other or multi-value destinations do not/iu,
+    /`sourceRegionReason` is `explicit_market` or `saved_or_default`/u,
   );
   assert.match(
     agent,
-    /unique[\s\S]*--region hk[\s\S]*--region cn[\s\S]*selects that endpoint[\s\S]*persists[\s\S]*no HK\/CN region[\s\S]*saved config[\s\S]*explicitly different[\s\S]*--market <source>[\s\S]*explicit market wins[\s\S]*Never run visa region get\/set/iu,
+    /Omit --market\s+in every search[\s\S]*never switches the HK\/CN source[\s\S]*--region jp[\s\S]*leave the saved market unchanged[\s\S]*visa region set <hk\|cn> only when[\s\S]*persists nothing/iu,
   );
   assert.match(
     filterReference,
-    /Required Shape[\s\S]*`region`[\s\S]*user destination[\s\S]*remembered region[\s\S]*`hk`[\s\S]*`category`/iu,
+    /Required Shape[\s\S]*`region`[\s\S]*User destination[\s\S]*remembered region[\s\S]*`hk`[\s\S]*`category`/iu,
+  );
+  assert.match(
+    filterReference,
+    /Omit\s+`--market`[\s\S]*never switches the HK\/CN source[\s\S]*visa region set <hk\|cn>/iu,
   );
 });
 
@@ -421,7 +429,7 @@ test('discovery presents products first and stays silent about empty collections
 test('compact filter reference defines schema, selection priority, and intent boundary', () => {
   assert.match(
     filterReference,
-    /Every request or `--filter-sets` object requires[\s\S]*`region`[\s\S]*`category`/iu,
+    /`region`: every request and `--filter-sets` object[\s\S]*`category`: required when the ask names/iu,
   );
   assert.match(
     filterReference,
@@ -444,11 +452,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each still\s+requires region\/category/iu,
+    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each keeps region,\s+the same category rule/iu,
   );
   assert.match(
-    filterReference,
-    /Visa recommendation uses only[\s\S]*taxonomy filters[\s\S]*sends no[\s\S]*keyword[\s\S]*unchanged positional query[\s\S]*Program-matched[\s\S]*merchant Catalog search[\s\S]*Never pass `--include-broad-catalog`[\s\S]*`--broad-queries`/iu,
+    skill,
+    /Never pass\s+`--include-broad-catalog` or `--broad-queries`[\s\S]*never pass `--keyword`[\s\S]*Visa recommendation sends taxonomy filters only and no keyword/iu,
   );
   const taxonomyCodes = [
     'outbound', 'study', 'local', 'inbound', 'haitao',
@@ -497,11 +505,11 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市[\s\S]*region=hk[\s\S]*category=shopping_supermarket[\s\S]*purpose=local[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery/iu,
+    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市[\s\S]*region=hk[\s\S]*category=shopping_supermarket[\s\S]*purpose=local[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery[\s\S]*日本有什么优惠[\s\S]*region=jp` only/iu,
   );
   assert.match(
     agent,
-    /Every plan must include region[\s\S]*at least one category[\s\S]*remembered search region[\s\S]*else hk[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
+    /Every plan must include region[\s\S]*remembered search region[\s\S]*else hk[\s\S]*at least one category whenever[\s\S]*omit category\s+only for a generic regional ask[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
   );
 });
 
@@ -957,12 +965,27 @@ test('purchase route is preserved in the CLI snapshot instead of reconstructed b
   assert.doesNotMatch(skill, /authoritative-program-commerce-url/u);
 });
 
-test('recommend-products always carries a category or an explicit --all browse', () => {
-  assert.match(skill, /Natural language never replaces the category flag/u);
-  assert.match(skill, /every strict call carries\s+`--region` and at least one `--category`/u);
-  assert.match(skill, /超市 \/ 街市 map\s+to `shopping_supermarket`/u);
-  assert.match(skill, /region-only\s+browse must add `--all`/u);
-  assert.match(skill, /filters\s+incomplete/u);
+test('recommend-products requires a category only for a named category, merchant, brand, or product', () => {
+  assert.match(skill, /Every call carries `--region`/u);
+  assert.match(
+    skill,
+    /`--category` is required whenever the request\s+names a category, merchant, brand, or product/u,
+  );
+  assert.match(skill, /natural language never\s+replaces that flag/u);
+  assert.match(skill, /超市 \/ 街市 map to\s+`shopping_supermarket`/u);
+  assert.match(
+    skill,
+    /Omit\s+`--category` only for a genuinely generic regional request[\s\S]*returns the region's first page/u,
+  );
+  assert.match(
+    skill,
+    /Never invent a category for a generic request[\s\S]*relaxed explicitly requested filters[\s\S]*region-only rerun, never as a\s+missing category to guess again/u,
+  );
+  assert.doesNotMatch(skill, /filters\s+incomplete/u);
   assert.match(filterReference, /Natural language never replaces `category`/u);
-  assert.match(filterReference, /region-only\s+browse\s+requires `--all`/u);
+  assert.match(
+    filterReference,
+    /Omit `category` for a generic regional ask[\s\S]*Never\s+guess one/u,
+  );
+  assert.doesNotMatch(filterReference, /requires `--all`/u);
 });

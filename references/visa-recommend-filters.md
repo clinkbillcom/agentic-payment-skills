@@ -1,40 +1,34 @@
 # Recommend-Products Filters
 
-One `visa recommend-products` call; no standalone discovery.
-
 ## Required Shape
 
-Every request or `--filter-sets` object requires:
-
-- `region`: user destination, else remembered region, else `hk`.
-- `category`: one or more relevant codes; prefer specific children. Multiple
-  values are OR. Different axes are AND.
-- Natural language never replaces `category` (超市/supermarket ->
-  `shopping_supermarket`, 百货/mall -> `shopping_department_mall`). A region-only
-  browse requires `--all`.
+- `region`: every request and `--filter-sets` object. User destination, else
+  remembered region, else `hk`.
+- `category`: required when the ask names a category, merchant, brand, or
+  product; prefer children. Multiple values are OR. Different axes are AND.
+  Natural language never replaces `category` (超市 -> `shopping_supermarket`,
+  百货 -> `shopping_department_mall`).
+- Omit `category` for a generic regional ask (`日本有什么优惠`, `any offers`)
+  naming none; region-only returns the region's first page. Never guess one:
+  the server relaxes an unsupported category and the CLI fails with
+  `relaxed explicitly requested filters`.
 
 ```json
-{
-  "region": ["hk"],
-  "category": ["shopping_supermarket", "shopping_department_mall"]
-}
+{ "region": ["hk"], "category": ["shopping_supermarket", "shopping_department_mall"] }
 ```
 
-Add `purpose`, `attribute`, `card_level`, or `card_issuer` only
-when explicitly stated; otherwise omit it. Generic `优惠`,
-`权益`, `benefit`, or `offer` selects none. Never pass `type`, `keyword`,
-`limit`, or `page`. Add `--all` only for an explicit all request.
-Never fill `reward_type` or pass `--reward-type`.
+Add `purpose`, `attribute`, `card_level`, or `card_issuer` only when
+explicitly stated; otherwise omit. Generic `优惠`, `权益`, `benefit`, or
+`offer` selects none. Never pass `type`, `keyword`, `limit`, or `page`.
+Add `--all` only for an explicit all ask.
+Never fill `reward_type` or pass `--reward-type`. Omit `--market`: a search
+never switches the HK/CN source; only an explicit user request runs
+`visa region set <hk|cn>`.
 
 Flags: each axis maps to `--<axis>` with `_` written as `-`
 (`card_level -> --card-level`). Prefer one multi-category plan. Use
-`--filter-sets` only for four genuinely different safe plans; each still
-requires region/category and every explicit constraint.
-
-Visa recommendation uses only taxonomy filters and sends no
-keyword. The unchanged positional query is used only by a Program-matched
-merchant Catalog search. Never pass `--include-broad-catalog` or
-`--broad-queries` in this branch.
+`--filter-sets` only for four genuinely different safe plans; each keeps region,
+the same category rule, and every explicit constraint.
 
 ## Canonical Codes
 
@@ -103,5 +97,5 @@ Examples:
 
 - `香港超市和百货优惠`: `region=hk`, `shopping_supermarket shopping_department_mall`.
 - `香港本地超市`: `region=hk`, `category=shopping_supermarket`, `purpose=local`.
-- `我想下单咖啡`: `region=<resolved>`, `category=dining_cafe_bakery`; no other
-  axis unless stated.
+- `我想下单咖啡`: `category=dining_cafe_bakery`.
+- `日本有什么优惠`: `region=jp` only.

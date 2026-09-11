@@ -1,5 +1,26 @@
 # Visa Skill Change Log
 
+## 2026-09-11: Optional category and explicit-only market switching
+
+- Vendored CLI `0.2.66`. `visa recommend-products` still requires `--region`,
+  but `--category` is now optional: a genuinely generic regional request such as
+  `日本有什么优惠` runs region-only and returns that region's first page instead
+  of failing with `filters incomplete`. Any request naming a category, merchant,
+  brand, or product must still carry `--category`, and an explicit all-Benefits
+  request must still carry `--all`; that contract now lives in the Skill and the
+  filter reference rather than in a CLI gate.
+- A guessed category is worse than none: the server relaxes a category its
+  Program pool cannot satisfy and the CLI fails the call with `Visa
+  recommendation relaxed explicitly requested filters`. That error means the
+  region has no Benefit in that category, so the Skill answers from a
+  region-only rerun instead of guessing another category.
+- A search never changes the HK/CN Benefit source. `--region` is a destination
+  only, `--market` overrides the source for one call and persists nothing, and
+  a recommendation writes no config. `visa region set <hk|cn>` is the only
+  explicit market switch, `visa region get` only reports the active market, and
+  missing config still resolves to `hk`. `sourceRegionReason` is now
+  `explicit_market` or `saved_or_default`.
+
 ## 2026-09-11: VIC readiness reads the card-level signal
 
 - Vendored CLI `0.2.65`. CWallet's device strong-auth change made the card
