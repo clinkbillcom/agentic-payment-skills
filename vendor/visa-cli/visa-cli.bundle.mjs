@@ -10845,7 +10845,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.65";
+var CLI_VERSION = "0.2.67";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -32161,7 +32161,7 @@ async function recommendVisaOffers(options2) {
   const responseBody = requireVsraSuccess(fetched.response, "Visa recommendation");
   const violatedAxes = explicitRecommendationFilterViolations(responseBody, options2.filters);
   if (violatedAxes.length > 0 && options2.explicitFilterRelaxation !== "no_match") {
-    throw apiError(`Visa recommendation relaxed explicitly requested filters: ${violatedAxes.join(", ")}`);
+    throw noMatchingFilterCombinationError(violatedAxes, options2.filters);
   }
   const recommendationResponse = violatedAxes.length > 0 ? replaceResponseItems(fetched.aggregatedResponse ?? responseBody, []) : fetched.aggregatedResponse ?? responseBody;
   const response = enrichRecommendationCommerce(recommendationResponse);
@@ -32198,6 +32198,24 @@ function describeRecommendationResult(response, allOffersRequested) {
     relaxedAxes,
     returnedOfferCount
   };
+}
+function noMatchingFilterCombinationError(violatedAxes, explicitFilters) {
+  const relaxed = new Set(violatedAxes);
+  const requestedAxes = VISA_FILTER_AXES.filter((axis) => (explicitFilters[axis]?.length ?? 0) > 0);
+  const retryAxes = requestedAxes.filter((axis) => !relaxed.has(axis));
+  const retryFilters = {};
+  for (const axis of retryAxes) {
+    retryFilters[axis] = [...explicitFilters[axis] ?? []];
+  }
+  const dropped = violatedAxes.join(", ");
+  const retryHint = retryAxes.length > 0 ? `retry without ${dropped}, keeping ${retryAxes.join(", ")}` : `retry with a single broader axis`;
+  return new CliError("api_error", `Visa recommendation found no offer matching every requested filter, so the server relaxed ${dropped} and returned offers that do not satisfy the request. The filters are too narrow together, not necessarily wrong on their own: ${retryHint}.`, EXIT_CODES.API, 400, {
+    reason: "no_offer_for_filter_combination",
+    relaxedAxes: [...violatedAxes],
+    requestedAxes: [...requestedAxes],
+    retryAxes: [...retryAxes],
+    ...retryAxes.length > 0 ? { retryFilters } : {}
+  });
 }
 function explicitRecommendationFilterViolations(body, explicitFilters) {
   const data = responseDataRecord(body);
@@ -34562,11 +34580,18 @@ Behavior:
   Output recommendationMode is matching_offers when returned Programs still satisfy the requested
   relevance filters. Callers may rank the complete dynamic result against the request and choose
   presentation details without relying on CLI-assigned numbering or a fixed display count. If the
-  server relaxes natural-language filters after finding no relevant offers, recommendationMode is
-  fallback_all_offers and relaxedAxes names the relaxed filters. Those fallback Programs are not
-  relevant matches and must not be ranked or displayed as if they matched. Broad user requests use
-  all_offers_requested; an empty non-broad result uses no_matching_offers. returnedOfferCount is the
-  number of rows actually present in response.data.items.
+  server relaxes filters the caller did not request after finding no relevant offers,
+  recommendationMode is fallback_all_offers and relaxedAxes names the relaxed filters. Those
+  fallback Programs are not relevant matches and must not be ranked or displayed as if they matched.
+  Broad user requests use all_offers_requested; an empty non-broad result uses no_matching_offers.
+  returnedOfferCount is the number of rows actually present in response.data.items.
+
+  When the server relaxes a filter the caller did send, no offer matched every requested filter.
+  A single request fails with exit code 5 and error details reason=no_offer_for_filter_combination,
+  relaxedAxes, requestedAxes, retryAxes, and retryFilters: the axes are too narrow together, so
+  retry with retryFilters rather than treating the answer as "no offers exist". In --filter-sets
+  mode that set instead degrades to no-match so the other sets still return; its source row carries
+  strictMatchFailure and the merged result lists strictMatchFailures.
 
   MCC means Merchant Category Code, the four-digit merchant classification code used by card
   networks. A Visa Program category is an offer taxonomy value, not an MCC.
@@ -35290,7 +35315,7 @@ async function executeVisaRecommendation(context, options2 = {}) {
   const sourceRegionReason = explicitMarket !== void 0 ? "explicit_market" : "saved_or_default";
   const market = parseVisaMarket(explicitMarket, context.storedConfig);
   const sourceEndpoint = resolveVsraBaseUrl(market);
-  const runRecommendation = (recommendationFilters, taxonomyPayload) => recommendVisaOffers({
+  const runRecommendation = (recommendationFilters, taxonomyPayload, relaxationOverride) => recommendVisaOffers({
     storedConfig: context.storedConfig,
     market,
     locale,
@@ -35302,7 +35327,7 @@ async function executeVisaRecommendation(context, options2 = {}) {
     dryRun: context.globalOptions.dryRun,
     onAuthorization: createVisaAuthorizationReporter(context),
     inferNaturalFilters: false,
-    ...options2.explicitFilterRelaxation !== void 0 ? { explicitFilterRelaxation: options2.explicitFilterRelaxation } : {},
+    ...relaxationOverride !== void 0 ? { explicitFilterRelaxation: relaxationOverride } : options2.explicitFilterRelaxation !== void 0 ? { explicitFilterRelaxation: options2.explicitFilterRelaxation } : {},
     ...taxonomyPayload !== void 0 ? { taxonomyPayload } : {}
   });
   if (filterSets.length > 0) {
@@ -35315,7 +35340,7 @@ async function executeVisaRecommendation(context, options2 = {}) {
     const expanded = await Promise.all(filterSets.map(async (filterSet, index) => ({
       index,
       filters: filterSet,
-      ...await runRecommendation(filterSet, taxonomyPayload)
+      ...await runRecommendation(filterSet, taxonomyPayload, "no_match")
     })));
     applyVisaStoredConfig(context, expanded[0]?.storedConfig ?? context.storedConfig);
     return {
@@ -36161,20 +36186,29 @@ function mergeAgentSelectedVisaRecommendations(originalQuery, filterSets, runs, 
     }
     const sourcePages = recommendationNumber(result.pagesFetched);
     pagesFetched += sourcePages;
+    const strictMatchFailure = recommendationRecord(result).strictMatchFailure;
     sources.push({
       index: run.index,
       filters: run.filters,
       recommendationMode: mode,
       returnedOfferCount: recommendationNumber(result.returnedOfferCount),
       pagesFetched: sourcePages,
-      includedOfferCount
+      includedOfferCount,
+      ...strictMatchFailure !== void 0 ? { strictMatchFailure } : {}
     });
   }
   const original = recommendationRecord(runs[0]?.result);
   const response = recommendationRecord(original.response);
   const data = recommendationRecord(response.data);
+  const { strictMatchFailure: firstRunStrictMatchFailure, ...mergedBase } = original;
+  void firstRunStrictMatchFailure;
+  const strictMatchFailures = sources.filter((source) => source.strictMatchFailure !== void 0).map((source) => ({
+    index: source.index,
+    ...recommendationRecord(source.strictMatchFailure)
+  }));
   return {
-    ...original,
+    ...mergedBase,
+    ...strictMatchFailures.length > 0 ? { strictMatchFailures } : {},
     personalized: false,
     allOffers: allOffersRequested,
     pagesFetched,

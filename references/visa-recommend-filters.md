@@ -9,9 +9,10 @@
   Natural language never replaces `category` (超市 -> `shopping_supermarket`,
   百货 -> `shopping_department_mall`).
 - Omit `category` for a generic regional ask (`日本有什么优惠`, `any offers`)
-  naming none; region-only returns the region's first page. Never guess one:
-  the server relaxes an unsupported category and the CLI fails with
-  `relaxed explicitly requested filters`.
+  naming none; region-only returns page 1.
+- Never guess a category. If nothing satisfies every filter the CLI fails with
+  `reason=no_offer_for_filter_combination` (axes too narrow together): rerun once
+  with `retryFilters` from `error.details`.
 
 ```json
 { "region": ["hk"], "category": ["shopping_supermarket", "shopping_department_mall"] }
@@ -27,12 +28,12 @@ never switches the HK/CN source; only an explicit user request runs
 
 Flags: each axis maps to `--<axis>` with `_` written as `-`
 (`card_level -> --card-level`). Prefer one multi-category plan. Use
-`--filter-sets` only for four genuinely different safe plans; each keeps region,
-the same category rule, and every explicit constraint.
+`--filter-sets` only for four genuinely different safe plans; each keeps region
+and the same category rule.
 
 ## Canonical Codes
 
-Use only these codes. Parent region/category codes include children.
+Use only these codes; parents include children.
 
 ```text
 purpose:
@@ -95,7 +96,7 @@ CCBDB BOCDB CMBDB ABCDB CIBPLATINUM BOCAPP
 
 Examples:
 
-- `香港超市和百货优惠`: `region=hk`, `shopping_supermarket shopping_department_mall`.
+- `香港超市和百货优惠`: `shopping_supermarket shopping_department_mall`.
 - `香港本地超市`: `region=hk`, `category=shopping_supermarket`, `purpose=local`.
 - `我想下单咖啡`: `category=dining_cafe_bakery`.
 - `日本有什么优惠`: `region=jp` only.

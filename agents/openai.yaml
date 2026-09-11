@@ -29,9 +29,13 @@ interface:
     remembered search region, else hk. Include at least one category whenever
     the request names a category, merchant, brand, or product, and omit category
     only for a generic regional ask such as 日本有什么优惠 or any offers, which
-    returns that region's first page. Never guess a category: the server relaxes
-    an unsupported one and the CLI then fails with "relaxed explicitly requested
-    filters", which means that region has no Benefit in that category. Category
+    returns that region's first page. Never guess a category. When no offer
+    satisfies every requested filter the CLI fails with
+    reason=no_offer_for_filter_combination in error.details, meaning the axes
+    are too narrow together: rerun once with the retryFilters from those details
+    and answer from that result, never from the failed call alone. In
+    --filter-sets mode an unmatchable set degrades to no-match and is reported
+    in strictMatchFailures while the other sets still return. Category
     accepts multiple values as OR; prefer specific child codes and one
     multi-category plan. Add purpose, attribute, card_level, or card_issuer only
     when explicitly stated by the current user; otherwise omit them. Never

@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.86. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.87. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.86"
+  version: "0.1.87"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -382,11 +382,15 @@ replaces that flag: supermarket / grocery / 超市 / 街市 map to
 `日本有什么优惠`, `有什么权益`, or `any offers`, which names no category,
 merchant, brand, or product; that call returns the region's first page.
 
-Never invent a category for a generic request. An unsupported category makes
-the server relax it, and the CLI then fails the call with `Visa recommendation
-relaxed explicitly requested filters`. Treat that error as "this category has
-no Benefit in this region" and answer from a region-only rerun, never as a
-missing category to guess again.
+Never invent a category for a generic request. When no offer satisfies every
+requested filter, the server drops one axis and returns offers that do not match,
+so the CLI fails the call with `reason=no_offer_for_filter_combination` in
+`error.details`. That means the axes are too narrow together, not that the
+region has no Benefit at all: rerun once with the `retryFilters` object from
+those details (the same filters minus `relaxedAxes`), then answer from that
+result. Never guess a different category, never repeat the same filters, and
+never report "no offers" from the failed call alone. Report no results only
+after the narrower rerun also returns none.
 
 Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:
@@ -404,6 +408,11 @@ issue multiple Agent-managed Shell commands to reach a count. The four-set
 aggregate validates one taxonomy snapshot, runs four parallel Visa requests,
 excludes `fallback_all_offers` rows, preserves filter-set priority, and
 de-duplicates by Program code.
+
+In aggregate mode an unmatchable set does not fail the command: it degrades to
+no-match, its `filterSelection.sources` row carries `strictMatchFailure`, and
+the result lists `strictMatchFailures`. Present the Programs the other sets
+returned, and never describe a degraded set's axes as unavailable Benefits.
 
 Never add `--include-provider-products`, `--include-broad-catalog`, or
 `--broad-queries`, and never issue another Agent-managed recommend,

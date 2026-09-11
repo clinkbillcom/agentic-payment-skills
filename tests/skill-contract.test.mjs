@@ -44,7 +44,7 @@ async function walk(directory) {
 
 test('package exposes only the bundled Visa launcher and focused tests', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.86');
+  assert.equal(packageJson.version, '0.1.87');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, {
     test: 'node --test tests/*.test.mjs',
@@ -452,7 +452,7 @@ test('compact filter reference defines schema, selection priority, and intent bo
   }
   assert.match(
     filterReference,
-    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each keeps region,\s+the same category rule/iu,
+    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each keeps region\s+and the same category rule/iu,
   );
   assert.match(
     skill,
@@ -979,13 +979,25 @@ test('recommend-products requires a category only for a named category, merchant
   );
   assert.match(
     skill,
-    /Never invent a category for a generic request[\s\S]*relaxed explicitly requested filters[\s\S]*region-only rerun, never as a\s+missing category to guess again/u,
+    /Never invent a category for a generic request[\s\S]*reason=no_offer_for_filter_combination[\s\S]*axes are too narrow together, not that the\s+region has no Benefit at all[\s\S]*rerun once with the `retryFilters` object[\s\S]*Never guess a different category[\s\S]*Report no results only\s+after the narrower rerun also returns none/u,
+  );
+  assert.match(
+    skill,
+    /In aggregate mode an unmatchable set does not fail the command[\s\S]*strictMatchFailure[\s\S]*strictMatchFailures[\s\S]*never describe a degraded set's axes as unavailable Benefits/u,
+  );
+  assert.match(
+    filterReference,
+    /Never guess a category[\s\S]*reason=no_offer_for_filter_combination[\s\S]*retryFilters/u,
+  );
+  assert.match(
+    agent,
+    /reason=no_offer_for_filter_combination in error.details[\s\S]*rerun once with the retryFilters[\s\S]*never from the failed call alone[\s\S]*unmatchable set degrades to no-match/u,
   );
   assert.doesNotMatch(skill, /filters\s+incomplete/u);
   assert.match(filterReference, /Natural language never replaces `category`/u);
   assert.match(
     filterReference,
-    /Omit `category` for a generic regional ask[\s\S]*Never\s+guess one/u,
+    /Omit `category` for a generic regional ask[\s\S]*Never guess a category/u,
   );
   assert.doesNotMatch(filterReference, /requires `--all`/u);
 });
