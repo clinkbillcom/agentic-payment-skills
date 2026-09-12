@@ -17,7 +17,13 @@ const artifacts = Object.fromEntries(await Promise.all(paths.map(async (path) =>
 const combined = Object.values(artifacts).join('\n');
 
 async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
   const files = [];
   for (const entry of entries) {
     const path = join(directory, entry.name);
