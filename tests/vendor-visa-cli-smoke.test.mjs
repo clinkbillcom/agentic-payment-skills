@@ -130,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.67');
+  assert.equal(vendorPackage.version, '0.2.68');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '460f9f61a30a2b6889f43ebfd0aea31dfe9e5ffb',
+    '55f41a6194a51aa22776af182d00f74b11df0cf4',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -869,7 +869,6 @@ test('aggregate commands support side-effect-free planning', () => {
       instructionContext,
     }),
     '--confirm-purchase',
-    '--open',
     '--dry-run',
     '--format',
     'json',
@@ -894,7 +893,6 @@ test('aggregate commands support side-effect-free planning', () => {
       instructionContext: minorUnitInstructionContext,
     }),
     '--confirm-purchase',
-    '--open',
     '--dry-run',
     '--format',
     'json',
@@ -916,7 +914,6 @@ test('aggregate commands support side-effect-free planning', () => {
       environment: 'uat',
       requestText: 'Log in to Visa Benefit',
     }),
-    '--open',
     '--dry-run',
     '--format',
     'json',

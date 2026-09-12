@@ -23,9 +23,9 @@ interface:
     Route every initial product, category, merchant, buy/order/checkout, and Benefit
     request through exactly one visa recommend-products. This product-match
     branch never runs broad Catalog: never pass --include-broad-catalog or
-    --broad-queries and never call standalone catalog search as fallback. Read only
-    references/visa-recommend-filters.md and choose the smallest safe filter
-    shape. Every plan must include region; use the user's region, else the
+    --broad-queries and never call standalone catalog search as fallback. Keep
+    region and Catalog routing in this prompt and choose the smallest safe
+    filter shape. Every plan must include region; use the user's region, else the
     remembered search region, else hk. Include at least one category whenever
     the request names a category, merchant, brand, or product, and omit category
     only for a generic regional ask such as 日本有什么优惠 or any offers, which
@@ -39,6 +39,9 @@ interface:
     accepts multiple values as OR; prefer specific child codes and one
     multi-category plan. Add purpose, attribute, card_level, or card_issuer only
     when explicitly stated by the current user; otherwise omit them. Never
+    guess non-region taxonomy codes. If another axis or code is needed, run
+    visa taxonomy and use the current enum returned by GET {base_url}/api/v1/taxonomy.
+    Never fill a taxonomy axis only to make a filter set look complete. Never
     choose limit or page. Use one strict explicit-filter call by default. Use
     --filter-sets only when exactly four genuinely different safe plans improve
     recall. Preserve every explicit brand, merchant, product, category,
@@ -101,8 +104,9 @@ interface:
     for genuinely missing or materially changed facts. Do not search or ask to
     order again for an already authorized selection.
     Only one product with quantity 1 is supported; never split orders or silently
-    reduce a multi-item request. Save the selected row's purchaseContext unchanged
-    and use the same file in commerce-login and commerce-run. Never build an
+    reduce a multi-item request. Keep the selected row's purchaseContext unchanged
+    in memory and pass it directly with --context <json> to commerce-login and
+    commerce-run. Never create a context file. Never build an
     Instruction context, infer MCC, or copy Program fields. If purchaseContext is
     missing, report purchaseContextUnavailable instead of inventing data.
     Once the user requests the unchanged purchase, run login and then commerce-run
@@ -113,13 +117,17 @@ interface:
     Before purchase after login readiness, say once:
     "登录已就绪，直接执行购买流程，可能打开浏览器授权页面。"
     These are notices, not questions; execute immediately without waiting for a reply.
-    Successful browser opening stays silent; observe the same running command
-    until it returns, without asking for a chat reply or killing/restarting it.
-    Failed or explicitly disabled opening returns manualOpenUrl promptly. When
-    the completed result also has rerunAllowed=true, resumeMode=same_command,
-    and checkoutStarted=false, show the exact link once and pause for the user
-    to complete the page. After the user returns, execute the identical command
-    with the unchanged context file, without another purchase confirmation.
+    When login or run reaches a user browser operation, the aggregate returns
+    the exact URL and continuation state first. Tell the user to use the system
+    browser and never the Agent built-in browser. If the host Agent name is
+    known, use it; otherwise say "请在系统浏览器中完成操作，不要使用 Agent
+    内置浏览器。" and never emit {agent}. Then use the dedicated browser-open
+    dedicated browser-open operation to attempt the system browser. A successful launch is not business
+    success. For automatic launch, continue by checking the original operation
+    state; for manual completion, first check the state and do not reopen.
+    Failed opening returns manualOpenUrl. Only the exact pre-Checkout
+    continuation may resume the same operation; no replacement Instruction or
+    payment retry is allowed.
     Do not immediately loop retries. The CLI resumes the persisted login or
     exact Instruction; possible Checkout creation allows read-only recovery only.
     Automatically continue after readiness and report the terminal result.
@@ -127,93 +135,34 @@ interface:
     and order-detail replies. Never substitute UCP order IDs or Checkout IDs;
     explain orderUrlUnavailable without inventing a link or retrying payment.
     Portal owns card binding and VIC. The CLI never opens Bind Card.
-    At Quick creation, an eligible selected VIC-ready Visa card yields a CREATED
-    Quick bound to its paymentInstrumentId, without activation; otherwise the
-    new Quick is PENDING. LOGIN and REGISTER both support these outcomes.
-    The legacy response field pendingInstructionId carries an ID, not a status.
-    Use the actual Instruction status from the response and exact-GET;
-    never infer PENDING from the field name. Preserve existing matching Quicks
-    as-is; do not relabel a historical PENDING when card readiness changes.
-    commerce-login saves the Quick ID and
-    returns login-ready for a valid CREATED, PENDING, or ACTIVE Quick, without waiting
-    for activation or opening VIC. commerce-run owns card/VIC/Instruction waiting
-    and handoffs. Unknown or ongoing VIC state must not trigger another automatic
-    VIC opening; the Agent never opens another page.
-    Once commerce-login creates a Quick Instruction, commerce-run continues
-    that exact ID in every card/VIC state.
-    With an existing Quick, exact-GET and validate the original ID against the
-    frozen purchase and card. Never switch an existing Quick to any other ACTIVE
-    Instruction, even when it matches the same purchase. Missing or mismatched
-    Quick state requires a stop, not a new selection.
-    With an existing Quick, create zero additional Instructions in every case.
-    Card binding, VIC readiness, and Passkey authorization waits inside
-    commerce-run are capped at 10 minutes each. Binding failure, a card that
-    does not support VIC, and an unfinished Passkey authorization cannot be told
-    apart; only the CLI-reported timeout counts as failure, and all of them exit
-    through the same recovery below. Preserve the same Quick Instruction ID;
-    never create a second Instruction because a wait timed out.
-    On that exit, follow the recovery object returned by commerce-run, or run
-    visa pending-instructions --instruction-id {ORIGINAL_QUICK_ID}, and act only
-    on its status:
-    activation_ready: one Instruction and one VIC-ready Visa card are
-    determined (a CREATED Quick uses its bound card; a PENDING Quick uses the
-    single default VIC-ready Visa, else the only VIC-ready Visa, or the user's
-    --payment-instrument-id); the CLI --open opens the exact
-    /passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID} URL directly,
-    with no Portal page in between. Only a failed or disabled opening returns
-    manualOpenUrl; give that as the manual link. After the user completes
-    Passkey, rerun the same visa commerce-run command.
-    card_selection_required: several VIC-ready Visa cards qualify and none is
-    default; ask the user which card in cards[] to use, then rerun with
-    --payment-instrument-id. Never pick by list order.
-    portal_binding_required: no VIC-ready Visa card exists, or the bound card is
-    missing or unready; give the returned portalUrl
-    ({agent portal}/agent-authorization) and name the exact instructionId so
-    the user re-binds a card and authorizes it there.
-    instruction_not_activatable: the given --instruction-id is not in the
-    pending list; tell the user, exact-GET the original ID, and never pick another
-    from pendingInstructions[].
-    select_in_portal: the context does not identify one Instruction; show the
-    returned pendingInstructions[] with the portalUrl and let the user pick and
-    activate in that list. Never guess which one.
-    none_pending: nothing awaits activation; exact-GET the original Quick
-    before any other step.
-    Every outcome carries context (exact or unknown) and portalUrl.
-    recovery.status: "unavailable" with error means run the command manually.
-    Do not provide a VIC URL, a Bind Card link, or the Portal home page as the
-    recovery exit; the /agent-authorization list page is the only sanctioned
-    Portal recovery link. CWallet activates only the Instruction associated with
-    the Passkey ceremony; card readiness alone is not proof of activation.
-    Continue only after exact-GET verifies the original Quick ACTIVE and bound
-    to the same VIC-ready card. Card readiness alone is not proof of activation.
-    With a CREATED Quick, immediately have CLI --open open the exact
-    CLI-returned /passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}
-    URL using the original Quick ID and its bound paymentInstrumentId.
-    Do not wait for binding or VIC. Never substitute a different card.
-    Validate that the bound card is the same eligible VIC-ready Visa card;
-    a missing or mismatched binding requires a stop, not selection by list order.
-    Portal's existing /sign activates that same CREATED Quick.
-    CREATED is not ACTIVE and does not permit Checkout before authorization.
-    With a VIC-ready Visa card and a historical PENDING Quick, CLI --open opens the exact
-    /passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID} URL.
-    Use only the CLI-returned URL: {pi} is the selected paymentInstrumentId
-    and instructionId is the original Quick ID. Never construct this URL.
-    The required backend contract is CWallet compatibility for Portal's existing
-    /sign: authorization activates the original Quick ID in this state.
-    Never create another Instruction or wait for binding.
-    With an existing matching Quick already ACTIVE, reuse that exact ID directly.
-    Do not create an Instruction or request another authorization.
-    Without a Quick, normal matching ACTIVE reuse and ordinary Instruction
-    creation remain unchanged. Do not discard a Quick ID to enter that path.
-    The CLI opens the browser, not an Agent browser tool; the Portal home page is
-    not an activation link and /agent-authorization is the only Portal
-    recovery link. After a successful opening, wait without another
-    chat confirmation. On opener failure, return the original Quick's exact
-    manual link and exit. A CLI-permitted pre-Checkout rerun resumes the identical
-    command and frozen context with the original Quick ID and zero creates.
-    If the installed CLI cannot provide this path, report the limitation; never
-    fall back to creating or selecting another Instruction.
-    After a timeout, follow only explicit CLI pre-Checkout same-command permission
-    or read-only recovery, never another Instruction or payment retry. Keep deterministic steps
-    inside the CLI, never rerun commerce-run after possible Checkout creation,
-    and do not read references or use runtime --help during ordinary execution.
+    Freeze one purchase context and one selected PI. Use the default PI unless
+    the user explicitly chooses an alternate PI; never infer a default from the
+    first, only, newest, or VIC-ready card.
+    Query only the selected PI's Instructions. Reuse only a complete, usable,
+    unconsumed ACTIVE Instruction whose full context matches. PENDING and
+    CREATED are never reused as another purchase's match.
+    If no ACTIVE match exists, create a new ordinary PI-bound Instruction when
+    the selected PI has completed VIC; otherwise create a new PENDING
+    Instruction for the exact operation. Keep the original PENDING ID through
+    VIC, Passkey, and activation.
+    If no default PI exists, do not choose a card implicitly. Create the pending
+    operation, return Agent Portal card management, and re-read the default
+    after the user acts. An explicit alternate PI may be used without making
+    it default.
+    A changed default PI stops a default-based purchase and requires
+    reconfirmation. An explicit alternate remains selected only while it is
+    customer-owned and usable.
+    Binding, VIC, Passkey, and PENDING activation are one user-operation wait
+    stage capped at 10 minutes. Timeout never creates a replacement Instruction
+    or retries Checkout/payment.
+    When login or run reaches a browser operation, the aggregate returns the
+    exact URL and continuation state first. Tell the user to use the system
+    browser and never the Agent built-in browser. If the host Agent name is
+    known, use it; otherwise say "请在系统浏览器中完成操作，不要使用 Agent
+    内置浏览器。" and never emit {agent}. Use visa browser-open --url
+    <operation-url> for the system-browser attempt. After automatic launch,
+    rerun the original command with --browser-opened. After manual completion,
+    rerun with --manual-completed; check status first and do not reopen.
+    Browser state is not business success or failure.
+    Never rerun commerce-run after possible Checkout creation. Unknown payment
+    or authorization results require read-only recovery, not a retry.

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const root = new URL('../', import.meta.url);
 const paths = [
@@ -8,75 +9,59 @@ const paths = [
   'agents/openai.yaml',
   'README.md',
   'README.zh.md',
-  'references/quick-instruction-cases.md',
-  'references/change-log.md',
 ];
 const artifacts = Object.fromEntries(await Promise.all(paths.map(async (path) => [
   path,
-  (await readFile(new URL(path, root), 'utf8'))
-    .replace(/`/gu, '').replace(/\s+/gu, ' '),
+  await readFile(new URL(path, root), 'utf8'),
 ])));
-const englishContracts = paths.filter((path) => path !== 'README.zh.md');
+const combined = Object.values(artifacts).join('\n');
 
-// This distribution ships rules, not an Agent-side Quick state machine.
-test('Quick artifacts preserve actual status and the bound card in every English surface', () => {
-  for (const path of englishContracts) {
+async function walk(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await walk(path));
+    else files.push(path);
+  }
+  return files;
+}
+
+test('runtime artifacts keep only current Quick principles', () => {
+  for (const path of paths.filter((path) => !['agents/openai.yaml', 'README.md', 'README.zh.md'].includes(path))) {
     const text = artifacts[path];
-    assert.match(text, /CREATED/u, path);
-    assert.match(text, /paymentInstrumentId/u, path);
-    assert.match(text, /pendingInstructionId/u, path);
-    assert.match(text, /actual (?:returned )?Instruction status|Instruction's actual status|actual response status/u, path);
-    assert.match(text, /PENDING/u, path);
     assert.match(text, /ACTIVE/u, path);
+    assert.match(text, /PENDING/u, path);
+    assert.match(text, /paymentInstrumentId|selected PI|selectedPI/u, path);
+    assert.match(text, /selected PI|selectedPI/u, path);
+    assert.match(text, /10 minutes|10 分钟/u, path);
   }
+  assert.match(combined, /Never reuse PENDING or CREATED|PENDING and CREATED[\s\S]*never reused/u);
+  assert.match(combined, /usable[\s\S]*ACTIVE[\s\S]*match|ACTIVE[\s\S]*match/u);
+  assert.match(combined, /no replacement Instruction|replacement Instruction/u);
 });
 
-test('Quick artifacts include the exact Passkey identity contract and no CREATED binding wait', () => {
-  for (const path of ['SKILL.md', 'agents/openai.yaml', 'README.md', 'references/quick-instruction-cases.md']) {
-    const text = artifacts[path];
-    assert.match(text, /\/passkey-auth\/\{pi\}\?type=visa&instructionId=\{(?:ORIGINAL_QUICK_ID|originalId)\}/u, path);
-    assert.match(text, /(?:original Quick ID and (?:its )?bound paymentInstrumentId|original Quick ID and bound paymentInstrumentId)/u, path);
-    assert.match(text, /(?:Do not wait for binding or VIC|Do not wait for card binding or VIC)/u, path);
-  }
+test('runtime artifacts describe the selected PI and browser recovery contract', () => {
+  assert.match(combined, /default PI/u);
+  assert.match(combined, /alternate PI/u);
+  assert.match(combined, /browser-open --url/u);
+  assert.match(combined, /browser-opened/u);
+  assert.match(combined, /manual-completed/u);
+  assert.match(combined, /system browser|系统浏览器/u);
+  assert.match(combined, /built-in browser|内置浏览器/u);
+  assert.match(combined, /checkoutStarted=false|before Checkout/u);
 });
 
-test('Quick artifacts retain the 10-minute cap, unified recovery and original ACTIVE reuse', () => {
-  for (const path of ['SKILL.md', 'agents/openai.yaml', 'README.md', 'references/quick-instruction-cases.md']) {
-    const text = artifacts[path];
-    assert.match(text, /10 minutes/u, path);
-    assert.doesNotMatch(text, /15 minutes/u, path);
-    assert.match(text, /pending-instructions/u, path);
-    assert.match(text, /\/agent-authorization/u, path);
-    for (const status of ['activation_ready', 'card_selection_required', 'portal_binding_required', 'instruction_not_activatable', 'select_in_portal', 'none_pending']) {
-      assert.ok(text.includes(status), `${path} ${status}`);
-    }
-    assert.doesNotMatch(text, /(?:exact VIC URL|exact CLI VIC URL|exact CLI-returned VIC URL|Portal binding entry)/u, path);
-    assert.match(text, /(?:already ACTIVE, reuse that exact ID|ACTIVE reuses the original ID|Reuse the original Quick ID directly)/u, path);
-    assert.match(text, /(?:zero additional Instructions|zero additional creates)/u, path);
-    assert.match(text, /Without a Quick, normal matching ACTIVE reuse and ordinary Instruction creation remain unchanged/u, path);
-  }
+test('runtime artifacts do not load historical or filter reference files', async () => {
+  assert.doesNotMatch(combined, /visa-recommend-filters\.md/u);
+  assert.doesNotMatch(combined, /quick-instruction-cases\.md/u);
+  assert.doesNotMatch(combined, /references\/change-log\.md/u);
+  const referenceFiles = await walk(new URL('references/', root));
+  assert.deepEqual(referenceFiles, []);
 });
 
-test('Quick artifacts reject withdrawn always-PENDING and replacement permissions', () => {
-  for (const [path, text] of Object.entries(artifacts)) {
-    assert.doesNotMatch(text, /(?:always|invariably) (?:create[s]? (?:a |one )?(?:no-card )?)?PENDING|valid PENDING or ACTIVE Quick/u, path);
-    assert.doesNotMatch(text, /Case C permits|unless Case C|creates exactly one card-bound|Continue with the new ID|first reuse an exact matching ACTIVE|may create (?:one|a) (?:replacement|card-bound) Instruction/u, path);
-  }
-  const chinese = artifacts['README.zh.md'];
-  for (const required of ['真实响应', 'status', 'paymentInstrumentId', '不等绑卡/VIC', '超时', '10 分钟', 'pending-instructions', '/agent-authorization', 'ACTIVE 直接复用原 ID', '创建次数均为零']) {
-    assert.ok(chinese.includes(required), required);
-  }
-});
-
-test('Quick maintenance artifacts document precedence and do not claim runtime acceptance', () => {
-  assert.match(artifacts['references/change-log.md'], /2026-09-09/u);
-  assert.match(artifacts['references/change-log.md'], /2026-09-10/u);
-  assert.match(artifacts['references/change-log.md'], /Supersedes the 2026-09-09 Case A exit/u);
-  assert.match(artifacts['references/quick-instruction-cases.md'], /Case E: Recovery Without Exact Context/u);
-  assert.match(artifacts['references/change-log.md'], /Do not relabel or replace/u);
-  assert.match(artifacts['references/quick-instruction-cases.md'], /not CLI execution or backend deployment/u);
-  for (const path of ['README.md', 'README.zh.md']) {
-    assert.match(artifacts[path], /references\/quick-instruction-cases\.md/u);
-    assert.match(artifacts[path], /references\/change-log\.md/u);
-  }
+test('unknown browser host guidance never emits a placeholder', () => {
+  assert.match(combined, /不要使用 Agent 内置浏览器/u);
+  assert.match(combined, /never emit \{agent\}/u);
+  assert.match(combined, /never emit the literal placeholder/u);
 });

@@ -1,10 +1,10 @@
 # Visa Skill
 
-During login/run, successful browser opening is silent and the CLI keeps waiting.
-Failed or explicitly disabled opening returns `manualOpenUrl` promptly. Show it
-once and pause; after the user completes the page, rerun the identical command
-only when `rerunAllowed=true`, `resumeMode=same_command`, and `checkoutStarted=false`.
-The CLI resumes the existing login or exact Instruction, never a possible Checkout.
+During login/run, the aggregate returns the exact browser operation before
+opening it. Use the separate `visa browser-open --url <url>` command for a
+system-browser attempt. After automatic opening, resume with
+`--browser-opened`; after manual completion, resume with `--manual-completed`,
+which checks state first and does not reopen the browser.
 Purchase and order-detail replies include the returned `orderUrl` as a clickable
 View order link; never construct a Portal URL from an OMS/UCP order ID.
 
@@ -93,8 +93,8 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.87` vendors Visa CLI `0.2.67` from upstream commit
-`460f9f61a30a2b6889f43ebfd0aea31dfe9e5ffb`. This product-match branch performs
+Skill `0.1.88` vendors Visa CLI `0.2.68` from upstream commit
+`55f41a6194a51aa22776af182d00f74b11df0cf4`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
@@ -107,51 +107,29 @@ synchronization flow. If another distribution does not implement the required
 purchase-snapshot contract, it must report the limitation instead of inferring
 missing purchase data or decomposing the purchase into atomic commands.
 
-## Quick Instruction Contract
+## Quick Instruction Principles
 
-- At Quick creation, an eligible selected VIC-ready Visa card yields a CREATED
-  Quick bound to its `paymentInstrumentId`, without activation; otherwise the
-  new Quick is PENDING. LOGIN and REGISTER both support these outcomes.
-- The legacy response field `pendingInstructionId` carries an ID, not a status.
-  Use the actual Instruction `status` from the response and exact-GET;
-  never infer PENDING from the field name. Preserve existing matching Quicks
-  as-is; do not relabel a historical PENDING when card readiness changes.
-- Login saves the original ID and returns ready for CREATED, PENDING, or ACTIVE
-  without waiting for activation. `commerce-run` owns continuation.
-- CREATED opens the CLI-returned
-  `/passkey-auth/{pi}?type=visa&instructionId={ORIGINAL_QUICK_ID}` URL immediately,
-  with the original Quick ID and its bound `paymentInstrumentId`.
-  Do not wait for binding or VIC or substitute a different card. Portal's
-  existing `/sign` activates that same original ID.
-- Card binding, VIC, and Passkey waits are capped at 10 minutes. Binding
-  failure, a non-VIC card, and an unfinished Passkey cannot be told apart; only
-  the timeout counts as failure and every case exits through the same
-  recovery: follow the `commerce-run` `recovery` object or run
-  `visa pending-instructions --instruction-id {ORIGINAL_QUICK_ID}`.
-  `activation_ready` opens the original ID's Passkey URL directly with the
-  bound/default/unique VIC-ready card; `card_selection_required` asks the user
-  which card in `cards[]` to use; `portal_binding_required` and
-  `select_in_portal` return the `{agent portal}/agent-authorization` list link
-  where the user re-binds, picks, and activates; `instruction_not_activatable`
-  and `none_pending` mean exact-GET the original ID, never pick another. No VIC
-  URL, Bind Card link, or Portal home page is the exit.
-- A historical PENDING with a VIC-ready card opens the original ID's exact
-  CLI Passkey URL without binding wait or replacement.
-- ACTIVE reuses the original ID without another authorization. Another matching
-  ACTIVE never replaces an existing Quick. Checkout requires exact-GET proof
-  of the original Quick ACTIVE and bound to the same VIC-ready card.
-- With an existing Quick, create zero additional Instructions in every case.
-  Without a Quick, normal matching ACTIVE reuse and ordinary Instruction
-  creation remain unchanged. Do not discard a Quick ID to enter that path.
-- Only the CLI opens authorization pages. Success waits silently; failure
-  returns the original exact manual link. An explicitly permitted pre-Checkout
-  rerun preserves the same command, context, and ID with zero creates.
-  Possible Checkout creation permits read-only recovery only.
+- Freeze one purchase context and one selected PI. Use the default PI unless
+  the user explicitly chooses an alternate; never infer a default from card
+  order or VIC readiness.
+- Query only the selected PI's Instructions. Reuse only a complete, usable,
+  unconsumed ACTIVE match. PENDING and CREATED are never another purchase's
+  reuse candidates.
+- With no ACTIVE match, create a new ordinary PI-bound Instruction when the
+  selected PI is VIC-ready; otherwise create a PENDING Instruction and carry
+  its exact ID through VIC, Passkey, and activation.
+- A changed default PI stops a default-based purchase. An explicit alternate
+  remains selected only while it is customer-owned and usable.
+- If no default exists, do not choose a card implicitly. Return card management
+  and re-read the default after the user acts.
+- Binding, VIC, Passkey, and PENDING activation share a ten-minute wait bound.
+  Timeout never creates a replacement Instruction or retries payment.
+- Verify the exact Instruction is ACTIVE before Checkout, which is created and
+  completed at most once.
 
-Maintainers: the regression matrix is in
-[quick-instruction-cases.md](references/quick-instruction-cases.md); rule changes
-are recorded first in [change-log.md](references/change-log.md). These are
-maintenance references, not extra runtime steps.
+Maintainers: the runtime package keeps only the current Quick Instruction
+principles. Detailed case matrices and historical traceability belong outside
+this runtime package.
 
 ## Requirements
 
@@ -169,7 +147,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.87`
+Skill version: `0.1.88`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

@@ -10845,7 +10845,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.67";
+var CLI_VERSION = "0.2.68";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -19904,6 +19904,24 @@ async function preparePendingInstruction(instructionContext, maxWaitSeconds, dep
     };
   }
   const instructionId2 = requiredText(created.instructionId, "missing instructionId in pending instruction response");
+  if (dependencies.deferBrowserActions && initialStatus === "PENDING") {
+    const instruction = await dependencies.getInstruction(instructionId2);
+    if (instruction) {
+      assertExactInstruction(instruction, instructionId2);
+    }
+    return {
+      instructionId: instructionId2,
+      instructionStatus: normalizedStatus(instruction?.status ?? instruction?.state) || initialStatus,
+      state: "PENDING",
+      ...instruction ? { instruction } : {},
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false,
+      resumeCommand: dependencies.resumeCommand(instructionId2)
+    };
+  }
   if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && initialStatus !== "CREATED" && !cardReady && !isTerminalInstructionStatus(initialStatus)) {
     throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
   }
@@ -25867,6 +25885,7 @@ async function instructionPrepare(context) {
 async function prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, options2 = {}) {
   return preparePendingInstruction(instructionContext, maxWaitSeconds, {
     ...options2.portalManaged ? { portalManaged: true } : {},
+    ...options2.deferBrowserActions ? { deferBrowserActions: true } : {},
     createPendingInstruction: async (input) => {
       const detail = await createCommandPendingInstruction(context, input);
       await options2.onInstructionCreated?.(detail);
@@ -26056,7 +26075,7 @@ async function instructionCreate(context) {
 }
 async function openPortalWithBrowserHandoff(context, targetUrl, options2 = {}) {
   const launch = await openBrowserHandoff({
-    open: context.globalOptions.open && !context.globalOptions.dryRun,
+    open: (options2.forceOpen || context.globalOptions.open) && !context.globalOptions.dryRun,
     targetUrl,
     portalOrigin: resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
     runtimeConfig: context.runtimeConfig,
@@ -27181,30 +27200,12 @@ function providerEndpoint(baseUrl, merchantId) {
 }
 
 // dist/visa/context-input.js
-import { readFile as readFile5 } from "node:fs/promises";
 async function readVisaContextInput(flags, commandLabel) {
   const inline = getStringFlag(flags, "context");
-  const filePath = getStringFlag(flags, "context-file");
-  if (inline !== void 0 && filePath !== void 0) {
-    throw validationError("--context and --context-file cannot be used together");
+  if (inline === void 0) {
+    throw validationError(`${commandLabel} requires --context <json>`);
   }
-  if (inline === void 0 && filePath === void 0) {
-    throw validationError(`${commandLabel} requires --context <json> or --context-file <path>`);
-  }
-  if (filePath === void 0) {
-    return parseJsonFlag(inline, "--context");
-  }
-  if (!filePath.trim()) {
-    throw validationError("--context-file path must not be blank");
-  }
-  let source;
-  try {
-    source = await readFile5(filePath, "utf8");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw validationError(`could not read --context-file "${filePath}": ${message}`);
-  }
-  return parseJsonFlag(source, "--context-file");
+  return parseJsonFlag(inline, "--context");
 }
 
 // dist/visa/instruction-context.js
@@ -29502,7 +29503,7 @@ async function runVisaCommerce(context, options2, dependencies) {
   } catch (error) {
     return workflowFailure("product_resolution", error);
   }
-  const cardResult = quick && quickInstruction ? await resolveQuickVisaAuthorization(dependencies, context, quick, quickInstruction, maxWaitSeconds) : await ensureVisaCardReady(dependencies, context, maxWaitSeconds, continuation?.paymentInstrumentId);
+  const cardResult = quick && quickInstruction ? await resolveQuickVisaAuthorization(dependencies, context, quick, quickInstruction, maxWaitSeconds, options2.browserAction) : await ensureVisaCardReady(dependencies, context, maxWaitSeconds, continuation?.paymentInstrumentId, options2.browserAction);
   if (!cardResult.ready) {
     return {
       command: "visa commerce-run",
@@ -29516,7 +29517,7 @@ async function runVisaCommerce(context, options2, dependencies) {
   const paymentInstrumentId = card.paymentInstrumentId;
   let instruction = cardResult.instruction;
   if (!instruction) {
-    const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds);
+    const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, options2.browserAction);
     if (!regular.instruction) {
       return {
         command: "visa commerce-run",
@@ -29647,7 +29648,7 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       login: login.detail
     };
   }
-  const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS);
+  const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS, void 0, options2.browserAction);
   if (!cardResult.ready) {
     return {
       command: "visa commerce-run",
@@ -29725,13 +29726,13 @@ function buildDryRunPlan(context, options2) {
     ]
   };
 }
-async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS, resumePaymentInstrumentId) {
+async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds = DEFAULT_WORKFLOW_WAIT_SECONDS, resumePaymentInstrumentId, browserAction) {
   let cards;
   try {
     cards = await dependencies.refreshCards();
   } catch (error) {
     if (purchaseContext && !resumePaymentInstrumentId) {
-      return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
+      return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds, browserAction);
     }
     return {
       ready: false,
@@ -29750,7 +29751,7 @@ async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds
         reason: "visa_card_setup_requires_a_frozen_purchase_instruction_context"
       };
     }
-    return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds);
+    return resolvePendingVisaAuthorization(dependencies, purchaseContext, maxWaitSeconds, browserAction);
   }
   if (selection.action === "select") {
     return {
@@ -29773,7 +29774,7 @@ async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds
   }
   return { ready: true, card: selection.card };
 }
-async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSeconds) {
+async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSeconds, browserAction) {
   let pending;
   try {
     pending = await dependencies.preparePendingInstruction({
@@ -29837,7 +29838,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
         paymentRetryAllowed: false
       };
     }
-    return resolveQuickVisaAuthorization(dependencies, context, quick, pending.instruction, maxWaitSeconds);
+    return resolveQuickVisaAuthorization(dependencies, context, quick, pending.instruction, maxWaitSeconds, browserAction);
   }
   if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
     return {
@@ -29920,7 +29921,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
     }
   };
 }
-async function resolveQuickVisaAuthorization(dependencies, context, quick, instruction, maxWaitSeconds) {
+async function resolveQuickVisaAuthorization(dependencies, context, quick, instruction, maxWaitSeconds, browserAction) {
   const waitSeconds = Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS);
   const failure = (reason, detail) => quickInstructionFailure(quick, reason, detail);
   const valid = (exact) => Boolean(exact && instructionId(exact) === quick.instructionId && quickInstructionMatchesContext(exact, context.instructionContext) && (!quick.paymentInstrumentId || !instructionPaymentInstrumentId(exact) || quick.paymentInstrumentId === instructionPaymentInstrumentId(exact)));
@@ -30044,6 +30045,33 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
       paymentRetryAllowed: false
     };
     if (quick.authorizationStage === stage || instruction.ceremonyInProgress === true || card.ceremonyInProgress === true) {
+      if (browserAction === "manual_completed") {
+        const exact2 = await readExact();
+        if (exact2 && instructionStatus(exact2) === "ACTIVE") {
+          return activeResult(exact2, await dependencies.refreshCards());
+        }
+        return {
+          ...manual,
+          status: "user_action_still_pending",
+          manualCompletionChecked: true
+        };
+      }
+      if (browserAction === "browser_opened") {
+        const wait2 = await waitForExact();
+        const exact2 = await readExact();
+        if (!valid(exact2)) {
+          return failure("quick_instruction_changed_or_unavailable_after_browser_open");
+        }
+        if (instructionStatus(exact2) === "ACTIVE") {
+          return activeResult(exact2, await dependencies.refreshCards());
+        }
+        return {
+          ...manual,
+          status: wait2.timedOut ? "timeout" : "pending",
+          browserAction: "browser_opened",
+          resumeCommand: instructionGetResumeCommand(quick.instructionId)
+        };
+      }
       return { ...manual, reason: "authorization_already_started_continue_existing_page" };
     }
     if (stage === "vic" && (resolveVisaVicReadiness(card) !== "not_ready" || instruction.ceremonyInProgress !== false)) {
@@ -30055,12 +30083,21 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
       phase: "authorization",
       authorizationStage: stage
     };
-    await dependencies.saveQuickContinuation?.(quick);
     let browserLaunch;
-    try {
-      browserLaunch = await dependencies.openUserAction(url, "instruction_authorization");
-    } catch (error) {
-      return { ...manual, error: error instanceof Error ? error.message : "browser_open_failed" };
+    if (browserAction === "browser_opened") {
+      browserLaunch = {
+        requested: true,
+        status: "launched",
+        opener: "separate_browser_open",
+        attempts: []
+      };
+    } else {
+      await dependencies.saveQuickContinuation?.(quick);
+      try {
+        browserLaunch = await dependencies.openUserAction(url, "instruction_authorization");
+      } catch (error) {
+        return { ...manual, error: error instanceof Error ? error.message : "browser_open_failed" };
+      }
     }
     if (browserLaunch.status !== "launched")
       return { ...manual, browserLaunch };
@@ -30145,7 +30182,7 @@ function selectExistingVisaCardForVic(cards) {
   const selected = visaCards.length === 1 ? visaCards[0] : defaults.length === 1 ? defaults[0] : void 0;
   return selected && resolveVisaVicReadiness(selected) === "not_ready" ? selected : void 0;
 }
-async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds) {
+async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, browserAction) {
   const continuation = await dependencies.getContinuation?.();
   if (continuation) {
     const exact = await dependencies.getInstruction(continuation.instructionId);
@@ -30175,6 +30212,52 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
         rerunAllowed: false,
         resumeCommand: instructionGetResumeCommand(continuation.instructionId)
       } };
+    }
+    if (browserAction === "manual_completed") {
+      return { result: {
+        ...manualInstructionResult(continuation.instructionId, paymentInstrumentId, dependencies.passkeyUrl(paymentInstrumentId, continuation.instructionId)),
+        status: "user_action_still_pending",
+        manualCompletionChecked: true
+      } };
+    }
+    if (browserAction === "browser_opened") {
+      let wait;
+      try {
+        wait = await dependencies.waitForEvents({
+          type: "purchase_instruction.activated",
+          maxWaitSeconds: Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS),
+          expectedResource: {
+            instructionId: continuation.instructionId,
+            purchaseInstructionId: continuation.instructionId
+          }
+        });
+      } catch (error) {
+        return {
+          result: workflowFailure("instruction_activation_wait", error, {
+            instructionId: continuation.instructionId,
+            resumeCommand: instructionGetResumeCommand(continuation.instructionId)
+          })
+        };
+      }
+      const refreshed = await dependencies.getInstruction(continuation.instructionId);
+      if (refreshed && createdInstructionMatchesContext(refreshed, paymentInstrumentId, context)) {
+        return {
+          instruction: {
+            instructionId: continuation.instructionId,
+            source: "created",
+            detail: refreshed
+          },
+          result: {}
+        };
+      }
+      return {
+        result: {
+          ...manualInstructionResult(continuation.instructionId, paymentInstrumentId, dependencies.passkeyUrl(paymentInstrumentId, continuation.instructionId)),
+          status: wait.timedOut ? "timeout" : "pending",
+          browserAction: "browser_opened",
+          resumeCommand: instructionGetResumeCommand(continuation.instructionId)
+        }
+      };
     }
     return { result: manualInstructionResult(continuation.instructionId, paymentInstrumentId, dependencies.passkeyUrl(paymentInstrumentId, continuation.instructionId)) };
   }
@@ -30248,8 +30331,57 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
   const authorized = await authorizeInstruction(dependencies, created.instructionId, paymentInstrumentId, context, maxWaitSeconds);
   return authorized.instruction ? { instruction: authorized.instruction, result: {} } : { result: authorized.result };
 }
-async function authorizeInstruction(dependencies, instructionIdValue, paymentInstrumentId, context, maxWaitSeconds) {
+async function authorizeInstruction(dependencies, instructionIdValue, paymentInstrumentId, context, maxWaitSeconds, browserAction) {
   const passkeyUrl = dependencies.passkeyUrl(paymentInstrumentId, instructionIdValue);
+  if (browserAction === "manual_completed") {
+    const exact = await dependencies.getInstruction(instructionIdValue);
+    if (exact && instructionId(exact) === instructionIdValue && createdInstructionMatchesContext(exact, paymentInstrumentId, context)) {
+      return {
+        instruction: {
+          instructionId: instructionIdValue,
+          source: "created",
+          detail: exact
+        },
+        result: {}
+      };
+    }
+    return {
+      result: {
+        ...manualInstructionResult(instructionIdValue, paymentInstrumentId, passkeyUrl),
+        status: "user_action_still_pending",
+        manualCompletionChecked: true
+      }
+    };
+  }
+  if (browserAction === "browser_opened") {
+    const wait2 = await dependencies.waitForEvents({
+      type: "purchase_instruction.activated",
+      maxWaitSeconds: Math.min(maxWaitSeconds, USER_AUTHORIZATION_WAIT_SECONDS),
+      expectedResource: {
+        instructionId: instructionIdValue,
+        purchaseInstructionId: instructionIdValue
+      }
+    });
+    const exact = await dependencies.getInstruction(instructionIdValue);
+    if (exact && instructionId(exact) === instructionIdValue && createdInstructionMatchesContext(exact, paymentInstrumentId, context)) {
+      return {
+        instruction: {
+          instructionId: instructionIdValue,
+          source: "created",
+          detail: exact
+        },
+        result: {}
+      };
+    }
+    return {
+      result: {
+        ...manualInstructionResult(instructionIdValue, paymentInstrumentId, passkeyUrl),
+        status: wait2.timedOut ? "timeout" : "pending",
+        browserAction: "browser_opened",
+        resumeCommand: instructionGetResumeCommand(instructionIdValue)
+      }
+    };
+  }
   let browserLaunch;
   try {
     browserLaunch = await dependencies.openUserAction(passkeyUrl, "instruction_authorization");
@@ -31762,6 +31894,28 @@ async function resumeVisaLogin(options2) {
 async function initializeVisaLogin(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? delay;
+  if (options2.deferBrowserActions && !options2.dryRun) {
+    if (options2.browserAction === "manual_completed" && !options2.storedConfig.visa?.pendingBenefitLogin) {
+      throw validationError("No prepared login to resume; start commerce-login without a browser action flag.");
+    }
+    const started = await startVisaLogin({ ...options2, reuseInstructionContext: true });
+    if (!started.result.reusedPending && options2.browserAction !== "browser_opened") {
+      return started;
+    }
+    while (true) {
+      const resumed = await resumeVisaLogin({
+        ...options2,
+        storedConfig: started.storedConfig,
+        resumeId: started.result.resumeId
+      });
+      if (resumed.result.status === "ready" || options2.browserAction !== "browser_opened") {
+        return resumed;
+      }
+      const pending2 = resumed.result;
+      const remaining = Math.max(0, Date.parse(pending2.expiresAt) - now());
+      await sleep3(Math.min(pending2.retryAfterSeconds * 1e3, remaining));
+    }
+  }
   if (options2.returnOnBrowserFailure && !options2.dryRun) {
     let started = await startVisaLogin({ ...options2, reuseInstructionContext: true });
     if (!started.result.reusedPending) {
@@ -32875,6 +33029,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     baseUrl: context.runtimeConfig.baseUrl
   });
   return {
+    deferBrowserActions: !context.globalOptions.open,
     getContinuation: async () => {
       return (await readStoredConfig()).visa?.commerceContinuations?.[fingerprint];
     },
@@ -32901,7 +33056,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
         return stored;
       });
     },
-    bindingPortalUrl: () => resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
+    bindingPortalUrl: () => new URL("/agent-authorization", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
     saveContinuation: async (continuation) => {
       await updateStoredConfig((stored) => {
         const visa = stored.visa ?? defaultVisaState();
@@ -32943,6 +33098,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     },
     preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
       portalManaged: true,
+      ...context.globalOptions.open ? {} : { deferBrowserActions: true },
       onInstructionCreated: async (detail) => {
         if (optionalText8(detail.status ?? detail.state)?.toUpperCase() !== "PENDING") {
           const id = optionalText8(detail.instructionId ?? detail.purchaseInstructionId);
@@ -32954,7 +33110,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     }),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
     openUserAction: async (url) => {
-      return openPortalWithBrowserHandoff(context, url, { reportOpenFailure: false });
+      return context.globalOptions.open ? openPortalWithBrowserHandoff(context, url, { reportOpenFailure: false }) : openBrowserWithResult(false, url);
     },
     waitForEvents: async (options2) => {
       const result = await collectCommandEvents(context, options2);
@@ -33127,7 +33283,7 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
         detail: result.detail
       };
     },
-    initializeLogin: async (instructionContext) => {
+    initializeLogin: async (instructionContext, browserAction) => {
       let manualOpenUrl;
       let browserLaunch;
       const { result, storedConfig } = await initializeVisaLogin({
@@ -33136,6 +33292,8 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
         timeoutMs: context.globalOptions.timeoutMs,
         dryRun: false,
         returnOnBrowserFailure: true,
+        deferBrowserActions: !context.globalOptions.open,
+        ...browserAction ? { browserAction } : {},
         ...instructionContext ? { instructionContext } : {},
         openAuthorization: async (url) => {
           manualOpenUrl = url;
@@ -33946,7 +34104,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     }
     return readyLoginResult(context, dependencies, pendingInstructionId3, current.detail);
   }
-  const initialized = await dependencies.initializeLogin(context.instructionContext);
+  const initialized = await dependencies.initializeLogin(context.instructionContext, options2.browserAction);
   if (!initialized.ready) {
     if (!initialized.manualOpenUrl || !["authorization_pending", "authorization_processing"].includes(String(initialized.detail.status))) {
       throw authError("visa init exited without status=ready");
@@ -34057,6 +34215,7 @@ Usage:
   clink visa recommend-products <query> [filters]
   clink visa detail <program-code> [options]
   clink visa taxonomy [options]
+  clink visa browser-open --url <url> [options]
   clink visa product-search --merchant-url <url> --query <text> [options]
   clink visa commerce-login --context <json> [options]
   clink visa commerce-run --context <json> [options]
@@ -34071,6 +34230,7 @@ Subcommands:
   recommend-products Find Visa Offers and immediately resolve configured orderable products
   detail       Fetch one Program's redemption details and terms
   taxonomy     Fetch the current VSRA taxonomy
+  browser-open Open an exact Visa operation URL in the system browser
   product-search Resolve one purchasable product through internal-first routing
   commerce-login Check Benefit login and initialize it with a frozen Instruction context
   commerce-run Complete Card/VIC, Instruction, Checkout, payment, and delivery
@@ -34087,9 +34247,10 @@ Examples:
   clink visa recommend --personalized "\u6211\u7684\u5361\u80FD\u7528\u4EC0\u4E48"
   clink visa detail P2025110009
   clink visa product-search --merchant-url https://merchant.example/store --query "meal voucher"
-  clink visa commerce-login --context-file login.json --confirm-purchase --open
-  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
-  clink visa commerce-run --context-file purchase.json --confirm-purchase --open
+  clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --confirm-purchase
+  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}'
+  clink visa commerce-run --context '{"mode":"purchase",...}' --confirm-purchase
+  clink visa browser-open --url "https://agent.example/operation" --format json
   clink visa pending-instructions --open
   clink visa pending-instructions --instruction-id ins_xxx --payment-instrument-id pi_xxx --open
 `;
@@ -34196,14 +34357,13 @@ Examples:
 var VISA_COMMERCE_LOGIN_HELP = `clink visa commerce-login
 
 Usage:
-  clink visa commerce-login (--context <json> | --context-file <path>) [options]
+  clink visa commerce-login --context <json> [options]
 
 Options:
   --context <json>             Login context with environment, expected, and instructionContext
-  --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required before every live login check or initialization
-  --open                       Open required login or eligible existing-card VIC once
-  --no-open                    Return manualOpenUrl without opening a browser
+  --browser-opened             A separate browser-open operation launched the page; wait for result
+  --manual-completed           The user completed the page manually; check status without opening
   --dry-run                    Validate and print the zero-side-effect login plan
   --timeout <ms>               Per-request timeout in milliseconds
 ${OUTPUT_OPTIONS2}
@@ -34227,10 +34387,10 @@ Behavior:
   config or touches Tokens or the network. Dry-run performs no login inspection, config mutation,
   browser launch, or network request.
 
-  Successful browser opening emits no manual link or user-action prompt. Only failed or
-  explicitly disabled opening returns promptly with status=user_action_required, manualOpenUrl,
-  rerunAllowed=true, resumeMode=same_command, and checkoutStarted=false. Show the link and pause.
-  After the user completes the page, execute the identical command with the unchanged context.
+  The command returns the exact browser operation before opening it. Use visa browser-open --url
+  <operation-url> for a separate system-browser launch, then rerun with --browser-opened. If the
+  user opened and completed it manually, rerun with --manual-completed; the command checks status
+  first and does not open the browser.
   The CLI resumes the persisted login without starting another flow. Card/VIC and Instruction
   authorization belong to commerce-run; commerce-login never opens a separate VIC page.
 
@@ -34249,23 +34409,21 @@ Behavior:
   Expired, terminal, missing or mismatched Quick Instructions fail closed.
   All activation waiting is in commerce-run.
   Responses without an Instruction ID continue the regular Instruction flow without polling.
-  Quick IDs are not written into purchase-context files and survive process restart and Token
-  refresh. With successful --open, the user finishes VSRP login in the one opened browser flow.
+  Quick IDs are not written into purchase context and survive process restart and Token refresh.
   The command persists a continuation on browser failure and never calls the standalone Instruction create
   API, resolves a merchant, searches Catalog, opens Bind Card, creates a Checkout, or pays.
 
 Examples:
-  clink visa commerce-login --context-file login.json --dry-run --format pretty
-  clink visa commerce-login --context-file login.json --confirm-purchase --open --format json
+  clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --dry-run --format pretty
+  clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --confirm-purchase --format json
 `;
 var VISA_COMMERCE_RUN_HELP = `clink visa commerce-run
 
 Usage:
-  clink visa commerce-run (--context <json> | --context-file <path>) [options]
+  clink visa commerce-run --context <json> [options]
 
 Options:
   --context <json>             Preparation or frozen purchase context JSON
-  --context-file <path>        Read the same JSON object from a UTF-8 file
   --confirm-purchase           Required for live purchase modes; forbidden for mode=prepare
   --open                       Open the required Visa purchase authorization page
   --no-open                    Return the exact authorization link without opening
@@ -34368,13 +34526,11 @@ Behavior:
   Instruction, refreshes cards, and requires the attached paymentInstrumentId to be a same-card
   Visa the card list reports as VIC-registered (card-level strongAuthRegistered=true, or
   visaRegistrationSucceeded=true on backends that predate it) before continuing.
-  Only failed or explicitly disabled browser opening emits a manualOpenUrl fallback. Successful
-  opening is silent; keep querying the same running command without asking for a user reply.
-  For Instruction browser failure, return immediately with rerunAllowed=true,
-  resumeMode=same_command, and checkoutStarted=false. After manual authorization, the identical
-  command resumes only the saved Instruction ID. An early repeat returns the same link without
-  reopening or creating another Instruction. Once this continuation enters Checkout, rerunning
-  is blocked and only read-only recovery is allowed.
+  The command returns the exact browser operation before opening it. Use visa browser-open --url
+  <operation-url> for a separate system-browser launch, then rerun with --browser-opened. If the
+  user opened and completed it manually, rerun with --manual-completed; the command checks status
+  first and does not open the browser. A failed browser-open returns manualOpenUrl. Once this
+  continuation enters Checkout, rerunning is blocked and only read-only recovery is allowed.
   orderUrl, when returned, is the current Portal transaction page
   for clinkOrderId, not the UCP orderId. Missing payment identity reports orderUrlUnavailable.
   It lists only that payment instrument's Instructions and considers ACTIVE candidates whose
@@ -34410,10 +34566,10 @@ Behavior:
   resumeCommand. Never rerun commerce-run after Checkout creation.
 
 Examples:
-  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}' --open
+  clink visa commerce-run --context '{"mode":"prepare","target":"login","environment":"uat"}'
   clink visa commerce-run --context '{"mode":"prepare","target":"visa_card_ready","environment":"uat"}'
-  clink visa commerce-run --context-file purchase.json --dry-run --format pretty
-  clink visa commerce-run --context-file purchase.json --confirm-purchase --open --format json
+  clink visa commerce-run --context '{"mode":"purchase",...}' --dry-run --format pretty
+  clink visa commerce-run --context '{"mode":"purchase",...}' --confirm-purchase --format json
 `;
 var VISA_INIT_HELP = `clink visa init
 
@@ -34804,7 +34960,8 @@ var VISA_OPTION_DEFINITIONS = [
   },
   { name: "start", flags: "--start" },
   { name: "resume", flags: "--resume <resume-id>" },
-  { name: "context-file", flags: "--context-file <path>" },
+  { name: "browser-opened", flags: "--browser-opened" },
+  { name: "manual-completed", flags: "--manual-completed" },
   { name: "selected-product-id", flags: "--selected-product-id <id>" }
 ];
 var VISA_MULTI_VALUE_OPTIONS = /* @__PURE__ */ new Map([
@@ -34830,6 +34987,8 @@ var VISA_FLAG_NAMES = [
   "broad-queries",
   "start",
   "resume",
+  "browser-opened",
+  "manual-completed",
   "region",
   "category",
   "purpose",
@@ -34838,7 +34997,6 @@ var VISA_FLAG_NAMES = [
   "card-level",
   "card-issuer",
   "keyword",
-  "context-file",
   "selected-product-id"
 ];
 var VISA_RECOMMEND_FILTER_FLAG_NAMES = [
@@ -34910,6 +35068,8 @@ async function handleVisaEditionCommand(command, subcommand, context) {
       return visaDetail(context);
     case "taxonomy":
       return visaTaxonomy(context);
+    case "browser-open":
+      return visaBrowserOpen(context);
     case "commerce-run":
       return visaCommerceRun(context);
     case "commerce-login":
@@ -34976,6 +35136,29 @@ async function visaProductSearch(context) {
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
+async function visaBrowserOpen(context) {
+  assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa browser-open --url <url> [options]`);
+  const url = requiredFlag(context.args.flags, "url", "visa browser-open requires --url <url>");
+  if (context.globalOptions.dryRun) {
+    printSuccess({
+      command: "visa browser-open",
+      status: "dry_run",
+      sideEffects: false,
+      url
+    }, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const browserLaunch = await openPortalWithBrowserHandoff(context, url, { forceOpen: true, reportOpenFailure: false });
+  printSuccess({
+    command: "visa browser-open",
+    status: browserLaunch.status === "launched" ? "launched" : "manual_required",
+    terminal: true,
+    url,
+    browserLaunch,
+    ...browserLaunch.status === "launched" ? {} : { manualOpenUrl: url }
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
 function resolveSelectedProductId(flags) {
   const selected = getStringFlag(flags, "selected-product-id")?.trim();
   const compatibility = getStringFlag(flags, "product-id")?.trim();
@@ -34990,6 +35173,15 @@ function requiredFlag(flags, name, message) {
     throw validationError(message);
   }
   return value;
+}
+function resolveBrowserAction(flags) {
+  if (getBooleanFlag(flags, "browser-opened")) {
+    return "browser_opened";
+  }
+  if (getBooleanFlag(flags, "manual-completed")) {
+    return "manual_completed";
+  }
+  return void 0;
 }
 async function prepareVisaEditionCommand(command, subcommand, args) {
   if (command !== "visa" || subcommand !== "commerce-login") {
@@ -35014,8 +35206,10 @@ async function visaCommerceLogin(context) {
   if (!isPreparedVisaCommerceLogin(prepared)) {
     throw validationError("visa commerce-login context was not prepared");
   }
+  const browserAction = resolveBrowserAction(context.args.flags);
   const result = await runVisaCommerceLogin(prepared.context, {
     dryRun: context.globalOptions.dryRun,
+    ...browserAction ? { browserAction } : {},
     confirmedPurchase: getBooleanFlag(context.args.flags, "confirm-purchase")
   }, createVisaBenefitLoginCliDependencies(context, prepared.context.environment));
   printSuccess(result, context.globalOptions.format);
@@ -35038,9 +35232,11 @@ async function visaCommerceRun(context) {
     throw validationError("visa commerce-run prepare mode does not accept --wait-delivery");
   }
   const maxWait = parsePositiveIntFlag(getStringFlag(context.args.flags, "max-wait"), "--max-wait must be a positive integer");
+  const browserAction = resolveBrowserAction(context.args.flags);
   const result = await runVisaCommerce(commerceContext, {
     dryRun: context.globalOptions.dryRun,
     confirmedPurchase,
+    ...browserAction ? { browserAction } : {},
     ..."wait-delivery" in context.args.flags ? {
       waitDelivery: getBooleanFlag(context.args.flags, "wait-delivery")
     } : {},
@@ -35864,6 +36060,7 @@ function validateVisaFlagScope(command, subcommand, flags) {
     const recommendationCommand = recommend || recommendProducts;
     const regionCommand = subcommand === "region";
     const commerceContextCommand = commerceRun || commerceLogin;
+    const browserActionCommand = subcommand === "browser-open";
     if (regionCommand) {
       for (const name of /* @__PURE__ */ new Set([
         ...VISA_FLAG_NAMES,
@@ -35874,10 +36071,24 @@ function validateVisaFlagScope(command, subcommand, flags) {
         }
       }
     }
-    for (const name of ["context-file", "confirm-purchase"]) {
+    for (const name of ["confirm-purchase"]) {
       if (!commerceContextCommand && flags[name] !== void 0) {
         throw validationError(`--${name} is only supported by visa commerce-run or visa commerce-login`);
       }
+    }
+    for (const name of ["browser-opened", "manual-completed"]) {
+      if (!commerceContextCommand && flags[name] !== void 0) {
+        throw validationError(`--${name} is only supported by visa commerce-run or visa commerce-login`);
+      }
+    }
+    if (commerceContextCommand && flags.open !== void 0) {
+      throw validationError("--open is not supported by visa commerce-login or visa commerce-run; use visa browser-open --url <url>");
+    }
+    if (browserActionCommand && (flags["browser-opened"] !== void 0 || flags["manual-completed"] !== void 0)) {
+      throw validationError("browser action flags are only supported by visa commerce-run or visa commerce-login");
+    }
+    if (flags["browser-opened"] !== void 0 && flags["manual-completed"] !== void 0) {
+      throw validationError("--browser-opened and --manual-completed cannot be used together");
     }
     for (const name of ["wait-delivery", "max-wait"]) {
       if (!commerceRun && flags[name] !== void 0) {
