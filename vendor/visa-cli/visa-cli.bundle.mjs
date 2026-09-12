@@ -35148,7 +35148,10 @@ async function visaBrowserOpen(context) {
     }, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
-  const browserLaunch = await openPortalWithBrowserHandoff(context, url, { forceOpen: true, reportOpenFailure: false });
+  const browserLaunch = await openBrowserWithResult(true, url, {
+    onFailure: () => {
+    }
+  });
   printSuccess({
     command: "visa browser-open",
     status: browserLaunch.status === "launched" ? "launched" : "manual_required",
