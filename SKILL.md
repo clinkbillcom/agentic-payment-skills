@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.95. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.96. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.95"
+  version: "0.1.96"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -205,6 +205,8 @@ with the original command and check its operation state. If the user completed
 the operation manually, continue with the original command and mark the manual
 completion; the first step is an authoritative status check and the browser
 must not be opened again. A failed launch returns the exact URL for manual use.
+Say: "If the page did not open successfully, you can reopen it using this
+link: <operation-url>".
 A closed page is not business failure. Unknown payment or authorization
 results stop the flow and require read-only recovery.
 Never kill/restart an unrelated running command or use shell background jobs.
@@ -562,7 +564,14 @@ need another login page. This is a notice, not a question; execute immediately:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
-  --context '<purchase-context-json>' \
+  --mode selected_product --environment <environment> \
+  --request-text "<original request>" \
+  --merchant-id <merchant-id> --endpoint "<endpoint>" \
+  --merchant-url "<merchant-url>" --merchant-name "<merchant-name>" \
+  --product-id <product-id> --title "<product title>" \
+  --amount <total amount> --currency <currency> --quantity 1 \
+  --availability in_stock --digital-delivery-expected <true|false> \
+  [--mandate-mcc <mcc>] \
   --confirm-purchase \
   --format json
 ```
@@ -583,7 +592,14 @@ Before the command, say once in the locked language:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
-  --context '<purchase-context-json>' \
+  --mode selected_product --environment <environment> \
+  --request-text "<original request>" \
+  --merchant-id <merchant-id> --endpoint "<endpoint>" \
+  --merchant-url "<merchant-url>" --merchant-name "<merchant-name>" \
+  --product-id <product-id> --title "<product title>" \
+  --amount <total amount> --currency <currency> --quantity 1 \
+  --availability in_stock --digital-delivery-expected <true|false> \
+  [--mandate-mcc <mcc>] \
   --confirm-purchase \
   --format json
 ```
@@ -627,7 +643,8 @@ show but never auto-open a Bind Card link and must stay foreground.
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
-  --context '<frozen-context-json>' \
+  --mode prepare --target <login|visa_card_ready> \
+  --environment <environment> --request-text "<request>" \
   --format json
 ```
 

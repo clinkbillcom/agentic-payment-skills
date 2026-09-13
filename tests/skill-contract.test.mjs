@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.95');
+  assert.equal(packageJson.version, '0.1.96');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -187,15 +187,16 @@ test('result presentation keeps products and Benefits distinct', () => {
   assert.match(skill, /visaBenefits[\s\S]*only source for user-facing Benefit rows/u);
 });
 
-test('purchase uses one frozen context and direct inline CLI input', () => {
+test('purchase uses one frozen context and direct flat CLI input', () => {
   const purchase = skill.slice(
     skill.indexOf('## Visa Purchase Fast Path'),
     skill.indexOf('### Visa Preparation'),
   );
   assert.match(purchase, /purchaseContext` unchanged[\s\S]*in memory|purchaseContext unchanged[\s\S]*in memory/u);
   assert.match(purchase, /Do not create a[\s\S]*local JSON file/u);
-  assert.equal((purchase.match(/--context '<purchase-context-json>'/gu) ?? []).length, 2);
+  assert.equal((purchase.match(/--mode selected_product[\s\S]*?--digital-delivery-expected/gu) ?? []).length, 2);
   assert.doesNotMatch(purchase, /--context-file|same file/u);
+  assert.doesNotMatch(purchase, /--context '<purchase-context-json>'/u);
   assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN/u);
   assert.match(purchase, /never run or refresh `visa detail`/iu);
   assert.match(agent, /pass it directly with --context <json>/u);
