@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.96. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.97. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.96"
+  version: "0.1.97"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -123,6 +123,9 @@ A denomination in a product title is product identity, not the purchase price.
 For example, an `HKD 100 Gift Card` with Catalog `price.amount=100` and
 `currency=USD` has face value `HKD 100` and purchase price `USD 1.00`; never
 display it as `USD 100` or rewrite the title denomination.
+For flat `commerce-login` and `commerce-run` arguments, `--amount` must equal
+the authoritative `product.totalAmountMajor` value. Never pass
+`product.totalAmountMinor`; this example uses `--amount 1`, not `--amount 100`.
 
 ### Authorization And Input
 
@@ -603,6 +606,7 @@ Before the command, say once in the locked language:
   --amount <total amount> --currency <currency> --quantity 1 \
   --availability in_stock --digital-delivery-expected <true|false> \
   [--mandate-mcc <mcc>] \
+  [--purchase-instruction-id <activated-id>] \
   --confirm-purchase \
   --format json
 ```
@@ -754,12 +758,21 @@ general workflow engine.
   amount buffer.
 - Passkey and edit pages belong to the user. Only an authoritative `ACTIVE`
   result makes an Instruction usable.
+- When the user asks to create an Instruction without explicitly saying
+  `pending`, use ordinary `instruction create` and omit
+  `--payment-instrument-id`; the CLI uses only the explicitly marked default PI.
+  If that default Visa supports VIC but is not registered, guide the user
+  through VIC before authorization. If it does not support VIC, use the
+  existing alternate/new-card flow rather than forcing that card through VIC.
 - Recurring or scheduled use requires explicit cadence, per-run cap, currency,
   validity horizon, and pinned Instruction plus Mandate IDs. Missing scope
   stops; unattended execution never substitutes another authorization.
 - `pending-instruction create` is an explicit atomic/test command only. It
   always creates a new PENDING Instruction and returns its exact ID; it is not
   a normal-purchase fallback and must not be retried blindly.
+- Use `visa commerce-run --purchase-instruction-id <id>` only after the user
+  has activated that exact Instruction. It must be ACTIVE and match the frozen
+  purchase context; a mismatch is terminal and does not create a replacement.
 - If that non-idempotent create returns an unknown result, reconcile with the
   read-only `activatable` query first. Retry at most once only when the
   expected new Instruction is not found; otherwise stop and preserve the

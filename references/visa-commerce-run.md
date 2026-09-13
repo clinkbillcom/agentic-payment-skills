@@ -40,6 +40,12 @@ The aggregate error envelope is expected to expose `stage`, `status`, and
 `instructionId`, `paymentInstrumentId`, `resumeCommand`, `resumeReadOnly`, and
 `recovery`. Preserve these fields when explaining the failure.
 
+When `--purchase-instruction-id <id>` is supplied, the aggregate uses only that
+exact Instruction. It must be ACTIVE, bound to the selected PI, unconsumed, and
+an exact usable match for the frozen purchase context. A non-ACTIVE or
+mismatched Instruction is a terminal error; do not create or activate a
+replacement.
+
 ## Instruction And PI Rules
 
 - Match only the selected PI's exact usable `ACTIVE` Instructions.

@@ -111,7 +111,9 @@ interface:
     price.amount and price_range amounts are minor
     units: convert with ISO currency fraction digits before display or freeze.
     Thus amount=100 USD is USD 1.00. Keep a title denomination such as HKD 100
-    separate from the USD purchase price. When the user selects an unmatched Visa Benefit and asks
+    separate from the USD purchase price. For flat commerce arguments, use
+    product.totalAmountMajor as --amount; never use product.totalAmountMinor.
+    When the user selects an unmatched Visa Benefit and asks
     for details, run visa detail by stable Program code; do not rerun
     product-search and do not add a purchase CTA. Once the user selects an
     exact returned product and explicitly authorizes buy, order, or checkout,
@@ -168,6 +170,15 @@ interface:
     the selected PI has completed VIC; otherwise create a new PENDING
     Instruction for the exact operation. Keep the original PENDING ID through
     VIC, Passkey, and activation.
+    When the user asks to create an Instruction without saying pending, use
+    ordinary instruction create with no payment-instrument-id so the CLI uses
+    only the explicitly marked default PI. If that PI supports but has not
+    completed VIC, guide VIC; if it does not support VIC, use the existing
+    alternate/new-card flow. Use pending-instruction create only when the user
+    explicitly requests Pending.
+    After the user activates an exact Instruction, commerce-run may receive
+    --purchase-instruction-id <id>; it must be ACTIVE and match the frozen
+    purchase facts, otherwise stop without replacement.
     If no default PI exists, do not choose a card implicitly. Create the pending
     operation, return Agent Portal card management, and re-read the default
     after the user acts. An explicit alternate PI may be used without making

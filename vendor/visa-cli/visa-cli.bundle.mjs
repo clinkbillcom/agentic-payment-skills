@@ -3778,6 +3778,7 @@ var init_args = __esm({
       { name: "channel-type", flags: "--channel-type <type>" },
       { name: "form-type", flags: "--form-type <type>" },
       { name: "amount", flags: "--amount <amount>" },
+      { name: "amount-limit", flags: "--amount-limit <amount>" },
       { name: "currency", flags: "--currency <currency>" },
       { name: "instruction-id", flags: "--instruction-id <id>" },
       { name: "mandate-id", flags: "--mandate-id <id>" },
@@ -4996,7 +4997,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.74";
+    CLI_VERSION = "0.2.75";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -5710,7 +5711,10 @@ function pickDefaultPaymentMethod(items) {
     }
     const record2 = item;
     return record2.isDefault === true || record2.default === true || record2.defaultPaymentMethod === true;
-  }) ?? items[0];
+  });
+  if (preferred === void 0) {
+    throw configError("no explicit default payment method; pass --payment-instrument-id explicitly");
+  }
   if (typeof preferred !== "object" || preferred === null) {
     throw configError("unable to resolve default payment method");
   }
@@ -8515,6 +8519,8 @@ Options:
   --title <title>              Instruction title
   --mandates <json>            Mandate JSON array
   --mandates-file <path>       UTF-8 JSON array file
+  --amount-limit <amount>      Shorthand for one mandate's amountLimit
+  --currency <currency>        Shorthand mandate currency for --amount-limit
   --description <text>         Instruction description
   --effective-until-time <datetime>
   --is-recurring               Mark the instruction as recurring
@@ -8528,6 +8534,9 @@ Examples:
   clink pending-instruction create \\
     --title "Test pending instruction" \\
     --mandates '[{"title":"Test","description":"Test authorization","amountLimit":10.00,"currencyCode":"USD","merchantCategoryCode":"5411"}]' \\
+    --format json
+  clink pending-instruction create \\
+    --title "Test pending instruction" --amount-limit 10 --currency USD \\
     --format json
 `;
     INSTRUCTION_HELP = `clink instruction
@@ -8652,11 +8661,11 @@ Example:
     INSTRUCTION_CREATE_HELP = `clink instruction create
 
 Usage:
-  clink instruction create --payment-instrument-id <id> --title <title> \\
+  clink instruction create [--payment-instrument-id <id>] --title <title> \\
     (--mandates <json> | --mandates-file <path>) [options]
 
 Required Arguments:
-  --payment-instrument-id <id> Payment instrument ID for the Visa card
+  --payment-instrument-id <id> Payment instrument ID; omitted uses the explicit default PI
   --title <title>              Instruction title
   --mandates <json>            Mandate JSON array; amount and currency live on each mandate
   --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
@@ -8685,6 +8694,8 @@ Mandate Fields:
 Notes:
   Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
   after the user completes Passkey/FIDO authorization on the agent page.
+  When --payment-instrument-id is omitted, the CLI reads the authoritative card list and uses only
+  the explicitly marked default payment instrument; it never uses the first card as a fallback.
   --mandates and --mandates-file are mutually exclusive. On Windows PowerShell, prefer
   --mandates-file so JSON quotes are not reinterpreted by the shell.
   Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
@@ -9371,6 +9382,20 @@ async function readInstructionMandates(flags) {
     throw validationError("--mandates and --mandates-file cannot be used together");
   }
   if (inlineJson === void 0 && filePath === void 0) {
+    const amountLimit = getStringFlag(flags, "amount-limit");
+    if (amountLimit !== void 0) {
+      const title = requireNonBlankStringFlag(flags, "missing --title", "title");
+      const currencyCode = requireNonBlankStringFlag(flags, "missing --currency", "currency");
+      const description = getStringFlag(flags, "description") ?? `Purchase ${title}`;
+      return [{
+        title,
+        description,
+        amountLimit,
+        currencyCode,
+        ...getStringFlag(flags, "merchant-category-code") ? { merchantCategoryCode: getStringFlag(flags, "merchant-category-code") } : {},
+        ...getStringFlag(flags, "preferred-merchant-name") ? { preferredMerchantName: getStringFlag(flags, "preferred-merchant-name") } : {}
+      }];
+    }
     throw validationError("missing --mandates or --mandates-file (JSON array)");
   }
   let source = inlineJson;
@@ -9515,6 +9540,7 @@ var init_instruction_context = __esm({
       "description",
       "mandates",
       "mandates-file",
+      "amount-limit",
       "is-recurring",
       "shipping-address",
       "effective-until-time"
@@ -26215,8 +26241,9 @@ async function instructionBody(context) {
   const flags = context.args.flags;
   const isRecurring = getBooleanFlag(flags, "is-recurring");
   const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring, { requireCoreFields: true });
+  const paymentInstrumentId = getStringFlag(flags, "payment-instrument-id") ?? await resolveDefaultInstructionPaymentInstrumentId(context);
   const body = compact3({
-    paymentInstrumentId: requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id"),
+    paymentInstrumentId,
     title: requireNonBlankStringFlag(flags, "missing --title", "title"),
     description: getStringFlag(flags, "description"),
     effectiveUntilTime: utcDateTimeFlag(flags, "effective-until-time"),
@@ -26231,6 +26258,17 @@ async function instructionBody(context) {
     body.shippingAddress = shippingAddress;
   }
   return body;
+}
+async function resolveDefaultInstructionPaymentInstrumentId(context) {
+  if (context.globalOptions.dryRun) {
+    return pickDefaultPaymentInstrument(getStoredPaymentMethods(context));
+  }
+  const info = await resolveCardInfo(context);
+  if (info.dryRun) {
+    throw apiError("instruction create card lookup unexpectedly produced a dry-run response");
+  }
+  const methods = Array.isArray(info.data.paymentMethodsVoList) ? info.data.paymentMethodsVoList : getStoredPaymentMethods(context);
+  return pickDefaultPaymentInstrument(methods);
 }
 async function instructionPrepare(context) {
   if (getBooleanFlag(context.args.flags, "no-watch")) {
@@ -26569,7 +26607,7 @@ async function listCommandInstructions(context, paymentInstrumentId) {
     method: "GET",
     path: INSTRUCTION_PATH2,
     headers: buildInstructionHeaders(runtimeConfig),
-    query: { paymentInstrumentId },
+    query: { status: "ACTIVE", paymentInstrumentId },
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false
   }));
@@ -30302,6 +30340,18 @@ async function runVisaCommerce(context, options2, dependencies) {
   }
   const continuation = await dependencies.getContinuation?.();
   let quick = await dependencies.getQuickContinuation?.();
+  if (options2.purchaseInstructionId && continuation && continuation.instructionId !== options2.purchaseInstructionId) {
+    return {
+      command: "visa commerce-run",
+      stage: "instruction_selection",
+      status: "conflict",
+      terminal: true,
+      instructionId: options2.purchaseInstructionId,
+      reason: "explicit_instruction_conflicts_with_saved_continuation",
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    };
+  }
   if (continuation?.phase === "checkout_started" || quick?.phase === "checkout_started") {
     return {
       command: "visa commerce-run",
@@ -30316,6 +30366,18 @@ async function runVisaCommerce(context, options2, dependencies) {
   }
   let quickInstruction;
   if (quick) {
+    if (options2.purchaseInstructionId && quick.instructionId !== options2.purchaseInstructionId) {
+      return {
+        command: "visa commerce-run",
+        stage: "instruction_selection",
+        status: "conflict",
+        terminal: true,
+        instructionId: options2.purchaseInstructionId,
+        reason: "explicit_instruction_conflicts_with_saved_quick",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
     try {
       quickInstruction = await dependencies.getInstruction(quick.instructionId);
     } catch (error) {
@@ -30337,7 +30399,57 @@ async function runVisaCommerce(context, options2, dependencies) {
   } catch (error) {
     return workflowFailure("product_resolution", error);
   }
-  const cardResult = quick && quickInstruction ? await resolveQuickVisaAuthorization(dependencies, context, quick, quickInstruction, maxWaitSeconds, options2.browserAction) : await ensureVisaCardReady(dependencies, context, maxWaitSeconds, continuation?.paymentInstrumentId, options2.browserAction);
+  let explicitInstruction;
+  let explicitPaymentInstrumentId;
+  if (options2.purchaseInstructionId) {
+    try {
+      explicitInstruction = await dependencies.getInstruction(options2.purchaseInstructionId);
+    } catch (error) {
+      return workflowFailure("instruction_active_verify", error, {
+        instructionId: options2.purchaseInstructionId,
+        createsAnotherInstruction: false
+      });
+    }
+    if (!explicitInstruction || instructionId(explicitInstruction) !== options2.purchaseInstructionId) {
+      return {
+        command: "visa commerce-run",
+        stage: "instruction_selection",
+        status: "failed",
+        terminal: true,
+        instructionId: options2.purchaseInstructionId,
+        reason: "explicit_instruction_not_found",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
+    if (instructionStatus(explicitInstruction) !== "ACTIVE") {
+      return {
+        command: "visa commerce-run",
+        stage: "instruction_selection",
+        status: "not_active",
+        terminal: true,
+        instructionId: options2.purchaseInstructionId,
+        instructionStatus: instructionStatus(explicitInstruction),
+        reason: "explicit_instruction_must_be_active",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
+    explicitPaymentInstrumentId = instructionPaymentInstrumentId(explicitInstruction);
+    if (!explicitPaymentInstrumentId) {
+      return {
+        command: "visa commerce-run",
+        stage: "instruction_selection",
+        status: "failed",
+        terminal: true,
+        instructionId: options2.purchaseInstructionId,
+        reason: "explicit_instruction_has_no_payment_instrument",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
+  }
+  const cardResult = !options2.purchaseInstructionId && quick && quickInstruction ? await resolveQuickVisaAuthorization(dependencies, context, quick, quickInstruction, maxWaitSeconds, options2.browserAction) : await ensureVisaCardReady(dependencies, context, maxWaitSeconds, explicitPaymentInstrumentId ?? continuation?.paymentInstrumentId, options2.browserAction);
   if (!cardResult.ready) {
     return {
       command: "visa commerce-run",
@@ -30347,10 +30459,34 @@ async function runVisaCommerce(context, options2, dependencies) {
     };
   }
   const card = cardResult.card;
-  quick ??= await dependencies.getQuickContinuation?.();
+  if (!options2.purchaseInstructionId) {
+    quick ??= await dependencies.getQuickContinuation?.();
+  }
   const paymentInstrumentId = card.paymentInstrumentId;
   let instruction = cardResult.instruction;
-  if (!instruction) {
+  if (explicitInstruction) {
+    const candidate = activeInstructionCandidate(explicitInstruction, paymentInstrumentId, context, Date.now());
+    if (!candidate) {
+      return {
+        command: "visa commerce-run",
+        stage: "instruction_selection",
+        status: "mismatch",
+        terminal: true,
+        instructionId: options2.purchaseInstructionId,
+        paymentInstrumentId,
+        reason: "explicit_instruction_mismatch",
+        mismatches: explicitInstructionMismatches(explicitInstruction, paymentInstrumentId, context),
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false
+      };
+    }
+    instruction = {
+      instructionId: candidate.instructionId,
+      source: "explicit_active",
+      detail: candidate.detail,
+      amountLimit: candidate.amountLimit
+    };
+  } else if (!instruction) {
     const regular = await resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, options2.browserAction);
     if (!regular.instruction) {
       return {
@@ -31480,6 +31616,66 @@ function pendingObservedMandateFingerprint(mandate, instructionExpiryMs, nowMs) 
 }
 function merchantScopeMatchesContext(candidate, context) {
   return context.instructionContext.mandates.some((expected) => optionalNormalized(candidate.preferredMerchantName ?? candidate.preferred_merchant_name) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory ?? candidate.merchant_category) === optionalNormalized(expected.merchantCategory));
+}
+function explicitInstructionMismatches(instruction, paymentInstrumentId, context) {
+  const mismatches = [];
+  const observedPi = instructionPaymentInstrumentId(instruction);
+  if (observedPi !== paymentInstrumentId) {
+    mismatches.push({
+      field: "paymentInstrumentId",
+      expected: paymentInstrumentId,
+      actual: observedPi ?? null
+    });
+  }
+  const expectedAmount = context.purchaseContext.totalPrice;
+  const expectedCurrency = context.purchaseContext.currency;
+  const mandates = mandateArray(instruction);
+  const amounts = mandates.map((mandate) => mandate.amountLimit).filter((value) => value !== void 0);
+  const amountMatches = mandates.some((mandate) => candidateAmountMinorUnits(mandate.amountLimit, expectedCurrency) !== void 0 && candidateAmountMinorUnits(mandate.amountLimit, expectedCurrency) >= majorAmountMinorUnits(expectedAmount, expectedCurrency));
+  if (!amountMatches) {
+    mismatches.push({
+      field: "amount",
+      expected: expectedAmount,
+      actual: amounts.length > 0 ? amounts : null,
+      currency: expectedCurrency
+    });
+  }
+  const observedCurrency = optionalNormalized(instruction.currencyCode ?? instruction.currency);
+  if (observedCurrency && observedCurrency !== normalizedText3(expectedCurrency)) {
+    mismatches.push({
+      field: "currency",
+      expected: expectedCurrency,
+      actual: observedCurrency
+    });
+  }
+  if (normalizedText3(instruction.title) !== normalizedText3(context.instructionContext.title)) {
+    mismatches.push({
+      field: "title",
+      expected: context.instructionContext.title,
+      actual: instruction.title ?? null
+    });
+  }
+  if (!mandates.some((mandate) => merchantScopeMatchesContext(mandate, context))) {
+    mismatches.push({
+      field: "merchantScope",
+      expected: context.instructionContext.mandates.map((mandate) => ({
+        preferredMerchantName: mandate.preferredMerchantName ?? null,
+        merchantCategory: mandate.merchantCategory ?? null
+      })),
+      actual: mandates.map((mandate) => ({
+        preferredMerchantName: mandate.preferredMerchantName ?? mandate.preferred_merchant_name ?? null,
+        merchantCategory: mandate.merchantCategory ?? mandate.merchant_category ?? null
+      }))
+    });
+  }
+  if (mismatches.length === 0) {
+    mismatches.push({
+      field: "instructionContext",
+      expected: "exact usable ACTIVE match",
+      actual: "does not match"
+    });
+  }
+  return mismatches;
 }
 function mandatesEqual(candidate, expected) {
   return normalizedText3(candidate.title) === normalizedText3(expected.title) && normalizedText3(candidate.description) === normalizedText3(expected.description) && comparableAmount2(candidate.amountLimit) === comparableAmount2(expected.amountLimit) && normalizedText3(candidate.currencyCode ?? candidate.currency) === normalizedText3(expected.currencyCode) && normalizedText3(candidate.merchantCategoryCode ?? candidate.merchant_category_code) === normalizedText3(expected.merchantCategoryCode) && optionalNormalized(candidate.preferredMerchantName) === optionalNormalized(expected.preferredMerchantName) && optionalNormalized(candidate.merchantCategory) === optionalNormalized(expected.merchantCategory);
@@ -35457,6 +35653,8 @@ Options:
   --mandate-mcc <code>         One four-digit Instruction MCC
   --asserted-category <category>
                                Product category asserted by the caller
+  --purchase-instruction-id <id>
+                               Use this exact ACTIVE Instruction; it must match the purchase
   --digital-delivery-expected <true|false>
                                Whether digital delivery is expected
   --context <json>             Legacy full-context compatibility input
@@ -35477,8 +35675,9 @@ Context:
 
   mode=purchase accepts the Visa Skill frozen shape: environment, requestText, optional program.code,
   selection.merchantUrl/productId/productQuery/quantity, expected.merchantName/itemTitle/amount/
-  currency, instructionContext, and digitalDeliveryExpected. Top-level instructionId is rejected;
-  commerce-run resumes the saved Quick ID, or selects a usable ACTIVE Instruction when no Quick exists.
+  currency, instructionContext, and digitalDeliveryExpected. Pass
+  --purchase-instruction-id to use one exact ACTIVE Instruction after verifying its full context;
+  otherwise commerce-run resumes the saved Quick ID, or selects a usable ACTIVE Instruction when no Quick exists.
   selection.merchantUrl must be the merchant route URL returned as product.merchantUrl (or
   product.productUrl), never a Visa Program offer page. When merchantUrl is not routable but the
   frozen merchantId/endpoint come from an authoritative product resolution, the internal route is
@@ -35521,6 +35720,8 @@ Context:
   selection.merchantId and endpoint are optional frozen routing facts. Every new Instruction
   mandate must match expected.amount and currency and use one MCC, which becomes the Checkout MCC.
   The CLI never adds an amount buffer.
+  Flat --amount is always a major-currency value and must come from
+  product.totalAmountMajor; never pass product.totalAmountMinor.
   When the CLI distribution is locked to sandbox/UAT or test, a generic production context
   defaults to that locked environment. Explicit incompatible non-production values still fail.
 
@@ -35574,6 +35775,10 @@ Behavior:
   still permit the actual total. It chooses the smallest amountLimit greater than or equal to the
   total, then the newest trusted createdAt/createTime. Missing or tied creation time fails closed.
   The chosen ID is exact-GET again and every condition is revalidated before Checkout.
+  With --purchase-instruction-id, only that exact ID is considered. It must be ACTIVE, bound to the
+  selected PI, unconsumed, and match the frozen amount, currency, title, merchant scope, MCC, expiry,
+  recurrence, and Mandates. A non-ACTIVE or mismatched explicit Instruction is a terminal error;
+  commerce-run never creates a replacement for it.
 
   For an already VIC-ready card, the regular flow remains unchanged.
   Unrelated historical PENDING or draft Instructions are never authorized by the regular flow. When no usable
@@ -36129,9 +36334,16 @@ async function visaCommerceRun(context) {
   }
   const maxWait = parsePositiveIntFlag(getStringFlag(context.args.flags, "max-wait"), "--max-wait must be a positive integer");
   const browserAction = resolveBrowserAction(context.args.flags);
+  const instructionId2 = optionalNonBlankFlag(context.args.flags, "instruction-id");
+  const purchaseInstructionId = optionalNonBlankFlag(context.args.flags, "purchase-instruction-id");
+  if (instructionId2 && purchaseInstructionId && instructionId2 !== purchaseInstructionId) {
+    throw validationError("--instruction-id and --purchase-instruction-id must match when both are provided");
+  }
+  const explicitPurchaseInstructionId = purchaseInstructionId ?? instructionId2;
   const result = await runVisaCommerce(commerceContext, {
     dryRun: context.globalOptions.dryRun,
     confirmedPurchase,
+    ...explicitPurchaseInstructionId ? { purchaseInstructionId: explicitPurchaseInstructionId } : {},
     ...browserAction ? { browserAction } : {},
     ..."wait-delivery" in context.args.flags ? {
       waitDelivery: getBooleanFlag(context.args.flags, "wait-delivery")
@@ -36993,6 +37205,9 @@ function validateVisaFlagScope(command, subcommand, flags) {
     }
     if (!commerceContextCommand && (flags.context !== void 0 || [...FLAT_COMMERCE_SCOPE_FLAG_NAMES].some((name) => flags[name] !== void 0))) {
       throw validationError("purchase context arguments are only supported by visa commerce-run or visa commerce-login");
+    }
+    if (subcommand !== "commerce-run" && subcommand !== "pending-instructions" && (flags["instruction-id"] !== void 0 || flags["purchase-instruction-id"] !== void 0)) {
+      throw validationError("--instruction-id and --purchase-instruction-id are only supported by visa commerce-run or visa pending-instructions");
     }
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
