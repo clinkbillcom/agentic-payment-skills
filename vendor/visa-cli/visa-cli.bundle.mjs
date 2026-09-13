@@ -12,8 +12,15 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require2() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -31,6 +38,131 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// dist/errors.js
+function validationError(message) {
+  return new CliError("validation_error", message, EXIT_CODES.VALIDATION);
+}
+function configError(message) {
+  return new CliError("config_error", message, EXIT_CODES.CONFIG);
+}
+function authError(message, code = 401) {
+  return new CliError("auth_error", message, EXIT_CODES.AUTH, code);
+}
+function apiError(message, code = 400) {
+  return new CliError("api_error", message, EXIT_CODES.API, code);
+}
+function paymentStateUnknownError(message, details) {
+  return new CliError("payment_state_unknown", message, EXIT_CODES.API, 500, details);
+}
+function networkError(message) {
+  return new CliError("network_error", message, EXIT_CODES.NETWORK);
+}
+function installError(message) {
+  return new CliError("install_error", message, EXIT_CODES.INSTALL);
+}
+var EXIT_CODES, CliError;
+var init_errors = __esm({
+  "dist/errors.js"() {
+    "use strict";
+    EXIT_CODES = {
+      OK: 0,
+      GENERAL: 1,
+      VALIDATION: 2,
+      CONFIG: 3,
+      AUTH: 4,
+      API: 5,
+      NETWORK: 6,
+      THREE_DS: 7,
+      INSTALL: 8
+    };
+    CliError = class extends Error {
+      type;
+      exitCode;
+      code;
+      details;
+      constructor(type, message, exitCode, code, details) {
+        super(message);
+        this.name = "CliError";
+        this.type = type;
+        this.exitCode = exitCode;
+        this.code = code ?? exitCode;
+        this.details = details;
+      }
+    };
+  }
+});
+
+// dist/command-branding.js
+function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
+  if (executableName === MAIN_EXECUTABLE_NAME) {
+    return value;
+  }
+  return value.replace(/^clink(?=\r?\n)/u, executableName).replace(CLI_COMMAND_PATTERN, executableName);
+}
+var MAIN_EXECUTABLE_NAME, VISA_EXECUTABLE_NAME, CLI_COMMAND_PATTERN;
+var init_command_branding = __esm({
+  "dist/command-branding.js"() {
+    "use strict";
+    MAIN_EXECUTABLE_NAME = "clink";
+    VISA_EXECUTABLE_NAME = "visa-cli";
+    CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
+  }
+});
+
+// dist/output.js
+function printSuccess(data, format) {
+  const envelope = {
+    ok: true,
+    data
+  };
+  process.stdout.write(serialize(envelope, format));
+}
+function printJson(value, format) {
+  process.stdout.write(serialize(value, format));
+}
+function printError(error, options2) {
+  const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
+  const message = renderCliCommandText(cliError.message, options2.executableName ?? MAIN_EXECUTABLE_NAME);
+  if (!options2.explicitFormat) {
+    process.stderr.write(renderHumanError(message, options2.helpHint));
+    return cliError.exitCode;
+  }
+  const envelope = {
+    ok: false,
+    error: {
+      type: cliError.type,
+      code: cliError.code,
+      message,
+      ...cliError.details ? { details: cliError.details } : {}
+    }
+  };
+  process.stderr.write(serialize(envelope, options2.format));
+  return cliError.exitCode;
+}
+function serialize(value, format) {
+  if (format === "pretty") {
+    return `${JSON.stringify(value, null, 2)}
+`;
+  }
+  return `${JSON.stringify(value)}
+`;
+}
+function renderHumanError(message, helpHint) {
+  const lines = [`Error: ${message}`];
+  if (helpHint) {
+    lines.push(`Hint: ${helpHint}`);
+  }
+  return `${lines.join("\n")}
+`;
+}
+var init_output = __esm({
+  "dist/output.js"() {
+    "use strict";
+    init_errors();
+    init_command_branding();
+  }
+});
 
 // node_modules/commander/lib/error.js
 var require_error = __commonJS({
@@ -3458,6 +3590,7152 @@ var require_commander = __commonJS({
   }
 });
 
+// node_modules/commander/esm.mjs
+var import_index, program, createCommand, createArgument, createOption, CommanderError, InvalidArgumentError, InvalidOptionArgumentError, Command, Argument, Option, Help;
+var init_esm = __esm({
+  "node_modules/commander/esm.mjs"() {
+    import_index = __toESM(require_commander(), 1);
+    ({
+      program,
+      createCommand,
+      createArgument,
+      createOption,
+      CommanderError,
+      InvalidArgumentError,
+      InvalidOptionArgumentError,
+      Command: (
+        // deprecated old name
+        Command
+      ),
+      Argument,
+      Option,
+      Help
+    } = import_index.default);
+  }
+});
+
+// dist/args.js
+function parseArgs(argv, options2 = {}) {
+  const optionDefinitions = [
+    ...OPTION_DEFINITIONS,
+    ...options2.optionDefinitions ?? []
+  ];
+  const multiValueOptions = options2.multiValueOptions ?? /* @__PURE__ */ new Map();
+  const preFlags = {};
+  const forwarded = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    const equalsIndex = token.indexOf("=");
+    const rawOption = equalsIndex >= 0 ? token.slice(0, equalsIndex) : token;
+    const multiValueName = multiValueOptions.get(rawOption);
+    if (multiValueName) {
+      const values = [];
+      if (equalsIndex >= 0) {
+        const inline = token.slice(equalsIndex + 1);
+        if (inline) {
+          values.push(inline);
+        }
+      } else {
+        while (index + 1 < argv.length && !argv[index + 1]?.startsWith("--")) {
+          values.push(argv[index + 1]);
+          index += 1;
+        }
+      }
+      if (values.length === 0) {
+        throw validationError(`option ${rawOption} requires at least one value`);
+      }
+      const previous = preFlags[multiValueName];
+      preFlags[multiValueName] = [
+        ...typeof previous === "string" ? previous.split(",") : [],
+        ...values
+      ].join(",");
+      continue;
+    }
+    if (token === "--no-watch") {
+      preFlags["no-watch"] = true;
+      continue;
+    }
+    if (token === "--watch") {
+      preFlags.watch = true;
+      continue;
+    }
+    if (token === "--no-open") {
+      preFlags["no-open"] = true;
+      continue;
+    }
+    if (token === "--no-ack") {
+      preFlags["no-ack"] = true;
+      continue;
+    }
+    forwarded.push(token);
+  }
+  const parser = new Command().helpOption(false).allowUnknownOption(true);
+  for (const option of optionDefinitions) {
+    parser.option(option.flags);
+  }
+  const { operands, unknown } = parser.parseOptions(forwarded);
+  const unknownOption = unknown.find((token) => token.startsWith("-"));
+  if (unknownOption) {
+    throw validationError(`unknown option: ${unknownOption}`);
+  }
+  const parsedOptions = parser.opts();
+  const flags = { ...preFlags };
+  for (const option of optionDefinitions) {
+    const value = parsedOptions[toCommanderOptionName(option.name)];
+    if (value === void 0 || value === false) {
+      continue;
+    }
+    flags[option.name] = value;
+  }
+  return { positionals: [...operands, ...unknown], flags };
+}
+function getStringFlag(flags, ...names) {
+  for (const name of names) {
+    const value = flags[name];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return void 0;
+}
+function getBooleanFlag(flags, ...names) {
+  for (const name of names) {
+    const value = flags[name];
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      return value === "true";
+    }
+  }
+  return false;
+}
+function requireStringFlag(flags, message, ...names) {
+  const value = getStringFlag(flags, ...names);
+  if (!value) {
+    throw validationError(message);
+  }
+  return value;
+}
+function toCommanderOptionName(value) {
+  return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
+}
+var OPTION_DEFINITIONS;
+var init_args = __esm({
+  "dist/args.js"() {
+    "use strict";
+    init_esm();
+    init_errors();
+    OPTION_DEFINITIONS = [
+      { name: "help", flags: "-h, --help" },
+      { name: "format", flags: "--format <format>" },
+      { name: "dry-run", flags: "--dry-run" },
+      { name: "confirm-purchase", flags: "--confirm-purchase" },
+      { name: "wait-delivery", flags: "--wait-delivery" },
+      { name: "all", flags: "--all" },
+      { name: "tippable", flags: "--tippable" },
+      { name: "check", flags: "--check" },
+      { name: "force", flags: "--force" },
+      { name: "open", flags: "--open" },
+      { name: "customer-id", flags: "--customer-id <id>" },
+      { name: "customer-api-key", flags: "--customer-api-key <key>" },
+      { name: "timeout", flags: "--timeout <ms>" },
+      { name: "email", flags: "--email <email>" },
+      { name: "otp", flags: "--otp <email_otp>" },
+      { name: "name", flags: "--name <name>" },
+      { name: "publisher", flags: "--publisher <publisher>" },
+      { name: "version", flags: "--version <versionNo>" },
+      { name: "source", flags: "--source <value>" },
+      { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
+      { name: "idempotency-key", flags: "--idempotency-key <key>" },
+      { name: "checkout-id", flags: "--checkout-id <id>" },
+      { name: "ucp-order-id", flags: "--ucp-order-id <id>" },
+      { name: "next-token", flags: "--next-token <token>" },
+      { name: "event-only", flags: "--event-only" },
+      { name: "endpoint", flags: "--endpoint <url>" },
+      { name: "endpont", flags: "--endpont <url>" },
+      { name: "merchant-url", flags: "--merchant-url <url>" },
+      { name: "product-url", flags: "--product-url <url>" },
+      { name: "merchant-name", flags: "--merchant-name <name>" },
+      { name: "merchant-category-code", flags: "--merchant-category-code <code>" },
+      { name: "order-channel-id", flags: "--order-channel-id <id>" },
+      { name: "line-items", flags: "--line-items <json>" },
+      { name: "buyer", flags: "--buyer <json>" },
+      { name: "metadata", flags: "--metadata <json>" },
+      { name: "credential-token", flags: "--credential-token <token>" },
+      { name: "merchant-id", flags: "--merchant-id <id>" },
+      { name: "product-id", flags: "--product-id <id>" },
+      { name: "query", flags: "--query <text>" },
+      { name: "language", flags: "--language <tag>" },
+      { name: "context", flags: "--context <json>" },
+      { name: "filters", flags: "--filters <json>" },
+      { name: "signals", flags: "--signals <json>" },
+      { name: "attribution", flags: "--attribution <json>" },
+      { name: "cursor", flags: "--cursor <cursor>" },
+      { name: "request-id", flags: "--request-id <id>" },
+      { name: "ucp-agent", flags: "--ucp-agent <value>" },
+      { name: "ext", flags: "--ext <json>" },
+      { name: "channel-type", flags: "--channel-type <type>" },
+      { name: "form-type", flags: "--form-type <type>" },
+      { name: "amount", flags: "--amount <amount>" },
+      { name: "currency", flags: "--currency <currency>" },
+      { name: "instruction-id", flags: "--instruction-id <id>" },
+      { name: "mandate-id", flags: "--mandate-id <id>" },
+      { name: "session-id", flags: "--session-id <id>" },
+      { name: "payment-method-type", flags: "--payment-method-type <type>" },
+      { name: "terminal-qr", flags: "--terminal-qr" },
+      { name: "order-id", flags: "--order-id <id>" },
+      { name: "refund-id", flags: "--refund-id <id>" },
+      { name: "purchase-instruction-id", flags: "--purchase-instruction-id <id>" },
+      { name: "status", flags: "--status <status>" },
+      { name: "valid-only", flags: "--valid-only" },
+      { name: "title", flags: "--title <title>" },
+      { name: "description", flags: "--description <text>" },
+      { name: "effective-until-time", flags: "--effective-until-time <datetime>" },
+      { name: "mandates", flags: "--mandates <json>" },
+      { name: "mandates-file", flags: "--mandates-file <path>" },
+      { name: "products", flags: "--products <json>" },
+      { name: "is-recurring", flags: "--is-recurring" },
+      { name: "shipping-address", flags: "--shipping-address <json>" },
+      { name: "sandbox", flags: "--sandbox" },
+      { name: "test", flags: "--test" },
+      { name: "extra", flags: "--extra <json>" },
+      { name: "max-wait", flags: "--max-wait <seconds>" },
+      { name: "limit", flags: "--limit <n>" },
+      { name: "page", flags: "--page <n>" },
+      { name: "size", flags: "--size <n>" },
+      { name: "start-time", flags: "--start-time <datetime>" },
+      { name: "end-time", flags: "--end-time <datetime>" },
+      { name: "type", flags: "--type <eventType>" },
+      { name: "url", flags: "--url <url>" }
+    ];
+  }
+});
+
+// dist/domains.js
+function clinkEnvironmentForApiBaseUrl(apiBaseUrl) {
+  let origin;
+  try {
+    origin = new URL(apiBaseUrl).origin;
+  } catch {
+    return void 0;
+  }
+  const entries = Object.entries(API_BASE_URLS);
+  return entries.find(([, baseUrl]) => new URL(baseUrl).origin === origin)?.[0];
+}
+var API_BASE_URLS, AGENT_BASE_URLS, DASHBOARD_BASE_URLS, DEFAULT_BASE_URL;
+var init_domains = __esm({
+  "dist/domains.js"() {
+    "use strict";
+    API_BASE_URLS = {
+      sandbox: "https://uat-api.clinkbill.com",
+      test: "https://api.clinkbill.dev",
+      production: "https://api.clinkbill.com"
+    };
+    AGENT_BASE_URLS = {
+      sandbox: "https://uat-agent.clinkbill.com",
+      test: "https://agent.clinkbill.dev",
+      production: "https://agent.clinkbill.com"
+    };
+    DASHBOARD_BASE_URLS = {
+      sandbox: "https://uat-dashboard.clinkbill.com",
+      test: "https://dashboard.clinkbill.dev",
+      production: "https://dashboard.clinkbill.com"
+    };
+    DEFAULT_BASE_URL = API_BASE_URLS.production;
+  }
+});
+
+// dist/portal-order-link.js
+function portalOrderLink(apiBaseUrl, resources, paymentEvents = [], expectedCheckoutId) {
+  const environment = clinkEnvironmentForApiBaseUrl(apiBaseUrl);
+  if (!environment)
+    return {};
+  const origin = AGENT_BASE_URLS[environment];
+  const ids = /* @__PURE__ */ new Set();
+  let invalid = false;
+  const addId = (value) => {
+    if (value === void 0 || value === null)
+      return;
+    if (typeof value !== "string" || !ORDER_ID.test(value.trim())) {
+      invalid = true;
+    } else {
+      ids.add(value.trim());
+    }
+  };
+  const addUrl = (value) => {
+    if (typeof value !== "string")
+      return;
+    try {
+      const url = new URL(value);
+      if (url.origin !== origin || url.username || url.password)
+        return;
+      const match = /^\/transaction\/([^/]+)\/?$/u.exec(url.pathname);
+      if (match)
+        addId(decodeURIComponent(match[1]));
+    } catch {
+    }
+  };
+  for (const resource of resources) {
+    const value = object(resource);
+    const ucp = object(value.ucp);
+    for (const source of [value, ucp]) {
+      addId(source.clinkOrderId);
+      addId(source.clink_order_id);
+      addId(source.paymentOrderId);
+      addId(source.payment_order_id);
+    }
+    const order = object(value.order);
+    const success = object(ucp.success_info);
+    for (const source of [value, order, success]) {
+      addUrl(source.orderUrl);
+      addUrl(source.permalink_url);
+      addUrl(source.permalinkUrl);
+    }
+  }
+  for (const event of paymentEvents) {
+    if (!["agent_order.succeeded", "agent_order.failed"].includes(event.eventType))
+      continue;
+    if (!expectedCheckoutId || event.data.checkoutId !== expectedCheckoutId)
+      continue;
+    addId(event.resourceId);
+    addId(event.data.orderId);
+    addId(event.data.order_id);
+    addId(event.data.paymentOrderId);
+    addId(event.data.payment_order_id);
+  }
+  if (invalid || ids.size > 1)
+    return { orderUrlUnavailable: "conflicting_payment_order_identity" };
+  const id = [...ids][0];
+  return id ? {
+    clinkOrderId: id,
+    orderUrl: `${origin}/transaction/${encodeURIComponent(id)}`
+  } : {};
+}
+function object(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+var ORDER_ID;
+var init_portal_order_link = __esm({
+  "dist/portal-order-link.js"() {
+    "use strict";
+    init_domains();
+    ORDER_ID = /^[A-Za-z0-9_-]{1,160}$/u;
+  }
+});
+
+// dist/card-vic-readiness.js
+function optionalText(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function cardSchemeText(card) {
+  return (optionalText(card.cardScheme) ?? optionalText(card.cardBrand) ?? optionalText(card.brand) ?? optionalText(card.network) ?? "").toUpperCase();
+}
+function cardSchemeIsVisa(card) {
+  return cardSchemeText(card) === "VISA";
+}
+function resolveVisaVicCapability(card) {
+  if (!cardSchemeIsVisa(card)) {
+    return "unsupported";
+  }
+  if (typeof card.cardSchemeRegistrationEnabled === "boolean") {
+    return card.cardSchemeRegistrationEnabled ? "supported" : "unsupported";
+  }
+  return "unknown";
+}
+function resolveVisaRegistrationCompletion(card) {
+  if (typeof card.strongAuthRegistered === "boolean") {
+    if (!card.strongAuthRegistered) {
+      return false;
+    }
+    const authProtocol = optionalText(card.authProtocol)?.toUpperCase();
+    return !authProtocol || authProtocol === "VISA";
+  }
+  return typeof card.visaRegistrationSucceeded === "boolean" ? card.visaRegistrationSucceeded : void 0;
+}
+function resolveVisaVicReadiness(card) {
+  if (!cardSchemeIsVisa(card)) {
+    return "not_ready";
+  }
+  const capability = resolveVisaVicCapability(card);
+  if (capability === "unsupported") {
+    return "not_ready";
+  }
+  if (capability === "unknown") {
+    return "unknown";
+  }
+  const completion = resolveVisaRegistrationCompletion(card);
+  return completion === void 0 ? "unknown" : completion ? "ready" : "not_ready";
+}
+function visaVicReady(card) {
+  return resolveVisaVicReadiness(card) === "ready";
+}
+function visaVicReadinessEvidence(card) {
+  return {
+    vicReadiness: resolveVisaVicReadiness(card),
+    ...typeof card.strongAuthRegistered === "boolean" ? { strongAuthRegistered: card.strongAuthRegistered } : {},
+    ...optionalText(card.authProtocol) ? { authProtocol: optionalText(card.authProtocol) } : {},
+    ...typeof card.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: card.visaRegistrationSucceeded } : {},
+    ...typeof card.cardSchemeRegistrationEnabled === "boolean" ? { cardSchemeRegistrationEnabled: card.cardSchemeRegistrationEnabled } : {}
+  };
+}
+var init_card_vic_readiness = __esm({
+  "dist/card-vic-readiness.js"() {
+    "use strict";
+  }
+});
+
+// dist/url.js
+function httpOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return void 0;
+    }
+    return url.origin;
+  } catch {
+    return void 0;
+  }
+}
+function sameHttpOrigin(left, right) {
+  const leftOrigin = httpOrigin(left);
+  const rightOrigin = httpOrigin(right);
+  return leftOrigin !== void 0 && leftOrigin === rightOrigin;
+}
+var init_url = __esm({
+  "dist/url.js"() {
+    "use strict";
+  }
+});
+
+// dist/browser-handoff.js
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createServer } from "node:http";
+function canUseBrowserHandoff(runtimeConfig) {
+  return Boolean(runtimeConfig.authorization && sameHttpOrigin(runtimeConfig.authorization.issuerOrigin, runtimeConfig.baseUrl));
+}
+async function openBrowserHandoff(options2) {
+  if (!options2.open) {
+    return completedLaunch(notRequestedBrowserLaunch(), "direct_fallback");
+  }
+  const target = validateTargetUrl(options2.targetUrl, options2.portalOrigin);
+  if (!target) {
+    throw new Error("browser handoff target URL is not trusted");
+  }
+  if (!canUseBrowserHandoff(options2.runtimeConfig)) {
+    return directFallback(options2);
+  }
+  const clock = options2.clock ?? systemClock();
+  const bindLoopback = options2.bindLoopback ?? bindRandomLoopback;
+  const randomSecret = options2.randomSecret ?? defaultRandomSecret;
+  let binding;
+  let pending;
+  let timeoutHandle;
+  let processingCallback = false;
+  let completionSettled = false;
+  let resolveCompletion = () => {
+  };
+  const completion = new Promise((resolve6) => {
+    resolveCompletion = resolve6;
+  });
+  const settle = async (status) => {
+    if (completionSettled) {
+      return;
+    }
+    completionSettled = true;
+    if (timeoutHandle !== void 0) {
+      clock.clearTimeout(timeoutHandle);
+      timeoutHandle = void 0;
+    }
+    await binding?.close();
+    resolveCompletion(status);
+  };
+  const handleRequest = async (request, response) => {
+    if (completionSettled) {
+      sendStatus(response, 410);
+      return;
+    }
+    const currentBinding = binding;
+    if (!currentBinding) {
+      sendStatus(response, 503);
+      return;
+    }
+    const requestUrl = parseLoopbackRequestUrl(request, currentBinding.origin);
+    if (!requestUrl || requestUrl.pathname !== BROWSER_HANDOFF_CALLBACK_PATH) {
+      sendStatus(response, 404);
+      return;
+    }
+    if (request.method !== "GET") {
+      sendStatus(response, 405);
+      return;
+    }
+    if (!pending) {
+      sendStatus(response, 409);
+      return;
+    }
+    if (processingCallback) {
+      sendStatus(response, 409);
+      return;
+    }
+    const expectedHost = new URL(currentBinding.origin).host;
+    const handoffId = singleQueryValue(requestUrl, "handoff_id");
+    const claimId = singleQueryValue(requestUrl, "claim_id");
+    const browserNonce = singleQueryValue(requestUrl, "browser_nonce");
+    const loopbackState = singleQueryValue(requestUrl, "loopback_state");
+    const callbackValid = request.headers.host === expectedHost && handoffId === pending.handoffId && isOpaqueValue(claimId) && isOpaqueValue(browserNonce) && secureEqual(loopbackState, pending.loopbackState);
+    if (!callbackValid) {
+      await sendRedirect(response, pending.fallbackLoginUrl);
+      await settle("email_login_fallback");
+      return;
+    }
+    processingCallback = true;
+    try {
+      const approved = await options2.request({
+        path: `${CREATE_HANDOFF_PATH}/${encodeURIComponent(pending.handoffId)}/approve`,
+        body: {
+          claim_id: claimId,
+          browser_nonce: browserNonce,
+          cli_verifier: pending.verifier
+        }
+      });
+      if (!isSuccessfulResponse(approved)) {
+        throw new Error("approve rejected");
+      }
+      await sendRedirect(response, pending.completeUrl);
+      await settle("approved");
+    } catch {
+      await sendRedirect(response, pending.fallbackLoginUrl);
+      await settle("email_login_fallback");
+    }
+  };
+  try {
+    binding = await bindLoopback((request, response) => {
+      void handleRequest(request, response).catch(() => {
+        if (!response.headersSent) {
+          sendStatus(response, 500);
+        } else if (!response.writableEnded) {
+          response.end();
+        }
+        void settle("email_login_fallback");
+      });
+    });
+    const loopbackOrigin = validateLoopbackOrigin(binding.origin);
+    if (!loopbackOrigin) {
+      await binding.close();
+      return directFallback(options2);
+    }
+    const verifier = randomSecret();
+    const loopbackState = randomSecret();
+    const loopbackRedirectUri = new URL(BROWSER_HANDOFF_CALLBACK_PATH, loopbackOrigin).toString();
+    const created = await options2.request({
+      path: CREATE_HANDOFF_PATH,
+      body: {
+        cli_challenge: s256(verifier),
+        loopback_redirect_uri: loopbackRedirectUri,
+        loopback_state: loopbackState,
+        return_path: target.returnPath
+      }
+    });
+    const createResult2 = parseCreateResponse(created, target.portalOrigin);
+    pending = {
+      handoffId: createResult2.handoffId,
+      verifier,
+      loopbackState,
+      fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
+      completeUrl: createResult2.completeUrl
+    };
+    timeoutHandle = clock.setTimeout(() => {
+      void settle("timeout");
+    }, createResult2.expiresIn * 1e3);
+    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult2.browserUrl);
+    if (browserLaunch.status !== "launched") {
+      await settle("direct_fallback");
+      const fallbackLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+      return { browserLaunch: fallbackLaunch, completion };
+    }
+    return { browserLaunch, completion };
+  } catch {
+    await settle("direct_fallback");
+    const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+    return { browserLaunch, completion };
+  }
+}
+async function bindRandomLoopback(handler) {
+  const server = createServer(handler);
+  server.on("clientError", (_error, socket) => {
+    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+  });
+  await new Promise((resolve6, reject) => {
+    const onError = (error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve6();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen({
+      host: "127.0.0.1",
+      port: 0,
+      exclusive: true
+    });
+  });
+  let closed = false;
+  const address = server.address();
+  if (!address || address.address !== "127.0.0.1") {
+    await closeServer();
+    throw new Error("loopback listener did not bind to 127.0.0.1");
+  }
+  server.on("error", () => {
+  });
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    close: closeServer
+  };
+  async function closeServer() {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    if (!server.listening) {
+      return;
+    }
+    await new Promise((resolve6) => {
+      server.close(() => resolve6());
+      server.closeIdleConnections();
+      server.closeAllConnections();
+    });
+  }
+}
+function validateTargetUrl(targetUrl, portalOrigin) {
+  try {
+    const trustedOrigin = new URL(portalOrigin).origin;
+    const target = new URL(targetUrl);
+    if (target.origin !== trustedOrigin || target.username || target.password) {
+      return void 0;
+    }
+    return {
+      portalOrigin: trustedOrigin,
+      returnPath: `${target.pathname}${target.search}${target.hash}`
+    };
+  } catch {
+    return void 0;
+  }
+}
+function validateLoopbackOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !parsed.port || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return void 0;
+    }
+    return parsed.origin;
+  } catch {
+    return void 0;
+  }
+}
+function parseCreateResponse(response, portalOrigin) {
+  if (!isSuccessfulResponse(response)) {
+    throw new Error("create rejected");
+  }
+  const data = unwrapData(response.body);
+  if (!isRecord(data)) {
+    throw new Error("invalid create response");
+  }
+  const handoffId = requiredOpaqueValue(data.handoff_id);
+  const browserUrl = requiredString(data.browser_url);
+  const completeUrl = parseCompleteUrl(requiredString(data.complete_url), portalOrigin, handoffId);
+  const expiresIn = Number(data.expires_in);
+  if (!Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_HANDOFF_LIFETIME_SECONDS) {
+    throw new Error("invalid create response");
+  }
+  const actual = new URL(browserUrl);
+  const expected = new URL(`${HANDOFF_PAGE_PREFIX}${encodeURIComponent(handoffId)}`, portalOrigin);
+  if (actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search || actual.hash || actual.username || actual.password) {
+    throw new Error("invalid create response");
+  }
+  if (!completeUrl) {
+    throw new Error("invalid create response");
+  }
+  return {
+    handoffId,
+    browserUrl: actual.toString(),
+    completeUrl,
+    expiresIn
+  };
+}
+function parseCompleteUrl(completeUrl, portalOrigin, handoffId) {
+  try {
+    if (completeUrl.length > MAX_COMPLETE_URL_LENGTH) {
+      return void 0;
+    }
+    const parsed = new URL(completeUrl);
+    if (parsed.protocol !== "https:" || parsed.origin !== new URL(portalOrigin).origin || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname === "/") {
+      return void 0;
+    }
+    const lastSegment = parsed.pathname.split("/").at(-1);
+    if (!lastSegment || decodeURIComponent(lastSegment) !== handoffId) {
+      return void 0;
+    }
+    const normalized = parsed.toString();
+    return normalized.length <= MAX_COMPLETE_URL_LENGTH ? normalized : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function isSuccessfulResponse(response) {
+  if (response.status < 200 || response.status >= 300) {
+    return false;
+  }
+  if (!isRecord(response.body) || !("code" in response.body)) {
+    return true;
+  }
+  const code = Number(response.body.code);
+  return code >= 200 && code < 300;
+}
+function unwrapData(value) {
+  return isRecord(value) && "data" in value ? value.data : value;
+}
+function parseLoopbackRequestUrl(request, loopbackOrigin) {
+  try {
+    const parsed = new URL(request.url ?? "/", loopbackOrigin);
+    return parsed.origin === loopbackOrigin ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function singleQueryValue(url, name) {
+  const values = url.searchParams.getAll(name);
+  return values.length === 1 ? values[0] : void 0;
+}
+function requiredOpaqueValue(value) {
+  const text2 = requiredString(value);
+  if (!isOpaqueValue(text2)) {
+    throw new Error("invalid opaque value");
+  }
+  return text2;
+}
+function requiredString(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("missing string");
+  }
+  return value.trim();
+}
+function isOpaqueValue(value) {
+  return Boolean(value && value.length <= 256 && OPAQUE_VALUE_PATTERN.test(value));
+}
+function secureEqual(left, right) {
+  if (left === void 0) {
+    return false;
+  }
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+function s256(verifier) {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+function defaultRandomSecret() {
+  return randomBytes(32).toString("base64url");
+}
+function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
+  const login = new URL("/login", portalOrigin);
+  login.searchParams.set("redirectUrl", returnPath);
+  if (email) {
+    login.searchParams.set("email", email);
+  }
+  return login.toString();
+}
+async function sendRedirect(response, location) {
+  if (response.destroyed || response.writableEnded) {
+    return;
+  }
+  await new Promise((resolve6) => {
+    const complete = () => resolve6();
+    response.once("finish", complete);
+    response.once("close", complete);
+    response.once("error", complete);
+    try {
+      response.writeHead(302, {
+        "Cache-Control": "no-store",
+        Connection: "close",
+        Location: location
+      });
+      response.end();
+      if (response.destroyed || response.writableFinished) {
+        complete();
+      }
+    } catch {
+      complete();
+    }
+  });
+}
+function sendStatus(response, status) {
+  response.writeHead(status, {
+    "Cache-Control": "no-store",
+    Connection: "close"
+  });
+  response.end();
+}
+async function safeOpenBrowser(openBrowser, url) {
+  try {
+    return await openBrowser(url);
+  } catch {
+    return {
+      requested: true,
+      status: "failed",
+      opener: null,
+      attempts: []
+    };
+  }
+}
+async function directFallback(options2) {
+  const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
+  return completedLaunch(browserLaunch, "direct_fallback");
+}
+function completedLaunch(browserLaunch, status) {
+  return {
+    browserLaunch,
+    completion: Promise.resolve(status)
+  };
+}
+function notRequestedBrowserLaunch() {
+  return {
+    requested: false,
+    status: "not_requested",
+    opener: null,
+    attempts: []
+  };
+}
+function systemClock() {
+  return {
+    setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds),
+    clearTimeout: (handle) => clearTimeout(handle)
+  };
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var BROWSER_HANDOFF_CALLBACK_PATH, CREATE_HANDOFF_PATH, HANDOFF_PAGE_PREFIX, MAX_HANDOFF_LIFETIME_SECONDS, MAX_COMPLETE_URL_LENGTH, OPAQUE_VALUE_PATTERN;
+var init_browser_handoff = __esm({
+  "dist/browser-handoff.js"() {
+    "use strict";
+    init_url();
+    BROWSER_HANDOFF_CALLBACK_PATH = "/callback";
+    CREATE_HANDOFF_PATH = "/agent/cwallet/oauth/browser-handoffs";
+    HANDOFF_PAGE_PREFIX = "/oauth/cli-handoff/";
+    MAX_HANDOFF_LIFETIME_SECONDS = 300;
+    MAX_COMPLETE_URL_LENGTH = 2048;
+    OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/u;
+  }
+});
+
+// dist/auth-identity.js
+function runtimeAuthorizationIdentity(config) {
+  if (config.authorization) {
+    return {
+      type: "oauth",
+      customerId: config.authorization.customerId,
+      deviceId: config.authorization.deviceId,
+      issuerOrigin: config.authorization.issuerOrigin,
+      ...config.authorization.sessionId ? { sessionId: config.authorization.sessionId } : {}
+    };
+  }
+  if (config.customerApiKey) {
+    return {
+      type: "csk",
+      ...config.customerId ? { customerId: config.customerId } : {},
+      customerApiKey: config.customerApiKey,
+      baseUrl: config.baseUrl
+    };
+  }
+  return { type: "none" };
+}
+function authorizationIdentityCanContinue(expected, current) {
+  if (expected.type === "none" || current.type === "none") {
+    return expected.type === "none" && current.type === "none";
+  }
+  if (expected.type === "oauth" && current.type === "oauth") {
+    return expected.customerId === current.customerId && expected.deviceId === current.deviceId && expected.issuerOrigin === current.issuerOrigin && (expected.sessionId === void 0 || expected.sessionId === current.sessionId);
+  }
+  if (expected.type === "csk" && current.type === "csk") {
+    return (expected.customerId === void 0 || current.customerId === void 0 || expected.customerId === current.customerId) && expected.customerApiKey === current.customerApiKey && sameHttpOrigin(expected.baseUrl, current.baseUrl);
+  }
+  return expected.type === "csk" && current.type === "oauth" && Boolean(expected.customerId) && expected.customerId === current.customerId && sameHttpOrigin(expected.baseUrl, current.issuerOrigin);
+}
+function authorizationIdentityCustomerId(identity) {
+  return identity.type === "none" ? void 0 : identity.customerId;
+}
+function storedConfigCanCacheForIdentity(storedConfig, expected) {
+  if (expected.type === "none") {
+    return false;
+  }
+  if (storedConfig.authorization) {
+    return authorizationIdentityCanContinue(expected, runtimeAuthorizationIdentity(storedRuntimeConfig(storedConfig)));
+  }
+  if (storedConfig.oauthRequired) {
+    return false;
+  }
+  if (storedConfig.customerId && expected.customerId && storedConfig.customerId !== expected.customerId) {
+    return false;
+  }
+  if (storedConfig.customerApiKey && (expected.type !== "csk" || storedConfig.customerApiKey !== expected.customerApiKey)) {
+    return false;
+  }
+  return true;
+}
+function storedRuntimeConfig(storedConfig) {
+  const runtimeConfig = {
+    baseUrl: storedConfig.baseUrl,
+    defaultOpenLinks: storedConfig.defaultOpenLinks
+  };
+  if (storedConfig.authorization) {
+    runtimeConfig.customerId = storedConfig.authorization.customerId;
+    runtimeConfig.authorization = { ...storedConfig.authorization };
+  } else if (!storedConfig.oauthRequired) {
+    if (storedConfig.customerId) {
+      runtimeConfig.customerId = storedConfig.customerId;
+    }
+    if (storedConfig.customerApiKey) {
+      runtimeConfig.customerApiKey = storedConfig.customerApiKey;
+    }
+  }
+  return runtimeConfig;
+}
+var init_auth_identity = __esm({
+  "dist/auth-identity.js"() {
+    "use strict";
+    init_url();
+  }
+});
+
+// dist/config.js
+import { randomUUID } from "node:crypto";
+import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+function configPathDisplay() {
+  return `~/.${CONFIG_DIRECTORY_NAME}/config.json`;
+}
+function defaultConfig() {
+  return {
+    baseUrl: DEFAULT_BASE_URL,
+    defaultOpenLinks: false
+  };
+}
+async function readStoredConfig() {
+  try {
+    const content = await readFile(CONFIG_PATH, "utf8");
+    return normalizeStoredConfig(JSON.parse(content));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return defaultConfig();
+    }
+    throw configError(`failed to read config file: ${error.message}`);
+  }
+}
+async function updateStoredConfig(update) {
+  return withConfigLock(async () => {
+    const current = await readStoredConfig();
+    const updated = await update(cloneStoredConfig(current));
+    const next = enforceCredentialInvariant(current, updated);
+    await writeStoredConfigUnlocked(next);
+    return next;
+  });
+}
+async function beginWalletInit(startedAt = Date.now()) {
+  if (!Number.isFinite(startedAt) || startedAt < 0) {
+    throw configError("wallet init start time is invalid");
+  }
+  return withConfigLock(async () => {
+    const current = await readWalletInitState();
+    if (current?.startedAt !== void 0 && current.startedAt > startedAt) {
+      return void 0;
+    }
+    const generation = randomUUID();
+    await writeAtomicTextFile(WALLET_INIT_GENERATION_PATH, `${JSON.stringify({ generation, startedAt })}
+`, 384);
+    return generation;
+  });
+}
+async function isWalletInitCurrent(generation) {
+  return (await readWalletInitState())?.generation === generation;
+}
+async function runIfWalletInitCurrent(generation, operation) {
+  return withConfigLock(async () => {
+    if ((await readWalletInitState())?.generation !== generation) {
+      return false;
+    }
+    operation();
+    return true;
+  });
+}
+function enforceCredentialInvariant(current, next) {
+  if (current.oauthRequired || current.authorization || next.oauthRequired || next.authorization) {
+    next.oauthRequired = true;
+    delete next.customerApiKey;
+  }
+  return next;
+}
+function resolveRuntimeConfig(storedConfig, flags) {
+  const oauthRequired = Boolean(storedConfig.oauthRequired || storedConfig.authorization);
+  const envConfig = compactDefined({
+    customerId: process.env.CLINK_CUSTOMER_ID,
+    customerApiKey: process.env.CLINK_CUSTOMER_API_KEY
+  });
+  const flagConfig = compactDefined({
+    customerId: getStringFlag(flags, "customer-id"),
+    customerApiKey: getStringFlag(flags, "customer-api-key")
+  });
+  const legacyConfig = {
+    ...storedConfig,
+    ...envConfig,
+    ...flagConfig
+  };
+  const runtimeConfig = {
+    // wallet init persists the selected environment. CLINK_BASE_URL remains available as an
+    // advanced process override, but --sandbox/--test are scoped to wallet init.
+    baseUrl: process.env.CLINK_BASE_URL ?? storedConfig.baseUrl,
+    defaultOpenLinks: storedConfig.defaultOpenLinks
+  };
+  if (storedConfig.authorization) {
+    runtimeConfig.customerId = storedConfig.authorization.customerId;
+    runtimeConfig.authorization = { ...storedConfig.authorization };
+  } else if (!oauthRequired) {
+    assignIfDefined(runtimeConfig, "customerId", legacyConfig.customerId);
+    assignIfDefined(runtimeConfig, "customerApiKey", legacyConfig.customerApiKey);
+  }
+  assignIfDefined(runtimeConfig, "email", storedConfig.email);
+  assignIfDefined(runtimeConfig, "name", storedConfig.name);
+  return runtimeConfig;
+}
+function resolveWalletInitBaseUrl(flags) {
+  const selectedEnvironment = resolveSelectedEnvironment(flags);
+  return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
+}
+function resolvePublicCatalogBaseUrl(flags) {
+  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
+}
+function resolveSelectedEnvironment(flags) {
+  const explicitEnvironment = resolveExplicitEnvironment(flags);
+  const distributionEnvironment = walletInitDistributionEnvironment();
+  if (explicitEnvironment && distributionEnvironment && explicitEnvironment !== distributionEnvironment) {
+    throw validationError(`wallet init environment is fixed to ${distributionEnvironment} by this CLI distribution`);
+  }
+  return explicitEnvironment ?? distributionEnvironment;
+}
+function resolveExplicitEnvironment(flags) {
+  const sandbox = getBooleanFlag(flags, "sandbox");
+  const test = getBooleanFlag(flags, "test");
+  if (sandbox && test) {
+    throw validationError("--sandbox and --test cannot be used together");
+  }
+  return sandbox ? "sandbox" : test ? "test" : void 0;
+}
+function walletInitDistributionEnvironment() {
+  const value = process.env.CLINK_WALLET_INIT_ENVIRONMENT?.trim().toLowerCase();
+  if (!value) {
+    return void 0;
+  }
+  if (value === "production" || value === "sandbox" || value === "test") {
+    return value;
+  }
+  throw validationError("invalid CLINK_WALLET_INIT_ENVIRONMENT");
+}
+function normalizeConfigKey(rawKey) {
+  const key = rawKey.trim();
+  switch (key) {
+    case "base-url":
+    case "baseUrl":
+      return "baseUrl";
+    case "customer-id":
+    case "customerId":
+      return "customerId";
+    case "customer-api-key":
+    case "customerApiKey":
+      return "customerApiKey";
+    case "default-open-links":
+    case "defaultOpenLinks":
+      return "defaultOpenLinks";
+    case "email":
+      return "email";
+    case "name":
+      return "name";
+    default:
+      throw configError(`unsupported config key: ${rawKey}`);
+  }
+}
+function parseConfigValue(key, rawValue) {
+  if (key === "defaultOpenLinks") {
+    if (rawValue !== "true" && rawValue !== "false") {
+      throw configError("defaultOpenLinks must be true or false");
+    }
+    return rawValue === "true";
+  }
+  if (key === "baseUrl" && !httpOrigin(rawValue)) {
+    throw configError("baseUrl must be an absolute http(s) URL");
+  }
+  return rawValue;
+}
+function resolveOpenFlag(storedConfig, flags) {
+  if (getBooleanFlag(flags, "no-open")) {
+    return false;
+  }
+  if (flags.open !== void 0) {
+    return getBooleanFlag(flags, "open");
+  }
+  return storedConfig.defaultOpenLinks;
+}
+function isCustomerConfigKey(key) {
+  return key === "customerId" || key === "customerApiKey" || key === "email" || key === "name";
+}
+function cloneStoredConfig(config) {
+  return {
+    ...config,
+    baseUrl: config.baseUrl,
+    defaultOpenLinks: config.defaultOpenLinks,
+    ...config.authorization ? { authorization: { ...config.authorization } } : {},
+    ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
+    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {},
+    ...config.visa ? { visa: cloneOpaqueVisaState(config.visa) } : {}
+  };
+}
+function normalizeStoredConfig(raw) {
+  const config = defaultConfig();
+  if (typeof raw !== "object" || raw === null) {
+    return config;
+  }
+  const record2 = raw;
+  if (typeof record2.baseUrl === "string" && record2.baseUrl.length > 0) {
+    config.baseUrl = record2.baseUrl;
+  }
+  if (typeof record2.defaultOpenLinks === "boolean") {
+    config.defaultOpenLinks = record2.defaultOpenLinks;
+  }
+  assignStoredCustomerState(config, parseStoredCustomerState(record2));
+  if (isRecord2(record2.visa)) {
+    config.visa = cloneOpaqueVisaState(record2.visa);
+  }
+  return config;
+}
+function cloneOpaqueVisaState(state) {
+  return structuredClone(state);
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseStoredCustomerState(raw) {
+  const customer = {};
+  if (typeof raw !== "object" || raw === null) {
+    return customer;
+  }
+  const record2 = raw;
+  assignCustomerString(customer, "customerId", record2.customerId);
+  assignCustomerString(customer, "customerApiKey", record2.customerApiKey ?? record2.customerAPIKey);
+  const authorization = parseStoredAuthorization(record2.authorization, customer.customerId);
+  const oauthRequired = record2.oauthRequired === true || record2.authorization !== void 0;
+  if (authorization) {
+    customer.authorization = authorization;
+    customer.customerId = authorization.customerId;
+  }
+  if (oauthRequired) {
+    customer.oauthRequired = true;
+    delete customer.customerApiKey;
+  }
+  assignCustomerString(customer, "email", record2.email);
+  assignCustomerString(customer, "name", record2.name);
+  assignPaymentMethods(customer, record2.paymentMethods);
+  assignRiskRules(customer, record2.riskRules);
+  return customer;
+}
+function assignStoredCustomerState(target, value) {
+  assignIfDefined(target, "customerId", value.customerId);
+  assignIfDefined(target, "customerApiKey", value.customerApiKey);
+  assignIfDefined(target, "authorization", value.authorization ? { ...value.authorization } : void 0);
+  assignIfDefined(target, "oauthRequired", value.oauthRequired);
+  assignIfDefined(target, "email", value.email);
+  assignIfDefined(target, "name", value.name);
+  if (value.paymentMethods) {
+    target.paymentMethods = value.paymentMethods.map((item) => ({ ...item }));
+  }
+  if (value.riskRules) {
+    target.riskRules = value.riskRules.map((item) => ({ ...item }));
+  }
+}
+function parseStoredAuthorization(raw, fallbackCustomerId) {
+  if (typeof raw !== "object" || raw === null) {
+    return void 0;
+  }
+  const record2 = raw;
+  const customerId = nonEmptyString(record2.customerId) ?? fallbackCustomerId;
+  const customerIdVerified = record2.customerIdVerified === true;
+  const sessionId = nonEmptyString(record2.sessionId);
+  const deviceId = nonEmptyString(record2.deviceId);
+  const issuerOrigin = httpOrigin(nonEmptyString(record2.issuerOrigin) ?? "");
+  const accessToken = nonEmptyString(record2.accessToken);
+  const refreshToken = nonEmptyString(record2.refreshToken);
+  const agentClientId = nonEmptyString(record2.agentClientId);
+  const visaRegistrationStatus = parseVisaRegistrationStatus(record2.visaRegistrationStatus);
+  const scope = nonEmptyString(record2.scope);
+  const accessTokenExpiresAt = finiteNumber(record2.accessTokenExpiresAt);
+  const refreshTokenExpiresAt = finiteNumber(record2.refreshTokenExpiresAt);
+  if (!customerId || !deviceId || !issuerOrigin || !accessToken || !refreshToken || !scope || accessTokenExpiresAt === void 0 || refreshTokenExpiresAt === void 0) {
+    return void 0;
+  }
+  return {
+    type: "oauth",
+    customerId,
+    ...customerIdVerified ? { customerIdVerified: true } : {},
+    ...sessionId ? { sessionId } : {},
+    deviceId,
+    issuerOrigin,
+    tokenType: "Bearer",
+    accessToken,
+    accessTokenExpiresAt,
+    refreshToken,
+    refreshTokenExpiresAt,
+    ...agentClientId ? { agentClientId } : {},
+    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
+    scope
+  };
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+function parseVisaRegistrationStatus(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const normalized = value.trim().toUpperCase();
+  return normalized === "PENDING" || normalized === "REGISTERING" || normalized === "SUCCEEDED" || normalized === "FAILED" || normalized === "UNKNOWN" ? normalized : void 0;
+}
+async function writeStoredConfigUnlocked(config) {
+  await ensureConfigDirectory();
+  const tempPath = `${CONFIG_PATH}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}
+`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 384
+    });
+    if (process.platform !== "win32") {
+      await chmod(tempPath, 384);
+    }
+    await rename(tempPath, CONFIG_PATH);
+    if (process.platform !== "win32") {
+      await chmod(CONFIG_PATH, 384);
+    }
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
+async function writeAtomicTextFile(filePath, content, mode) {
+  await ensureConfigDirectory();
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, content, {
+      encoding: "utf8",
+      flag: "wx",
+      mode
+    });
+    if (process.platform !== "win32") {
+      await chmod(tempPath, mode);
+    }
+    await rename(tempPath, filePath);
+    if (process.platform !== "win32") {
+      await chmod(filePath, mode);
+    }
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
+async function readWalletInitState() {
+  try {
+    const content = (await readFile(WALLET_INIT_GENERATION_PATH, "utf8")).trim();
+    if (!content) {
+      return void 0;
+    }
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const record2 = parsed;
+        const generation = nonEmptyString(record2.generation);
+        const startedAt = finiteNumber(record2.startedAt);
+        if (generation && startedAt !== void 0 && startedAt >= 0) {
+          return { generation, startedAt };
+        }
+      }
+    } catch {
+    }
+    return { generation: content };
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return void 0;
+    }
+    throw configError(`failed to read wallet init generation: ${error.message}`);
+  }
+}
+async function withConfigLock(operation) {
+  await ensureConfigDirectory();
+  const deadline = Date.now() + CONFIG_LOCK_TIMEOUT_MS;
+  for (; ; ) {
+    let handle;
+    try {
+      handle = await open(CONFIG_LOCK_PATH, "wx", 384);
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw configError(`failed to lock config file: ${error.message}`);
+      }
+      await removeStaleConfigLock();
+      if (Date.now() >= deadline) {
+        throw configError("timed out waiting for config file lock");
+      }
+      await sleep(100);
+      continue;
+    }
+    try {
+      await handle.writeFile(`${process.pid}
+${Date.now()}
+`, "utf8");
+      return await operation();
+    } finally {
+      await handle.close();
+      await rm(CONFIG_LOCK_PATH, { force: true });
+    }
+  }
+}
+async function ensureConfigDirectory() {
+  await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
+  if (process.platform !== "win32") {
+    await chmod(CONFIG_DIR, 448);
+  }
+}
+async function removeStaleConfigLock() {
+  try {
+    const lockStat = await stat(CONFIG_LOCK_PATH);
+    if (Date.now() - lockStat.mtimeMs > CONFIG_LOCK_STALE_MS) {
+      await rm(CONFIG_LOCK_PATH, { force: true });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve6) => setTimeout(resolve6, ms));
+}
+function compactDefined(value) {
+  return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
+}
+function assignIfDefined(target, key, value) {
+  if (value !== void 0) {
+    target[key] = value;
+  }
+}
+function assignCustomerString(target, key, value) {
+  if (typeof value === "string" && value.length > 0) {
+    target[key] = value;
+  }
+}
+function assignPaymentMethods(target, value) {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  const paymentMethods = value.filter((item) => {
+    if (typeof item !== "object" || item === null) {
+      return false;
+    }
+    const paymentInstrumentId = item.paymentInstrumentId;
+    return typeof paymentInstrumentId === "string" && paymentInstrumentId.length > 0;
+  }).map((item) => ({ ...item }));
+  if (paymentMethods.length > 0) {
+    target.paymentMethods = paymentMethods;
+  }
+}
+function assignRiskRules(target, value) {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  const riskRules = value.filter((item) => {
+    if (typeof item !== "object" || item === null) {
+      return false;
+    }
+    const customerId = item.customerId;
+    return typeof customerId === "string" && customerId.length > 0;
+  }).map((item) => ({ ...item }));
+  if (riskRules.length > 0) {
+    target.riskRules = riskRules;
+  }
+}
+var CONFIG_DIRECTORY_NAME, CONFIG_DIR, CONFIG_PATH, CONFIG_LOCK_PATH, WALLET_INIT_GENERATION_PATH, CONFIG_LOCK_TIMEOUT_MS, CONFIG_LOCK_STALE_MS;
+var init_config = __esm({
+  "dist/config.js"() {
+    "use strict";
+    init_args();
+    init_domains();
+    init_errors();
+    init_url();
+    CONFIG_DIRECTORY_NAME = process.env.CLINK_CLI_CONFIG_DIRECTORY_NAME ?? "clink-cli";
+    CONFIG_DIR = path.join(os.homedir(), `.${CONFIG_DIRECTORY_NAME}`);
+    CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
+    CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
+    WALLET_INIT_GENERATION_PATH = path.join(CONFIG_DIR, "wallet-init-generation");
+    CONFIG_LOCK_TIMEOUT_MS = 1e4;
+    CONFIG_LOCK_STALE_MS = 5 * 6e4;
+  }
+});
+
+// dist/version.js
+var CLI_VERSION, CLI_VERSION_HEADER;
+var init_version = __esm({
+  "dist/version.js"() {
+    "use strict";
+    CLI_VERSION = "0.2.72";
+    CLI_VERSION_HEADER = "X-Clink-CLI-Version";
+  }
+});
+
+// dist/device-identity.js
+import { execFile } from "node:child_process";
+import { createHash as createHash2 } from "node:crypto";
+import { readFile as readFile2 } from "node:fs/promises";
+import os2 from "node:os";
+async function resolveAgentClientBootstrap(installationId, options2 = {}) {
+  const runtime = { ...DEFAULT_RUNTIME, ...options2.runtime };
+  const platform = requireSupportedPlatform(runtime.platform);
+  const nativeDeviceId = await readNativeDeviceId(platform, runtime);
+  const metadata = {
+    installationId,
+    deviceId: deriveDeviceId(platform, nativeDeviceId),
+    clientVersion: CLI_VERSION,
+    platform,
+    architecture: runtime.architecture
+  };
+  const hostname = optionalMetadata(runtime.hostname, 255);
+  const osRelease = optionalMetadata(runtime.osRelease, 128);
+  if (hostname) {
+    metadata.hostname = hostname;
+  }
+  if (osRelease) {
+    metadata.osRelease = osRelease;
+  }
+  return metadata;
+}
+function deriveDeviceId(platform, nativeDeviceId) {
+  const normalized = normalizeNativeDeviceId(nativeDeviceId);
+  return createHash2("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
+}
+async function readNativeDeviceId(platform, runtime) {
+  try {
+    switch (platform) {
+      case "darwin":
+        return parseMacDeviceId(await runtime.executeFile("/usr/sbin/ioreg", ["-rd1", "-c", "IOPlatformExpertDevice"]));
+      case "win32":
+        return parseWindowsDeviceId(await runtime.executeFile("reg.exe", [
+          "query",
+          "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
+          "/v",
+          "MachineGuid",
+          "/reg:64"
+        ]));
+      case "linux":
+        return readLinuxDeviceId(runtime);
+    }
+  } catch (error) {
+    throw configError(`failed to read the ${platform} native device ID: ${error.message}`);
+  }
+}
+async function readLinuxDeviceId(runtime) {
+  const failures = [];
+  for (const filePath of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) {
+    try {
+      const value = (await runtime.readTextFile(filePath)).trim().toLowerCase();
+      if (value && value !== "uninitialized") {
+        return value;
+      }
+      failures.push(`${filePath} is blank or uninitialized`);
+    } catch (error) {
+      failures.push(`${filePath}: ${error.message}`);
+    }
+  }
+  throw new Error(`no usable Linux machine ID (${failures.join("; ")})`);
+}
+function parseMacDeviceId(output) {
+  const value = output.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/i)?.[1];
+  if (!value) {
+    throw new Error("ioreg did not return IOPlatformUUID");
+  }
+  return value;
+}
+function parseWindowsDeviceId(output) {
+  const value = output.match(/MachineGuid\s+REG_SZ\s+([^\r\n]+)/i)?.[1];
+  if (!value) {
+    throw new Error("registry query did not return MachineGuid");
+  }
+  return value;
+}
+function normalizeNativeDeviceId(value) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    throw configError("native device ID must not be blank");
+  }
+  return normalized;
+}
+function requireSupportedPlatform(platform) {
+  if (platform === "darwin" || platform === "win32" || platform === "linux") {
+    return platform;
+  }
+  throw configError(`Agent Client registration is not supported on ${platform}`);
+}
+function optionalMetadata(read, maxLength) {
+  try {
+    const value = read().trim();
+    return value ? value.slice(0, maxLength) : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function execute(filePath, args) {
+  return new Promise((resolve6, reject) => {
+    execFile(filePath, args, { encoding: "utf8", windowsHide: true }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve6(stdout);
+    });
+  });
+}
+var DEFAULT_RUNTIME;
+var init_device_identity = __esm({
+  "dist/device-identity.js"() {
+    "use strict";
+    init_errors();
+    init_version();
+    DEFAULT_RUNTIME = {
+      platform: process.platform,
+      architecture: process.arch,
+      readTextFile: (filePath) => readFile2(filePath, "utf8"),
+      executeFile: execute,
+      hostname: os2.hostname,
+      osRelease: os2.release
+    };
+  }
+});
+
+// dist/http.js
+async function requestJson(options2) {
+  const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
+  for (const [key, value] of Object.entries(options2.query ?? {})) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => url.searchParams.append(key, String(item)));
+    } else if (value !== void 0) {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  const acceptLanguage = options2.acceptLanguage === void 0 ? "en-US" : options2.acceptLanguage;
+  const headers = {
+    Accept: "application/json",
+    ...acceptLanguage ? { "Accept-Language": acceptLanguage } : {},
+    ...options2.headers ?? {}
+  };
+  if (options2.body !== void 0) {
+    headers["Content-Type"] = "application/json";
+  }
+  setHeader(headers, CLI_VERSION_HEADER, CLI_VERSION);
+  if (options2.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: options2.method,
+        url: url.toString(),
+        // Redact credential headers: --dry-run is meant to show request shape, and its output lands
+        // in logs / CI / shell history. The CLI never echoes customerApiKey elsewhere (see cli.ts).
+        headers: redactSensitiveHeaders(headers),
+        body: redactSensitiveBody(options2.body)
+      }
+    };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options2.timeoutMs);
+  try {
+    const init = {
+      method: options2.method,
+      headers,
+      signal: controller.signal
+    };
+    if (options2.body !== void 0) {
+      init.body = JSON.stringify(options2.body);
+    }
+    const response = await fetch(url, init);
+    const rawText = await response.text();
+    const body = parseBody(rawText);
+    return {
+      status: response.status,
+      url: response.url,
+      body
+    };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw networkError(`request timed out after ${options2.timeoutMs}ms`);
+    }
+    throw networkError(formatNetworkFailure(error));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function setHeader(headers, name, value) {
+  for (const existingName of Object.keys(headers)) {
+    if (existingName.toLowerCase() === name.toLowerCase()) {
+      delete headers[existingName];
+    }
+  }
+  headers[name] = value;
+}
+function formatNetworkFailure(error) {
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
+  const cause = isRecord3(error) && isRecord3(error.cause) ? error.cause : void 0;
+  if (!cause) {
+    return message;
+  }
+  const details = [
+    diagnosticField("code", cause.code),
+    diagnosticField("errno", cause.errno),
+    diagnosticField("syscall", cause.syscall),
+    diagnosticField("hostname", cause.hostname),
+    diagnosticField("address", cause.address),
+    diagnosticField("port", cause.port)
+  ].filter((value) => Boolean(value));
+  return details.length > 0 ? `${message} (${details.join(", ")})` : message;
+}
+function diagnosticField(name, value) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return void 0;
+  }
+  const normalized = String(value).replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 200);
+  return normalized ? `${name}=${normalized}` : void 0;
+}
+function isRecord3(value) {
+  return typeof value === "object" && value !== null;
+}
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+function redactSensitiveHeaders(headers) {
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]));
+}
+function redactSensitiveBody(value) {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveBody);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    SENSITIVE_BODY_KEYS.has(key) && item ? "***" : redactSensitiveBody(item)
+  ]));
+}
+function parseBody(rawText) {
+  if (!rawText) {
+    return {};
+  }
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    return rawText;
+  }
+}
+var SENSITIVE_HEADERS, SENSITIVE_BODY_KEYS;
+var init_http = __esm({
+  "dist/http.js"() {
+    "use strict";
+    init_errors();
+    init_version();
+    SENSITIVE_HEADERS = /* @__PURE__ */ new Set(["x-customer-api-key", "authorization"]);
+    SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
+      "access_token",
+      "accessToken",
+      "refresh_token",
+      "refreshToken",
+      "device_code",
+      "deviceCode",
+      "device_id",
+      "deviceId",
+      "installationId",
+      "hostname",
+      "cli_challenge",
+      "cli_verifier",
+      "loopback_redirect_uri",
+      "loopback_state",
+      "return_path",
+      "claim_id",
+      "browser_nonce",
+      "customerApiKey",
+      "customerAPIKey"
+    ]);
+  }
+});
+
+// dist/oauth-request.js
+async function requestJsonWithOAuthRetry(runtime, buildRequest, requester = requestJson) {
+  const initialConfig = await runtime.getRuntimeConfig();
+  const initialRequest = buildRequest(initialConfig);
+  const failedAuthorization = bearerAuthorizationSnapshot(initialConfig, initialRequest);
+  const initialResult = await requester(initialRequest);
+  if (!failedAuthorization || !runtime.refreshRuntimeConfig || isDryRun(initialResult) || !isUnauthorizedResponse(initialResult)) {
+    return initialResult;
+  }
+  const refreshedConfig = await runtime.refreshRuntimeConfig(failedAuthorization);
+  const retryConfig = runtime.reloadRuntimeConfig ? await runtime.reloadRuntimeConfig() : refreshedConfig;
+  return requester(buildRequest(retryConfig));
+}
+function bearerAuthorizationSnapshot(runtimeConfig, request) {
+  const authorization = runtimeConfig.authorization;
+  if (!authorization) {
+    return void 0;
+  }
+  const authorizationHeader = Object.entries(request.headers ?? {}).find(([name]) => name.toLowerCase() === "authorization")?.[1];
+  if (authorizationHeader !== `${authorization.tokenType} ${authorization.accessToken}`) {
+    return void 0;
+  }
+  return {
+    accessToken: authorization.accessToken,
+    customerId: authorization.customerId,
+    issuerOrigin: authorization.issuerOrigin,
+    deviceId: authorization.deviceId,
+    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
+  };
+}
+function isUnauthorizedResponse(response) {
+  if (response.status === 401) {
+    return true;
+  }
+  if (typeof response.body !== "object" || response.body === null) {
+    return false;
+  }
+  return Number(response.body.code) === 401;
+}
+function isDryRun(value) {
+  return "dryRun" in value;
+}
+var init_oauth_request = __esm({
+  "dist/oauth-request.js"() {
+    "use strict";
+    init_http();
+  }
+});
+
+// dist/utils.js
+import { spawn } from "node:child_process";
+import path2 from "node:path";
+function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
+  if (config.authorization) {
+    assertCredentialRequestOrigin(config, requestBaseUrl);
+    return {
+      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
+    };
+  }
+  if (!config.customerId) {
+    throw configError(LOGIN_REQUIRED_MESSAGE);
+  }
+  if (!config.customerApiKey) {
+    throw configError(LOGIN_REQUIRED_MESSAGE);
+  }
+  assertCredentialRequestOrigin(config, requestBaseUrl);
+  return {
+    "X-Customer-ID": config.customerId,
+    "X-Customer-API-Key": config.customerApiKey,
+    "X-Timestamp": Date.now().toString()
+  };
+}
+function buildCustomerApiKeyHeaders(config, requestBaseUrl = config.baseUrl) {
+  if (config.authorization) {
+    assertCredentialRequestOrigin(config, requestBaseUrl);
+    return {
+      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
+    };
+  }
+  if (!config.customerApiKey) {
+    throw configError(LOGIN_REQUIRED_MESSAGE);
+  }
+  assertCredentialRequestOrigin(config, requestBaseUrl);
+  return {
+    "X-Customer-API-Key": config.customerApiKey,
+    "X-Timestamp": Date.now().toString()
+  };
+}
+function buildInstructionHeaders(config, requestBaseUrl = config.baseUrl) {
+  return buildCustomerApiKeyHeaders(config, requestBaseUrl);
+}
+function assertCredentialRequestOrigin(config, requestBaseUrl) {
+  const requestOrigin = strictCredentialOrigin(requestBaseUrl);
+  const walletOrigin = strictCredentialOrigin(config.baseUrl);
+  if (requestOrigin !== walletOrigin) {
+    throw configError("authenticated request origin does not match the effective wallet API origin (different API environment)");
+  }
+  if (config.authorization && strictCredentialOrigin(config.authorization.issuerOrigin) !== requestOrigin) {
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
+  }
+}
+function strictCredentialOrigin(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw configError("authenticated requests require an absolute HTTPS API URL");
+  }
+  if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) {
+    throw configError("authenticated requests require an absolute HTTPS API URL");
+  }
+  return parsed.origin;
+}
+function buildAgentPortalUrl(bindingUrl, expectedPortalOrigin, pathname, email) {
+  const bindingOrigin = new URL(bindingUrl).origin;
+  const trustedOrigin = new URL(expectedPortalOrigin).origin;
+  if (!sameHttpOrigin(bindingOrigin, trustedOrigin)) {
+    throw configError("card binding URL belongs to an unexpected Portal environment");
+  }
+  const url = new URL(pathname, trustedOrigin);
+  if (email) {
+    url.searchParams.set("email", email);
+  }
+  return url.toString();
+}
+function resolveAgentBaseUrl(apiBaseUrl) {
+  try {
+    const url = new URL(apiBaseUrl);
+    if (url.origin === API_BASE_URLS.sandbox) {
+      return AGENT_BASE_URLS.sandbox;
+    }
+    if (url.origin === API_BASE_URLS.test) {
+      return AGENT_BASE_URLS.test;
+    }
+    if (url.origin === API_BASE_URLS.production) {
+      return AGENT_BASE_URLS.production;
+    }
+    const segments = url.hostname.split(".");
+    const first = segments[0] ?? "";
+    if (/(^|-)api$/i.test(first)) {
+      segments[0] = first.replace(/(^|-)api$/i, "$1agent");
+      url.hostname = segments.join(".");
+      return url.origin;
+    }
+  } catch {
+  }
+  return AGENT_BASE_URLS.production;
+}
+function resolveDashboardBaseUrl(apiBaseUrl) {
+  try {
+    const url = new URL(apiBaseUrl);
+    if (url.origin === API_BASE_URLS.sandbox) {
+      return DASHBOARD_BASE_URLS.sandbox;
+    }
+    if (url.origin === API_BASE_URLS.test) {
+      return DASHBOARD_BASE_URLS.test;
+    }
+    if (url.origin === API_BASE_URLS.production) {
+      return DASHBOARD_BASE_URLS.production;
+    }
+    const segments = url.hostname.split(".");
+    const first = segments[0] ?? "";
+    if (/(^|-)api$/i.test(first)) {
+      segments[0] = first.replace(/(^|-)api$/i, "$1dashboard");
+      url.hostname = segments.join(".");
+      return url.origin;
+    }
+  } catch {
+  }
+  return DASHBOARD_BASE_URLS.production;
+}
+function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId2, email) {
+  const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
+  url.searchParams.set("type", "visa");
+  if (instructionId2) {
+    url.searchParams.set("instructionId", instructionId2);
+  }
+  if (email) {
+    url.searchParams.set("email", email);
+  }
+  return url.toString();
+}
+function maybeOpenBrowser(open9, url, onFailure = (message) => process.stderr.write(`${message}
+`)) {
+  if (!open9) {
+    return;
+  }
+  let failureReported = false;
+  const reportFailure = () => {
+    if (failureReported) {
+      return;
+    }
+    failureReported = true;
+    onFailure(BROWSER_OPEN_FAILURE_MESSAGE);
+  };
+  try {
+    const command = resolveBrowserOpenCommand(process.platform, url);
+    const child = spawn(command.executable, command.args, {
+      detached: true,
+      stdio: "ignore"
+    });
+    child.once("error", reportFailure);
+    child.once("exit", (code) => {
+      if (code !== 0) {
+        reportFailure();
+      }
+    });
+    child.unref();
+  } catch {
+    reportFailure();
+  }
+}
+function resolveBrowserOpenCommand(platform, url, env = process.env) {
+  return resolveBrowserOpenCommands(platform, url, env)[0];
+}
+async function openBrowserWithResult(open9, url, options2 = {}) {
+  if (!open9) {
+    return {
+      requested: false,
+      status: "not_requested",
+      opener: null,
+      attempts: []
+    };
+  }
+  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url, options2.env ?? process.env);
+  const launch = options2.launch ?? launchBrowserOpenCommand;
+  const attempts = [];
+  for (const command of commands) {
+    attempts.push(command.executable);
+    try {
+      await launch(command);
+      return {
+        requested: true,
+        status: "launched",
+        opener: command.executable,
+        attempts
+      };
+    } catch {
+    }
+  }
+  (options2.onFailure ?? ((message) => process.stderr.write(`${message}
+`)))(BROWSER_OPEN_FAILURE_MESSAGE);
+  return {
+    requested: true,
+    status: "failed",
+    opener: null,
+    attempts
+  };
+}
+function resolveBrowserOpenCommands(platform, url, env = process.env) {
+  if (platform === "darwin") {
+    return [{ executable: "open", args: [url] }];
+  }
+  if (platform === "win32") {
+    const windowsDirectory = env.SystemRoot?.trim() || env.WINDIR?.trim();
+    const rundll32 = windowsDirectory ? path2.win32.join(windowsDirectory, "System32", "rundll32.exe") : "rundll32.exe";
+    const explorer = windowsDirectory ? path2.win32.join(windowsDirectory, "explorer.exe") : "explorer.exe";
+    return [
+      {
+        executable: rundll32,
+        args: ["url.dll,FileProtocolHandler", url]
+      },
+      {
+        executable: explorer,
+        args: [url]
+      }
+    ];
+  }
+  return [
+    { executable: "xdg-open", args: [url] },
+    { executable: "gio", args: ["open", url] }
+  ];
+}
+async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAND_TIMEOUT_MS) {
+  const child = spawn(command.executable, command.args, {
+    stdio: "ignore",
+    windowsHide: true
+  });
+  const outcome = new Promise((resolve6) => {
+    let reported = false;
+    const report = (result2) => {
+      if (reported) {
+        return;
+      }
+      reported = true;
+      resolve6(result2);
+    };
+    child.once("error", (error) => report({ type: "error", error }));
+    child.once("exit", (code, signal) => report({ type: "exit", code, signal }));
+  });
+  const waitForOutcome = async (waitMs) => {
+    let timeout;
+    try {
+      return await Promise.race([
+        outcome,
+        new Promise((resolve6) => {
+          timeout = setTimeout(resolve6, waitMs, null);
+        })
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
+  };
+  const result = await waitForOutcome(timeoutMs);
+  if (result?.type === "error") {
+    throw result.error;
+  }
+  if (result?.type === "exit") {
+    if (result.code === 0) {
+      return;
+    }
+    throw new Error(result.signal ? `${command.executable} exited on signal ${result.signal}` : `${command.executable} exited with code ${result.code ?? "unknown"}`);
+  }
+  const timeoutError = new Error(`${command.executable} timed out after ${timeoutMs}ms`);
+  child.kill("SIGTERM");
+  if (await waitForOutcome(BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS)) {
+    throw timeoutError;
+  }
+  child.kill("SIGKILL");
+  await outcome;
+  throw timeoutError;
+}
+function parseJsonFlag(value, flagName) {
+  try {
+    return JSON.parse(value.replace(/^\uFEFF/u, ""));
+  } catch (error) {
+    throw apiError(`invalid JSON for ${flagName}: ${error.message}`);
+  }
+}
+function unwrapApiData(body) {
+  if (typeof body === "object" && body !== null && "data" in body) {
+    return body.data;
+  }
+  return body;
+}
+function assertApiSuccess(status, body) {
+  if (status === 401 || status === 403) {
+    throw authError(extractMessage(body) ?? `request failed with status ${status}`, status);
+  }
+  if (status < 200 || status >= 300) {
+    throw apiError(extractMessage(body) ?? `request failed with status ${status}`, status);
+  }
+  if (typeof body === "object" && body !== null && "code" in body) {
+    const code = Number(body.code);
+    if (!Number.isNaN(code) && code !== 200) {
+      if (code === 401 || code === 403) {
+        throw authError(extractMessage(body) ?? `request failed with code ${code}`, code);
+      }
+      throw apiError(extractMessage(body) ?? `request failed with code ${code}`, code);
+    }
+  }
+}
+function extractMessage(body) {
+  if (typeof body !== "object" || body === null) {
+    return void 0;
+  }
+  const candidate = body.message ?? body.msg ?? body.error;
+  if (typeof candidate === "string") {
+    return sanitizeApiMessage(candidate);
+  }
+  const messages = body.messages;
+  if (Array.isArray(messages)) {
+    for (const item of messages) {
+      if (typeof item === "string") {
+        return sanitizeApiMessage(item);
+      }
+      if (typeof item !== "object" || item === null) {
+        continue;
+      }
+      const messageContent = item.content ?? item.message ?? item.msg;
+      if (typeof messageContent === "string") {
+        return sanitizeApiMessage(messageContent);
+      }
+    }
+  }
+  return void 0;
+}
+function sanitizeApiMessage(message) {
+  const trimmed = message.trim();
+  if (!hasInternalServiceDiagnostics(trimmed)) {
+    return trimmed;
+  }
+  const publicPrefix = extractPublicErrorPrefix(trimmed);
+  const publicReason = /timeout|timed out/i.test(trimmed) ? "downstream service timeout" : "downstream service invocation failed";
+  return publicPrefix ? `${publicPrefix}: ${publicReason}` : publicReason;
+}
+function hasInternalServiceDiagnostics(message) {
+  return [
+    /org\.apache\.dubbo/i,
+    /DefaultServiceInstance/i,
+    /GenericService/i,
+    /from the registry/i,
+    /\bproviders?\s+\[[^\]]+\]/i,
+    /\bconsumer\s+\d{1,3}(?:\.\d{1,3}){3}/i,
+    /\bprovider\.application\b/i,
+    /\bservice\{name=/i,
+    /Failed to invoke the method/i
+  ].some((pattern) => pattern.test(message));
+}
+function extractPublicErrorPrefix(message) {
+  const markerIndexes = [
+    "Failed to invoke the method",
+    "org.apache.dubbo",
+    "DefaultServiceInstance",
+    "GenericService",
+    "from the registry",
+    "Tried 1 times of the providers"
+  ].map((marker) => message.indexOf(marker)).filter((index) => index > 0);
+  const firstMarkerIndex = markerIndexes.length > 0 ? Math.min(...markerIndexes) : -1;
+  if (firstMarkerIndex <= 0) {
+    return void 0;
+  }
+  const prefix = message.slice(0, firstMarkerIndex).replace(/[\s:：,，.。]+$/u, "").trim();
+  return prefix.length > 0 ? prefix : void 0;
+}
+function pickDefaultPaymentMethod(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw configError("no payment methods available; pass --payment-instrument-id explicitly");
+  }
+  const preferred = items.find((item) => {
+    if (typeof item !== "object" || item === null) {
+      return false;
+    }
+    const record2 = item;
+    return record2.isDefault === true || record2.default === true || record2.defaultPaymentMethod === true;
+  }) ?? items[0];
+  if (typeof preferred !== "object" || preferred === null) {
+    throw configError("unable to resolve default payment method");
+  }
+  const paymentInstrumentId = preferred.paymentInstrumentId;
+  if (typeof paymentInstrumentId !== "string" || paymentInstrumentId.length === 0) {
+    throw configError("unable to resolve paymentInstrumentId from default card");
+  }
+  return preferred;
+}
+function pickDefaultPaymentInstrument(items) {
+  return pickDefaultPaymentMethod(items).paymentInstrumentId;
+}
+var LOGIN_REQUIRED_MESSAGE, BROWSER_OPEN_FAILURE_MESSAGE, BROWSER_OPEN_COMMAND_TIMEOUT_MS, BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS;
+var init_utils = __esm({
+  "dist/utils.js"() {
+    "use strict";
+    init_domains();
+    init_errors();
+    init_url();
+    LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
+    BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
+    BROWSER_OPEN_COMMAND_TIMEOUT_MS = 5e3;
+    BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS = 250;
+  }
+});
+
+// dist/events.js
+function eventMatchesInstruction(event, instructionId2) {
+  const expectedInstructionId = resolvedTypedIdentifierAliases([instructionId2]);
+  const candidate = resolvedTypedIdentifierAliases([
+    event.data.instructionId,
+    event.data.instruction_id,
+    event.data.purchaseInstructionId,
+    event.data.purchase_instruction_id,
+    event.resourceId
+  ]);
+  return event.eventType === "purchase_instruction.activated" && expectedInstructionId !== void 0 && candidate === expectedInstructionId;
+}
+async function pollWebhookEvents(options2) {
+  return (await pollWebhookEventPage(options2)).records;
+}
+async function pollWebhookEventPage(options2) {
+  const result = await requestJsonWithOAuthRetry({
+    getRuntimeConfig: options2.getRuntimeConfig ?? (() => options2.runtimeConfig),
+    ...options2.getRuntimeConfig ? { reloadRuntimeConfig: options2.getRuntimeConfig } : {},
+    ...options2.refreshRuntimeConfig ? { refreshRuntimeConfig: options2.refreshRuntimeConfig } : {}
+  }, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: EVENT_POLL_PATH,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body: {
+      pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE,
+      ...options2.eventTypes && options2.eventTypes.length > 0 ? { eventTypes: options2.eventTypes } : {},
+      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {},
+      ...options2.nextToken ? { nextToken: options2.nextToken } : {}
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  }));
+  if ("dryRun" in result) {
+    return { records: [] };
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  const dataObject = typeof data === "object" && data !== null ? data : void 0;
+  const records = dataObject ? dataObject.records : void 0;
+  if (!Array.isArray(records)) {
+    throw apiError("invalid Event Hub poll response: expected data.records to be an array", 502);
+  }
+  if (!records.every(isWebhookEventRecord)) {
+    throw apiError("invalid Event Hub poll response: expected every record to contain non-empty eventId and eventType", 502);
+  }
+  const nextTokenValue = dataObject?.nextToken;
+  if (nextTokenValue === void 0 || nextTokenValue === null) {
+    return { records };
+  }
+  if (typeof nextTokenValue !== "string" || nextTokenValue.trim().length === 0) {
+    throw apiError("invalid Event Hub poll response: expected data.nextToken to be a non-empty string", 502);
+  }
+  return { records, nextToken: nextTokenValue.trim() };
+}
+async function ackWebhookEvents(options2, eventIds) {
+  const requestedEventIds = [...new Set(eventIds)];
+  if (requestedEventIds.length === 0) {
+    return [];
+  }
+  const refreshRuntimeConfig = options2.refreshRuntimeConfig;
+  const result = await requestJsonWithOAuthRetry({
+    getRuntimeConfig: async () => {
+      const runtimeConfig = options2.getRuntimeConfig ? await options2.getRuntimeConfig() : options2.runtimeConfig;
+      assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+      return runtimeConfig;
+    },
+    ...options2.getRuntimeConfig ? {
+      reloadRuntimeConfig: async () => {
+        const runtimeConfig = await options2.getRuntimeConfig();
+        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+        return runtimeConfig;
+      }
+    } : {},
+    ...refreshRuntimeConfig ? {
+      refreshRuntimeConfig: async (failedAuthorization) => {
+        const runtimeConfig = await refreshRuntimeConfig(failedAuthorization);
+        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
+        return runtimeConfig;
+      }
+    } : {}
+  }, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: EVENT_ACK_PATH,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body: { eventIds: requestedEventIds },
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  }));
+  if ("dryRun" in result) {
+    return [];
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (typeof data !== "object" || data === null) {
+    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
+  }
+  const deletedCount = data.deletedCount;
+  const notFoundEventIds = data.notFoundEventIds;
+  if (!Number.isInteger(deletedCount) || deletedCount < 0 || !Array.isArray(notFoundEventIds) || !notFoundEventIds.every((eventId) => typeof eventId === "string")) {
+    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
+  }
+  const requestedEventIdSet = new Set(requestedEventIds);
+  const notFoundEventIdSet = new Set(notFoundEventIds);
+  if (notFoundEventIdSet.size !== notFoundEventIds.length || notFoundEventIds.some((eventId) => !requestedEventIdSet.has(eventId))) {
+    throw apiError("invalid Event Hub ack response: unexpected notFoundEventIds", 502);
+  }
+  const ackedEventIds = requestedEventIds.filter((eventId) => !notFoundEventIdSet.has(eventId));
+  if (ackedEventIds.length !== deletedCount) {
+    throw apiError("invalid Event Hub ack response: deletedCount does not match event IDs", 502);
+  }
+  return ackedEventIds;
+}
+async function watchEvents(options2) {
+  assertValidWatchTarget(options2);
+  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_WATCH_DURATION_MS;
+  const sleep3 = options2.sleep ?? realSleep;
+  const now = options2.now ?? Date.now;
+  const log = options2.log ?? stderrLog;
+  const startedAtMs = now();
+  const staleEventCutoffMs = options2.staleEventCutoffMs ?? startedAtMs;
+  const ackUnmatchedEvents = options2.ackUnmatchedEvents ?? true;
+  const runtimeState = { value: options2.runtimeConfig };
+  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
+  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
+  const logHandoff = () => {
+    log(`Open this link in your browser to complete the ${options2.label}:`);
+    log(`  ${options2.url}`);
+    log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
+  };
+  if (!options2.onReady) {
+    logHandoff();
+  }
+  let ready = false;
+  let lastRecoverablePollError;
+  let deadline = startedAtMs + maxDurationMs;
+  const markReady = () => {
+    if (ready) {
+      return;
+    }
+    ready = true;
+    if (options2.onReady) {
+      deadline = now() + maxDurationMs;
+    }
+    options2.onReady?.();
+    if (options2.onReady) {
+      logHandoff();
+    }
+  };
+  for (; ; ) {
+    let records;
+    let polledIdentity = { type: "none" };
+    try {
+      records = await pollWebhookEvents({
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+        timeoutMs: options2.timeoutMs,
+        ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
+        ...options2.eventType && !ackUnmatchedEvents ? { eventTypes: [options2.eventType] } : {}
+      });
+      polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+      if (getRuntimeConfig) {
+        const currentRuntimeConfig = await getRuntimeConfig();
+        assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
+      }
+      assertPolledEventCustomers(records, polledIdentity);
+      markReady();
+    } catch (error) {
+      if (!isRecoverableWatchPollError(error)) {
+        throw error;
+      }
+      lastRecoverablePollError = error;
+      if (now() + pollIntervalMs >= deadline) {
+        break;
+      }
+      await sleep3(pollIntervalMs);
+      continue;
+    }
+    if (records.length > 0) {
+      const staleRecords = records.filter((record2) => isStaleForWatch(record2, staleEventCutoffMs));
+      const currentRecords = records.filter((record2) => !isStaleForWatch(record2, staleEventCutoffMs));
+      const watchTargetEnabled = hasWatchTarget(options2);
+      const staleEvents = staleRecords.map(toProcessedEvent);
+      const staleAckableEvents = watchTargetEnabled && !ackUnmatchedEvents ? staleEvents.filter((event) => eventMatchesWatchTarget(event, options2)) : staleEvents;
+      const staleEventIds = staleAckableEvents.map((event) => event.eventId).filter((id) => id.length > 0);
+      if (staleEventIds.length > 0) {
+        const ackedStaleEventIds = await ackWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          expectedIdentity: polledIdentity,
+          timeoutMs: options2.timeoutMs
+        }, staleEventIds);
+        if (ackedStaleEventIds.length > 0) {
+          log(`Ignored ${ackedStaleEventIds.length} stale event(s) from before the watch started.`);
+        }
+      }
+      if (currentRecords.length === 0) {
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      const events = await processEvents(currentRecords, polledIdentity, options2.resolveStoredRuntimeConfig);
+      log(`Received ${events.length} event(s):`);
+      for (const event of events) {
+        log(`  ${event.summary}`);
+      }
+      const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
+      if (watchTargetEnabled && matchedEvents.length === 0) {
+        const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
+        if (ackUnmatchedEvents) {
+          const ackedIgnoredEventIds = await ackWebhookEvents({
+            runtimeConfig: runtimeState.value,
+            ...getRuntimeConfig ? { getRuntimeConfig } : {},
+            ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+            expectedIdentity: polledIdentity,
+            timeoutMs: options2.timeoutMs
+          }, ignoredEventIds);
+          log(`No event matched the watched resource yet; acknowledged ${ackedIgnoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        } else {
+          log(`No event matched the watched resource yet; preserved ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
+        }
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      const matchedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
+      const ackedEventIds = await ackWebhookEvents({
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+        expectedIdentity: polledIdentity,
+        timeoutMs: options2.timeoutMs
+      }, matchedEventIds);
+      const ackedEventIdSet = new Set(ackedEventIds);
+      const acknowledgedEvents = matchedEvents.filter((event) => ackedEventIdSet.has(event.eventId));
+      if (acknowledgedEvents.length === 0) {
+        log("The matching event was already acknowledged by another watcher; continuing to poll.");
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      log(`Acknowledged ${ackedEventIds.length} event(s).`);
+      return {
+        watched: true,
+        url: options2.url,
+        timedOut: false,
+        events: acknowledgedEvents,
+        ackedEventIds
+      };
+    }
+    if (now() + pollIntervalMs >= deadline) {
+      break;
+    }
+    await sleep3(pollIntervalMs);
+  }
+  if (options2.onReady && !ready && lastRecoverablePollError !== void 0) {
+    throw lastRecoverablePollError;
+  }
+  log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
+  return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
+}
+function isStaleForWatch(record2, staleEventCutoffMs) {
+  const rawEventTime = record2.eventTime;
+  const eventTimeMs = parseEventTimeMs(rawEventTime);
+  if (eventTimeMs === void 0) {
+    return false;
+  }
+  const precisionMs = eventTimePrecisionMs(rawEventTime);
+  const comparableCutoffMs = Math.floor(staleEventCutoffMs / precisionMs) * precisionMs;
+  return eventTimeMs < comparableCutoffMs;
+}
+function eventTimePrecisionMs(value) {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value < 1e12 ? 1e3 : 1;
+  }
+  if (typeof value !== "string") {
+    return 1;
+  }
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) < 1e12 ? 1e3 : 1;
+  }
+  const timestamp = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.(\d{1,3}))?(?:Z|[+-]\d{2}:?\d{2})?$/.exec(trimmed);
+  if (!timestamp) {
+    return 1;
+  }
+  const fractionalDigits = timestamp[1]?.length ?? 0;
+  return fractionalDigits === 0 ? 1e3 : 10 ** (3 - fractionalDigits);
+}
+function hasWatchTarget(options2) {
+  return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
+}
+function eventMatchesWatchTarget(event, options2) {
+  if (options2.eventType && event.eventType !== options2.eventType) {
+    return false;
+  }
+  const expectedResource = options2.expectedResource ?? {};
+  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
+  if (expectedEntries.length === 0) {
+    return true;
+  }
+  const instructionExpectedAliases = [
+    expectedResource.instructionId,
+    expectedResource.instruction_id,
+    expectedResource.purchaseInstructionId,
+    expectedResource.purchase_instruction_id
+  ];
+  if (instructionExpectedAliases.some((value) => value !== void 0)) {
+    const expectedInstructionId = resolvedTypedIdentifierAliases(instructionExpectedAliases);
+    const eventInstructionId = resolvedTypedIdentifierAliases([
+      event.resourceId,
+      event.data.instructionId,
+      event.data.instruction_id,
+      event.data.purchaseInstructionId,
+      event.data.purchase_instruction_id
+    ]);
+    if (expectedInstructionId === void 0 || eventInstructionId !== expectedInstructionId) {
+      return false;
+    }
+    return expectedEntries.filter(([key]) => !isInstructionIdentifierKey(key)).every(([key, value]) => eventFieldValues(event, key).includes(value));
+  }
+  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
+}
+function eventFieldValues(event, key) {
+  const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+  const identifier = resolvedTypedIdentifierAliases([
+    event.data[key],
+    event.data[snakeKey],
+    key.toLowerCase().endsWith("id") ? event.resourceId : void 0
+  ]);
+  return identifier === void 0 ? [] : [identifier];
+}
+function normalizedValue(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : void 0;
+}
+function resolvedTypedIdentifierAliases(values) {
+  let resolved;
+  for (const value of values) {
+    if (value === void 0) {
+      continue;
+    }
+    if (typeof value !== "string") {
+      return void 0;
+    }
+    const candidate = value.trim();
+    if (!candidate) {
+      return void 0;
+    }
+    if (resolved !== void 0 && resolved !== candidate) {
+      return void 0;
+    }
+    resolved = candidate;
+  }
+  return resolved;
+}
+function isInstructionIdentifierKey(key) {
+  return key === "instructionId" || key === "instruction_id" || key === "purchaseInstructionId" || key === "purchase_instruction_id";
+}
+function assertValidWatchTarget(options2) {
+  if (options2.eventType !== void 0 && normalizedValue(options2.eventType) === void 0) {
+    throw validationError("eventType must be a non-blank string when provided");
+  }
+  assertValidExpectedResource(options2.expectedResource);
+}
+function assertValidCollectTarget(options2) {
+  if (options2.checkoutId !== void 0 && normalizedValue(options2.checkoutId) === void 0) {
+    throw validationError("checkoutId must be a non-blank string when provided");
+  }
+  if (options2.nextToken !== void 0 && normalizedValue(options2.nextToken) === void 0) {
+    throw validationError("nextToken must be a non-blank string when provided");
+  }
+  if (options2.nextToken !== void 0 && options2.checkoutId === void 0) {
+    throw validationError("nextToken requires checkoutId");
+  }
+  assertValidExpectedResource(options2.expectedResource);
+}
+function assertValidExpectedResource(expectedResource) {
+  if (expectedResource === void 0) {
+    return;
+  }
+  const entries = Object.entries(expectedResource);
+  if (entries.length === 0 || entries.some(([, value]) => normalizedValue(value) === void 0)) {
+    throw validationError("expectedResource must contain only non-blank string identifiers when provided");
+  }
+  const instructionAliases = entries.filter(([key]) => isInstructionIdentifierKey(key)).map(([, value]) => value);
+  if (instructionAliases.length > 0 && resolvedTypedIdentifierAliases(instructionAliases) === void 0) {
+    throw validationError("expectedResource contains conflicting instruction identifiers");
+  }
+}
+function parseEventTimeMs(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return normalizeEpochMs(value);
+  }
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return void 0;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return normalizeEpochMs(Number(trimmed));
+  }
+  const utcDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(trimmed);
+  if (utcDateTime) {
+    const [, year, month, day, hour, minute, second, millisecond = "0"] = utcDateTime;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond.padEnd(3, "0")));
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function normalizeEpochMs(value) {
+  return value < 1e12 ? value * 1e3 : value;
+}
+function isRecoverableWatchPollError(error) {
+  return error instanceof CliError && (error.type === "network_error" || error.type === "api_error" && error.code === 429);
+}
+function trackRuntimeConfigLoader(runtimeState, getRuntimeConfig) {
+  if (!getRuntimeConfig) {
+    return void 0;
+  }
+  return async () => {
+    const loaded = await getRuntimeConfig();
+    runtimeState.value = loaded;
+    return loaded;
+  };
+}
+function trackRuntimeConfigRefresher(runtimeState, refreshRuntimeConfig) {
+  if (!refreshRuntimeConfig) {
+    return void 0;
+  }
+  return async (failedAuthorization) => {
+    const refreshed = await refreshRuntimeConfig(failedAuthorization);
+    runtimeState.value = refreshed;
+    return refreshed;
+  };
+}
+async function collectWebhookEvents(options2) {
+  assertValidCollectTarget(options2);
+  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
+  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_COLLECT_DURATION_MS;
+  const ack = options2.ack ?? true;
+  const sleep3 = options2.sleep ?? realSleep;
+  const now = options2.now ?? Date.now;
+  const requestedTypes = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
+  const hasTypeFilter = requestedTypes.size > 0;
+  const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
+  const checkoutId = normalizedValue(options2.checkoutId);
+  const hasCheckoutFilter = checkoutId !== void 0;
+  const effectivePageSize = options2.pageSize ?? DEFAULT_PAGE_SIZE;
+  const checkoutEventType = [...requestedTypes][0];
+  if (hasCheckoutFilter && (requestedTypes.size !== 1 || checkoutEventType !== "agent_order.succeeded" && checkoutEventType !== "agent_order.failed")) {
+    throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
+  }
+  const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
+  const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
+  const matchesTarget = (event, sourceRecord) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || recordMatchesCheckoutId(sourceRecord, checkoutId) && recordHasConsistentPaymentOrderIdAliases(sourceRecord)) && matchesExpectedResource(event);
+  const runtimeState = { value: options2.runtimeConfig };
+  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
+  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
+  const collected = [];
+  const ackedEventIds = [];
+  let watchReady = false;
+  let lastRecoverablePollError;
+  let checkoutNextToken = normalizedValue(options2.nextToken);
+  const targetReached = () => collected.length > 0;
+  const processPolledRecords = async (records) => {
+    if (records.length === 0) {
+      return false;
+    }
+    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+    const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
+    const matchingEvents = events.flatMap((event, index) => {
+      if (!matchesTarget(event, records[index])) {
+        return [];
+      }
+      return [hasCheckoutFilter ? { ...event, data: { ...event.data, checkoutId } } : event];
+    });
+    const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
+    const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
+    const confirmedAckedEventIds = await ackWebhookEvents({
+      runtimeConfig: runtimeState.value,
+      ...getRuntimeConfig ? { getRuntimeConfig } : {},
+      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+      expectedIdentity: polledIdentity,
+      timeoutMs: options2.timeoutMs
+    }, ids);
+    ackedEventIds.push(...confirmedAckedEventIds);
+    if (ack) {
+      const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
+      collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
+    } else {
+      collected.push(...matchingEvents);
+    }
+    return targetReached();
+  };
+  let deadline = now() + maxDurationMs;
+  for (; ; ) {
+    try {
+      const page = hasCheckoutFilter ? await pollWebhookEventPage({
+        runtimeConfig: runtimeState.value,
+        ...getRuntimeConfig ? { getRuntimeConfig } : {},
+        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+        timeoutMs: options2.timeoutMs,
+        pageSize: effectivePageSize,
+        eventTypes: [...requestedTypes],
+        checkoutId,
+        ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+      }) : {
+        records: await pollWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          timeoutMs: options2.timeoutMs,
+          pageSize: effectivePageSize,
+          ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
+        })
+      };
+      const records = page.records;
+      if (!watchReady) {
+        if (options2.onReady) {
+          const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+          if (getRuntimeConfig) {
+            const currentRuntimeConfig = await getRuntimeConfig();
+            assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
+          }
+          assertPolledEventCustomers(records, polledIdentity);
+          deadline = now() + maxDurationMs;
+        }
+        watchReady = true;
+        options2.onReady?.();
+      }
+      if (await processPolledRecords(records)) {
+        return { ready: true, timedOut: false, events: collected, ackedEventIds };
+      }
+      if (hasCheckoutFilter) {
+        if (page.nextToken !== void 0) {
+          if (records.length > 0 && page.nextToken === checkoutNextToken) {
+            throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+          }
+          checkoutNextToken = page.nextToken;
+        } else if (records.length >= effectivePageSize) {
+          throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
+        }
+      }
+    } catch (error) {
+      if (options2.onReady && !watchReady && isRecoverableWatchPollError(error)) {
+        lastRecoverablePollError = error;
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      throw error;
+    }
+    if (now() + pollIntervalMs >= deadline) {
+      break;
+    }
+    await sleep3(pollIntervalMs);
+  }
+  if (options2.onReady && !watchReady && lastRecoverablePollError !== void 0) {
+    throw lastRecoverablePollError;
+  }
+  return {
+    ready: false,
+    timedOut: true,
+    events: collected,
+    ackedEventIds,
+    ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+  };
+}
+function recordMatchesCheckoutId(record2, expectedCheckoutId) {
+  const payload = strictPayloadObject(record2?.payload);
+  if (!payload) {
+    return false;
+  }
+  const dataValue = strictObjectValue(payload, "data");
+  const data = isRecord4(dataValue) ? dataValue : void 0;
+  return resolvedTypedIdentifierAliases([
+    ...dataValue === null ? [null] : [],
+    data?.checkoutId,
+    data?.checkout_id,
+    strictNestedValue(payload, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"]),
+    ...data ? [
+      strictNestedValue(data, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"])
+    ] : []
+  ]) === expectedCheckoutId;
+}
+function recordHasConsistentPaymentOrderIdAliases(record2) {
+  const payload = strictPayloadObject(record2?.payload);
+  if (!payload) {
+    return false;
+  }
+  const dataValue = strictObjectValue(payload, "data");
+  const data = isRecord4(dataValue) ? dataValue : void 0;
+  const paymentData = data ?? (dataValue === void 0 ? payload : void 0);
+  const aliases = [
+    record2?.resourceId,
+    ...dataValue === null ? [null] : [],
+    paymentData?.resourceId,
+    paymentData?.resource_id,
+    paymentData?.orderId,
+    paymentData?.order_id,
+    paymentData?.paymentOrderId,
+    paymentData?.payment_order_id
+  ];
+  return aliases.every((value) => value === void 0) || resolvedTypedIdentifierAliases(aliases) !== void 0;
+}
+function strictObjectValue(record2, key) {
+  if (!(key in record2)) {
+    return void 0;
+  }
+  const value = record2[key];
+  return isRecord4(value) ? value : null;
+}
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function strictNestedValue(record2, path4) {
+  let current = record2;
+  for (const key of path4) {
+    if (!isRecord4(current)) {
+      return null;
+    }
+    if (!(key in current)) {
+      return void 0;
+    }
+    current = current[key];
+  }
+  return current;
+}
+function strictPayloadObject(payload) {
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload);
+    return isRecord4(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function eventMatchesExpectedResource(event, expectedResource) {
+  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
+  if (expectedEntries.length === 0) {
+    return true;
+  }
+  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
+}
+async function processEvents(records, expectedIdentity, resolveStoredRuntimeConfig = storedRuntimeConfig) {
+  const events = records.map(toProcessedEvent);
+  await updateStoredConfig((current) => {
+    if (expectedIdentity) {
+      assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig);
+    }
+    for (const event of events) {
+      applyEventToConfig(current, event);
+    }
+    return current;
+  });
+  return events;
+}
+function assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig) {
+  const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
+  if (expectedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, expectedIdentity) || !authorizationIdentityCanContinue(expectedIdentity, currentIdentity)) {
+    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+  }
+  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
+  const mismatchedEvent = events.find((event) => eventCustomerIds(event).some((customerId) => expectedCustomerId !== void 0 && customerId !== expectedCustomerId) || eventCustomerIds(event).length > 1);
+  if (mismatchedEvent) {
+    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
+  }
+}
+function assertRuntimeIdentity(runtimeConfig, expectedIdentity) {
+  if (!expectedIdentity) {
+    return;
+  }
+  if (!authorizationIdentityCanContinue(expectedIdentity, runtimeAuthorizationIdentity(runtimeConfig))) {
+    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
+  }
+}
+function assertPolledEventCustomers(records, expectedIdentity) {
+  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
+  if (!expectedCustomerId) {
+    return;
+  }
+  const mismatchedEvent = records.map(toProcessedEvent).find((event) => {
+    const customerIds = eventCustomerIds(event);
+    return customerIds.length > 1 || customerIds.some((customerId) => customerId !== expectedCustomerId);
+  });
+  if (mismatchedEvent) {
+    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
+  }
+}
+function eventCustomerIds(event) {
+  const customerIds = [event.customerId, asString(event.data.customerId)];
+  if (event.eventType === "risk_rule.updated") {
+    customerIds.push(event.resourceId);
+  }
+  return [...new Set(customerIds.filter((value) => Boolean(value)))];
+}
+function toProcessedEvent(record2) {
+  const data = parsePayloadData(record2.payload);
+  return {
+    eventId: record2.eventId,
+    eventType: record2.eventType,
+    ...record2.customerId ? { customerId: record2.customerId } : {},
+    ...record2.resourceId ? { resourceId: record2.resourceId } : {},
+    ...record2.businessStatus ? { businessStatus: record2.businessStatus } : {},
+    ...record2.eventTime ? { eventTime: record2.eventTime } : {},
+    known: KNOWN_EVENT_TYPES.has(record2.eventType),
+    summary: summarizeEvent(record2, data),
+    data
+  };
+}
+function applyEventToConfig(config, event) {
+  if (event.eventType.startsWith("payment_method.")) {
+    applyPaymentMethodEvent(config.paymentMethods ?? (config.paymentMethods = []), event);
+  }
+  if (event.eventType === "risk_rule.updated") {
+    applyRiskRuleEvent(config.riskRules ?? (config.riskRules = []), event);
+  }
+}
+function applyPaymentMethodEvent(paymentMethods, event) {
+  const paymentInstrumentId = asString(event.data.paymentInstrumentId) ?? event.resourceId;
+  if (event.eventType === "payment_method.default_change") {
+    const defaultId = asString(event.data.defaultPaymentMethodId) ?? paymentInstrumentId;
+    for (const method of paymentMethods) {
+      method.isDefault = method.paymentInstrumentId === defaultId;
+    }
+    return;
+  }
+  if (event.eventType === "payment_method.delete" || event.eventType === "payment_method.deleted") {
+    if (!paymentInstrumentId) {
+      return;
+    }
+    const index = paymentMethods.findIndex((method) => method.paymentInstrumentId === paymentInstrumentId);
+    if (index >= 0) {
+      paymentMethods.splice(index, 1);
+    }
+    return;
+  }
+  if (!paymentInstrumentId) {
+    return;
+  }
+  const existing = paymentMethods.find((method) => method.paymentInstrumentId === paymentInstrumentId);
+  if (existing) {
+    Object.assign(existing, event.data, { paymentInstrumentId });
+  } else {
+    paymentMethods.push({ ...event.data, paymentInstrumentId });
+  }
+}
+function applyRiskRuleEvent(riskRules, event) {
+  const customerId = asString(event.data.customerId) ?? event.resourceId ?? event.customerId;
+  if (!customerId) {
+    return;
+  }
+  const nextRiskRule = {
+    ...event.data,
+    customerId
+  };
+  const existing = riskRules.find((riskRule) => riskRule.customerId === customerId);
+  if (existing) {
+    Object.assign(existing, nextRiskRule);
+  } else {
+    riskRules.push(nextRiskRule);
+  }
+}
+function summarizeEvent(record2, data) {
+  switch (record2.eventType) {
+    case "agent_order.succeeded":
+      return `order ${str(data, "orderId", record2.resourceId)} succeeded${amountSuffix(data)}`;
+    case "agent_order.failed":
+      return `order ${str(data, "orderId", record2.resourceId)} failed${failureSuffix(data)}`;
+    case "agent_order.created":
+      return `order ${str(data, "orderId", record2.resourceId)} created${amountSuffix(data)}`;
+    case "agent_refund.succeeded":
+      return `refund ${str(data, "refundId", record2.resourceId)} succeeded for order ${str(data, "orderId")}`;
+    case "agent_refund.failed":
+      return `refund ${str(data, "refundId", record2.resourceId)} failed${failureSuffix(data)}`;
+    case "agent_refund.rejected":
+      return `refund ${str(data, "refundId", record2.resourceId)} rejected${reasonSuffix(data)}`;
+    case "agent_refund.approved":
+      return `refund ${str(data, "refundId", record2.resourceId)} approved`;
+    case "payment_method.added":
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} added${cardSuffix(data)}`;
+    case "payment_method.update":
+    case "payment_method.updated":
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} updated${cardSuffix(data)}`;
+    case "payment_method.delete":
+    case "payment_method.deleted":
+      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} deleted${cardSuffix(data)}`;
+    case "payment_method.default_change":
+      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record2.resourceId))}`;
+    case "risk_rule.updated":
+      return `risk rules updated for ${str(data, "customerId", record2.customerId)}`;
+    case "vic_device.binding_succeeded":
+      return `VIC device bound for payment method ${str(data, "paymentInstrumentId", record2.resourceId)}`;
+    case "purchase_instruction.created":
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} created${titleSuffix(data)}`;
+    case "purchase_instruction.activated":
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} activated (Passkey/FIDO authorized)`;
+    case "purchase_instruction.updated":
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} updated${statusSuffix(data)}`;
+    case "purchase_instruction.cancelled":
+      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} cancelled${reasonSuffix(data)}`;
+    default:
+      return `received ${record2.eventType}${record2.resourceId ? ` (${record2.resourceId})` : ""}`;
+  }
+}
+function amountSuffix(data) {
+  const amount = data.amount;
+  const currency = asString(data.currency);
+  if (amount === void 0 || amount === null) {
+    return "";
+  }
+  return ` (${String(amount)}${currency ? ` ${currency}` : ""})`;
+}
+function failureSuffix(data) {
+  const code = asString(data.failureCode);
+  const message = asString(data.failureMessage);
+  if (!code && !message) {
+    return "";
+  }
+  return `: ${[code, message].filter(Boolean).join(" ")}`;
+}
+function reasonSuffix(data) {
+  const reason = asString(data.reason);
+  return reason ? `: ${reason}` : "";
+}
+function statusSuffix(data) {
+  const status = asString(data.status);
+  return status ? ` (status: ${status})` : "";
+}
+function titleSuffix(data) {
+  const title = asString(data.title);
+  return title ? `: ${title}` : "";
+}
+function cardSuffix(data) {
+  const brand = asString(data.cardBrand) ?? asString(data.cardScheme);
+  const last4 = asString(data.cardLast4) ?? asString(data.cardLastFour);
+  if (!brand && !last4) {
+    return "";
+  }
+  return ` (${[brand, last4 ? `****${last4}` : ""].filter(Boolean).join(" ")})`;
+}
+function parsePayloadData(payload) {
+  if (!payload) {
+    return {};
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return {};
+  }
+  const record2 = parsed;
+  if (typeof record2.data === "object" && record2.data !== null) {
+    return record2.data;
+  }
+  return record2;
+}
+function isWebhookEventRecord(value) {
+  return typeof value === "object" && value !== null && typeof value.eventId === "string" && value.eventId.trim().length > 0 && typeof value.eventType === "string" && value.eventType.trim().length > 0;
+}
+function str(data, key, fallback) {
+  return asString(data[key]) ?? fallback ?? "unknown";
+}
+function asString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+var EVENT_POLL_PATH, EVENT_ACK_PATH, DEFAULT_POLL_INTERVAL_MS, DEFAULT_EVENT_WATCH_DURATION_MS, DEFAULT_PAGE_SIZE, DEFAULT_COLLECT_POLL_INTERVAL_MS, DEFAULT_EVENT_COLLECT_DURATION_MS, KNOWN_EVENT_TYPES, realSleep, stderrLog;
+var init_events = __esm({
+  "dist/events.js"() {
+    "use strict";
+    init_config();
+    init_auth_identity();
+    init_errors();
+    init_oauth_request();
+    init_utils();
+    EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
+    EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
+    DEFAULT_POLL_INTERVAL_MS = 5e3;
+    DEFAULT_EVENT_WATCH_DURATION_MS = 15 * 6e4;
+    DEFAULT_PAGE_SIZE = 20;
+    DEFAULT_COLLECT_POLL_INTERVAL_MS = 2e3;
+    DEFAULT_EVENT_COLLECT_DURATION_MS = 6e4;
+    KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
+      "agent_order.succeeded",
+      "agent_order.failed",
+      "agent_order.created",
+      "agent_refund.succeeded",
+      "agent_refund.failed",
+      "agent_refund.rejected",
+      "agent_refund.approved",
+      "payment_method.added",
+      // Backend `VtsAppService` currently publishes `payment_method.update` (no trailing "d"); accept
+      // both spellings so card-change summaries survive a future rename to `payment_method.updated`.
+      "payment_method.update",
+      "payment_method.updated",
+      "payment_method.delete",
+      "payment_method.deleted",
+      "payment_method.default_change",
+      "risk_rule.updated",
+      // The VIC device event remains provisional until its producer contract is verified.
+      "vic_device.binding_succeeded",
+      // CWallet publishes the purchase-instruction lifecycle events. Matching also accepts the poll
+      // record's top-level resourceId because Event Hub may normalize the event-specific payload.
+      "purchase_instruction.created",
+      "purchase_instruction.activated",
+      "purchase_instruction.updated",
+      "purchase_instruction.cancelled"
+    ]);
+    realSleep = (ms) => new Promise((resolve6) => setTimeout(resolve6, ms));
+    stderrLog = (message) => {
+      process.stderr.write(`\u2022 ${message}
+`);
+    };
+  }
+});
+
+// dist/help.js
+function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
+  const output = getHelpText(command, subcommand, nestedCommand, executableName);
+  process.stdout.write(output);
+}
+function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
+  const help = getRawHelpText(command, subcommand, nestedCommand);
+  return renderCliCommandText(help, executableName);
+}
+function getRawHelpText(command, subcommand, nestedCommand) {
+  switch (command) {
+    case "install":
+      return INSTALL_HELP;
+    case "update":
+      return UPDATE_HELP;
+    case "skills":
+      switch (subcommand) {
+        case "list":
+          return SKILLS_LIST_HELP;
+        case "install":
+          return SKILLS_INSTALL_HELP;
+        case "sync":
+          return SKILLS_SYNC_HELP;
+        case "tip":
+          return SKILLS_TIP_HELP;
+        default:
+          return SKILLS_HELP;
+      }
+    case "wallet":
+      switch (subcommand) {
+        case "init":
+          return WALLET_INIT_HELP;
+        case "logout":
+          return WALLET_LOGOUT_HELP;
+        case "status":
+          return WALLET_STATUS_HELP;
+        default:
+          return WALLET_HELP;
+      }
+    case "card":
+      switch (subcommand) {
+        case "binding-link":
+          return CARD_BINDING_LINK_HELP;
+        case "setup-link":
+          return CARD_SETUP_LINK_HELP;
+        case "modify-link":
+          return CARD_MODIFY_LINK_HELP;
+        case "passkey-link":
+          return CARD_PASSKEY_LINK_HELP;
+        case "list":
+          return CARD_LIST_HELP;
+        case "get":
+          return CARD_GET_HELP;
+        default:
+          return CARD_HELP;
+      }
+    case "risk":
+      switch (subcommand) {
+        case "get":
+          return RISK_RULE_GET_HELP;
+        case "link":
+          return RISK_RULE_LINK_HELP;
+        default:
+          return RISK_RULE_HELP;
+      }
+    case "pay":
+      return PAY_HELP;
+    case "instruction":
+      switch (subcommand) {
+        case "prepare":
+          return INSTRUCTION_PREPARE_HELP;
+        case "create":
+          return INSTRUCTION_CREATE_HELP;
+        case "sign-url":
+          return INSTRUCTION_SIGN_URL_HELP;
+        case "list":
+          return INSTRUCTION_LIST_HELP;
+        case "get":
+          return INSTRUCTION_GET_HELP;
+        case "update":
+          return INSTRUCTION_UPDATE_HELP;
+        case "cancel":
+          return INSTRUCTION_CANCEL_HELP;
+        default:
+          return INSTRUCTION_HELP;
+      }
+    case "pending-instruction":
+      return PENDING_INSTRUCTION_HELP;
+    case "events":
+      switch (subcommand) {
+        case "poll":
+          return EVENTS_POLL_HELP;
+        default:
+          return EVENTS_HELP;
+      }
+    case "tool":
+      switch (subcommand) {
+        case "item-id":
+          return TOOL_ITEM_ID_HELP;
+        case "parse-site":
+          return TOOL_PARSE_SITE_HELP;
+        case "parse-item":
+          return TOOL_PARSE_ITEM_HELP;
+        case "checkout-total":
+          return TOOL_CHECKOUT_TOTAL_HELP;
+        case "get-ucp-profile":
+          return TOOL_GET_UCP_PROFILE_HELP;
+        case "get-rest-endpoint":
+          return TOOL_GET_REST_ENDPOINT_HELP;
+        case "internal-ucp":
+          switch (nestedCommand) {
+            case "get-endpoint":
+              return TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP;
+            case "get-merchant-list":
+              return TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP;
+            default:
+              return TOOL_INTERNAL_UCP_HELP;
+          }
+        default:
+          return TOOL_HELP;
+      }
+    case "refund":
+      switch (subcommand) {
+        case "create":
+          return REFUND_CREATE_HELP;
+        case "get":
+          return REFUND_GET_HELP;
+        default:
+          return REFUND_HELP;
+      }
+    case "ucp-checkout":
+      switch (subcommand) {
+        case "run":
+          return UCP_CHECKOUT_RUN_HELP;
+        case "create":
+          return UCP_CHECKOUT_CREATE_HELP;
+        case "get":
+          return UCP_CHECKOUT_GET_HELP;
+        case "update":
+          return UCP_CHECKOUT_UPDATE_HELP;
+        case "cancel":
+          return UCP_CHECKOUT_CANCEL_HELP;
+        case "complete":
+          return UCP_CHECKOUT_COMPLETE_HELP;
+        default:
+          return UCP_CHECKOUT_HELP;
+      }
+    case "ucp-catalog":
+      switch (subcommand) {
+        case "search":
+          return UCP_CATALOG_SEARCH_HELP;
+        case "product":
+          return UCP_CATALOG_PRODUCT_HELP;
+        default:
+          return UCP_CATALOG_HELP;
+      }
+    case "catalog":
+      switch (subcommand) {
+        case "search":
+          return CATALOG_SEARCH_HELP;
+        default:
+          return CATALOG_HELP;
+      }
+    case "ucp-order":
+      switch (subcommand) {
+        case "get":
+          return UCP_ORDER_GET_HELP;
+        case "wait-delivery":
+          return UCP_ORDER_WAIT_DELIVERY_HELP;
+        case "list":
+          return UCP_ORDER_LIST_HELP;
+        default:
+          return UCP_ORDER_HELP;
+      }
+    case "config":
+      switch (subcommand) {
+        case "set":
+          return CONFIG_SET_HELP;
+        case "get":
+          return CONFIG_GET_HELP;
+        case "unset":
+          return CONFIG_UNSET_HELP;
+        default:
+          return CONFIG_HELP;
+      }
+    default:
+      return ROOT_HELP;
+  }
+}
+var HELP_OPTION, OUTPUT_OPTIONS, TOOL_NETWORK_OPTIONS, CUSTOMER_AUTH_OPTIONS, CUSTOMER_API_KEY_OPTIONS, CUSTOMER_REQUEST_OPTIONS, CUSTOMER_API_KEY_REQUEST_OPTIONS, PUBLIC_CATALOG_ENVIRONMENT_OPTIONS, PUBLIC_CATALOG_REQUEST_OPTIONS, PUBLIC_CATALOG_LIST_OPTIONS, CUSTOMER_API_KEY_LINK_OPTIONS, ROOT_HELP, INSTALL_HELP, UPDATE_HELP, SKILLS_HELP, SKILLS_SYNC_HELP, SKILLS_LIST_HELP, SKILLS_INSTALL_HELP, SKILLS_TIP_HELP, TOOL_HELP, TOOL_ITEM_ID_HELP, TOOL_PARSE_SITE_HELP, TOOL_PARSE_ITEM_HELP, TOOL_CHECKOUT_TOTAL_HELP, TOOL_GET_UCP_PROFILE_HELP, TOOL_GET_REST_ENDPOINT_HELP, TOOL_INTERNAL_UCP_HELP, TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP, TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP, WALLET_HELP, WALLET_INIT_HELP, WALLET_LOGOUT_HELP, WALLET_STATUS_HELP, CARD_HELP, CARD_BINDING_LINK_HELP, CARD_SETUP_LINK_HELP, CARD_MODIFY_LINK_HELP, CARD_PASSKEY_LINK_HELP, CARD_LIST_HELP, CARD_GET_HELP, RISK_RULE_HELP, RISK_RULE_GET_HELP, RISK_RULE_LINK_HELP, PAY_HELP, REFUND_HELP, REFUND_CREATE_HELP, REFUND_GET_HELP, UCP_CHECKOUT_HELP, UCP_CATALOG_HELP, UCP_CATALOG_SEARCH_HELP, UCP_CATALOG_PRODUCT_HELP, CATALOG_HELP, CATALOG_SEARCH_HELP, UCP_ORDER_HELP, UCP_ORDER_GET_HELP, UCP_ORDER_WAIT_DELIVERY_HELP, UCP_ORDER_LIST_HELP, UCP_CHECKOUT_CREATE_HELP, UCP_CHECKOUT_RUN_HELP, UCP_CHECKOUT_GET_HELP, UCP_CHECKOUT_UPDATE_HELP, UCP_CHECKOUT_CANCEL_HELP, UCP_CHECKOUT_COMPLETE_HELP, CONFIG_HELP, CONFIG_SET_HELP, CONFIG_GET_HELP, CONFIG_UNSET_HELP, PENDING_INSTRUCTION_HELP, INSTRUCTION_HELP, INSTRUCTION_PREPARE_HELP, INSTRUCTION_CREATE_HELP, INSTRUCTION_SIGN_URL_HELP, INSTRUCTION_LIST_HELP, INSTRUCTION_GET_HELP, INSTRUCTION_UPDATE_HELP, INSTRUCTION_CANCEL_HELP, EVENTS_HELP, EVENTS_POLL_HELP;
+var init_help = __esm({
+  "dist/help.js"() {
+    "use strict";
+    init_command_branding();
+    HELP_OPTION = `  --help, -h                    Show this help`;
+    OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
+${HELP_OPTION}`;
+    TOOL_NETWORK_OPTIONS = `  --timeout <ms>                Request timeout in milliseconds
+${OUTPUT_OPTIONS}`;
+    CUSTOMER_AUTH_OPTIONS = `  --customer-id <id>            Override customer ID
+  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
+    CUSTOMER_API_KEY_OPTIONS = `  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
+    CUSTOMER_REQUEST_OPTIONS = `${CUSTOMER_AUTH_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+    CUSTOMER_API_KEY_REQUEST_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+    PUBLIC_CATALOG_ENVIRONMENT_OPTIONS = `  --sandbox                    Use the sandbox/UAT API for this command
+  --test                       Use the test API for this command; cannot be combined with --sandbox`;
+    PUBLIC_CATALOG_REQUEST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --dry-run                     Print the request without executing it
+${OUTPUT_OPTIONS}`;
+    PUBLIC_CATALOG_LIST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+${OUTPUT_OPTIONS}`;
+    CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
+  --timeout <ms>                Request timeout in milliseconds
+  --open                        Open the generated link in the browser
+  --no-watch                    Do not poll for webhook events after printing the link
+  --dry-run                     Print the link without polling for webhook events
+${OUTPUT_OPTIONS}`;
+    ROOT_HELP = `clink
+
+Clink customer wallet CLI.
+
+Usage:
+  clink <command> [subcommand] [options]
+
+Commands:
+  install           Install the latest npm CLI, then synchronize the official payment Skill
+  update            Check or update the npm CLI, then synchronize the official payment Skill
+  wallet            Initialize wallet and inspect local wallet status
+  card              Generate card links and manage payment methods
+  risk              Inspect or open risk rule settings
+  skills            Discover, install, and tip skills; synchronize the official Skill
+  pay               Charge a payment instrument
+  refund            Create refund and query refund status
+  ucp-checkout      Manage UCP checkout sessions for shadow merchants
+  ucp-catalog       Search merchant UCP catalogs
+  catalog           Search catalogs across merchants without naming one
+  ucp-order         Query UCP orders and wait for digital delivery
+  instruction       Manage purchase instruction mandates (agentic authorization)
+  pending-instruction Create a new non-idempotent PENDING instruction
+  events            Poll the webhook-event queue for state-change events
+  tool              Utility tools for UCP and checkout workflows
+  config            Read and update local config
+
+Global Options:
+  --format <json|pretty>        Output format
+  --dry-run                     Print request without executing
+  --open                        Open generated link in browser
+  --no-open                     Do not open generated links; overrides --open and saved defaults
+  --no-watch                    Do not poll for webhook events after printing a link
+  --customer-id <id>            Override customer ID for authenticated commands
+  --customer-api-key <key>      Legacy API key override for authenticated never-OAuth wallets only
+  --timeout <ms>                Request timeout in milliseconds
+  --help, -h                    Show help
+
+Wallet Environment:
+  Select an official environment with wallet init: --sandbox uses sandbox and --test uses test.
+  The main distribution uses production when neither is present; packaged distributions may fix
+  their wallet-init environment internally. Successful initialization saves the environment, and
+  later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
+  process override for those authenticated commands.
+
+Public Discovery Environment:
+  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
+  config-independent commands. They default to production and accept --sandbox or --test per call.
+
+Event Watching:
+  Link commands normally print the browser handoff and then poll
+  /agent/event-hub/webhook-events/poll (pageSize=20, every 5s up to 15 min),
+  process events (logging progress to stderr and updating the local cache), ACK
+  the records consumed by that workflow, and print a watch envelope to stdout.
+  card binding-link is readiness-gated: it first starts a server-side
+  payment_method.added selector, then prints its sanitized Portal handoff, and ACKs only
+  the matching event. Pass --no-watch to skip polling (for scripted or
+  non-interactive use, including card binding-link refreshes). To pull state
+  changes on demand without printing a link, use 'clink events poll'
+  (see 'clink events --help').
+
+Examples:
+  npx @clink-ai/clink-cli@latest install
+  clink update
+  clink update --check --format pretty
+  clink skills sync --force
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
+  clink wallet status --format pretty
+  clink card setup-link --open
+  clink skills list --all --format pretty
+  clink skills tip --publisher clinkpay --name PollyReach --amount 2
+  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink catalog search --query "iced latte" --format json
+  clink ucp-checkout get --checkout-id chk_xxx
+  clink ucp-order get --order-id order_xxx
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900
+  clink ucp-order list --status paid --start-time 2026-07-01T00:00:00Z
+  clink tool item-id --url https://shop.example/products/t-shirt?variant=123
+  clink refund create --order-id order_xxx
+
+More Help:
+  clink install --help
+  clink update --help
+  clink wallet --help
+  clink card --help
+  clink skills --help
+  clink ucp-catalog --help
+  clink catalog --help
+  clink ucp-checkout --help
+  clink ucp-order --help
+  clink refund --help
+  clink instruction --help
+  clink events --help
+  clink tool --help
+  clink config --help
+`;
+    INSTALL_HELP = `clink install
+
+Install the latest npm CLI globally, then synchronize the official agentic-payment-skills package.
+
+Usage:
+  npx @clink-ai/clink-cli@latest install [options]
+
+Options:
+  --force                     Replace a conflicting unmanaged official Skill installation
+  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Runs an argv-based npm global install without a command shell, then synchronizes the official
+  payment Skill at ~/.agents/skills/agentic-payment-skills. This is an explicit setup command.
+  npm postinstall does not download Skills, and ordinary wallet/payment commands never perform
+  Skill synchronization.
+  Self-install is supported only by the npm distribution. A vendored CLI reports a clear error.
+  If npm succeeds but Skill synchronization fails, the error reports a partial result and the
+  previously active Skill release remains in place.
+
+Example:
+  npx @clink-ai/clink-cli@latest install --format pretty
+`;
+    UPDATE_HELP = `clink update
+
+Check or update the npm CLI, then synchronize the official agentic-payment-skills package.
+
+Usage:
+  clink update [options]
+
+Options:
+  --check                     Check without modifying installed CLI or Skill state
+  --force                     Reinstall the latest CLI and replace a conflicting unmanaged Skill
+  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Queries the npm latest tag. A newer version is installed globally without a command shell; an
+  already-current CLI skips npm installation but still synchronizes the Skill. --check does not
+  modify installed CLI or Skill state and reports action=checked plus the Skill plannedAction.
+  Self-update is supported only by the npm distribution.
+
+Examples:
+  clink update
+  clink update --check --format pretty
+  clink update --force
+`;
+    SKILLS_HELP = `clink skills
+
+Usage:
+  clink skills <list|install|sync|tip> [options]
+
+Actions:
+  list              List all public skills in reversed NEW order with one-based Number fields
+  install           Download and install a skill package into local agent skill directories
+  sync              Synchronize the official agentic-payment-skills package without updating CLI
+  tip               Tip a skill publisher using the refreshed default payment method
+
+Examples:
+  clink skills list --all --format pretty
+  clink skills install clinkpay/PollyReach@v1.0.0
+  clink skills install clinkpay/PollyReach --force
+  clink skills sync --force
+  clink skills tip --publisher clinkpay --name PollyReach --amount 2
+`;
+    SKILLS_SYNC_HELP = `clink skills sync
+
+Synchronize the official agentic-payment-skills package without updating the CLI.
+
+Usage:
+  clink skills sync [options]
+
+Options:
+  --check                     Check without modifying installed Skill state
+  --force                     Replace a conflicting unmanaged official Skill installation
+  --timeout <ms>              Source download timeout in milliseconds
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Uses GitHub as the primary source and the Clink-hosted ZIP as its availability fallback. The
+  validated package is published at ~/.agents/skills/agentic-payment-skills using the managed
+  release transaction.
+  This is the recovery entry point when CLI installation already succeeded but Skill sync did not.
+  --check reports action=checked and exposes the would-be install action as plannedAction.
+
+Examples:
+  clink skills sync
+  clink skills sync --check --format pretty
+  clink skills sync --force
+`;
+    SKILLS_LIST_HELP = `clink skills list
+
+Usage:
+  clink skills list --all [options]
+
+Required Arguments:
+  --all                        Request all public skills with pageSize=999
+
+Options:
+  --tippable                  Also require valid skillId/merchantId and tipsConfigJson.enabled=true
+  --timeout <ms>               Request timeout in milliseconds
+${OUTPUT_OPTIONS}
+
+Endpoint:
+  GET /prod-api/skill-marketplace/public/skills?pageSize=999&sort=NEW
+
+Behavior:
+  Keeps only rows with nonempty publisher, name, and versionNo.
+  With --tippable, also requires nonempty skillId/merchantId and boolean tipsConfigJson.enabled=true.
+  Filtering happens before the CLI reverses rows and assigns contiguous one-based Number values.
+  The resulting JSON array is returned through the standard success envelope.
+
+Examples:
+  clink skills list --all --format pretty
+  clink skills list --all --tippable --format pretty
+`;
+    SKILLS_INSTALL_HELP = `clink skills install
+
+Usage:
+  clink skills install <publisher>/<skillName>[@<version>] [options]
+
+Arguments:
+  <publisher>/<skillName>[@<version>]
+                              Skill package identity. When @<version> is omitted, the marketplace
+                              returns the latest downloadable version. Publisher and skill names
+                              may contain Unicode and internal spaces; quote the full identity.
+
+Options:
+  --force                     Replace an existing installation and agent link/copy backups
+  --timeout <ms>              Request timeout; package downloads use at least 300000 ms
+  --dry-run                   Plan the install without network calls or filesystem writes
+${OUTPUT_OPTIONS}
+
+Install Location:
+  A single-skill download may be a raw UTF-8 SKILL.md file or a ZIP containing SKILL.md at its root.
+  Otherwise, archive-root directories with their own direct SKILL.md files are selected. One uses
+  the requested Skill name; two or more form a multi-skill archive and use their directory names as
+  sibling entries.
+  Ordinary files and other directories are ignored. When no root Skill directory exists and there
+  is exactly one top-level directory, the same selection applies inside that common wrapper directory.
+  Selected Skills are exposed under ~/.agents/skills.
+  Multi-skill releases and Agent updates are committed or rolled back together.
+
+Agent Integration:
+  Existing local agent homes are detected automatically and updated where supported:
+  Cursor/Claude/Codex/CodeBuddy/Trae, OpenCode/GitHub Copilot/Gemini CLI,
+  OpenClaw/Hermes, and CodeWork/ChatGPT.
+
+Endpoint:
+  GET /prod-api/skill-marketplace/public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
+
+Examples:
+  clink skills install clinkpay/PollyReach@v1.0.0
+  clink skills install clinkpay/PollyReach
+  clink skills install clinkpay/PollyReach --force
+  clink skills install clinkpay/PollyReach --dry-run --format pretty
+`;
+    SKILLS_TIP_HELP = `clink skills tip
+
+Usage:
+  clink skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
+
+Target:
+  --publisher <publisher>      Exact publisher; requires --name
+  --name <skillName>           Exact skill name; requires --publisher
+
+Required Argument:
+  --amount <amount>            USD amount from 1 to 100 (inclusive)
+
+Options:
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Publisher and skill names accept Unicode letters, numbers, and internal ASCII spaces.
+  Quote publisher or skill-name values that contain spaces.
+  Tips select the latest Marketplace version with sort=NEW.
+  Successful results include the resolved versionNo when the Marketplace supplies it.
+  Tips use the refreshed explicit default payment method.
+  A default CARD is charged without a Credit balance check.
+  A default BALANCE must have enough finite availableBalance to cover the full amount.
+  No explicit default fails with: No default payment method
+  An unsupported explicit default fails with: Unsupported default payment method
+  Insufficient or invalid default Credit fails with 402: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
+  Payment results expose rawPaymentStatus, rawPaymentMessage, and the original payment payload.
+  The backend calculates Credit allocation.
+`;
+    TOOL_HELP = `clink tool
+
+Usage:
+  clink tool item-id --url <url> [options]
+  clink tool parse-site --url <url> [options]
+  clink tool parse-item --url <url> [options]
+  clink tool checkout-total --url <url> [options]
+  clink tool get-ucp-profile --url <url> [options]
+  clink tool get-rest-endpoint --url <url> [options]
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-merchant-list [options]
+
+Tools:
+  item-id        Extract a UCP item_id from a product URL
+  parse-site     Detect the site type from a URL
+  parse-item     Extract Shopify item facts with merchant, currency, and variant details
+  checkout-total Extract the total amount from a Shopify checkout URL
+  get-ucp-profile Fetch a merchant UCP discovery profile
+  get-rest-endpoint Resolve the UCP REST endpoint and provider
+  internal-ucp   Read supported merchants or resolve an internal Clink UCP endpoint
+
+Examples:
+  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
+  clink tool parse-site --url https://store.example.com --format json
+  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format json
+  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
+  clink tool get-ucp-profile --url https://merchant.example.com --format json
+  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format json
+  clink tool internal-ucp get-merchant-list --format json
+`;
+    TOOL_ITEM_ID_HELP = `clink tool item-id
+
+Usage:
+  clink tool item-id --url <url> [options]
+
+Arguments:
+  --url <url>   Product URL to inspect
+
+Options:
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Shopify is detected when the hostname ends with .myshopify.com, or when any CNAME in the chain
+  has canonical name shops.myshopify.com. For Shopify URLs, item_id is the variant query parameter.
+  Other sites return item_id "unknown".
+
+Examples:
+  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
+`;
+    TOOL_PARSE_SITE_HELP = `clink tool parse-site
+
+Usage:
+  clink tool parse-site --url <url> [options]
+
+Arguments:
+  --url <url>   Site URL to inspect
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Shopify is detected first when the hostname ends with .myshopify.com, then eats365 when it ends
+  with .eats365pos.com. Otherwise the CLI sends a browser-like GET request to https://<host> and
+  detects Shopify when a powered-by response header contains Shopify. If the header is absent or
+  the request fails, the CLI checks whether the hostname's CNAME chain reaches
+  shops.myshopify.com. A rate-limited request returns site_detection_rate_limited only when DNS
+  cannot confirm Shopify. Other sites return site_type "unknown".
+
+Examples:
+  clink tool parse-site --url https://store.example.com --format pretty
+  clink tool parse-site --url https://store.eats365pos.com --format pretty
+`;
+    TOOL_PARSE_ITEM_HELP = `clink tool parse-item
+
+Usage:
+  clink tool parse-item --url <url> [options]
+
+Arguments:
+  --url <url>   Product detail URL to inspect
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  First detects the site type with the same detector as parse-site. Unknown sites return
+  error_code "unkonw site type"; inconclusive rate-limited detection returns
+  site_detection_rate_limited. eats365 sites return a normal success envelope with
+  resolution "manual_item_facts", an empty items array, and a required_fields list: the platform
+  publishes no machine-readable product data, so this is an instruction to source those fields
+  from the conversation context and pass them to ucp-checkout create, not a failure to handle.
+  That envelope also carries checkout_mapping, which maps each field to its ucp-checkout create
+  flag, and unit_price_format. eats365 unitPrice is a major-unit decimal such as "28.00" because
+  create scales line_items price by --currency; minor units there would overcharge by that scale.
+  Both the unknown and eats365 cases exit 0. For custom Shopify domains, the standard UCP
+  profile's validated merchant_origin is used as the canonical storefront origin when available.
+  Product URLs are normalized by removing query/hash parameters and appending .js, then the
+  command reads the Shopify product JSON and returns one top-level item fact object. The items
+  array contains one entry per variant with itemId, title, unitPriceMinor, available, itemUrl,
+  options, and inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365
+  unitPrice field. itemId is the raw Shopify variant ID. Currency is read from product JSON when
+  present, otherwise from Shopify /cart.js. The command does not infer MCC or
+  merchantCategoryCode.
+
+Examples:
+  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
+`;
+    TOOL_CHECKOUT_TOTAL_HELP = `clink tool checkout-total
+
+Usage:
+  clink tool checkout-total --url <url> [options]
+
+Arguments:
+  --url <url>   Shopify checkout URL to inspect
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Reads Shopify checkout serialized GraphQL state from meta[name="serialized-graphql"] and returns
+  buyerProposal.runningTotal.value amount/currencyCode. sellerProposal.runningTotal is accepted only
+  when it matches the same total. The command does not parse page text or use regex fallbacks.
+  When the serialized state is absent, the command exits successfully with error_message
+  "checkout_state_not_found".
+
+Examples:
+  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format pretty
+`;
+    TOOL_GET_UCP_PROFILE_HELP = `clink tool get-ucp-profile
+
+Usage:
+  clink tool get-ucp-profile --url <url> [options]
+
+Arguments:
+  --url <url>   Merchant URL or domain to inspect
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Reads the merchant origin from --url, then fetches https://<domain>/.well-known/ucp-clink first.
+  If absent, it fetches https://<domain>/.well-known/ucp. On success, the command prints the
+  discovery JSON directly. When both discovery paths are absent, it exits successfully with
+  error_code "NO_UCP_SITE".
+
+Examples:
+  clink tool get-ucp-profile --url https://merchant.example.com --format pretty
+`;
+    TOOL_GET_REST_ENDPOINT_HELP = `clink tool get-rest-endpoint
+
+Usage:
+  clink tool get-rest-endpoint --url <url> [options]
+
+Arguments:
+  --url <url>   UCP site URL or domain to inspect
+
+Options:
+${OUTPUT_OPTIONS}
+
+Behavior:
+  Parses the URL hostname and resolves the UCP provider from the primary domain. For clinkbill.com
+  and its subdomains, provider is "clinkbill" and endpoint is returned as an empty string. Unknown
+  domains return error_code "NO_UCP_REST_ENDPOINT".
+
+Examples:
+  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
+`;
+    TOOL_INTERNAL_UCP_HELP = `clink tool internal-ucp
+
+Usage:
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
+  clink tool internal-ucp get-merchant-list [options]
+
+Subcommands:
+  get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
+  get-merchant-list  Return the supported merchant-list document for a public environment
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  get-endpoint uses the effective wallet API base and does not accept environment flags.
+  get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
+  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
+  A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
+  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
+
+Examples:
+  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
+  clink tool internal-ucp get-merchant-list --format pretty
+`;
+    TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP = `clink tool internal-ucp get-endpoint
+
+Usage:
+  clink tool internal-ucp get-endpoint --product-url <url> [options]
+
+Arguments:
+  --product-url <url>   Product URL whose exact hostname identifies the merchant
+
+Options:
+${TOOL_NETWORK_OPTIONS}
+
+Behavior:
+  Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
+  using the environment saved by wallet init. Re-run wallet init to switch environments.
+  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
+  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
+  miss is refreshed before it can become an external-route decision; errors are never cached.
+  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
+  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
+  independently from the effective wallet API base and merchant_id.
+  Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
+  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
+  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
+  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
+
+Examples:
+  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
+  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
+`;
+    TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP = `clink tool internal-ucp get-merchant-list
+
+Usage:
+  clink tool internal-ucp get-merchant-list [options]
+
+Options:
+${PUBLIC_CATALOG_LIST_OPTIONS}
+
+Behavior:
+  Returns {"merchants":[...]} from the public merchant-list API after validation.
+  The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
+  It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
+  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
+  It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
+  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
+  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
+  that may include a path.
+
+Examples:
+  clink tool internal-ucp get-merchant-list --format json
+`;
+    WALLET_HELP = `clink wallet
+
+Usage:
+  clink wallet init --email <email> [options]
+  clink wallet logout [options]
+  clink wallet status [options]
+
+Subcommands:
+  init         Authorize this CLI and persist OAuth credentials locally
+  logout       Revoke OAuth authorization and remove local credentials
+  status       Show effective wallet configuration without network request
+
+Examples:
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
+  clink wallet logout
+  clink wallet status --format pretty
+`;
+    WALLET_INIT_HELP = `clink wallet init
+
+Usage:
+  clink wallet init --email <email> [options]
+
+Arguments:
+  --email <email>              Customer email verified in the browser
+
+Options:
+  --sandbox                    Use sandbox API base from domains.ts
+  --test                       Use test API base from domains.ts; cannot be combined with --sandbox
+  --timeout <ms>               Request timeout in milliseconds
+  --open                       Open the authorization URL in the browser
+  --no-open                    Do not open the browser; overrides --open and default-open-links
+  --dry-run                    Print the Device Authorization request without executing it
+  --title <text>               Purchase intent title; enables the Quick Instruction context
+  --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
+  --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
+  --description <text>         Optional Quick Instruction description
+  --is-recurring               Mark it recurring; mandates require recurringFrequency
+  --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
+  --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
+${OUTPUT_OPTIONS}
+
+Device Authorization:
+  An explicit --sandbox/--test or a distribution-fixed environment takes precedence. Otherwise
+  wallet init uses CLINK_BASE_URL when present and production when absent. A successful initialization
+  saves the selected base URL for every later command. Re-run wallet init to switch environments.
+  The CLI keeps user_code in the browser URL query and carries email/derived name in its fragment.
+  The Portal removes those values from the address bar immediately after reading them.
+  The CLI prints the URL, opens it only when --open or default-open-links is enabled, then polls
+  until authorization completes. --no-open always disables browser launch. If launch fails, open
+  the displayed URL manually while polling continues.
+  Email OTP entry and confirmation happen in the browser.
+  Existing customers keep their server-side name. New customers get the email text before @ as
+  their initial name; --name is rejected. Use \`config set name\` to change the local name later.
+
+Quick Instruction:
+  Passing any Quick Instruction option sends instruction_context with Device Authorization;
+  --title and one of --mandates/--mandates-file are then required. --payment-instrument-id and
+  --extra are rejected because card selection belongs to CWallet and the context is intentionally bounded.
+  Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
+  contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
+  requires description, a positive amountLimit with at most two decimals, and currencyCode.
+  Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
+  After browser authorization, CWallet creates/reuses a Quick: CREATED bound to a selected
+  VIC-ready Visa when available, otherwise no-card PENDING. The legacy pendingInstructionId
+  field can refer to CREATED, PENDING or ACTIVE; exact-GET its actual status and keep the original ID.
+  A null value means no usable Quick ID was returned and does not
+  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
+  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
+  \`instruction list --valid-only\` until it is ACTIVE.
+
+Payment Methods:
+  After authorization succeeds, wallet init refreshes cached payment methods through the
+  card binding-link endpoint and returns the trusted add-card bindingUrl. It uses the local
+  add-card path and locally stored email; backend path, query, fragment, and token data are
+  discarded. A refresh failure is reported in output but does not fail wallet initialization.
+
+Examples:
+  clink wallet init --email alice@example.com
+  clink wallet init --sandbox --email alice@example.com
+  clink wallet init --test --email alice@example.com
+  clink wallet init --test --email alice@example.com --title "Buy running shoes" \\
+    --mandates '[{"description":"Running shoes","amountLimit":"25.50","currencyCode":"USD"}]'
+`;
+    WALLET_LOGOUT_HELP = `clink wallet logout
+
+Usage:
+  clink wallet logout [options]
+
+Behavior:
+  Best-effort revokes the current OAuth Refresh Token, then removes both OAuth credentials
+  and any legacy customer API key from local config. It also removes customerId, payment-method
+  cache, and risk-rule cache so a later login may safely bind a different customer.
+
+Options:
+  --timeout <ms>               Request timeout in milliseconds
+  --dry-run                    Print the revoke request without changing local config
+${OUTPUT_OPTIONS}
+
+Examples:
+  clink wallet logout
+  clink wallet logout --format pretty
+`;
+    WALLET_STATUS_HELP = `clink wallet status
+
+Usage:
+  clink wallet status [options]
+
+Notes:
+  Shows the effective local wallet configuration after resolving flags, environment variables,
+  and saved config. Stored OAuth authorization takes priority over legacy CSK. OAuth wallets never
+  fall back to CSK, including after logout or expiry. No network request is made, and raw OAuth
+  tokens and customer API keys are never printed. authorizationEnvironmentMatches reports whether
+  saved OAuth can be used with the selected API base; oauthRequired remains true after logout.
+
+Options:
+${CUSTOMER_AUTH_OPTIONS}
+${OUTPUT_OPTIONS}
+
+Examples:
+  clink wallet status
+  clink wallet status --format pretty
+`;
+    CARD_HELP = `clink card
+
+Usage:
+  clink card binding-link [options]
+  clink card setup-link [--open] [options]
+  clink card modify-link [--open] [options]
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
+  clink card list [options]
+  clink card get --payment-instrument-id <id> [options]
+
+Subcommands:
+  binding-link   Fetch raw binding link and refresh cached payment methods
+  setup-link     Fetch payment method setup link and refresh cached payment methods
+  modify-link    Fetch payment method modify link and refresh cached payment methods
+  passkey-link   Open Visa card Passkey registration through Browser Handoff
+  list           List cached payment methods from local config
+  get            Get cached payment method detail from local config
+`;
+    CARD_BINDING_LINK_HELP = `clink card binding-link
+
+Usage:
+  clink card binding-link [options]
+
+Options:
+  --no-watch                   Skip Event Hub readiness/watch and return an explicit watch gap
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Calls /agent/cwallet/card/bindingLink.
+  Refreshes local cached payment methods from paymentMethodsVoList.
+  Rebuilds the returned link from its Portal origin and appends the locally stored email.
+  Other backend path, query, and fragment values are not exposed.
+  With watch enabled, waits for the first well-formed successful Event Hub poll, then prints an
+  add-card bindingUrl rebuilt from the trusted Portal origin with watchReady=true and
+  watchEventType=payment_method.added.
+  watchReady means the listener is ready; completion is the matching event in the second envelope.
+  Event Hub filters payment_method.added before pagination. Only matching events are ACKed;
+  unrelated current and stale events remain queued. A malformed successful poll fails before the
+  binding handoff is exposed.
+  Pass --no-watch when you only need to refresh the cached card list; it does not poll and returns
+  watchReady=false plus watchEventType=null while stderr identifies the missing listener.
+
+Examples:
+  clink card binding-link
+  clink card binding-link --no-watch --format pretty
+`;
+    CARD_SETUP_LINK_HELP = `clink card setup-link
+
+Usage:
+  clink card setup-link [--open] [options]
+
+Options:
+  --open                       Open the generated setup link in the browser
+  --no-watch                   Skip polling for webhook events after printing the link
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Derives the add-card page from the binding link response.
+  Refreshes local cached payment methods before returning the setup URL.
+  Appends the locally stored email so a signed-out browser can prefill login.
+  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
+  failures open the trusted setup URL directly; callback/approve failures use email-code login.
+  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
+
+Examples:
+  clink card setup-link
+  clink card setup-link --open
+`;
+    CARD_MODIFY_LINK_HELP = `clink card modify-link
+
+Usage:
+  clink card modify-link [--open] [options]
+
+Options:
+  --open                       Open the generated manage-card link in the browser
+  --no-watch                   Skip polling for webhook events after printing the link
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Derives the manage-card page from the binding link response.
+  Refreshes local cached payment methods before returning the modify URL.
+  Appends the locally stored email so a signed-out browser can prefill login.
+  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
+  failures open the trusted modify URL directly; callback/approve failures use email-code login.
+  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
+
+Examples:
+  clink card modify-link
+  clink card modify-link --open
+`;
+    CARD_PASSKEY_LINK_HELP = `clink card passkey-link
+
+Usage:
+  clink card passkey-link --payment-instrument-id <id> [--open] [options]
+
+Required Arguments:
+  --payment-instrument-id <id> Payment instrument ID for the Visa card
+
+Options:
+  --customer-api-key <key>     Legacy API key override for never-OAuth wallets only
+  --timeout <ms>               Browser Handoff request timeout in milliseconds
+  --open                       Open the Visa Passkey page in the browser
+  --dry-run                    Print the link without opening the browser
+${OUTPUT_OPTIONS}
+
+Notes:
+  Builds the Visa card Passkey URL locally without creating an Instruction.
+  With --open and Agent OAuth, first completes a one-time loopback Browser Handoff so the Portal
+  receives a browser session before navigating to the Passkey page.
+  After Passkey registration, refresh the card through clink card binding-link --no-watch.
+  Output includes manualOpenUrl and browserLaunch for caller diagnostics.
+
+Examples:
+  clink card passkey-link --payment-instrument-id pi_xxx --open
+`;
+    CARD_LIST_HELP = `clink card list
+
+Usage:
+  clink card list [options]
+
+Notes:
+  Reads payment methods from local config only and does not make a network request.
+
+Options:
+${OUTPUT_OPTIONS}
+
+Examples:
+  clink card list
+  clink card list --format pretty
+`;
+    CARD_GET_HELP = `clink card get
+
+Usage:
+  clink card get --payment-instrument-id <id> [options]
+
+Arguments:
+  --payment-instrument-id <id> Payment instrument ID to read from local cached payment methods
+
+Options:
+${OUTPUT_OPTIONS}
+
+Notes:
+  Reads payment method detail from local config only and does not make a network request.
+
+Examples:
+  clink card get --payment-instrument-id pi_xxx
+  clink card get --payment-instrument-id pi_xxx --format pretty
+`;
+    RISK_RULE_HELP = `clink risk
+
+Usage:
+  clink risk get [options]
+  clink risk link [--open] [options]
+
+Subcommands:
+  get          Fetch current risk rule settings
+  link         Print the agent risk-rule setup page URL
+`;
+    RISK_RULE_GET_HELP = `clink risk get
+
+Usage:
+  clink risk get [options]
+
+Options:
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Calls GET /agent/risk/rule/settings.
+
+Examples:
+  clink risk get
+  clink risk get --format pretty
+`;
+    RISK_RULE_LINK_HELP = `clink risk link
+
+Usage:
+  clink risk link [--open] [options]
+
+Options:
+${CUSTOMER_API_KEY_LINK_OPTIONS}
+
+Notes:
+  Prints the agent risk-rule setup page at /risk-rules-setup. The agent domain mirrors the
+  environment saved by wallet init, or the environment derived from an explicit base override.
+  No network request.
+  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
+
+Examples:
+  clink risk link
+  clink risk link --open
+`;
+    PAY_HELP = `clink pay
+
+Usage:
+  clink pay --merchant-id <id> --amount <amount> --currency <currency> [--payment-instrument-id <id>] [options]
+  clink pay --session-id <id> [--payment-instrument-id <id>] [options]
+
+Arguments:
+  --merchant-id <id>           Merchant ID for direct charge mode
+  --amount <amount>            Charge amount for direct charge mode
+  --currency <currency>        Charge currency for direct charge mode, for example USD
+  --session-id <id>            Checkout session ID for session mode
+  --payment-instrument-id <id> Payment instrument to charge; optional for ALIPAY
+  --instruction-id <id>          VIC purchase instruction ID sent as instruction_id
+  --purchase-instruction-id <id> Backward-compatible alias for --instruction-id
+  --mandate-id <id>              VIC mandate ID sent as mandate_id
+  --shipping-address <json>      UCP Postal Address JSON object sent as shippingaddress
+  --products <json>              Product list JSON array for aiAgentInstructionBo.products
+
+Options:
+  --payment-method-type <type> Payment method type, defaults to CARD
+  --terminal-qr               Render a returned payment QR in the terminal
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  If --payment-instrument-id is omitted, ALIPAY sends no payment instrument and lets the backend
+  resolve or create it. CARD and BALANCE keep using the cached default payment method. Other types
+  refresh payment methods and require one matching type. If none match, bind one and refresh
+  payment methods. When several match, exactly one must be marked default or the caller must pass
+  --payment-instrument-id explicitly.
+  An explicit payment instrument for ALIPAY or those other types is validated against the refreshed
+  list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
+  Refresh cached payment methods with clink card binding-link when needed.
+  For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
+  For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
+  street_address, extended_address, address_locality, address_region, address_country,
+  postal_code, first_name, last_name, and phone_number.
+  For product-level VIC credential context, pass --products as a JSON array with productId,
+  productName, productUrl, quantity, unitPrice, currencyCode, and optional extra.
+  Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
+  A status 5 payment with a PNG QR response returns customerAction.type=QR_CODE_REQUIRED,
+  mediaType=image/png, a private temporary imagePath, cleanupRequired=true, a directory-level
+  cleanupPath, order/payment execution IDs, and expiry metadata. expiresAt is Unix epoch seconds;
+  event consumers use expiresSecond with a maximum of 900 seconds. The PNG Data URL is never
+  printed. After payment reaches a terminal state or expires, the caller must remove
+  customerAction.cleanupPath recursively.
+  With --terminal-qr, pay also renders the QR as UTF-8 characters on stderr while stdout remains
+  one machine-readable result. The raw QR payload is never printed. If terminal rendering is
+  unavailable, pay prints a safe warning and keeps customerAction.imagePath for fallback display.
+  If the payment was submitted but the QR cannot be validated or stored, pay returns
+  error.type=payment_state_unknown with retryAllowed=false and the existing order/payment
+  execution IDs. Do not retry automatically; verify the existing payment first.
+
+Examples:
+  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
+  clink pay --merchant-id merchant_xxx --amount 1 --currency USD --payment-method-type ALIPAY --terminal-qr --format json
+  clink pay --session-id sess_xxx --payment-instrument-id pi_xxx
+  clink pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
+`;
+    REFUND_HELP = `clink refund
+
+Usage:
+  clink refund create --order-id <id> [options]
+  clink refund get --refund-id <id> [options]
+
+Subcommands:
+  create       Apply full refund for an order
+  get          Query refund status
+`;
+    REFUND_CREATE_HELP = `clink refund create
+
+Usage:
+  clink refund create --order-id <id> [options]
+
+Arguments:
+  --order-id <id>              Order ID to refund
+
+Options:
+${CUSTOMER_REQUEST_OPTIONS}
+
+Notes:
+  Applies a full refund for the given order.
+
+Examples:
+  clink refund create --order-id order_xxx
+  clink refund create --order-id order_xxx --format pretty
+`;
+    REFUND_GET_HELP = `clink refund get
+
+Usage:
+  clink refund get --refund-id <id> [options]
+
+Arguments:
+  --refund-id <id>             Refund order ID to query
+
+Options:
+${CUSTOMER_REQUEST_OPTIONS}
+
+Examples:
+  clink refund get --refund-id rfd_xxx
+  clink refund get --refund-id rfd_xxx --format pretty
+`;
+    UCP_CHECKOUT_HELP = `clink ucp-checkout
+
+Usage:
+  clink ucp-checkout <run|create|get|update|cancel|complete> [options]
+
+Actions:
+  run       Create, complete exactly once, and optionally wait for digital delivery
+  create    Create a UCP checkout session for an external/shadow merchant
+  get       Fetch one checkout session by --checkout-id
+  update    Replace editable checkout fields by --checkout-id
+  cancel    Cancel one checkout session by --checkout-id
+  complete  Complete checkout with a payment instrument
+
+Arguments:
+  --checkout-id <id>              Checkout ID for get/update/cancel/complete
+  --merchant-url <url>            External merchant checkout URL for create
+  --merchant-name <name>          Optional merchant display name override for create
+  --merchant-category-code <code> Merchant category code for create
+  --order-channel-id <id>         Optional advanced override; backend derives it from merchant-url
+  --currency <currency>           Checkout currency for create; update validation/dry-run hint
+  --line-items <json>             UCP line_items JSON array for create/update
+  --buyer <json>                  UCP buyer JSON object for create/update
+  --shipping-address <json>       Shipping address JSON object for create/update
+  --metadata <json>               Metadata JSON object for create/update
+  --payment-instrument-id <id>    Payment instrument ID for run/complete; defaults to the cached default card
+  --confirm-purchase              Required for a live run; confirms the user-approved purchase
+  --wait-delivery                 After a completed run, wait for the returned digital order
+  --max-wait <seconds>            Delivery wait bound for run; defaults to 900
+  --endpoint <url>                Optional checkout endpoint prefix; appends checkout-sessions paths
+
+Notes:
+  Calls /agent/ucp/external/checkout-sessions internally because CLI-discovered merchants use the
+  shadow-merchant external checkout path by default. The command surface intentionally does not
+  expose an "external" mode or subcommand.
+  When --endpoint is provided, create appends /checkout-sessions, get/update append
+  /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  create sends merchant_url, customer_id, buyer.email, and context.currency.
+  customer_id and buyer.email come from the local clink config JSON.
+  Idempotency-Key is generated by clink for create/update/complete; callers do not pass it.
+  create treats line_items price/amount fields as decimal major-unit values and converts them to
+  minor units by --currency. Live update reads the existing checkout currency and converts decimal
+  strings such as "12.00"; integer JSON numbers remain accepted as minor units for compatibility.
+  update --dry-run requires --currency because it performs no read request.
+  complete sends a standard UCP payment object with payment.instruments[0].id as local
+  config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
+  omitted, it uses the local cached default card.
+  run requires --confirm-purchase before any live request. It never retries create or complete,
+  calls complete exactly once, and returns a read-only get resumeCommand for non-completed states.
+  --wait-delivery starts only when complete returns status=completed and data.order.id. It reuses
+  the bounded, read-only ucp-order delivery wait and never retries payment or Checkout.
+  run --dry-run needs no confirmation and prints the create, exactly-once complete, and optional
+  delivery plan without making network requests or payment side effects.
+  A completed get/complete response carries the OMS/UCP order ID in data.order.id. Pass that exact
+  value to ucp-order get; do not infer the ID kind from an order_ prefix. agent_order event
+  resourceId, data.orderId, and data.paymentOrderId are Clink Payment order IDs, not UCP order IDs.
+
+Examples:
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --payment-instrument-id pi_xxx --confirm-purchase --wait-delivery --format json
+  clink ucp-checkout create \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --format json
+  clink ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' --format json
+  clink ucp-checkout complete --checkout-id chk_xxx --format json
+  clink ucp-checkout cancel --checkout-id chk_xxx --format json
+`;
+    UCP_CATALOG_HELP = `clink ucp-catalog
+
+Usage:
+  clink ucp-catalog search --merchant-id <id> --query <text> [options]
+
+Actions:
+  search     Search one merchant's UCP Catalog
+  product    Get one product by the ID returned from Catalog search
+
+Examples:
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink ucp-catalog product --merchant-id merchant_xxx --product-id product_xxx --format json
+  clink ucp-catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
+`;
+    UCP_CATALOG_SEARCH_HELP = `clink ucp-catalog search
+
+Usage:
+  clink ucp-catalog search --merchant-id <id> --query <text> [options]
+
+Required Arguments:
+  --merchant-id <id>          Merchant-scoped UCP Catalog owner
+  --query <text>              Catalog search text
+
+Optional Request Fields:
+  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
+                              zh-Hans, or fr-CA. Omitted means results are not translated
+  --context <json>            UCP Catalog context JSON object. Fields:
+                              - address_country: ISO 3166-1 alpha-2 context hint (e.g., "SG", "HK")
+                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
+                              - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
+  --filters <json>            UCP Catalog filters JSON object; prices use minor units
+  --signals <json>            UCP Catalog signals JSON object
+  --attribution <json>        UCP Catalog attribution JSON object
+  --cursor <cursor>           Pagination cursor from a previous response
+  --limit <n>                 Page size from 1 to 100; server default is 10
+  --request-id <id>           Request-Id header; defaults to a generated UUID
+  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
+
+Options:
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
+
+Behavior:
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/search. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
+  CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
+  refresh or a wallet-login recovery prompt.
+  Localization is opt-in and comes only from context.language: pass --language <tag> or set the
+  field inside --context, never both. Omit them and results keep the merchant's original titles
+  and descriptions; the query text is never used to guess a target language.
+
+Examples:
+  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
+  clink ucp-catalog search --merchant-id merchant_xxx --query \u718A\u732B\u5916\u5356 --language en --format json
+  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --language en-US --context '{"currency":"USD"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
+`;
+    UCP_CATALOG_PRODUCT_HELP = `clink ucp-catalog product
+
+Usage:
+  clink ucp-catalog product --merchant-id <id> --product-id <id> [options]
+
+Required Arguments:
+  --merchant-id <id>          Merchant-scoped UCP Catalog owner
+  --product-id <id>           Product ID returned by ucp-catalog search
+
+Optional Request Fields:
+  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
+                              zh-Hans, or fr-CA. Omitted means results are not translated
+  --context <json>            UCP Catalog context JSON object
+  --language <tag>            Convenience override for context.language
+  --filters <json>            UCP Catalog filters JSON object; prices use minor units
+  --signals <json>            UCP Catalog signals JSON object
+  --attribution <json>        UCP Catalog attribution JSON object
+  --request-id <id>           Request-Id header; defaults to a generated UUID
+  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
+
+Options:
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
+
+Behavior:
+  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
+  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
+  It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
+  Localization is opt-in and comes only from context.language: pass --language <tag> or set the
+  field inside --context, never both. Omit them and the product keeps its original title and
+  description. Pass the same language Search used, or the two views disagree.
+
+Examples:
+  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
+  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en     --format json
+`;
+    CATALOG_HELP = `clink catalog
+
+Usage:
+  clink catalog search --query <text> [options]
+
+Actions:
+  search     Search catalogs across merchants without naming one
+
+Examples:
+  clink catalog search --query "iced latte" --format json
+  clink catalog search --query shoes --channel-type shopify --format pretty
+`;
+    CATALOG_SEARCH_HELP = `clink catalog search
+
+Usage:
+  clink catalog search --query <text> [options]
+
+Required Arguments:
+  --query <text>              Catalog search text
+
+Optional Request Fields:
+  --channel-type <type>       Narrow to one channel, for example shopify or eats365.
+                              Omitted means discovery across every channel
+  --form-type <type>          Caller-declared form or scenario type; echoed back in discovery mode
+  --ext <json>                Caller-defined extension map, passed through and logged only.
+                              It never affects search conditions or the response shape
+  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
+                              zh-Hans, or fr-CA
+  --context <json>            UCP Catalog context JSON object. Fields:
+                              - address_region: regional discovery hint (e.g., "SG", "HK")
+                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
+                              - currency: ISO 4217 code (e.g., "USD", "HKD")
+  --language <tag>            Convenience override for context.language
+  --filters <json>            UCP Catalog filters JSON object; prices use minor units
+  --signals <json>            UCP Catalog signals JSON object
+  --attribution <json>        UCP Catalog attribution JSON object
+  --request-id <id>           Request-Id header; defaults to a generated UUID
+  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
+
+Options:
+${PUBLIC_CATALOG_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/ucp/extra/catalog/search
+
+Behavior:
+  Sends an anonymous request, defaults to production, and accepts --sandbox or --test for this
+  invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
+  Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
+  not need to know one up front. Use ucp-catalog search when the merchant is already known.
+  address_region is a discovery hint, not a strict filter. Published external-store mappings
+  currently cover HK and SG; other ISO codes may leave results un-narrowed.
+  Broad discovery returns a bounded, non-exhaustive result window and currently exposes no pagination.
+  Use ucp-catalog search for real cursor pagination when a merchant is already known.
+  Results come back grouped by target, each group carrying channel_type plus either merchant_id
+  (internal merchant) or store_id (external platform store). The shape does not change with
+  --channel-type; only the number of groups does.
+  Set context.language, with --language <tag> or the field inside --context, to declare the
+  caller's language; the two cannot be combined and the query text is never used to guess one.
+  Broad discovery forwards that language to each provider but does not run UCP's LLM translation
+  pass; provider localization may vary. The result translation is implemented for merchant-scoped
+  ucp-catalog search and product only.
+
+Examples:
+  clink catalog search --query "iced latte" --format json
+  clink catalog search \\
+    --query shoes --channel-type shopify \\
+    --ext '{"trace":"demo-1"}' \\
+    --language en-US --context '{"currency":"USD"}' \\
+    --format pretty
+  clink catalog search \\
+    --query coffee \\
+    --language en --context '{"address_region":"SG","currency":"SGD"}' \\
+    --format json
+`;
+    UCP_ORDER_HELP = `clink ucp-order
+
+Usage:
+  clink ucp-order <get|wait-delivery|list> [options]
+
+Actions:
+  get             Get one UCP order's current status by order ID
+  wait-delivery   Poll an expected digital delivery until ready, failed, or timed out
+  list            List the calling wallet's orders, newest first
+
+Examples:
+  clink ucp-order get --order-id order_xxx --format json
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
+  clink ucp-order list --status paid --format json
+  clink ucp-order list --status paid,refunded --start-time 2026-07-01T00:00:00Z --format pretty
+`;
+    UCP_ORDER_GET_HELP = `clink ucp-order get
+
+Usage:
+  clink ucp-order get --order-id <id> [options]
+
+Required Arguments:
+  --order-id <id>             Order ID to fetch
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/ucp/orders/{orderId}
+
+Behavior:
+  Uses the environment saved by wallet init. The endpoint is not merchant-scoped: ownership is
+  checked against the caller's wallet identity, so another buyer's order returns not_found.
+  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
+  their legacy customer API key.
+  --order-id must be data.order.id from a completed ucp-checkout get/complete response. Do not infer
+  the ID kind from an order_ prefix: agent_order event resourceId, data.orderId, and
+  data.paymentOrderId are Clink Payment order IDs and must not be used here. A successful response
+  can include the merchant completion details in data.ucp.success_info.
+
+Examples:
+  clink ucp-order get --order-id order_xxx --format json
+`;
+    UCP_ORDER_WAIT_DELIVERY_HELP = `clink ucp-order wait-delivery
+
+Usage:
+  clink ucp-order wait-delivery --order-id <id> [--max-wait <seconds>] [options]
+
+Required Arguments:
+  --order-id <id>             UCP Order ID whose digital delivery is expected
+
+Optional Arguments:
+  --max-wait <seconds>        Bounded wait across order reads (default 900)
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  Repeated GET /agent/ucp/orders/{orderId}
+
+Behavior:
+  Use only when the frozen product context expects a digital delivery such as a voucher, coupon,
+  card secret, redemption link, or image. A missing digital_delivery field is treated as pending
+  because the asynchronous payment projection may not have initialized it yet. Pending reads honor
+  digital_delivery.next_retry_at with a 3-to-30-second local clamp. The command stops at ready or
+  failed; ready requires at least one artifact. It never retries payment, checkout completion, or
+  order creation.
+
+  Output contains ready, timedOut, deliveryStatus, attempts, and the last authoritative order.
+  A timeout also contains resumeCommand. Payment success and delivery status remain independent:
+  failed or timed-out delivery must not downgrade an already confirmed payment.
+
+Examples:
+  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
+`;
+    UCP_ORDER_LIST_HELP = `clink ucp-order list
+
+Usage:
+  clink ucp-order list [--status <statuses>] [--start-time <utc>] [--end-time <utc>] [options]
+
+Optional Arguments:
+  --status <statuses>         Comma-separated order statuses; matches any of them. One of
+                              draft, pending, paid, cancelled, partially_refunded, refunded
+  --start-time <utc>          Created-at lower bound, inclusive; UTC RFC 3339
+  --end-time <utc>            Created-at upper bound, inclusive; UTC RFC 3339
+  --page <n>                  Page number starting at 1; server default is 1
+  --size <n>                  Page size; the server applies its own default and upper bound
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/ucp/orders?created_from=&created_to=&status=&page=&size=
+  Multiple statuses are sent as repeated status params, for example status=paid&status=refunded.
+
+Behavior:
+  Returns only the calling wallet's own orders, newest first: ownership comes from the wallet
+  identity and cannot be passed in. Timestamps without a zone offset are read as UTC and sent as
+  RFC 3339. Rows carry id, checkout_id, status, payment_status, amount, currency, and created_at;
+  use ucp-order get for the full order.
+
+Examples:
+  clink ucp-order list --status paid --format json
+  clink ucp-order list \\
+    --status paid,partially_refunded,refunded \\
+    --start-time 2026-07-01T00:00:00Z \\
+    --end-time 2026-07-31T23:59:59Z \\
+    --size 20 --format pretty
+`;
+    UCP_CHECKOUT_CREATE_HELP = `clink ucp-checkout create
+
+Usage:
+  clink ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
+
+Required Arguments:
+  --merchant-url <url>            External merchant checkout URL
+  --merchant-category-code <code> Merchant category code, ISO 18245 MCC
+  --currency <currency>           Checkout currency, for example USD
+  --line-items <json>             UCP line_items JSON array
+
+Optional Arguments:
+  --merchant-name <name>          Merchant display name override
+  --order-channel-id <id>         Advanced override; backend normally derives it from merchant-url
+  --buyer <json>                  UCP buyer JSON object
+  --shipping-address <json>       Shipping address JSON object
+  --metadata <json>               Metadata JSON object
+  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/ucp/external/checkout-sessions
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  customer_id and buyer.email are read from the local clink config JSON.
+  Idempotency-Key is generated by clink.
+  line_items price/amount fields are decimal major-unit values and are converted by --currency;
+  --currency is sent as context.currency.
+
+Examples:
+  clink ucp-checkout create \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --format json
+`;
+    UCP_CHECKOUT_RUN_HELP = `clink ucp-checkout run
+
+Usage:
+  clink ucp-checkout run --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
+
+Required Arguments:
+  --merchant-url <url>            External merchant checkout URL
+  --merchant-category-code <code> Merchant category code, ISO 18245 MCC
+  --currency <currency>           Checkout currency, for example USD
+  --line-items <json>             UCP line_items JSON array
+  --confirm-purchase              Required for live execution; omit only with --dry-run
+
+Optional Arguments:
+  --merchant-name <name>          Merchant display name override
+  --order-channel-id <id>         Advanced override; backend normally derives it from merchant-url
+  --buyer <json>                  UCP buyer JSON object
+  --shipping-address <json>       Shipping address JSON object
+  --metadata <json>               Metadata JSON object
+  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
+  --wait-delivery                 Wait for digital delivery after authoritative completion
+  --max-wait <seconds>            Delivery wait bound; defaults to 900 and requires --wait-delivery
+  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoints:
+  POST /agent/ucp/external/checkout-sessions
+  POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
+  GET  /agent/ucp/orders/{orderId} only with --wait-delivery after completed + data.order.id
+
+Safety:
+  Missing --confirm-purchase on a live run is rejected before any network request.
+  create and complete are each called once and are never automatically retried. complete is the
+  only payment-submitting step. A complete_in_progress or any other non-completed response returns
+  stage=complete plus a read-only resumeCommand bound to the original endpoint and checkoutId.
+  --wait-delivery starts only for status=completed with data.order.id. ready, failed, and timeout
+  return the authoritative order and digital_delivery snapshot; timeout reuses the ucp-order
+  wait-delivery resumeCommand. Delivery polling never retries create, complete, or payment.
+  --dry-run performs no network request and prints an auditable create/complete/delivery plan.
+
+Examples:
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
+    --payment-instrument-id pi_xxx --confirm-purchase --format json
+  clink ucp-checkout run \\
+    --merchant-url https://shop.example/checkout/abc \\
+    --merchant-category-code 5311 --currency USD \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Voucher","price":"10.00"},"quantity":1}]' \\
+    --confirm-purchase --wait-delivery --max-wait 900 --format json
+`;
+    UCP_CHECKOUT_GET_HELP = `clink ucp-checkout get
+
+Usage:
+  clink ucp-checkout get --checkout-id <id> [options]
+
+Required Arguments:
+  --checkout-id <id>              Checkout ID to fetch
+
+Optional Arguments:
+  --endpoint <url>                Optional checkout endpoint prefix
+  --max-wait <seconds>            Poll only this Checkout until terminal; defaults to 900
+  --wait-delivery                 After completed + data.order.id, also wait for digital delivery
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/ucp/external/checkout-sessions/{checkoutId}
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Without wait flags, performs one GET. With --max-wait, polls only the same Checkout by GET and
+  never creates, completes, or submits payment. --wait-delivery continues from an authoritative
+  completed Checkout into the same order's digital-delivery wait. A timeout returns one bound
+  ucp-checkout get resumeCommand; callers must not append ucp-order commands.
+  Once completed, data.order.id is the OMS/UCP order ID accepted by ucp-order get. Do not use an
+  agent_order event's resourceId, data.orderId, or data.paymentOrderId; those are Clink Payment
+  order IDs, and an order_ prefix does not distinguish the two ID domains.
+
+Examples:
+  clink ucp-checkout get --checkout-id chk_xxx --format json
+  clink ucp-checkout get --checkout-id chk_xxx --wait-delivery --max-wait 900 --format json
+`;
+    UCP_CHECKOUT_UPDATE_HELP = `clink ucp-checkout update
+
+Usage:
+  clink ucp-checkout update --checkout-id <id> --line-items <json> [options]
+
+Required Arguments:
+  --checkout-id <id>              Checkout ID to update
+  --line-items <json>             Replacement UCP line_items JSON array
+
+Optional Arguments:
+  --currency <currency>           Expected checkout currency; required only with --dry-run
+  --buyer <json>                  Replacement UCP buyer JSON object
+  --shipping-address <json>       Replacement shipping address JSON object
+  --metadata <json>               Replacement metadata JSON object
+  --endpoint <url>                Optional checkout endpoint prefix
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  PUT /agent/ucp/external/checkout-sessions/{checkoutId}
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Idempotency-Key is generated by clink.
+  Live update fetches the existing checkout first and converts line_items price/amount decimal
+  strings such as "12.00" to minor-unit integers using its currency. Existing integer JSON numbers
+  remain minor-unit values for backward compatibility. --currency, when supplied, must match the
+  fetched checkout and is not sent in the PUT body. --dry-run performs no fetch, so it requires
+  --currency as the conversion hint.
+
+Examples:
+  clink ucp-checkout update \\
+    --checkout-id chk_xxx \\
+    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' \\
+    --format json
+`;
+    UCP_CHECKOUT_CANCEL_HELP = `clink ucp-checkout cancel
+
+Usage:
+  clink ucp-checkout cancel --checkout-id <id> [options]
+
+Required Arguments:
+  --checkout-id <id>              Checkout ID to cancel
+
+Optional Arguments:
+  --endpoint <url>                Optional checkout endpoint prefix
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/ucp/external/checkout-sessions/{checkoutId}/cancel
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+
+Examples:
+  clink ucp-checkout cancel --checkout-id chk_xxx --format json
+`;
+    UCP_CHECKOUT_COMPLETE_HELP = `clink ucp-checkout complete
+
+Usage:
+  clink ucp-checkout complete --checkout-id <id> [--payment-instrument-id <id>] [options]
+
+Required Arguments:
+  --checkout-id <id>              Checkout ID to complete
+
+Optional Arguments:
+  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
+  --endpoint <url>                Optional checkout endpoint prefix
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Idempotency-Key is generated by clink.
+  Sends a standard UCP payment object in the request body. The selected instrument id is local
+  config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
+  --payment-instrument-id is omitted or empty, the CLI uses the local cached default card.
+  The response is passed through unchanged, including data.ucp.success_info. When completion
+  returns data.order.id, use that exact OMS/UCP order ID with ucp-order get. Do not substitute an
+  agent_order event's resourceId, data.orderId, or data.paymentOrderId, even when it starts order_.
+
+Examples:
+  clink ucp-checkout complete --checkout-id chk_xxx --format json
+  clink ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
+`;
+    CONFIG_HELP = `clink config
+
+Usage:
+  clink config set <key> <value>
+  clink config get
+  clink config unset <key>
+
+Subcommands:
+  set        Update local config
+  get        Show local config
+  unset      Remove or reset a local config key
+
+Settable Keys:
+  base-url
+  customer-id
+  default-open-links
+  email
+  name
+
+Notes:
+  customer-api-key cannot be stored with config set. Use config unset customer-api-key to remove
+  an existing saved legacy key.
+  customer-id can be set directly only for wallets that have never used OAuth.
+  wallet init stores a single local customer. Running wallet init again overwrites customer
+  credentials and clears cached payment methods/risk rules for the previous customer.
+`;
+    CONFIG_SET_HELP = `clink config set
+
+Usage:
+  clink config set <key> <value>
+
+Arguments:
+  <key>                        Config key to update
+  <value>                      Value to save
+
+Options:
+${OUTPUT_OPTIONS}
+
+Settable Keys:
+  base-url
+  customer-id
+  default-open-links
+  email
+  name
+
+Examples:
+  clink config set base-url https://api.clinkbill.com
+  clink config set customer-id cus_xxx
+  clink config set default-open-links true
+`;
+    CONFIG_GET_HELP = `clink config get
+
+Usage:
+  clink config get [options]
+
+Options:
+${OUTPUT_OPTIONS}
+
+Examples:
+  clink config get
+  clink config get --format pretty
+`;
+    CONFIG_UNSET_HELP = `clink config unset
+
+Usage:
+  clink config unset <key> [options]
+
+Arguments:
+  <key>                        Config key to remove or reset
+
+Options:
+${OUTPUT_OPTIONS}
+
+Supported Keys:
+  base-url
+  customer-id
+  customer-api-key
+  default-open-links
+  email
+  name
+
+Examples:
+  clink config unset customer-api-key
+  clink config unset base-url
+`;
+    PENDING_INSTRUCTION_HELP = `clink pending-instruction
+
+Usage:
+  clink pending-instruction create [options]
+
+Action:
+  create    Always create one new PENDING Instruction through the Agent API
+
+Behavior:
+  This is a direct atomic command. It does not match or reuse ACTIVE, PENDING,
+  CREATED, or historical Instructions, does not select a card, and does not
+  open a browser or wait for activation. The endpoint is intentionally
+  non-idempotent: an unknown response must not be blindly retried. Use the
+  activatable Instruction query for read-only reconciliation before any retry.
+
+Options:
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array
+  --mandates-file <path>       UTF-8 JSON array file
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+  --is-recurring               Mark the instruction as recurring
+  --shipping-address <json>    Shipping address JSON object
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions/pending
+
+Examples:
+  clink pending-instruction create \\
+    --title "Test pending instruction" \\
+    --mandates '[{"title":"Test","description":"Test authorization","amountLimit":10.00,"currencyCode":"USD","merchantCategoryCode":"5411"}]' \\
+    --format json
+`;
+    INSTRUCTION_HELP = `clink instruction
+
+Usage:
+  clink instruction <prepare|create|sign-url|list|get|update|cancel> [options]
+
+Actions:
+  prepare   Create/reuse a Quick: bound CREATED authorization or no-card PENDING binding wait
+  create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
+  sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
+  list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
+  get       Get one instruction by --purchase-instruction-id
+  update    Print the agent page URL for user-managed changes; no backend update call in this phase
+  cancel    Print the agent page URL for user-managed cancellation; no backend cancel call in this phase
+
+Notes:
+  prepare POSTs the complete restricted instructionContext to
+  /agent/cwallet/instructions/pending. Only after CWallet returns the exact PENDING instructionId
+  does the CLI resolve the trusted card binding link. After the first successful exact-ID Event Hub
+  poll, it prints a machine-readable PENDING handoff envelope with watchReady=true, then keeps
+  waiting in the foreground. It never opens that link or a standalone VIC page. Activation is
+  exact-GET verified and timeout returns an instruction get continuation bound to the original ID;
+  it never creates a second Instruction or retries Checkout/payment.
+  A CREATED response returns the exact backend-bound card's manual authorization URL and a
+  read-only instruction get continuation, without opening a browser or waiting for binding.
+  create POSTs /agent/cwallet/instructions and creates the instruction in CREATED (draft) state,
+  then prints the Passkey page URL for the returned instructionId.
+  An instruction turns ACTIVE only after the Passkey/FIDO signature completes on the agent page
+  (that page calls the backend sign API with the WebAuthn authResult). The CLI does not call the
+  backend sign/update/cancel APIs itself \u2014 those require a Passkey authResult produced in the
+  browser, so sign-url/update/cancel only print the agent page URL for the user to complete there.
+  Agent page URL environment mirrors the environment saved by wallet init or an explicit API base.
+  Only valid for Visa cards the card list reports as VIC-registered: card-level
+  strongAuthRegistered = true, or visaRegistrationSucceeded = true on backends that
+  predate it. strongAuthReady is the requesting device's state and is never the gate.
+  Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
+  Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
+  --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
+  --valid-only lists ACTIVE instructions and, for one-time instructions, keeps only mandates with reserveStatus=0.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
+
+Examples:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
+  clink instruction create \\
+    --payment-instrument-id pi_xxx --title "Business trip" \\
+    --effective-until-time "2026-06-25 00:00:00" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
+    --format json
+  clink instruction sign-url \\
+    --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --format json
+  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
+  clink instruction get --purchase-instruction-id ins_xxx --format json
+  clink instruction cancel --format json
+`;
+    INSTRUCTION_PREPARE_HELP = `clink instruction prepare
+
+Usage:
+  clink instruction prepare --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
+
+Required Arguments:
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
+
+Optional Arguments:
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
+  --is-recurring               Mark the instruction as reusable/recurring
+  --shipping-address <json>    Shipping address JSON object for physical goods
+  --max-wait <seconds>         Foreground activation wait bound, defaults to 900
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions/pending
+
+Behavior:
+  Sends the complete restricted instructionContext without paymentInstrumentId or extra. CWallet
+  creates or reuses one no-card PENDING Instruction and returns its exact instructionId/status.
+  If a VIC-ready card is selected at creation, /pending may instead return CREATED with its
+  backend-bound paymentInstrumentId. The CLI exact-GETs that ID and returns user_action_required,
+  the same card's manualOpenUrl for authorization, and a read-only instruction get continuation.
+  It does not wait for binding, open a browser, replace the bound card, or create another ID.
+  Only ACTIVE is ready for use.
+  The CLI then obtains the existing card binding link but withholds it until the first successful
+  Event Hub poll and identity validation. At readiness it writes the stable English prompt to stderr
+  and stdout emits a structured handoff envelope:
+  status=PENDING, the exact instructionId, trusted bindingUrl, watchReady=true,
+  watchEventType=purchase_instruction.activated, terminal=false, and processRunning=true.
+  The process remains in the foreground and later emits one final exact-ID envelope.
+  The CLI never opens the card binding link or a standalone VIC page. Portal owns card binding,
+  3DS, and VIC; after Portal completion CWallet attaches that card and activates the same ID.
+  The activation event is only a wake-up signal: the CLI exact-GETs the returned ID before reporting
+  ready. Timeout or a wait failure returns a read-only instruction get continuation for the same ID.
+  It never creates a replacement Instruction and never starts Checkout or payment.
+  Pending expiry is server-owned: exact verification requires one valid future Instruction expiry
+  shared by every Mandate, but does not require equality with caller-supplied expiry values.
+  If CWallet returns CARD_READY or VIC_READY without an instructionId because VIC completed during
+  the request race, the command returns card_ready without another POST or a binding handoff.
+  --open and --no-watch are intentionally unsupported.
+
+Mandate Fields:
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
+  merchantCategoryCode, preferredMerchantName or merchantCategory, and effectiveUntilTime.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
+
+Example:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
+`;
+    INSTRUCTION_CREATE_HELP = `clink instruction create
+
+Usage:
+  clink instruction create --payment-instrument-id <id> --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
+
+Required Arguments:
+  --payment-instrument-id <id> Payment instrument ID for the Visa card
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
+
+Optional Arguments:
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
+  --is-recurring               Mark the instruction as reusable/recurring
+  --shipping-address <json>    Shipping address JSON object for physical goods
+  --extra <json>               Extra JSON object passed through to the backend
+
+Options:
+  --open                       Open the generated Passkey link in the browser
+  --no-watch                   Do not poll for webhook events after printing the link
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions
+
+Mandate Fields:
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
+  merchantCategoryCode, and effectiveUntilTime.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
+
+Notes:
+  Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
+  after the user completes Passkey/FIDO authorization on the agent page.
+  --mandates and --mandates-file are mutually exclusive. On Windows PowerShell, prefer
+  --mandates-file so JSON quotes are not reinterpreted by the shell.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+  Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
+
+Examples:
+  clink instruction create \\
+    --payment-instrument-id pi_xxx --title "Business trip" \\
+    --effective-until-time "2026-06-25 00:00:00" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
+    --format json
+  clink instruction create \\
+    --payment-instrument-id pi_xxx --title "Business trip" \\
+    --mandates-file .\\mandates.json --format json
+`;
+    INSTRUCTION_SIGN_URL_HELP = `clink instruction sign-url
+
+Usage:
+  clink instruction sign-url --payment-instrument-id <id> --purchase-instruction-id <id> [options]
+
+Required Arguments:
+  --payment-instrument-id <id>    Payment instrument ID for the Visa card
+  --purchase-instruction-id <id>  Purchase instruction ID to authorize
+
+Options:
+${CUSTOMER_API_KEY_LINK_OPTIONS}
+
+Notes:
+  Builds the Passkey URL locally. The browser page performs the backend sign call with WebAuthn
+  authResult after the user authorizes.
+  Output includes manualOpenUrl and browserLaunch so callers can handle manual browser fallback.
+
+Examples:
+  clink instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
+`;
+    INSTRUCTION_LIST_HELP = `clink instruction list
+
+Usage:
+  clink instruction list [options]
+
+Optional Arguments:
+  --status <status>              Filter by status: CREATED, ACTIVE, PENDING, INPROGRESS, COMPLETED,
+                                 CANCELLED, EXPIRED, DECLINED
+  --valid-only                   List ACTIVE instructions only; one-time mandates are filtered to reserveStatus=0
+  --payment-instrument-id <id>   Filter by payment instrument ID
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/cwallet/instructions
+
+Notes:
+  --valid-only cannot be combined with a non-ACTIVE --status.
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+
+Examples:
+  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
+  clink instruction list --status ACTIVE --format pretty
+`;
+    INSTRUCTION_GET_HELP = `clink instruction get
+
+Usage:
+  clink instruction get --purchase-instruction-id <id> [options]
+
+Required Arguments:
+  --purchase-instruction-id <id>  Purchase instruction ID to fetch
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  GET /agent/cwallet/instructions/{purchaseInstructionId}
+
+Notes:
+  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
+
+Examples:
+  clink instruction get --purchase-instruction-id ins_xxx --format json
+`;
+    INSTRUCTION_UPDATE_HELP = `clink instruction update
+
+Usage:
+  clink instruction update [options]
+
+Options:
+${CUSTOMER_API_KEY_LINK_OPTIONS}
+
+Notes:
+  Prints the agent page URL for user-managed changes. The CLI does not call a backend update API
+  because updates require Passkey/WebAuthn authorization in the browser.
+
+Examples:
+  clink instruction update --open
+`;
+    INSTRUCTION_CANCEL_HELP = `clink instruction cancel
+
+Usage:
+  clink instruction cancel [options]
+
+Options:
+${CUSTOMER_API_KEY_LINK_OPTIONS}
+
+Notes:
+  Prints the agent page URL for user-managed cancellation. The CLI does not call a backend cancel API
+  because cancellation requires Passkey/WebAuthn authorization in the browser.
+
+Examples:
+  clink instruction cancel --open
+`;
+    EVENTS_HELP = `clink events
+
+Usage:
+  clink events poll [options]
+
+Subcommands:
+  poll              Poll the webhook-event queue for state-change events
+
+Examples:
+  clink events poll --format json
+  clink events poll --type payment_method.added --format json
+`;
+    EVENTS_POLL_HELP = `clink events poll
+
+Poll the latest state-change events (POST /agent/event-hub/webhook-events/poll)
+within a bounded window, process and cache them, and (by default) acknowledge them via
+POST /agent/event-hub/webhook-events/ack. Use this to consume state changes on demand
+instead of relying on the link-command watch.
+
+Usage:
+  clink events poll [options]
+
+Options:
+  --max-wait <seconds>         Bounded window across retries (default 60)
+  --limit <n>                  Max events per poll (pageSize, default 20)
+  --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
+  --checkout-id <id>           Match one agent_order event by canonical checkout aliases or the
+                               UCP agentInstructionInfo checkout ID; preserve every nonmatch
+  --ucp-order-id <id>          Frozen UCP order ID from checkout data; after a verified succeeded
+                               event, fetch this order before ACK without re-reading checkout
+  --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
+                               --ucp-order-id is unavailable
+  --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
+  --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
+  --event-only                 ACK and return the exact succeeded event without UCP order lookup
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Output (data):
+  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...],
+    "nextToken"?: string, "paymentConfirmed"?: true, "ucpOrderId"?: string,
+    "orderLookupStatus"?: "FETCHED"|"ERROR"|"IDENTIFIER_CONFLICT"|"PENDING",
+    "order"?: object, "orderWarning"?: string, "orderResumeCommand"?: string,
+    "eventAckWarning"?: string }
+  On timeout, "resumeCommand" is included. Ordinary polls need no cursor because ACKed
+  events are removed server-side. Checkout polls may also return nextToken, which the
+  generated resumeCommand carries automatically, together with --ucp-order-id and --endpoint.
+
+Notes:
+  Every record read is processed: payment_method.* events refresh cached payment methods
+  and risk_rule.updated events upsert local risk rule state. With --type, "events" contains
+  only matching records; a comma-separated list waits for any listed type. Unrelated records
+  are acknowledged and skipped so an older page cannot block the requested type. Matching
+  records are also acknowledged by default.
+  With both --type and --no-ack, matching records stay queued but unrelated records are still
+  acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
+  --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The request sends
+  eventTypes plus selectors.checkoutId to Event Hub before pagination. Event Hub returns nextToken
+  so the CLI can continue past unacknowledged events owned by another Checkout. Missing, malformed,
+  or conflicting checkout aliases fail closed; resourceId/orderId never substitute. A full page
+  without nextToken fails explicitly instead of polling the same page forever. Only an exact match
+  with absent or mutually consistent Payment Order aliases is eligible for ACK; malformed aliases
+  stay queued. resumeCommand preserves the selector and nextToken.
+  By default an agent_order.succeeded selected with --checkout-id continues in the same process
+  to UCP order lookup while the event remains queued, then ACKs immediately before output.
+  --ucp-order-id is the fast path and is the only supplied ID passed
+  to ucp-order get; event resourceId/orderId remain Payment Order IDs and are never reused. Without
+  --ucp-order-id, the CLI re-reads the same checkout (and --endpoint) immediately, then after
+  1/2/4/8 seconds while projection is pending, and accepts only mutually consistent canonical,
+  legacy OMS, or completed data.order identifiers. Checkout/order lookup failures keep
+  paymentConfirmed=true, exit 0, and return a separate warning/resume command. An uncertain ACK
+  also exits 0 with payment evidence plus eventAckWarning, so a later harmless duplicate can be
+  observed. --no-ack and --event-only suppress this automatic lookup.
+  --payment-instrument-id requires --type, is mutually exclusive with --checkout-id, and matches
+  canonical payload aliases or the event resourceId. Same-type events for another card remain
+  unacknowledged, and resumeCommand preserves the card selector.
+
+Examples:
+  clink events poll --format json
+  clink events poll --type payment_method.updated --format json
+  clink events poll --type payment_method.update,vic_device.binding_succeeded --payment-instrument-id pi_123 --format json
+  clink events poll --type account-created,account-reloaded --format json
+  clink events poll --type agent_order.succeeded --checkout-id checkout_123 --format json
+  clink events poll --type agent_order.succeeded --checkout-id checkout_123 --ucp-order-id ucp_order_123 --max-wait 900 --format json
+  clink events poll --no-ack --format json
+`;
+  }
+});
+
+// dist/internal-ucp.js
+async function getInternalUcpMerchantList(options2 = {}) {
+  return (await loadInternalUcpMerchantList(options2)).merchants;
+}
+function validateInternalUcpMerchantList(value, source) {
+  if (!Array.isArray(value)) {
+    throw invalidMerchantList(source, "expected an array");
+  }
+  const merchants = [];
+  for (const record2 of value) {
+    if (!record2 || typeof record2 !== "object" || Array.isArray(record2)) {
+      continue;
+    }
+    const fields = record2;
+    const merchantId = nonBlankString(fields.merchant_id);
+    const merchantName = nonBlankString(fields.merchant_name);
+    const description = optionalDescription(fields.description);
+    const domain = merchantRouteUrl(fields.domain);
+    if (!merchantId || !merchantName || description === void 0 || !domain) {
+      continue;
+    }
+    const merchant = {
+      merchant_id: merchantId,
+      merchant_name: merchantName,
+      description,
+      domain
+    };
+    if (Object.hasOwn(fields, "ext")) {
+      const ext = safeCloneJsonValue(fields.ext);
+      if (ext !== void 0) {
+        merchant.ext = ext;
+      }
+    }
+    merchants.push(merchant);
+  }
+  if (value.length > 0 && merchants.length === 0) {
+    throw invalidMerchantList(source, "no valid merchant identities");
+  }
+  return merchants;
+}
+async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
+  let productUrl2;
+  try {
+    productUrl2 = new URL(rawProductUrl);
+  } catch {
+    throw validationError("invalid --product-url");
+  }
+  const environment = options2.environment ?? "production";
+  const domainName = canonicalDomain(productUrl2.hostname);
+  if (!domainName) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  let merchantId;
+  if (options2.merchants) {
+    merchantId = options2.merchants.get(domainName);
+  } else {
+    let loaded = await loadInternalUcpMerchants(options2);
+    merchantId = loaded.merchants.get(domainName);
+    if (!merchantId && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchants(options2, true);
+      merchantId = loaded.merchants.get(domainName);
+    }
+  }
+  if (!merchantId) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
+}
+async function resolveInternalUcpEndpointByMerchantId(rawMerchantId, options2 = {}) {
+  const merchantId = nonBlankString(rawMerchantId);
+  if (!merchantId) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  const environment = options2.environment ?? "production";
+  let domainName;
+  if (options2.merchants) {
+    domainName = domainNameForMerchantId(options2.merchants, merchantId);
+  } else {
+    let loaded = await loadInternalUcpMerchantList(options2);
+    domainName = merchantListDomainName(loaded.merchants, merchantId);
+    if (!domainName && loaded.fromCache) {
+      loaded = await loadInternalUcpMerchantList(options2, true);
+      domainName = merchantListDomainName(loaded.merchants, merchantId);
+    }
+  }
+  if (!domainName) {
+    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
+  }
+  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
+}
+function internalUcpMerchantRouteUrl(domainName) {
+  return `https://${domainName}/`;
+}
+function internalUcpEndpointResult(domainName, merchantId, baseUrl) {
+  let endpoint;
+  try {
+    endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchantId)}`, baseUrl);
+  } catch {
+    throw validationError("invalid internal UCP base URL");
+  }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
+    throw validationError("invalid internal UCP base URL");
+  }
+  return {
+    domainName,
+    merchantId,
+    provider: "clinkbill",
+    endpoint: endpoint.toString()
+  };
+}
+function domainNameForMerchantId(merchants, merchantId) {
+  for (const [domainName, mappedMerchantId] of merchants) {
+    if (mappedMerchantId === merchantId) {
+      return domainName;
+    }
+  }
+  return void 0;
+}
+function merchantListDomainName(merchants, merchantId) {
+  for (const merchant of merchants) {
+    if (merchant.merchant_id !== merchantId) {
+      continue;
+    }
+    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
+    if (domainName) {
+      return domainName;
+    }
+  }
+  return void 0;
+}
+async function loadInternalUcpMerchants(options2, forceRefresh = false) {
+  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
+  const environment = options2.environment ?? "production";
+  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+  return {
+    merchants: merchantMap(loaded.merchants, source),
+    fromCache: loaded.fromCache
+  };
+}
+async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
+  const environment = options2.environment ?? "production";
+  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
+  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
+  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
+  if (!requestsByUrl) {
+    requestsByUrl = /* @__PURE__ */ new Map();
+    merchantListRequests.set(fetchMerchantList, requestsByUrl);
+  }
+  let state = requestsByUrl.get(url);
+  if (!state) {
+    state = {};
+    requestsByUrl.set(url, state);
+  }
+  const now = Date.now();
+  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
+    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
+  }
+  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
+  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
+  if (inFlight) {
+    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
+  }
+  const requestState = state;
+  const request = (async () => {
+    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
+    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
+    const cached = Object.freeze(validated);
+    requestState.cached = {
+      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
+      merchants: cached
+    };
+    return cached;
+  })();
+  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
+  requestState.inFlightByTimeout.set(timeoutMs, request);
+  try {
+    return { merchants: cloneMerchantList(await request), fromCache: false };
+  } finally {
+    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
+      requestState.inFlightByTimeout.delete(timeoutMs);
+      if (requestState.inFlightByTimeout.size === 0) {
+        delete requestState.inFlightByTimeout;
+      }
+    }
+  }
+}
+async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
+  const deadline = Date.now() + timeoutMs;
+  let lastFailure;
+  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), remainingMs);
+    let response;
+    try {
+      response = await fetchMerchantList(url, {
+        method: "GET",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          "Accept-Language": "en-US",
+          "User-Agent": MERCHANT_LIST_USER_AGENT,
+          [CLI_VERSION_HEADER]: CLI_VERSION
+        },
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    }
+    if (!response.ok) {
+      clearTimeout(timeout);
+      discardMerchantListResponse(response);
+      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
+      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    }
+    let rawText;
+    try {
+      rawText = await response.text();
+    } catch (error) {
+      clearTimeout(timeout);
+      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
+      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
+        continue;
+      }
+      throw lastFailure;
+    } finally {
+      clearTimeout(timeout);
+    }
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw apiError("internal UCP merchant list response is not valid JSON", 502);
+    }
+  }
+  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+}
+function merchantRouteUrl(value) {
+  const rawDomain = nonBlankString(value);
+  if (!rawDomain) {
+    return void 0;
+  }
+  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
+    return void 0;
+  }
+  let domain;
+  try {
+    domain = new URL(rawDomain);
+  } catch {
+    return void 0;
+  }
+  const domainName = canonicalDomain(domain.hostname);
+  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
+    return void 0;
+  }
+  domain.hostname = domainName;
+  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
+    domain.port = "";
+  }
+  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
+}
+function nonBlankString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function stringValue(value) {
+  return typeof value === "string" ? value.trim() : void 0;
+}
+function optionalDescription(value) {
+  return value === null || value === void 0 ? "" : stringValue(value);
+}
+function safeCloneJsonValue(value) {
+  try {
+    return cloneJsonValue(value, /* @__PURE__ */ new Set());
+  } catch {
+    return void 0;
+  }
+}
+function cloneJsonValue(value, ancestors) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (!value || typeof value !== "object" || ancestors.has(value)) {
+    return void 0;
+  }
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const result = [];
+      for (const item of value) {
+        const cloned = cloneJsonValue(item, ancestors);
+        if (cloned === void 0) {
+          return void 0;
+        }
+        result.push(cloned);
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return void 0;
+    }
+    const entries = [];
+    for (const [key, item] of Object.entries(value)) {
+      const cloned = cloneJsonValue(item, ancestors);
+      if (cloned === void 0) {
+        return void 0;
+      }
+      entries.push([key, cloned]);
+    }
+    return Object.fromEntries(entries);
+  } finally {
+    ancestors.delete(value);
+  }
+}
+function canonicalDomain(value) {
+  return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
+}
+function merchantMap(merchants, source) {
+  const merchantIdsByDomain = /* @__PURE__ */ new Map();
+  for (const merchant of merchants) {
+    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
+    if (!domainName) {
+      continue;
+    }
+    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
+    merchantIds.add(merchant.merchant_id);
+    merchantIdsByDomain.set(domainName, merchantIds);
+  }
+  const mapped = new ConflictAwareMerchantMap(source);
+  for (const [domainName, merchantIds] of merchantIdsByDomain) {
+    if (merchantIds.size === 1) {
+      mapped.set(domainName, merchantIds.values().next().value);
+    } else {
+      mapped.addConflict(domainName);
+    }
+  }
+  return mapped;
+}
+function cloneMerchantList(merchants) {
+  return merchants.map((merchant) => {
+    const cloned = {
+      merchant_id: merchant.merchant_id,
+      merchant_name: merchant.merchant_name,
+      description: merchant.description,
+      domain: merchant.domain
+    };
+    if (Object.hasOwn(merchant, "ext")) {
+      const ext = safeCloneJsonValue(merchant.ext);
+      if (ext !== void 0) {
+        cloned.ext = ext;
+      }
+    }
+    return cloned;
+  });
+}
+function retryableMerchantListStatus(status) {
+  return status === 408 || status === 429 || status >= 500 && status <= 599;
+}
+function discardMerchantListResponse(response) {
+  if (response.body) {
+    void response.body.cancel().catch(() => {
+    });
+  }
+}
+async function waitForMerchantListRetry(deadline) {
+  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
+    return false;
+  }
+  await new Promise((resolve6) => {
+    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
+  });
+  return Date.now() < deadline;
+}
+function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
+  if (error?.name === "AbortError") {
+    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
+  }
+  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
+  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
+}
+function invalidMerchantList(source, reason) {
+  return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
+}
+var MERCHANT_LIST_PATH, MERCHANT_LIST_USER_AGENT, MERCHANT_LIST_TIMEOUT_MS, MERCHANT_LIST_CACHE_TTL_MS, MERCHANT_LIST_MAX_ATTEMPTS, MERCHANT_LIST_RETRY_DELAY_MS, merchantListRequests, ConflictAwareMerchantMap;
+var init_internal_ucp = __esm({
+  "dist/internal-ucp.js"() {
+    "use strict";
+    init_domains();
+    init_errors();
+    init_version();
+    MERCHANT_LIST_PATH = "/agent/ucp/merchants";
+    MERCHANT_LIST_USER_AGENT = "clink-cli";
+    MERCHANT_LIST_TIMEOUT_MS = 15e3;
+    MERCHANT_LIST_CACHE_TTL_MS = 3e4;
+    MERCHANT_LIST_MAX_ATTEMPTS = 2;
+    MERCHANT_LIST_RETRY_DELAY_MS = 50;
+    merchantListRequests = /* @__PURE__ */ new WeakMap();
+    ConflictAwareMerchantMap = class extends Map {
+      source;
+      conflicts = /* @__PURE__ */ new Set();
+      constructor(source) {
+        super();
+        this.source = source;
+      }
+      addConflict(domainName) {
+        this.delete(domainName);
+        this.conflicts.add(domainName);
+      }
+      get(domainName) {
+        this.assertUnambiguous(domainName);
+        return super.get(domainName);
+      }
+      has(domainName) {
+        this.assertUnambiguous(domainName);
+        return super.has(domainName);
+      }
+      assertUnambiguous(domainName) {
+        if (this.conflicts.has(domainName)) {
+          throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
+        }
+      }
+    };
+  }
+});
+
+// dist/instruction-context.js
+import { readFile as readFile3 } from "node:fs/promises";
+function hasQuickInstructionOptions(flags) {
+  return QUICK_INSTRUCTION_OPTIONS.some((name) => name in flags);
+}
+async function buildQuickInstructionContext(flags, commandLabel) {
+  if ("payment-instrument-id" in flags) {
+    throw validationError(`--payment-instrument-id is not supported by ${commandLabel}; the card is bound after login`);
+  }
+  if ("extra" in flags) {
+    throw validationError(`--extra is not supported by the ${commandLabel} Quick Instruction context`);
+  }
+  if (!QUICK_INSTRUCTION_CONTEXT_FLAGS.some((name) => name in flags)) {
+    return void 0;
+  }
+  const title = requireNonBlankStringFlag(flags, "missing --title", "title");
+  if (title.length > 256) {
+    throw validationError(`--title must be at most 256 characters, got ${title.length}`);
+  }
+  const description = getStringFlag(flags, "description");
+  if (description !== void 0 && description.length > 1024) {
+    throw validationError(`--description must be at most 1024 characters, got ${description.length}`);
+  }
+  const isRecurring = getBooleanFlag(flags, "is-recurring");
+  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring, { maxEntries: 10, requireCoreFields: true });
+  const effectiveUntilTime = utcDateTimeFlag(flags, "effective-until-time");
+  const context = {
+    title,
+    mandates,
+    ...description !== void 0 ? { description } : {},
+    ...effectiveUntilTime !== void 0 ? { effectiveUntilTime } : {},
+    ...isRecurring ? { isRecurring: true } : {}
+  };
+  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
+  if (shippingAddress !== void 0) {
+    context.shippingAddress = shippingAddress;
+  }
+  const contextBytes = Buffer.byteLength(JSON.stringify(context), "utf8");
+  if (contextBytes > QUICK_INSTRUCTION_CONTEXT_MAX_BYTES) {
+    throw validationError(`${commandLabel} instruction context must be at most 16384 UTF-8 bytes, got ${contextBytes}`);
+  }
+  return context;
+}
+async function readInstructionMandates(flags) {
+  const inlineJson = getStringFlag(flags, "mandates");
+  const filePath = getStringFlag(flags, "mandates-file");
+  if (inlineJson !== void 0 && filePath !== void 0) {
+    throw validationError("--mandates and --mandates-file cannot be used together");
+  }
+  if (inlineJson === void 0 && filePath === void 0) {
+    throw validationError("missing --mandates or --mandates-file (JSON array)");
+  }
+  let source = inlineJson;
+  let sourceName = "--mandates";
+  if (filePath !== void 0) {
+    if (!filePath.trim()) {
+      throw validationError("--mandates-file path must not be blank");
+    }
+    sourceName = "--mandates-file";
+    try {
+      source = await readFile3(filePath, "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
+    }
+  }
+  const parsed = parseJsonFlag(source, sourceName);
+  if (!Array.isArray(parsed)) {
+    throw validationError(`${sourceName} must be a JSON array`);
+  }
+  return parsed;
+}
+function normalizeInstructionMandates(mandates, isRecurring, options2 = {}) {
+  if (options2.requireCoreFields && mandates.length === 0) {
+    throw validationError("--mandates must contain at least one entry");
+  }
+  if (options2.maxEntries !== void 0 && mandates.length > options2.maxEntries) {
+    throw validationError(`--mandates cannot exceed ${options2.maxEntries} entries, got ${mandates.length}`);
+  }
+  return mandates.map((mandate, index) => {
+    if (!isJsonObject(mandate)) {
+      if (options2.requireCoreFields) {
+        throw validationError(`--mandates[${index}] must be a JSON object`);
+      }
+      if (isRecurring) {
+        throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
+      }
+      return mandate;
+    }
+    if (typeof mandate.description === "string" && mandate.description.length > MAX_MANDATE_DESCRIPTION_LENGTH) {
+      throw validationError(`--mandates[${index}].description must not exceed ${MAX_MANDATE_DESCRIPTION_LENGTH} characters`);
+    }
+    if (options2.requireCoreFields) {
+      requireMandateText(mandate, "description", index);
+      requireMandateAmountLimit(mandate, index);
+      requireMandateText(mandate, "currencyCode", index);
+      validateUtcDateTime(mandate.effectiveUntilTime, `--mandates[${index}].effectiveUntilTime`);
+    }
+    if (!isRecurring) {
+      return mandate;
+    }
+    const frequency = mandate.recurringFrequency;
+    if (typeof frequency !== "string" || frequency.trim().length === 0) {
+      throw validationError(`--mandates[${index}].recurringFrequency is required when --is-recurring is set`);
+    }
+    const normalizedFrequency = frequency.trim().toUpperCase();
+    if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
+      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
+    }
+    return {
+      ...mandate,
+      recurringFrequency: normalizedFrequency
+    };
+  });
+}
+function utcDateTimeFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  if (!UTC_DATETIME_FORMAT.test(value)) {
+    throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
+  }
+  return value;
+}
+function requireNonBlankStringFlag(flags, missingMessage, name) {
+  const value = requireStringFlag(flags, missingMessage, name);
+  if (!value.trim()) {
+    throw validationError(`--${name} is required and cannot be blank`);
+  }
+  return value;
+}
+function optionalJsonObjectFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  if (value === void 0) {
+    return void 0;
+  }
+  const parsed = parseJsonFlag(value, `--${name}`);
+  if (!isJsonObject(parsed)) {
+    throw validationError(`--${name} must be a JSON object`);
+  }
+  return parsed;
+}
+function validateUtcDateTime(value, field) {
+  if (value === void 0 || value === null) {
+    return;
+  }
+  if (typeof value !== "string" || !UTC_DATETIME_FORMAT.test(value)) {
+    throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
+  }
+}
+function requireMandateText(mandate, field, index) {
+  const value = mandate[field];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw validationError(`--mandates[${index}].${field} is required and cannot be blank`);
+  }
+}
+function requireMandateAmountLimit(mandate, index) {
+  const value = mandate.amountLimit;
+  if (value === void 0 || value === null) {
+    throw validationError(`--mandates[${index}].amountLimit is required`);
+  }
+  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text2) || Number(text2) <= 0) {
+    throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
+  }
+  if (typeof value === "number") {
+    const [integerPart, fractionPart = ""] = text2.split(".");
+    const minorUnits2 = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
+    if (!Number.isSafeInteger(minorUnits2)) {
+      throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
+    }
+  }
+}
+function isJsonObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var RECURRING_FREQUENCIES, RECURRING_FREQUENCY_SET, MAX_MANDATE_DESCRIPTION_LENGTH, UTC_DATETIME_FORMAT, QUICK_INSTRUCTION_CONTEXT_MAX_BYTES, QUICK_INSTRUCTION_CONTEXT_FLAGS, QUICK_INSTRUCTION_OPTIONS;
+var init_instruction_context = __esm({
+  "dist/instruction-context.js"() {
+    "use strict";
+    init_args();
+    init_errors();
+    init_utils();
+    RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
+    RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
+    MAX_MANDATE_DESCRIPTION_LENGTH = 150;
+    UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+    QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
+    QUICK_INSTRUCTION_CONTEXT_FLAGS = [
+      "title",
+      "description",
+      "mandates",
+      "mandates-file",
+      "is-recurring",
+      "shipping-address",
+      "effective-until-time"
+    ];
+    QUICK_INSTRUCTION_OPTIONS = [
+      ...QUICK_INSTRUCTION_CONTEXT_FLAGS,
+      "payment-instrument-id",
+      "extra"
+    ];
+  }
+});
+
+// dist/oauth.js
+import { randomUUID as randomUUID2 } from "node:crypto";
+function resolveOAuthDeviceId(config) {
+  return config.authorization?.deviceId ?? randomUUID2();
+}
+async function createDeviceAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: OAUTH_DEVICE_AUTHORIZATION_PATH,
+    body: {
+      client_id: OAUTH_CLIENT_ID,
+      device_id: options2.deviceId,
+      scope: options2.scope ?? OAUTH_DEFAULT_SCOPE,
+      source: OAUTH_CLIENT_ID,
+      agentClient: options2.agentClient,
+      ...options2.instructionContext ? { instruction_context: options2.instructionContext } : {}
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  if (isDryRun2(result)) {
+    return result;
+  }
+  const data = requireOAuthSuccess(result);
+  return {
+    deviceCode: requiredString2(data.device_code, "OAuth response is missing device_code"),
+    userCode: requiredString2(data.user_code, "OAuth response is missing user_code"),
+    verificationUri: requiredString2(data.verification_uri, "OAuth response is missing verification_uri"),
+    verificationUriComplete: requiredString2(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
+    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
+    interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
+  };
+}
+function buildVerificationUrl(authorization, email, name) {
+  const url = new URL(authorization.verificationUriComplete);
+  if (!url.searchParams.has("user_code")) {
+    url.searchParams.set("user_code", authorization.userCode);
+  }
+  url.searchParams.delete("email");
+  url.searchParams.delete("name");
+  const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+  fragment.set("email", email);
+  fragment.set("name", name);
+  url.hash = fragment.toString();
+  return url.toString();
+}
+async function pollDeviceToken(options2) {
+  const deadline = Date.now() + options2.expiresIn * 1e3;
+  let intervalSeconds = (nonNegativeNumber(options2.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS) + CLIENT_POLL_PADDING_SECONDS;
+  for (; ; ) {
+    await assertWalletInitIsCurrent(options2.isCurrent);
+    if (Date.now() >= deadline) {
+      throw authError("Authorization expired; run `clink wallet init` again.");
+    }
+    try {
+      const token = await requestToken({
+        baseUrl: options2.baseUrl,
+        timeoutMs: options2.timeoutMs,
+        requireAgentClientId: true,
+        body: {
+          grant_type: OAUTH_DEVICE_GRANT_TYPE,
+          client_id: OAUTH_CLIENT_ID,
+          device_id: options2.deviceId,
+          device_code: options2.deviceCode
+        }
+      });
+      return token;
+    } catch (error) {
+      if (!(error instanceof OAuthProtocolError)) {
+        throw error;
+      }
+      if (error.errorCode === "authorization_pending") {
+        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
+        continue;
+      }
+      if (error.errorCode === "slow_down") {
+        intervalSeconds += SLOW_DOWN_INCREMENT_SECONDS;
+        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
+        continue;
+      }
+      throw publicOAuthError(error, "device");
+    }
+  }
+}
+function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(), sessionId = randomUUID2()) {
+  const issuerOrigin = httpOrigin(issuerBaseUrl);
+  if (!issuerOrigin) {
+    throw configError("OAuth issuer must be an absolute http(s) URL");
+  }
+  return {
+    type: "oauth",
+    customerId: token.customerId,
+    customerIdVerified: true,
+    sessionId,
+    deviceId,
+    issuerOrigin,
+    tokenType: "Bearer",
+    accessToken: token.accessToken,
+    accessTokenExpiresAt: now + token.expiresIn * 1e3,
+    refreshToken: token.refreshToken,
+    refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
+    ...token.agentClientId ? { agentClientId: token.agentClientId } : {},
+    ...token.visaRegistrationStatus ? { visaRegistrationStatus: token.visaRegistrationStatus } : {},
+    scope: token.scope
+  };
+}
+async function ensureFreshOAuthAuthorization(options2) {
+  const authorization = options2.storedConfig.authorization;
+  if (!authorization) {
+    return options2.storedConfig;
+  }
+  assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
+  if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
+    return options2.storedConfig;
+  }
+  const expectedAuthorization = {
+    accessToken: authorization.accessToken,
+    customerId: authorization.customerId,
+    issuerOrigin: authorization.issuerOrigin,
+    deviceId: authorization.deviceId,
+    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
+  };
+  return refreshStoredAuthorization({ ...options2, expectedAuthorization });
+}
+async function revokeStoredAuthorization(options2) {
+  const result = await requestJson({
+    baseUrl: options2.authorization.issuerOrigin,
+    method: "POST",
+    path: OAUTH_REVOKE_PATH,
+    body: {
+      client_id: OAUTH_CLIENT_ID,
+      device_id: options2.authorization.deviceId,
+      refresh_token: options2.authorization.refreshToken
+    },
+    timeoutMs: options2.timeoutMs,
+    dryRun: options2.dryRun
+  });
+  if (isDryRun2(result)) {
+    return result;
+  }
+  requireOAuthSuccess(result);
+  return { revoked: true };
+}
+function assertAuthorizationEnvironment(authorization, runtimeBaseUrl) {
+  if (!sameHttpOrigin(authorization.issuerOrigin, runtimeBaseUrl)) {
+    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
+  }
+}
+function isAccessTokenFresh(authorization, minimumValidityMs = ACCESS_TOKEN_REFRESH_WINDOW_MS) {
+  return authorization.accessTokenExpiresAt > Date.now() + minimumValidityMs;
+}
+function clearOAuthAndLegacyCredentials(config) {
+  delete config.authorization;
+  delete config.customerApiKey;
+}
+async function refreshStoredAuthorization(options2) {
+  let refreshFailure;
+  const updated = await updateStoredConfig(async (current) => {
+    const authorization = current.authorization;
+    if (!authorization) {
+      refreshFailure = authError("OAuth login is missing; run `clink wallet init`.");
+      return current;
+    }
+    assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
+    if (!matchesAuthorizationIdentity(current, options2.expectedAuthorization)) {
+      refreshFailure = authError(options2.failedAuthorization ? "OAuth login changed while the request was in progress; retry the command." : "OAuth login changed while the command was in progress; retry the command.");
+      return current;
+    }
+    if (options2.failedAuthorization && !matchesAuthorizationIdentity(current, options2.failedAuthorization)) {
+      refreshFailure = authError("OAuth login changed while the request was in progress; retry the command.");
+      return current;
+    }
+    if (options2.failedAuthorization && authorization.accessToken !== options2.failedAuthorization.accessToken) {
+      return current;
+    }
+    if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
+      return current;
+    }
+    if (authorization.refreshTokenExpiresAt <= Date.now()) {
+      clearOAuthAndLegacyCredentials(current);
+      refreshFailure = authError("OAuth session expired; run `clink wallet init` again.");
+      return current;
+    }
+    try {
+      const token = await requestToken({
+        baseUrl: authorization.issuerOrigin,
+        timeoutMs: options2.timeoutMs,
+        body: {
+          grant_type: OAUTH_REFRESH_GRANT_TYPE,
+          client_id: OAUTH_CLIENT_ID,
+          device_id: authorization.deviceId,
+          refresh_token: authorization.refreshToken
+        }
+      });
+      const customerChanged = token.customerId !== authorization.customerId;
+      if (authorization.customerIdVerified && customerChanged) {
+        refreshFailure = authError("OAuth refresh returned a different customer; run `clink wallet init` again.");
+        return current;
+      }
+      if (authorization.agentClientId && token.agentClientId && authorization.agentClientId !== token.agentClientId) {
+        refreshFailure = authError("OAuth refresh returned a different Agent Client; run `clink wallet init` again.");
+        return current;
+      }
+      current.authorization = toStoredAuthorization(authorization.deviceId, token, authorization.issuerOrigin, Date.now(), authorization.sessionId);
+      if (!current.authorization.agentClientId && authorization.agentClientId) {
+        current.authorization.agentClientId = authorization.agentClientId;
+      }
+      if (!current.authorization.visaRegistrationStatus && authorization.visaRegistrationStatus) {
+        current.authorization.visaRegistrationStatus = authorization.visaRegistrationStatus;
+      }
+      current.customerId = token.customerId;
+      if (customerChanged) {
+        delete current.paymentMethods;
+        delete current.riskRules;
+      }
+      return current;
+    } catch (error) {
+      if (error instanceof OAuthProtocolError && error.errorCode === "invalid_grant") {
+        clearOAuthAndLegacyCredentials(current);
+        refreshFailure = authError("OAuth session is invalid or revoked; run `clink wallet init` again.");
+        return current;
+      }
+      throw error instanceof OAuthProtocolError ? publicOAuthError(error, "refresh") : error;
+    }
+  });
+  if (refreshFailure) {
+    throw refreshFailure;
+  }
+  return updated;
+}
+function matchesAuthorizationIdentity(config, failedAuthorization) {
+  const authorization = config.authorization;
+  return Boolean(authorization && authorization.customerId === failedAuthorization.customerId && authorization.issuerOrigin === failedAuthorization.issuerOrigin && authorization.deviceId === failedAuthorization.deviceId && (failedAuthorization.sessionId === void 0 || authorization.sessionId === failedAuthorization.sessionId));
+}
+async function requestToken(options2) {
+  const result = await requestJson({
+    baseUrl: options2.baseUrl,
+    method: "POST",
+    path: OAUTH_TOKEN_PATH,
+    body: options2.body,
+    timeoutMs: options2.timeoutMs,
+    dryRun: false
+  });
+  if (isDryRun2(result)) {
+    throw apiError("unexpected OAuth token dry-run response");
+  }
+  const data = requireOAuthSuccess(result);
+  const tokenType = requiredString2(data.token_type, "OAuth response is missing token_type");
+  if (tokenType.toLowerCase() !== "bearer") {
+    throw apiError(`unsupported OAuth token type: ${tokenType}`);
+  }
+  const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
+  const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
+  const pendingInstructionId2 = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
+  return {
+    tokenType: "Bearer",
+    accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
+    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
+    refreshToken: requiredString2(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
+    refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
+    customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
+    ...agentClientId ? { agentClientId } : {},
+    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
+    ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
+    scope: requiredString2(data.scope, "OAuth response is missing scope")
+  };
+}
+function requireOAuthSuccess(response) {
+  const oauthError = parseOAuthError(response.body);
+  if (oauthError) {
+    throw new OAuthProtocolError(oauthError.error, oauthError.errorDescription, response.status);
+  }
+  if (response.status < 200 || response.status >= 300) {
+    throw apiError(extractMessage(response.body) ?? `OAuth request failed with status ${response.status}`, response.status);
+  }
+  const body = unwrapResponseData(response.body);
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw apiError("OAuth response body is invalid");
+  }
+  return body;
+}
+function parseOAuthError(body) {
+  const candidate = unwrapResponseData(body);
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+    return void 0;
+  }
+  const record2 = candidate;
+  if (typeof record2.error !== "string" || record2.error.length === 0) {
+    return void 0;
+  }
+  const errorDescription = typeof record2.error_description === "string" ? record2.error_description : typeof record2.errorDescription === "string" ? record2.errorDescription : void 0;
+  return {
+    error: record2.error,
+    ...errorDescription ? { errorDescription } : {}
+  };
+}
+function unwrapResponseData(body) {
+  if (typeof body === "object" && body !== null && "data" in body) {
+    return body.data;
+  }
+  return body;
+}
+function publicOAuthError(error, phase) {
+  switch (error.errorCode) {
+    case "access_denied":
+      return authError("Authorization was denied.");
+    case "expired_token":
+      return authError("Authorization expired; run `clink wallet init` again.");
+    case "invalid_grant":
+      return authError(phase === "refresh" ? "OAuth session is invalid or revoked; run `clink wallet init` again." : "Authorization code is invalid or already used; run `clink wallet init` again.");
+    case "invalid_client":
+      return authError("OAuth client configuration was rejected.", error.status);
+    case "invalid_scope":
+      return configError("OAuth scope configuration was rejected by the server.");
+    case "invalid_request":
+      return apiError(error.message, error.status);
+    default:
+      return apiError(error.message, error.status);
+  }
+}
+async function sleepUntilNextPoll(intervalSeconds, deadline, pause) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw authError("Authorization expired; run `clink wallet init` again.");
+  }
+  await pause(Math.min(intervalSeconds * 1e3, remaining));
+}
+async function assertWalletInitIsCurrent(isCurrent) {
+  if (isCurrent && !await isCurrent()) {
+    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
+  }
+}
+function requiredString2(value, message) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw apiError(message);
+  }
+  return value;
+}
+function optionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function parseVisaRegistrationStatus2(value, required) {
+  const normalized = optionalString(value)?.toUpperCase();
+  if (!normalized) {
+    if (required) {
+      throw apiError("OAuth response is missing visa_registration_status");
+    }
+    return void 0;
+  }
+  if (normalized !== "PENDING" && normalized !== "REGISTERING" && normalized !== "SUCCEEDED" && normalized !== "FAILED" && normalized !== "UNKNOWN") {
+    throw apiError("OAuth response has invalid visa_registration_status");
+  }
+  return normalized;
+}
+function positiveNumber(value, message) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    throw apiError(message);
+  }
+  return number;
+}
+function nonNegativeNumber(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : void 0;
+}
+function isDryRun2(value) {
+  return "dryRun" in value;
+}
+function sleep2(ms) {
+  return new Promise((resolve6) => setTimeout(resolve6, ms));
+}
+function mergeOAuthLoginConfig(current, options2) {
+  if (options2.authorization.customerId !== options2.customerId) {
+    throw configError("OAuth token customer does not match the wallet login response");
+  }
+  const next = cloneStoredConfig(current);
+  next.baseUrl = options2.baseUrl;
+  next.email = options2.email;
+  next.name = options2.name;
+  next.customerId = options2.customerId;
+  next.authorization = { ...options2.authorization };
+  next.oauthRequired = true;
+  delete next.customerApiKey;
+  delete next.paymentMethods;
+  delete next.riskRules;
+  return next;
+}
+var OAUTH_CLIENT_ID, OAUTH_DEVICE_GRANT_TYPE, OAUTH_REFRESH_GRANT_TYPE, OAUTH_DEFAULT_SCOPE, OAUTH_DEVICE_AUTHORIZATION_PATH, OAUTH_TOKEN_PATH, OAUTH_REVOKE_PATH, DEFAULT_SERVER_POLL_INTERVAL_SECONDS, CLIENT_POLL_PADDING_SECONDS, SLOW_DOWN_INCREMENT_SECONDS, ACCESS_TOKEN_REFRESH_WINDOW_MS, WALLET_INIT_SUPERSEDED_MESSAGE, OAuthProtocolError;
+var init_oauth = __esm({
+  "dist/oauth.js"() {
+    "use strict";
+    init_config();
+    init_errors();
+    init_http();
+    init_url();
+    init_utils();
+    OAUTH_CLIENT_ID = "clink-cli";
+    OAUTH_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+    OAUTH_REFRESH_GRANT_TYPE = "refresh_token";
+    OAUTH_DEFAULT_SCOPE = [
+      "wallet:read",
+      "wallet:setup",
+      "payment:execute",
+      "instruction:read",
+      "instruction:write",
+      "browser:handoff",
+      "refund:read",
+      "refund:write",
+      "events:read",
+      "offline_access"
+    ].join(" ");
+    OAUTH_DEVICE_AUTHORIZATION_PATH = "/agent/cwallet/oauth/device/authorization";
+    OAUTH_TOKEN_PATH = "/agent/cwallet/oauth/token";
+    OAUTH_REVOKE_PATH = "/agent/cwallet/oauth/revoke";
+    DEFAULT_SERVER_POLL_INTERVAL_SECONDS = 5;
+    CLIENT_POLL_PADDING_SECONDS = 1;
+    SLOW_DOWN_INCREMENT_SECONDS = 5;
+    ACCESS_TOKEN_REFRESH_WINDOW_MS = 6e4;
+    WALLET_INIT_SUPERSEDED_MESSAGE = "A newer wallet init started; this login attempt has been cancelled.";
+    OAuthProtocolError = class extends Error {
+      errorCode;
+      status;
+      constructor(errorCode, description, status) {
+        super(description || errorCode);
+        this.name = "OAuthProtocolError";
+        this.errorCode = errorCode;
+        this.status = status;
+      }
+    };
+  }
+});
+
+// dist/skills/agents.js
+import { constants } from "node:fs";
+import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+async function detectAgents(input) {
+  const homeDir = resolve(input.homeDir);
+  const skillsRoot = resolve(input.skillsRoot);
+  const sharedTarget = join(skillsRoot, input.skillName);
+  const detected = [];
+  try {
+    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
+    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
+    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
+    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
+    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
+    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
+    const opencodeRoot = await firstExistingRoot(uniquePaths([
+      resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
+      join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
+      join(homeDir, ".opencode")
+    ]));
+    if (opencodeRoot !== null) {
+      detected.push({
+        agent: "opencode",
+        mode: "shared",
+        rootPath: opencodeRoot,
+        targetPath: sharedTarget
+      });
+    }
+    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
+    const copilotRoot = await firstExistingRoot(uniquePaths([
+      copilotCliRoot,
+      join(homeDir, ".config", "github-copilot")
+    ]));
+    if (copilotRoot !== null) {
+      detected.push({
+        agent: "github-copilot",
+        mode: "shared",
+        rootPath: copilotRoot,
+        targetPath: sharedTarget
+      });
+    }
+    const geminiHome = resolveEnvironmentRoot(input.env.GEMINI_CLI_HOME, homeDir);
+    const geminiRoot = join(geminiHome, ".gemini");
+    if (await isExistingRoot(geminiRoot)) {
+      const usesSharedHome = geminiHome === homeDir;
+      detected.push({
+        agent: "gemini-cli",
+        mode: usesSharedHome ? "shared" : "link",
+        rootPath: geminiRoot,
+        targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
+      });
+    }
+    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
+    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(DETECTION_FAILURE);
+  }
+  return detected;
+}
+async function prepareAgentPlans(input) {
+  try {
+    const preflighted = [];
+    for (const detected of input.detected) {
+      if (detected.mode === "shared" || detected.mode === "unsupported") {
+        preflighted.push({ mode: detected.mode, detected });
+        continue;
+      }
+      if (detected.targetPath === null) {
+        throw installError(PREPARE_FAILURE);
+      }
+      const writeDetected = detected;
+      const boundary = await inspectWritableBoundary(writeDetected);
+      const snapshot = await inspectTarget(writeDetected, input);
+      if (snapshot.kind === "conflict" && !input.force) {
+        throw installError(TARGET_CONFLICT);
+      }
+      const needsBackup = snapshot.kind !== "absent" && snapshot.kind !== "exact-link";
+      const copyTempPath = detected.mode === "copy" ? `${writeDetected.targetPath}.clink-${input.uuid}-${detected.agent}.copy` : null;
+      if (copyTempPath !== null && await pathEntryExists(copyTempPath)) {
+        throw installError(PREPARE_FAILURE);
+      }
+      const backupPath = needsBackup ? join(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
+      if (backupPath !== null && await pathEntryExists(backupPath)) {
+        throw installError(PREPARE_FAILURE);
+      }
+      preflighted.push({
+        mode: "write",
+        value: {
+          detected: writeDetected,
+          snapshot,
+          boundary,
+          copyTempPath,
+          backupPath,
+          keepBackup: snapshot.kind === "conflict"
+        }
+      });
+    }
+    return preflighted.map((entry) => {
+      if (entry.mode === "write") {
+        return createWritePlan(entry.value, input);
+      }
+      if (entry.mode === "shared") {
+        return createNoWritePlan(entry.detected, "shared");
+      }
+      return createNoWritePlan(entry.detected, "unsupported");
+    });
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PREPARE_FAILURE);
+  }
+}
+async function appendDetected(output, agent, mode, rootPath, targetPath) {
+  if (!await isExistingRoot(rootPath)) {
+    return;
+  }
+  output.push({ agent, mode, rootPath, targetPath: targetPath(rootPath) });
+}
+function resolveEnvironmentRoot(value, fallback) {
+  return value === void 0 || value.length === 0 ? resolve(fallback) : resolve(value);
+}
+function resolveOptionalEnvironmentRoot(value) {
+  return value === void 0 || value.length === 0 ? null : resolve(value);
+}
+function uniquePaths(paths) {
+  return [...new Set(paths.filter((value) => value !== null))];
+}
+async function firstExistingRoot(paths) {
+  for (const rootPath of paths) {
+    if (await isExistingRoot(rootPath)) {
+      return rootPath;
+    }
+  }
+  return null;
+}
+async function isExistingRoot(rootPath) {
+  const rootStat = await lstatIfExists(rootPath);
+  return rootStat !== null && (rootStat.isDirectory() || rootStat.isSymbolicLink());
+}
+function createNoWritePlan(detected, mode) {
+  return {
+    async apply() {
+      if (mode === "shared") {
+        return {
+          agent: detected.agent,
+          status: "shared",
+          path: detected.targetPath
+        };
+      }
+      return {
+        agent: detected.agent,
+        status: "unsupported",
+        path: null,
+        reason: UNSUPPORTED_REASON
+      };
+    },
+    async rollback() {
+    },
+    async finalize() {
+    }
+  };
+}
+function createWritePlan(preflight, input) {
+  const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
+  const targetPath = detected.targetPath;
+  const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
+  let appliedResult = null;
+  let backupMoved = false;
+  let backupVerified = false;
+  let backupContainerEntry = null;
+  let movedBackupFingerprint = null;
+  let preserveBackup = keepBackup;
+  let placedFingerprint = null;
+  let copyTempFingerprint = null;
+  let parentCreated = false;
+  let ownedParent = null;
+  let finalized = false;
+  let committed = false;
+  async function applyLink() {
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    if (snapshot.kind === "exact-link") {
+      return { agent: detected.agent, status: "unchanged", path: targetPath };
+    }
+    await ensureTargetParent();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await moveExistingTarget();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    const linkText = relative(dirname(targetPath), input.currentPath);
+    await symlink(linkText, targetPath, "dir");
+    placedFingerprint = await fingerprintPath(targetPath, detected.mode);
+    const installedSnapshot = await inspectTarget(detected, input);
+    if (installedSnapshot.kind !== "exact-link") {
+      throw new Error("link verification failed");
+    }
+    const installedLink = await readlink(targetPath);
+    if (installedLink !== linkText) {
+      throw new Error("link verification failed");
+    }
+    return { agent: detected.agent, status: "linked", path: targetPath };
+  }
+  async function applyCopy(releasePath, marker) {
+    if (!isMarker(marker) || marker.publisher !== input.publisher || marker.skillName !== input.skillName) {
+      throw new Error("invalid copy marker");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    if (snapshot.kind === "managed-copy" && markersMatchIdentityAndSha(snapshot.marker, marker)) {
+      return { agent: detected.agent, status: "unchanged", path: targetPath };
+    }
+    await ensureTargetParent();
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await moveExistingTarget();
+    if (copyTempPath === null) {
+      throw new Error("missing copy staging path");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    await assertAuxiliaryAbsent(copyTempPath);
+    await copyDirectoryExclusively(releasePath, copyTempPath);
+    copyTempFingerprint = await fingerprintPath(copyTempPath, detected.mode);
+    const stagedMarker = await readMarkerRecord(copyTempPath);
+    if (stagedMarker === null || !markersMatchIdentityAndSha(stagedMarker.marker, marker)) {
+      throw new Error("copy verification failed");
+    }
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetAbsent(targetPath);
+    await rename2(copyTempPath, targetPath);
+    placedFingerprint = copyTempFingerprint;
+    copyTempFingerprint = null;
+    await allowPendingFilesystemEvents();
+    await assertPathNamesEntry(targetPath, entryIdentityFromFingerprint(placedFingerprint));
+    const copiedFingerprint = await fingerprintPath(targetPath, detected.mode);
+    if (!sameMovedObject(placedFingerprint, copiedFingerprint)) {
+      throw new Error("copy placement verification failed");
+    }
+    placedFingerprint = copiedFingerprint;
+    const installedSnapshot = await inspectTarget(detected, input);
+    if (installedSnapshot.kind !== "managed-copy" || !markersMatchIdentityAndSha(installedSnapshot.marker, marker)) {
+      throw new Error("copy verification failed");
+    }
+    return { agent: detected.agent, status: "copied", path: targetPath };
+  }
+  async function ensureTargetParent() {
+    await assertWritableBoundary(boundary, ownedParent);
+    if (boundary.parent.kind === "existing") {
+      return;
+    }
+    await mkdir2(boundary.parentPath);
+    parentCreated = true;
+    ownedParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    await assertWritableBoundary(boundary, ownedParent);
+  }
+  async function moveExistingTarget() {
+    if (snapshot.kind === "absent" || snapshot.kind === "exact-link") {
+      return;
+    }
+    if (backupPath === null || backupObjectPath === null) {
+      throw new Error("missing backup path");
+    }
+    await mkdir2(input.backupsRoot, { recursive: true, mode: 448 });
+    await mkdir2(backupPath, { mode: 448 });
+    backupContainerEntry = createEntryIdentity(await lstat(backupPath));
+    await assertWritableBoundary(boundary, ownedParent);
+    await assertTargetUnchanged(detected, input, snapshot);
+    await assertPathNamesEntry(backupPath, backupContainerEntry);
+    await rename2(targetPath, backupObjectPath);
+    backupMoved = true;
+    await assertPathNamesEntry(backupPath, backupContainerEntry);
+    movedBackupFingerprint = await fingerprintPath(backupObjectPath, detected.mode);
+    if (!sameMovedObject(snapshot.fingerprint, movedBackupFingerprint)) {
+      preserveBackup = true;
+      throw new Error("moved target verification failed");
+    }
+    backupVerified = true;
+  }
+  async function undoMutation() {
+    let removedPlacedTarget = false;
+    if (copyTempPath !== null && copyTempFingerprint !== null) {
+      await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
+      copyTempFingerprint = null;
+    }
+    if (placedFingerprint !== null) {
+      const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
+      if (currentFingerprint !== null) {
+        if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
+          throw new Error("installed target changed before rollback");
+        }
+        await rm2(targetPath, { recursive: true, force: true });
+        removedPlacedTarget = true;
+      }
+      placedFingerprint = null;
+    }
+    if (backupMoved) {
+      if (backupPath === null || backupObjectPath === null) {
+        throw new Error("missing backup path");
+      }
+      await assertWritableBoundary(boundary, ownedParent);
+      await restoreBackupExclusively(backupObjectPath, targetPath, movedBackupFingerprint, detected.mode);
+      backupMoved = false;
+      backupVerified = false;
+      movedBackupFingerprint = null;
+    }
+    if (backupContainerEntry !== null && backupPath !== null) {
+      await removeOwnedDirectory(backupPath, backupContainerEntry);
+      backupContainerEntry = null;
+    }
+    if (parentCreated && removedPlacedTarget) {
+      await removeOwnedParent(boundary, ownedParent);
+    }
+    parentCreated = false;
+    ownedParent = null;
+  }
+  return {
+    async apply({ releasePath, marker }) {
+      if (appliedResult !== null) {
+        return appliedResult;
+      }
+      if (finalized) {
+        throw installError(APPLY_FAILURE);
+      }
+      try {
+        appliedResult = detected.mode === "link" ? await applyLink() : await applyCopy(releasePath, marker);
+        return appliedResult;
+      } catch {
+        try {
+          await undoMutation();
+        } catch {
+        }
+        throw installError(APPLY_FAILURE);
+      }
+    },
+    async rollback() {
+      if (committed) {
+        return;
+      }
+      if (appliedResult === null && !backupMoved && placedFingerprint === null) {
+        return;
+      }
+      try {
+        await undoMutation();
+        appliedResult = null;
+      } catch {
+        throw installError(ROLLBACK_FAILURE);
+      }
+    },
+    async finalize() {
+      if (finalized) {
+        return;
+      }
+      finalized = true;
+      committed = true;
+      if (backupMoved && !preserveBackup && backupVerified && backupPath !== null && backupObjectPath !== null && movedBackupFingerprint !== null) {
+        try {
+          if (backupContainerEntry === null) {
+            return;
+          }
+          await assertPathNamesEntry(backupPath, backupContainerEntry);
+          const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
+          if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
+            await rm2(backupPath, { recursive: true, force: true });
+            backupMoved = false;
+            backupVerified = false;
+            backupContainerEntry = null;
+            movedBackupFingerprint = null;
+          }
+        } catch {
+        }
+      }
+    }
+  };
+}
+async function inspectWritableBoundary(detected) {
+  const rootPath = resolve(detected.rootPath);
+  const targetPath = resolve(detected.targetPath);
+  if (!isPathContained(rootPath, targetPath)) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const rootStat = await lstat(rootPath);
+  if (!rootStat.isDirectory() && !rootStat.isSymbolicLink()) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const canonicalRoot = await realpath(rootPath);
+  const canonicalRootStat = await lstat(canonicalRoot);
+  if (!canonicalRootStat.isDirectory()) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const parentPath = dirname(targetPath);
+  const parentStat = await lstatIfExists(parentPath);
+  const parent = parentStat === null ? { kind: "missing" } : await inspectExistingDirectoryBoundary(parentPath, canonicalRoot, true);
+  return {
+    rootPath,
+    rootEntry: createEntryIdentity(rootStat),
+    canonicalRoot,
+    canonicalRootEntry: createEntryIdentity(canonicalRootStat),
+    parentPath,
+    parent
+  };
+}
+async function inspectExistingDirectoryBoundary(directoryPath, canonicalRoot, allowSymlink) {
+  const entryStat = await lstat(directoryPath);
+  if (!entryStat.isDirectory() && !(allowSymlink && entryStat.isSymbolicLink())) {
+    throw installError(TARGET_CONFLICT);
+  }
+  const canonicalPath = await realpath(directoryPath);
+  const canonicalStat = await lstat(canonicalPath);
+  if (!canonicalStat.isDirectory() || !isPathContained(canonicalRoot, canonicalPath)) {
+    throw installError(TARGET_CONFLICT);
+  }
+  return {
+    kind: "existing",
+    entry: createEntryIdentity(entryStat),
+    canonicalPath,
+    canonicalEntry: createEntryIdentity(canonicalStat)
+  };
+}
+async function assertWritableBoundary(boundary, ownedParent) {
+  const rootStat = await lstat(boundary.rootPath);
+  const canonicalRoot = await realpath(boundary.rootPath);
+  const canonicalRootStat = await lstat(canonicalRoot);
+  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(createEntryIdentity(canonicalRootStat), boundary.canonicalRootEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+  const expectedParent = ownedParent ?? boundary.parent;
+  if (expectedParent.kind === "missing") {
+    if (await pathEntryExists(boundary.parentPath)) {
+      throw installError(TARGET_CHANGED);
+    }
+    return;
+  }
+  const actualParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, true);
+  if (!sameEntryIdentity(actualParent.entry, expectedParent.entry) || actualParent.canonicalPath !== expectedParent.canonicalPath || !sameEntryIdentity(actualParent.canonicalEntry, expectedParent.canonicalEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function removeOwnedParent(boundary, ownedParent) {
+  if (ownedParent === null) {
+    return;
+  }
+  try {
+    const actual = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
+    if (!sameEntryIdentity(actual.entry, ownedParent.entry) || actual.canonicalPath !== ownedParent.canonicalPath || !sameEntryIdentity(actual.canonicalEntry, ownedParent.canonicalEntry)) {
+      return;
+    }
+    await rmdir(boundary.parentPath);
+  } catch (error) {
+    if (error instanceof CliError || isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTEMPTY") || isErrorCode(error, "EEXIST")) {
+      return;
+    }
+    throw error;
+  }
+}
+async function copyDirectoryContents(sourcePath, targetPath) {
+  const sourceStat = await lstat(sourcePath);
+  if (!sourceStat.isDirectory()) {
+    throw new Error("copy source is not a directory");
+  }
+  const entries = await readdir(sourcePath, { withFileTypes: true });
+  for (const entry of entries) {
+    await cp(join(sourcePath, entry.name), join(targetPath, entry.name), {
+      recursive: true,
+      dereference: false,
+      errorOnExist: true,
+      force: false
+    });
+  }
+}
+async function copyDirectoryExclusively(sourcePath, targetPath) {
+  const sourceStat = await lstat(sourcePath);
+  if (!sourceStat.isDirectory()) {
+    throw new Error("copy source is not a directory");
+  }
+  await cp(sourcePath, targetPath, {
+    recursive: true,
+    dereference: false,
+    errorOnExist: true,
+    force: false
+  });
+}
+async function allowPendingFilesystemEvents() {
+  await new Promise((resolveEvents) => setImmediate(resolveEvents));
+}
+async function assertPathNamesEntry(filePath, expectedEntry) {
+  const stats = await lstat(filePath);
+  if (!sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function removeOwnedDirectory(directoryPath, expectedEntry) {
+  const stats = await lstatIfExists(directoryPath);
+  if (stats === null || !sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
+    return;
+  }
+  try {
+    await rmdir(directoryPath);
+  } catch (error) {
+    if (!isErrorCode(error, "ENOENT") && !isErrorCode(error, "ENOTEMPTY") && !isErrorCode(error, "EEXIST")) {
+      throw error;
+    }
+  }
+}
+async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, mode) {
+  await assertTargetAbsent(targetPath);
+  const backupFingerprint = await fingerprintPath(backupPath, mode);
+  if (expectedBackup !== null && !sameMovedObject(expectedBackup, backupFingerprint)) {
+    throw new Error("backup changed before rollback");
+  }
+  if (backupFingerprint.type === "symlink") {
+    const linkText = await readlink(backupPath);
+    await symlink(linkText, targetPath, "dir");
+    await rm2(backupPath, { force: true });
+    return;
+  }
+  if (backupFingerprint.type === "file") {
+    await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
+    await rm2(backupPath, { force: true });
+    return;
+  }
+  if (backupFingerprint.type === "directory") {
+    await mkdir2(targetPath);
+    const placedDirectory = createEntryIdentity(await lstat(targetPath));
+    try {
+      await allowPendingFilesystemEvents();
+      await assertPathNamesEntry(targetPath, placedDirectory);
+      await copyDirectoryContents(backupPath, targetPath);
+      await assertPathNamesEntry(targetPath, placedDirectory);
+      const restoredFingerprint = await fingerprintPath(targetPath, mode);
+      if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
+        throw new Error("restored directory verification failed");
+      }
+      await rm2(backupPath, { recursive: true });
+      return;
+    } catch (error) {
+      const currentTarget = await lstatIfExists(targetPath);
+      if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
+        await rm2(targetPath, { recursive: true, force: true });
+      }
+      throw error;
+    }
+  }
+  throw new Error("unsupported backup type");
+}
+async function fingerprintPath(filePath, mode) {
+  const stats = await lstat(filePath);
+  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
+  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
+  return createFingerprint(stats, linkText, marker?.raw ?? null);
+}
+async function fingerprintPathIfExists(filePath, mode) {
+  const stats = await lstatIfExists(filePath);
+  if (stats === null) {
+    return null;
+  }
+  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
+  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
+  return createFingerprint(stats, linkText, marker?.raw ?? null);
+}
+async function inspectTarget(detected, input) {
+  const targetStat = await lstatIfExists(detected.targetPath);
+  if (targetStat === null) {
+    return { kind: "absent" };
+  }
+  if (detected.mode === "link") {
+    if (!targetStat.isSymbolicLink()) {
+      return {
+        kind: "conflict",
+        fingerprint: createFingerprint(targetStat, null, null)
+      };
+    }
+    const linkText = await readlink(detected.targetPath);
+    const resolvedTarget = resolve(dirname(detected.targetPath), linkText);
+    const fingerprint = createFingerprint(targetStat, linkText, null);
+    if (resolvedTarget === resolve(input.currentPath)) {
+      return { kind: "exact-link", fingerprint };
+    }
+    const releaseIdentity = await managedReleaseIdentity(input.currentPath, resolvedTarget);
+    if (releaseIdentity?.publisher === input.publisher && releaseIdentity.skillName === input.skillName) {
+      return { kind: "managed-link", fingerprint };
+    }
+    return { kind: "conflict", fingerprint };
+  }
+  if (detected.mode === "copy" && targetStat.isDirectory()) {
+    const markerRecord = await readMarkerRecord(detected.targetPath);
+    const fingerprint = createFingerprint(targetStat, null, markerRecord?.raw ?? null);
+    if (markerRecord !== null && markerRecord.marker.publisher === input.publisher && markerRecord.marker.skillName === input.skillName) {
+      return { kind: "managed-copy", fingerprint, marker: markerRecord.marker };
+    }
+    return { kind: "conflict", fingerprint };
+  }
+  return {
+    kind: "conflict",
+    fingerprint: createFingerprint(targetStat, null, null)
+  };
+}
+async function managedReleaseIdentity(currentPath, resolvedTarget) {
+  try {
+    const releasesRoot = await realpath(join(dirname(currentPath), ".clink", "releases"));
+    const releasesStat = await lstat(releasesRoot);
+    const targetStat = await lstat(resolvedTarget);
+    if (!releasesStat.isDirectory() || !targetStat.isDirectory()) {
+      return null;
+    }
+    const canonicalTarget = await realpath(resolvedTarget);
+    if (!isPathContained(releasesRoot, canonicalTarget)) {
+      return null;
+    }
+    const releasePath = relative(releasesRoot, canonicalTarget);
+    if (releasePath.length === 0 || isAbsolute(releasePath)) {
+      return null;
+    }
+    const parts = releasePath.split(/[\\/]/u);
+    if (parts.length !== 3 || parts.some((part) => part.length === 0) || !/^[a-f\d]{64}$/u.test(parts[2])) {
+      return null;
+    }
+    const marker = await readMarkerRecord(canonicalTarget);
+    if (marker === null || marker.marker.publisher !== parts[0] || marker.marker.skillName !== parts[1] || marker.marker.sha256 !== parts[2]) {
+      return null;
+    }
+    return { publisher: parts[0], skillName: parts[1] };
+  } catch {
+    return null;
+  }
+}
+async function assertTargetUnchanged(detected, input, expected) {
+  const actual = await inspectTarget(detected, input);
+  if (!sameSnapshot(actual, expected)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function assertTargetAbsent(targetPath) {
+  if (await pathEntryExists(targetPath)) {
+    throw installError(TARGET_CHANGED);
+  }
+}
+async function assertAuxiliaryAbsent(auxiliaryPath) {
+  if (await pathEntryExists(auxiliaryPath)) {
+    throw installError(PREPARE_FAILURE);
+  }
+}
+function sameSnapshot(first, second) {
+  if (first.kind !== second.kind) {
+    return false;
+  }
+  if (first.kind === "absent" || second.kind === "absent") {
+    return first.kind === second.kind;
+  }
+  return sameFingerprint(first.fingerprint, second.fingerprint);
+}
+function sameFingerprint(first, second) {
+  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.size === second.size && first.mtimeMs === second.mtimeMs && first.ctimeMs === second.ctimeMs && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+function sameMovedObject(first, second) {
+  return sameEntryIdentity(entryIdentityFromFingerprint(first), entryIdentityFromFingerprint(second)) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+function sameCopiedObject(first, second) {
+  return first.type === second.type && first.mode === second.mode && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
+}
+async function removeOwnedPath(filePath, expected, mode) {
+  const actual = await fingerprintPathIfExists(filePath, mode);
+  if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
+    return;
+  }
+  await rm2(filePath, { recursive: true, force: true });
+}
+function createEntryIdentity(stats) {
+  return {
+    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode
+  };
+}
+function entryIdentityFromFingerprint(fingerprint) {
+  return {
+    type: fingerprint.type,
+    dev: fingerprint.dev,
+    ino: fingerprint.ino,
+    mode: fingerprint.mode
+  };
+}
+function sameEntryIdentity(first, second) {
+  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode;
+}
+function isPathContained(rootPath, candidatePath) {
+  const containedPath = relative(rootPath, candidatePath);
+  return containedPath === "" || !isAbsolute(containedPath) && containedPath !== ".." && !containedPath.startsWith("../") && !containedPath.startsWith("..\\");
+}
+function createFingerprint(stats, linkText, markerRaw) {
+  return {
+    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs,
+    linkText,
+    markerRaw
+  };
+}
+async function readMarkerRecord(rootPath) {
+  const markerPath = join(rootPath, MARKER_FILE_NAME);
+  let markerStat;
+  try {
+    markerStat = await lstatIfExists(markerPath);
+  } catch {
+    return null;
+  }
+  if (markerStat === null || !markerStat.isFile() || markerStat.isSymbolicLink()) {
+    return null;
+  }
+  let handle;
+  try {
+    handle = await open2(markerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const raw = await handle.readFile({ encoding: "utf8" });
+    const parsed = JSON.parse(raw);
+    return isMarker(parsed) ? { marker: parsed, raw } : null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+function isMarker(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value;
+  return marker.schemaVersion === 1 && typeof marker.publisher === "string" && marker.publisher.length > 0 && typeof marker.skillName === "string" && marker.skillName.length > 0 && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && /^[a-f\d]{64}$/iu.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string";
+}
+function markersMatchIdentityAndSha(first, second) {
+  return first.publisher === second.publisher && first.skillName === second.skillName && first.sha256.toLowerCase() === second.sha256.toLowerCase();
+}
+async function lstatIfExists(filePath) {
+  try {
+    return await lstat(filePath);
+  } catch (error) {
+    if (isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTDIR")) {
+      return null;
+    }
+    throw error;
+  }
+}
+async function pathEntryExists(filePath) {
+  return await lstatIfExists(filePath) !== null;
+}
+function isErrorCode(error, code) {
+  return error?.code === code;
+}
+var MARKER_FILE_NAME, DETECTION_FAILURE, PREPARE_FAILURE, TARGET_CONFLICT, TARGET_CHANGED, APPLY_FAILURE, ROLLBACK_FAILURE, UNSUPPORTED_REASON;
+var init_agents = __esm({
+  "dist/skills/agents.js"() {
+    "use strict";
+    init_errors();
+    MARKER_FILE_NAME = ".clink-install.json";
+    DETECTION_FAILURE = "failed to detect installed agents";
+    PREPARE_FAILURE = "failed to prepare agent installation";
+    TARGET_CONFLICT = "agent target conflicts with existing content";
+    TARGET_CHANGED = "agent target changed after preflight";
+    APPLY_FAILURE = "failed to apply agent installation";
+    ROLLBACK_FAILURE = "failed to roll back agent installation";
+    UNSUPPORTED_REASON = "no supported local skill directory";
+  }
+});
+
 // node_modules/pend/index.js
 var require_pend = __commonJS({
   "node_modules/pend/index.js"(exports, module) {
@@ -4798,6 +12076,3793 @@ var require_yauzl = __commonJS({
     function defaultCallback(err) {
       if (err) throw err;
     }
+  }
+});
+
+// dist/payment/amount.js
+function parseAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw validationError("amount must be a positive number");
+  }
+  return amount;
+}
+var init_amount = __esm({
+  "dist/payment/amount.js"() {
+    "use strict";
+    init_errors();
+  }
+});
+
+// dist/skills/spec.js
+function parseSkillPackageSpec(value) {
+  const slashIndex = value.indexOf("/");
+  if (slashIndex === -1 || slashIndex !== value.lastIndexOf("/")) {
+    throw invalidPackageSpec();
+  }
+  const publisher = value.slice(0, slashIndex);
+  const skillAndVersion = value.slice(slashIndex + 1);
+  const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
+  const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
+  const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
+  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillName(skillName) || requestedVersion !== null && (requestedVersion.toLowerCase() === "latest" || !isValidSegment(requestedVersion, VERSION_PATTERN))) {
+    throw invalidPackageSpec();
+  }
+  return { publisher, skillName, requestedVersion };
+}
+function parseSkillInstallArgs(operands, flags) {
+  if (operands.length === 0) {
+    throw validationError(`skills install requires a package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  if (operands.length !== 1) {
+    throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
+  }
+  if (flags.version !== void 0) {
+    throw validationError("--version is not supported by skills install; use publisher/skillName@version");
+  }
+  return {
+    ...parseSkillPackageSpec(operands[0]),
+    force: getBooleanFlag(flags, "force")
+  };
+}
+function parseSkillTipArgs(operands, flags) {
+  if (operands.length !== 0) {
+    throw validationError("skills tip does not accept positional arguments; use --publisher with --name");
+  }
+  for (const name of FORBIDDEN_TIP_FLAGS) {
+    if (flags[name] !== void 0) {
+      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`);
+    }
+  }
+  const publisher = getStringFlag(flags, "publisher");
+  const skillName = getStringFlag(flags, "name");
+  const hasPublisher = flags.publisher !== void 0;
+  const hasSkillName = flags.name !== void 0;
+  if (!hasPublisher && !hasSkillName) {
+    throw validationError("skills tip requires --publisher with --name");
+  }
+  if (hasPublisher !== hasSkillName) {
+    throw validationError("skills tip requires both --publisher and --name");
+  }
+  if (publisher === void 0 || skillName === void 0 || !isValidSkillTipIdentitySegment(publisher) || !isValidSkillTipIdentitySegment(skillName)) {
+    throw invalidTipIdentity();
+  }
+  const target = {
+    publisher,
+    skillName
+  };
+  const currency = getStringFlag(flags, "currency");
+  if (currency !== void 0 && currency.toUpperCase() !== "USD") {
+    throw validationError("skills tip only supports USD");
+  }
+  const amount = parseAmount(requireStringFlag(flags, "missing --amount", "amount"));
+  if (amount < 1 || amount > 100) {
+    throw validationError("skills tip amount must be between 1 and 100 USD");
+  }
+  return {
+    target,
+    amount,
+    currency: "USD"
+  };
+}
+function isValidSkillIdentitySegment(value) {
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
+}
+function isValidSkillName(value) {
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
+}
+function isValidSkillTipIdentitySegment(value) {
+  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
+}
+function isValidSegment(value, pattern) {
+  return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
+}
+function invalidPackageSpec() {
+  return validationError(`invalid skill package; expected ${PACKAGE_SPEC_SYNTAX}`);
+}
+function invalidTipIdentity() {
+  return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
+}
+var HUMAN_READABLE_SEGMENT_PATTERN, VERSION_PATTERN, MAX_SEGMENT_LENGTH, PACKAGE_SPEC_SYNTAX, TIP_FLAG_SYNTAX, FORBIDDEN_TIP_FLAGS;
+var init_spec = __esm({
+  "dist/skills/spec.js"() {
+    "use strict";
+    init_args();
+    init_errors();
+    init_amount();
+    HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
+    VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
+    MAX_SEGMENT_LENGTH = 128;
+    PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
+    TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
+    FORBIDDEN_TIP_FLAGS = [
+      "version",
+      "payment-instrument-id",
+      "instruction-id",
+      "purchase-instruction-id",
+      "mandate-id",
+      "merchant-id",
+      "session-id",
+      "payment-method-type",
+      "shipping-address",
+      "products",
+      "force"
+    ];
+  }
+});
+
+// dist/skills/archive.js
+import { createWriteStream } from "node:fs";
+import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+function normalizeArchiveEntryPath(raw, maxDepth) {
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0) {
+    throw new Error("invalid archive depth limit");
+  }
+  if (raw.length === 0 || raw.includes("\0")) {
+    throw new Error("invalid archive entry path");
+  }
+  const withZipSeparators = raw.replace(/\\/g, "/");
+  if (withZipSeparators.startsWith("/") || /^[A-Za-z]:/.test(withZipSeparators)) {
+    throw new Error("invalid archive entry path");
+  }
+  const withoutDirectorySlash = withZipSeparators.endsWith("/") ? withZipSeparators.slice(0, -1) : withZipSeparators;
+  const segments = withoutDirectorySlash.split("/");
+  if (withoutDirectorySlash.length === 0 || segments.some((segment) => segment.length === 0 || segment === "." || segment === "..") || segments.length > maxDepth) {
+    throw new Error("invalid archive entry path");
+  }
+  return segments.join("/");
+}
+async function extractSkillPackage(packagePath, destination, overrides = {}) {
+  const destinationRoot = resolve2(destination);
+  try {
+    const limits = resolveArchiveLimits(overrides);
+    const classified = await classifySkillPackage(packagePath, limits);
+    if (classified.kind === "zip") {
+      return await extractSkillArchive(packagePath, destinationRoot, overrides);
+    }
+    return await materializeRawSkill(classified.bytes, destinationRoot);
+  } catch {
+    try {
+      await rm3(destinationRoot, { recursive: true, force: true });
+    } catch {
+    }
+    throw installError(INSTALL_ERROR_MESSAGE);
+  }
+}
+async function classifySkillPackage(packagePath, limits) {
+  const handle = await open3(packagePath, "r");
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile() || !Number.isSafeInteger(metadata.size) || metadata.size < 0) {
+      throw new Error("skill package is not a regular file");
+    }
+    const header = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
+    if (bytesRead === 4 && ZIP_SIGNATURES.has(header.readUInt32LE(0))) {
+      return { kind: "zip" };
+    }
+    if (metadata.size > limits.maxFileBytes || metadata.size > limits.maxTotalBytes) {
+      throw new Error("raw skill size limit exceeded");
+    }
+    const bytes = await handle.readFile();
+    if (bytes.byteLength !== metadata.size) {
+      throw new Error("raw skill size changed while reading");
+    }
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { kind: "raw", bytes };
+  } finally {
+    await handle.close();
+  }
+}
+async function materializeRawSkill(bytes, destinationRoot) {
+  await mkdir3(destinationRoot, { recursive: true, mode: 493 });
+  await chmod2(destinationRoot, 493);
+  const rawRoot = resolve2(destinationRoot, "raw");
+  assertPathContained(destinationRoot, rawRoot);
+  await mkdir3(rawRoot, { mode: 493 });
+  await chmod2(rawRoot, 493);
+  const skillPath = resolve2(rawRoot, "SKILL.md");
+  assertPathContained(rawRoot, skillPath);
+  await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
+  await chmod2(skillPath, 420);
+  return {
+    layout: "single",
+    skillRoot: rawRoot,
+    entryCount: 1,
+    uncompressedBytes: bytes.byteLength
+  };
+}
+async function extractSkillArchive(zipPath, destination, overrides = {}) {
+  let zipFile;
+  const destinationRoot = resolve2(destination);
+  try {
+    const limits = resolveArchiveLimits(overrides);
+    zipFile = await (0, import_yauzl.openPromise)(zipPath, {
+      autoClose: true,
+      decodeStrings: true,
+      strictFileNames: false,
+      validateEntrySizes: true
+    });
+    assertSafeSize(zipFile.entryCount);
+    if (zipFile.entryCount > limits.maxEntries) {
+      throw new Error("archive entry limit exceeded");
+    }
+    await mkdir3(destinationRoot, { recursive: true, mode: 493 });
+    await chmod2(destinationRoot, 493);
+    const rawRoot = resolve2(destinationRoot, "raw");
+    assertPathContained(destinationRoot, rawRoot);
+    await mkdir3(rawRoot, { mode: 493 });
+    await chmod2(rawRoot, 493);
+    const registeredPaths = new ArchivePathRegistry();
+    const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
+    const byteCount = { total: 0 };
+    let declaredTotalBytes = 0;
+    let entryCount = 0;
+    for await (const entry of zipFile.eachEntry()) {
+      entryCount += 1;
+      if (entryCount > limits.maxEntries) {
+        throw new Error("archive entry limit exceeded");
+      }
+      const normalizedPath = normalizeArchiveEntryPath(entry.fileName, limits.maxDepth);
+      rejectInstallMarker(normalizedPath);
+      const classified = classifyEntry(entry);
+      registeredPaths.register(normalizedPath, classified.kind);
+      const outputPath = resolve2(rawRoot, normalizedPath);
+      assertPathContained(rawRoot, outputPath);
+      validateDeclaredEntry(entry, limits);
+      declaredTotalBytes = addBoundedSize(declaredTotalBytes, entry.uncompressedSize, limits.maxTotalBytes);
+      if (classified.kind === "directory") {
+        if (entry.uncompressedSize !== 0) {
+          throw new Error("archive directory contains data");
+        }
+        await ensureDirectoryTree(rawRoot, outputPath, knownDirectories);
+        continue;
+      }
+      await ensureDirectoryTree(rawRoot, dirname2(outputPath), knownDirectories);
+      const source = await zipFile.openReadStreamPromise(entry);
+      const meter = new ArchiveByteCounter(limits, byteCount);
+      const mode = classified.executable ? 493 : 420;
+      await pipeline(source, meter, createWriteStream(outputPath, { flags: "wx", mode }));
+      if (meter.fileBytes !== entry.uncompressedSize) {
+        throw new Error("archive entry size mismatch");
+      }
+      await chmod2(outputPath, mode);
+    }
+    if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
+      throw new Error("archive size metadata mismatch");
+    }
+    closeZip(zipFile);
+    const layout = await selectSkillLayout(rawRoot);
+    return {
+      ...layout,
+      entryCount,
+      uncompressedBytes: byteCount.total
+    };
+  } catch {
+    closeZip(zipFile);
+    try {
+      await rm3(destinationRoot, { recursive: true, force: true });
+    } catch {
+    }
+    throw installError(INSTALL_ERROR_MESSAGE);
+  }
+}
+function resolveArchiveLimits(overrides) {
+  const limits = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
+  for (const value of [
+    limits.maxEntries,
+    limits.maxTotalBytes,
+    limits.maxFileBytes,
+    limits.maxDepth
+  ]) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error("invalid archive limit");
+    }
+  }
+  if (!Number.isFinite(limits.maxCompressionRatio) || limits.maxCompressionRatio < 0) {
+    throw new Error("invalid archive limit");
+  }
+  return limits;
+}
+function classifyEntry(entry) {
+  if (entry.isEncrypted() || !entry.canDecodeFileData()) {
+    throw new Error("unsupported archive entry encoding");
+  }
+  const hasDirectorySlash = entry.fileName.endsWith("/");
+  if (entry.versionMadeBy >>> 8 !== UNIX_PLATFORM) {
+    return {
+      kind: hasDirectorySlash ? "directory" : "file",
+      executable: false
+    };
+  }
+  const unixMode = entry.externalFileAttributes >>> 16 & 65535;
+  const unixType = unixMode & UNIX_FILE_TYPE_MASK;
+  if (unixType !== 0 && unixType !== UNIX_REGULAR_FILE && unixType !== UNIX_DIRECTORY) {
+    throw new Error("unsupported Unix archive entry type");
+  }
+  if (unixType === UNIX_DIRECTORY && !hasDirectorySlash) {
+    throw new Error("Unix directory entry lacks a directory path");
+  }
+  if (unixType === UNIX_REGULAR_FILE && hasDirectorySlash) {
+    throw new Error("Unix regular file uses a directory path");
+  }
+  const kind = hasDirectorySlash ? "directory" : "file";
+  return {
+    kind,
+    executable: kind === "file" && (unixMode & 73) !== 0
+  };
+}
+function validateDeclaredEntry(entry, limits) {
+  assertSafeSize(entry.compressedSize);
+  assertSafeSize(entry.uncompressedSize);
+  if (entry.uncompressedSize > limits.maxFileBytes) {
+    throw new Error("archive file limit exceeded");
+  }
+  if (entry.uncompressedSize === 0) {
+    return;
+  }
+  if (entry.compressedSize === 0 || entry.uncompressedSize / entry.compressedSize > limits.maxCompressionRatio) {
+    throw new Error("archive compression ratio exceeded");
+  }
+}
+function assertSafeSize(value) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error("invalid archive size metadata");
+  }
+}
+function addBoundedSize(current, addition, maximum) {
+  const total = current + addition;
+  if (!Number.isSafeInteger(total) || total > maximum) {
+    throw new Error("archive total size limit exceeded");
+  }
+  return total;
+}
+function rejectInstallMarker(path4) {
+  if (path4.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
+    throw new Error("archive contains a reserved install marker");
+  }
+}
+function canonicalArchivePath(path4) {
+  return path4.normalize("NFC").toLowerCase();
+}
+function assertPathContained(root, candidate) {
+  const relativePath = relative2(root, candidate);
+  if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute2(relativePath)) {
+    throw new Error("archive path escapes extraction root");
+  }
+}
+async function ensureDirectoryTree(root, target, knownDirectories) {
+  assertPathContained(root, target);
+  const relativePath = relative2(root, target);
+  if (relativePath.length === 0) {
+    return;
+  }
+  let current = root;
+  for (const segment of relativePath.split(sep)) {
+    current = resolve2(current, segment);
+    assertPathContained(root, current);
+    if (!knownDirectories.has(current)) {
+      try {
+        await mkdir3(current, { mode: 493 });
+      } catch (error) {
+        if (error.code !== "EEXIST") {
+          throw error;
+        }
+        const existing = await lstat2(current);
+        if (!existing.isDirectory()) {
+          throw new Error("archive directory conflicts with a file");
+        }
+      }
+      knownDirectories.add(current);
+    }
+    await chmod2(current, 493);
+  }
+}
+async function selectSkillLayout(rawRoot) {
+  const topLevelNames = (await readdir2(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  if (topLevelNames.includes("SKILL.md")) {
+    const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
+    if (rootSkill.isFile()) {
+      return { layout: "single", skillRoot: rawRoot };
+    }
+  }
+  const skillRoots = [];
+  const topLevelDirectories = [];
+  for (const name of topLevelNames) {
+    const candidateRoot = resolve2(rawRoot, name);
+    assertPathContained(rawRoot, candidateRoot);
+    const candidate = await lstat2(candidateRoot);
+    if (!candidate.isDirectory()) {
+      continue;
+    }
+    topLevelDirectories.push({ name, root: candidateRoot });
+    const candidateNames = await readdir2(candidateRoot);
+    if (!candidateNames.includes("SKILL.md")) {
+      continue;
+    }
+    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
+    if (!skillFile.isFile()) {
+      throw new Error("archive skill SKILL.md is not a regular file");
+    }
+    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
+  }
+  if (skillRoots.length === 1) {
+    return { layout: "single", skillRoot: skillRoots[0].skillRoot };
+  }
+  if (skillRoots.length >= 2) {
+    assertValidMultiSkillRoots(skillRoots);
+    return { layout: "multi", skillRoots };
+  }
+  if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
+    const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
+    if (wrappedSkillRoots.length === 1) {
+      return { layout: "single", skillRoot: wrappedSkillRoots[0].skillRoot };
+    }
+    if (wrappedSkillRoots.length >= 2) {
+      assertValidMultiSkillRoots(wrappedSkillRoots);
+      return { layout: "multi", skillRoots: wrappedSkillRoots };
+    }
+  }
+  throw new Error("archive must contain one skill root or multiple one-level skill roots");
+}
+async function findDirectSkillRoots(parentRoot) {
+  const names = (await readdir2(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
+  const skillRoots = [];
+  for (const name of names) {
+    const candidateRoot = resolve2(parentRoot, name);
+    assertPathContained(parentRoot, candidateRoot);
+    const candidate = await lstat2(candidateRoot);
+    if (!candidate.isDirectory()) {
+      continue;
+    }
+    const candidateNames = await readdir2(candidateRoot);
+    if (!candidateNames.includes("SKILL.md")) {
+      continue;
+    }
+    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
+    if (!skillFile.isFile()) {
+      throw new Error("archive skill SKILL.md is not a regular file");
+    }
+    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
+  }
+  return skillRoots;
+}
+function assertValidMultiSkillRoots(skillRoots) {
+  for (const skill of skillRoots) {
+    if (!isValidSkillName(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
+      throw new Error("archive contains an invalid multi-skill name");
+    }
+  }
+}
+function closeZip(zipFile) {
+  if (zipFile?.isOpen === true) {
+    try {
+      zipFile.close();
+    } catch {
+    }
+  }
+}
+var import_yauzl, DEFAULT_ARCHIVE_LIMITS, INSTALL_ERROR_MESSAGE, INSTALL_MARKER_NAME, ZIP_SIGNATURES, UNIX_PLATFORM, UNIX_FILE_TYPE_MASK, UNIX_REGULAR_FILE, UNIX_DIRECTORY, ArchivePathRegistry, ArchiveByteCounter;
+var init_archive = __esm({
+  "dist/skills/archive.js"() {
+    "use strict";
+    import_yauzl = __toESM(require_yauzl(), 1);
+    init_errors();
+    init_spec();
+    DEFAULT_ARCHIVE_LIMITS = Object.freeze({
+      maxEntries: 4096,
+      maxTotalBytes: 200 * 1024 * 1024,
+      maxFileBytes: 50 * 1024 * 1024,
+      maxDepth: 20,
+      maxCompressionRatio: 100
+    });
+    INSTALL_ERROR_MESSAGE = "failed to extract skill archive";
+    INSTALL_MARKER_NAME = ".clink-install.json";
+    ZIP_SIGNATURES = /* @__PURE__ */ new Set([67324752, 101010256, 134695760]);
+    UNIX_PLATFORM = 3;
+    UNIX_FILE_TYPE_MASK = 61440;
+    UNIX_REGULAR_FILE = 32768;
+    UNIX_DIRECTORY = 16384;
+    ArchivePathRegistry = class {
+      #paths = /* @__PURE__ */ new Map();
+      register(path4, kind) {
+        const segments = path4.split("/");
+        for (let index = 1; index < segments.length; index += 1) {
+          this.#registerDirectory(segments.slice(0, index).join("/"), false);
+        }
+        if (kind === "directory") {
+          this.#registerDirectory(path4, true);
+          return;
+        }
+        const key = canonicalArchivePath(path4);
+        const existing = this.#paths.get(key);
+        if (existing !== void 0) {
+          throw new Error("archive path collision");
+        }
+        this.#paths.set(key, { kind: "file", path: path4, explicit: true });
+      }
+      #registerDirectory(path4, explicit) {
+        const key = canonicalArchivePath(path4);
+        const existing = this.#paths.get(key);
+        if (existing === void 0) {
+          this.#paths.set(key, { kind: "directory", path: path4, explicit });
+          return;
+        }
+        if (existing.kind !== "directory" || existing.path !== path4) {
+          throw new Error("archive path collision");
+        }
+        if (explicit && existing.explicit) {
+          throw new Error("archive path collision");
+        }
+        if (explicit) {
+          existing.explicit = true;
+        }
+      }
+    };
+    ArchiveByteCounter = class extends Transform {
+      fileBytes = 0;
+      #limits;
+      #state;
+      constructor(limits, state) {
+        super();
+        this.#limits = limits;
+        this.#state = state;
+      }
+      _transform(chunk, _encoding, callback) {
+        this.fileBytes += chunk.byteLength;
+        this.#state.total += chunk.byteLength;
+        if (this.fileBytes > this.#limits.maxFileBytes || this.#state.total > this.#limits.maxTotalBytes) {
+          callback(new Error("archive byte limit exceeded"));
+          return;
+        }
+        callback(null, chunk);
+      }
+    };
+  }
+});
+
+// dist/skills/content-tree.js
+import { createHash as createHash3 } from "node:crypto";
+import { constants as constants2 } from "node:fs";
+import { lstat as lstat3, open as open4, readdir as readdir3, rm as rm4 } from "node:fs/promises";
+import { join as join2, relative as relative3, sep as sep2 } from "node:path";
+async function pruneAgenticPaymentSkillRoot(skillRoot) {
+  try {
+    for (const name of PRUNED_DIRECTORIES) {
+      const target = join2(skillRoot, name);
+      let stats;
+      try {
+        stats = await lstat3(target);
+      } catch (error) {
+        if (isErrorCode2(error, "ENOENT")) {
+          continue;
+        }
+        throw error;
+      }
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new Error(`${name} is not a real directory`);
+      }
+      await rm4(target, { recursive: true, force: false });
+    }
+  } catch {
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function validateAgenticPaymentSkillRoot(skillRoot) {
+  try {
+    await assertRegularFile(join2(skillRoot, "SKILL.md"));
+    await assertRegularFile(join2(skillRoot, "package.json"));
+    await assertExecutableFile(join2(skillRoot, "bin", "clink"));
+    await assertRealDirectory(join2(skillRoot, "lib"));
+    await assertRealDirectory(join2(skillRoot, "references"));
+    await assertRealDirectory(join2(skillRoot, "scripts"));
+    await assertRegularFile(join2(skillRoot, "scripts", "network-preflight.mjs"));
+    await assertRealDirectory(join2(skillRoot, "vendor", "clink-cli"));
+    await assertExecutableFile(join2(skillRoot, "vendor", "clink-cli", "clink-cli.bundle.mjs"));
+    for (const name of PRUNED_DIRECTORIES) {
+      await assertAbsent(join2(skillRoot, name));
+    }
+    await assertAbsent(join2(skillRoot, INSTALL_MARKER_FILE_NAME));
+    await assertAbsent(join2(skillRoot, PROVENANCE_FILE_NAME));
+    const packageBytes = await readRegularFile(join2(skillRoot, "package.json"));
+    if (packageBytes.byteLength > 64 * 1024) {
+      throw new Error("package metadata is too large");
+    }
+    const packageJson = JSON.parse(packageBytes.toString("utf8"));
+    if (!isRecord5(packageJson)) {
+      throw new Error("package metadata is invalid");
+    }
+    if (packageJson.name !== "clink-payment-skill") {
+      throw new Error("package name is invalid");
+    }
+    if (typeof packageJson.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
+      throw new Error("package version is invalid");
+    }
+    const skillBytes = await readRegularFile(join2(skillRoot, "SKILL.md"));
+    if (skillBytes.byteLength > 2 * 1024 * 1024) {
+      throw new Error("skill metadata is too large");
+    }
+    const skillText = new TextDecoder("utf-8", { fatal: true }).decode(skillBytes);
+    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillText)?.[1];
+    if (frontmatter === void 0 || !/^name:\s*["']?clink-payment-skill["']?\s*$/m.test(frontmatter)) {
+      throw new Error("skill name is invalid");
+    }
+    const declaredVersion = /^\s*version:\s*["']?([^"'\s]+)["']?\s*$/m.exec(frontmatter)?.[1];
+    if (declaredVersion !== void 0 && declaredVersion !== packageJson.version) {
+      throw new Error("skill version metadata conflicts");
+    }
+    return { skillVersion: packageJson.version };
+  } catch {
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function hashAgenticPaymentSkillTree(skillRoot) {
+  try {
+    const files = await collectContentFiles(skillRoot, skillRoot);
+    files.sort((left, right) => Buffer.compare(Buffer.from(left.relativePath), Buffer.from(right.relativePath)));
+    const hash = createHash3("sha256");
+    hash.update(CONTENT_TREE_DOMAIN);
+    for (const file of files) {
+      const bytes = await readRegularFile(file.absolutePath, file.sizeBytes);
+      hash.update(file.relativePath);
+      hash.update("\0");
+      hash.update(file.executable ? "1" : "0");
+      hash.update("\0");
+      hash.update(String(file.sizeBytes));
+      hash.update("\0");
+      hash.update(bytes);
+      hash.update("\0");
+    }
+    return hash.digest("hex");
+  } catch (error) {
+    if (error instanceof Error && error.name === "CliError") {
+      throw error;
+    }
+    throw installError(CONTENT_ERROR);
+  }
+}
+async function collectContentFiles(root, directory) {
+  const directoryStats = await lstat3(directory);
+  if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
+    throw new Error("content tree contains a non-directory boundary");
+  }
+  const names = await readdir3(directory);
+  const files = [];
+  for (const name of names) {
+    if (name.includes("\0")) {
+      throw new Error("content tree contains an invalid path");
+    }
+    const absolutePath = join2(directory, name);
+    const stats = await lstat3(absolutePath);
+    const relativePath = relative3(root, absolutePath).split(sep2).join("/");
+    if (relativePath === INSTALL_MARKER_FILE_NAME || relativePath === PROVENANCE_FILE_NAME) {
+      continue;
+    }
+    if (stats.isDirectory() && !stats.isSymbolicLink()) {
+      files.push(...await collectContentFiles(root, absolutePath));
+      continue;
+    }
+    if (!stats.isFile() || stats.isSymbolicLink() || !Number.isSafeInteger(stats.size)) {
+      throw new Error("content tree contains an unsupported entry");
+    }
+    files.push({
+      absolutePath,
+      relativePath,
+      executable: (stats.mode & 73) !== 0,
+      sizeBytes: stats.size
+    });
+  }
+  return files;
+}
+async function assertAbsent(path4) {
+  try {
+    await lstat3(path4);
+  } catch (error) {
+    if (isErrorCode2(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  throw new Error("reserved or pruned content is still present");
+}
+async function assertRegularFile(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error("required file is missing");
+  }
+}
+async function assertExecutableFile(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 73) === 0) {
+    throw new Error("required executable is missing");
+  }
+}
+async function assertRealDirectory(path4) {
+  const stats = await lstat3(path4);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("required directory is missing");
+  }
+}
+async function readRegularFile(path4, expectedSize) {
+  const handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || !Number.isSafeInteger(before.size)) {
+      throw new Error("content file is not regular");
+    }
+    if (expectedSize !== void 0 && before.size !== expectedSize) {
+      throw new Error("content file changed before reading");
+    }
+    const bytes = await handle.readFile();
+    const after = await handle.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || bytes.byteLength !== after.size) {
+      throw new Error("content file changed while reading");
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+function isRecord5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isErrorCode2(error, code) {
+  return error.code === code;
+}
+var CONTENT_TREE_DOMAIN, PROVENANCE_FILE_NAME, INSTALL_MARKER_FILE_NAME, CONTENT_ERROR, PRUNED_DIRECTORIES;
+var init_content_tree = __esm({
+  "dist/skills/content-tree.js"() {
+    "use strict";
+    init_errors();
+    CONTENT_TREE_DOMAIN = "clink-skill-tree-v1\0";
+    PROVENANCE_FILE_NAME = ".clink-provenance.json";
+    INSTALL_MARKER_FILE_NAME = ".clink-install.json";
+    CONTENT_ERROR = "invalid agentic payment skill content";
+    PRUNED_DIRECTORIES = ["docs", "tests"];
+  }
+});
+
+// dist/skills/install-lock.js
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { constants as constants3 } from "node:fs";
+import { lstat as lstat4, mkdir as mkdir4, open as open5, unlink } from "node:fs/promises";
+import { join as join3 } from "node:path";
+import { TextDecoder as TextDecoder2 } from "node:util";
+async function acquireAgenticPaymentInstallLock(input) {
+  const lockRoot = join3(input.homeDir, ".agents", "skills", ".clink", "locks");
+  const lockPath = join3(lockRoot, "agentic-payment-skills.lock");
+  try {
+    await mkdir4(lockRoot, { recursive: true, mode: 448 });
+    const rootStats = await lstat4(lockRoot);
+    if (!isRegularDirectory(rootStats)) {
+      throw new Error("lock root is not a real directory");
+    }
+    for (let attempt = 0; attempt < MAX_ACQUIRE_ATTEMPTS; attempt += 1) {
+      let handle;
+      try {
+        handle = await open5(lockPath, constants3.O_WRONLY | constants3.O_CREAT | constants3.O_EXCL | constants3.O_NOFOLLOW, 384);
+      } catch (error) {
+        if (!isErrorCode3(error, "EEXIST")) {
+          throw error;
+        }
+        const existing = await inspectExistingLock(lockPath);
+        if (existing === "locked") {
+          throw installError(LOCKED_MESSAGE);
+        }
+        continue;
+      }
+      let owned;
+      try {
+        const stats = await handle.stat();
+        if (!stats.isFile()) {
+          throw new Error("new lock is not a regular file");
+        }
+        owned = fileIdentity(stats);
+        const token = randomBytes2(LOCK_TOKEN_BYTES).toString("hex");
+        const metadata = {
+          schemaVersion: LOCK_SCHEMA_VERSION,
+          pid: process.pid,
+          acquiredAt: input.now.toISOString(),
+          token
+        };
+        const encoded = Buffer.from(JSON.stringify(metadata), "utf8");
+        if (encoded.byteLength === 0 || encoded.byteLength > MAX_LOCK_METADATA_BYTES) {
+          throw new Error("generated lock metadata has an invalid size");
+        }
+        await writeAll(handle, encoded);
+        await handle.sync();
+        await assertPathIdentity(lockPath, owned);
+        return createInstallLock(lockPath, handle, { ...owned, metadata });
+      } catch (error) {
+        await closeQuietly(handle);
+        if (owned !== void 0) {
+          await removeIfOwned(lockPath, owned);
+        }
+        throw error;
+      }
+    }
+    throw installError(LOCKED_MESSAGE);
+  } catch (error) {
+    if (error instanceof Error && error.name === "CliError") {
+      throw error;
+    }
+    throw installError(LOCK_FAILURE_MESSAGE);
+  }
+}
+function createInstallLock(lockPath, initialHandle, owned) {
+  let handle = initialHandle;
+  let state = "active";
+  return {
+    path: lockPath,
+    async release() {
+      if (state === "released") {
+        return;
+      }
+      try {
+        if (handle !== void 0) {
+          await handle.close();
+          handle = void 0;
+        }
+        const current = await readLockSnapshot(lockPath);
+        if (!sameSnapshot2(current, owned)) {
+          throw new Error("lock ownership changed");
+        }
+        await assertPathIdentity(lockPath, owned);
+        await unlink(lockPath);
+        state = "released";
+      } catch {
+        throw installError(LOCK_FAILURE_MESSAGE);
+      }
+    }
+  };
+}
+async function inspectExistingLock(lockPath) {
+  let observed;
+  try {
+    observed = await readLockSnapshot(lockPath);
+  } catch (error) {
+    if (error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  if (isProcessAlive(observed.metadata.pid)) {
+    return "locked";
+  }
+  let confirmed;
+  try {
+    confirmed = await readLockSnapshot(lockPath);
+  } catch (error) {
+    if (error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  if (!sameSnapshot2(observed, confirmed)) {
+    return "retry";
+  }
+  try {
+    await assertPathIdentity(lockPath, observed);
+    await unlink(lockPath);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT") || error instanceof LockChangedError) {
+      return "retry";
+    }
+    throw error;
+  }
+  return "retry";
+}
+async function readLockSnapshot(lockPath) {
+  const before = await lstatOrChanged(lockPath);
+  assertReadableLockStats(before);
+  let handle;
+  try {
+    handle = await open5(lockPath, constants3.O_RDONLY | constants3.O_NOFOLLOW);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      throw new LockChangedError();
+    }
+    throw error;
+  }
+  try {
+    const opened = await handle.stat();
+    assertReadableLockStats(opened);
+    if (!sameFileIdentity(before, opened)) {
+      throw new LockChangedError();
+    }
+    const bytes = await readBounded(handle);
+    const afterRead = await handle.stat();
+    if (!sameFileIdentity(opened, afterRead) || afterRead.size !== bytes.byteLength) {
+      throw new LockChangedError();
+    }
+    const afterPath = await lstatOrChanged(lockPath);
+    assertReadableLockStats(afterPath);
+    if (!sameFileIdentity(opened, afterPath)) {
+      throw new LockChangedError();
+    }
+    return {
+      ...fileIdentity(opened),
+      metadata: parseLockMetadata(bytes)
+    };
+  } finally {
+    await handle.close();
+  }
+}
+async function readBounded(handle) {
+  const result = Buffer.alloc(MAX_LOCK_METADATA_BYTES + 1);
+  let offset = 0;
+  while (offset < result.byteLength) {
+    const { bytesRead } = await handle.read(result, offset, result.byteLength - offset, offset);
+    if (bytesRead === 0) {
+      break;
+    }
+    offset += bytesRead;
+  }
+  if (offset === 0 || offset > MAX_LOCK_METADATA_BYTES) {
+    throw new Error("lock metadata has an invalid size");
+  }
+  return result.subarray(0, offset);
+}
+function parseLockMetadata(bytes) {
+  let parsed;
+  try {
+    parsed = JSON.parse(UTF8_DECODER.decode(bytes));
+  } catch {
+    throw new Error("lock metadata is not valid UTF-8 JSON");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("lock metadata is not an object");
+  }
+  const record2 = parsed;
+  const keys = Object.keys(record2).sort();
+  const isLegacy = keys.length === 3 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && record2.schemaVersion === 1;
+  const isCurrent = keys.length === 4 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && keys[3] === "token" && record2.schemaVersion === LOCK_SCHEMA_VERSION;
+  if (!isLegacy && !isCurrent) {
+    throw new Error("lock metadata fields are invalid");
+  }
+  if (typeof record2.pid !== "number" || !Number.isSafeInteger(record2.pid) || record2.pid < 1 || record2.pid > MAX_PID) {
+    throw new Error("lock metadata pid is invalid");
+  }
+  if (isCurrent && (typeof record2.token !== "string" || !/^[a-f0-9]{64}$/.test(record2.token))) {
+    throw new Error("lock metadata token is invalid");
+  }
+  if (typeof record2.acquiredAt !== "string" || !isCanonicalTimestamp(record2.acquiredAt)) {
+    throw new Error("lock metadata timestamp is invalid");
+  }
+  if (isCurrent) {
+    return {
+      schemaVersion: LOCK_SCHEMA_VERSION,
+      pid: record2.pid,
+      acquiredAt: record2.acquiredAt,
+      token: record2.token
+    };
+  }
+  return {
+    schemaVersion: 1,
+    pid: record2.pid,
+    acquiredAt: record2.acquiredAt
+  };
+}
+function isCanonicalTimestamp(value) {
+  try {
+    return new Date(value).toISOString() === value;
+  } catch {
+    return false;
+  }
+}
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isErrorCode3(error, "ESRCH")) {
+      return false;
+    }
+    if (isErrorCode3(error, "EPERM")) {
+      return true;
+    }
+    throw error;
+  }
+}
+async function writeAll(handle, bytes) {
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
+    if (bytesWritten <= 0) {
+      throw new Error("lock metadata write made no progress");
+    }
+    offset += bytesWritten;
+  }
+}
+async function assertPathIdentity(lockPath, expected) {
+  const current = await lstatOrChanged(lockPath);
+  if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(current, expected)) {
+    throw new LockChangedError();
+  }
+}
+async function lstatOrChanged(lockPath) {
+  try {
+    return await lstat4(lockPath);
+  } catch (error) {
+    if (isErrorCode3(error, "ENOENT")) {
+      throw new LockChangedError();
+    }
+    throw error;
+  }
+}
+function assertReadableLockStats(stats) {
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0 || stats.size > MAX_LOCK_METADATA_BYTES) {
+    throw new Error("lock file type or size is invalid");
+  }
+}
+function isRegularDirectory(stats) {
+  return stats.isDirectory() && !stats.isSymbolicLink();
+}
+function fileIdentity(stats) {
+  return { dev: stats.dev, ino: stats.ino };
+}
+function sameFileIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+function sameSnapshot2(left, right) {
+  if (!sameFileIdentity(left, right) || left.metadata.schemaVersion !== right.metadata.schemaVersion || left.metadata.pid !== right.metadata.pid || left.metadata.acquiredAt !== right.metadata.acquiredAt) {
+    return false;
+  }
+  return left.metadata.schemaVersion === 1 || right.metadata.schemaVersion === 2 && left.metadata.token === right.metadata.token;
+}
+async function closeQuietly(handle) {
+  try {
+    await handle.close();
+  } catch {
+  }
+}
+async function removeIfOwned(lockPath, expected) {
+  try {
+    const current = await lstat4(lockPath);
+    if (current.isFile() && !current.isSymbolicLink() && sameFileIdentity(current, expected)) {
+      await unlink(lockPath);
+    }
+  } catch {
+  }
+}
+function isErrorCode3(error, code) {
+  return error.code === code;
+}
+var LOCKED_MESSAGE, LOCK_FAILURE_MESSAGE, LOCK_SCHEMA_VERSION, LOCK_TOKEN_BYTES, MAX_LOCK_METADATA_BYTES, MAX_ACQUIRE_ATTEMPTS, MAX_PID, UTF8_DECODER, LockChangedError;
+var init_install_lock = __esm({
+  "dist/skills/install-lock.js"() {
+    "use strict";
+    init_errors();
+    LOCKED_MESSAGE = "agentic payment skill synchronization is already running";
+    LOCK_FAILURE_MESSAGE = "failed to manage agentic payment skill synchronization lock";
+    LOCK_SCHEMA_VERSION = 2;
+    LOCK_TOKEN_BYTES = 32;
+    MAX_LOCK_METADATA_BYTES = 1024;
+    MAX_ACQUIRE_ATTEMPTS = 4;
+    MAX_PID = 2147483647;
+    UTF8_DECODER = new TextDecoder2("utf-8", { fatal: true });
+    LockChangedError = class extends Error {
+      constructor() {
+        super("lock changed while it was being inspected");
+        this.name = "LockChangedError";
+      }
+    };
+  }
+});
+
+// dist/skills/source-download.js
+import { createHash as createHash4 } from "node:crypto";
+import { constants as constants4 } from "node:fs";
+import { open as open6, rm as rm5 } from "node:fs/promises";
+async function downloadGithubAgenticPaymentSkill(input) {
+  const sourceCommit = await resolveGithubMainCommit(input.timeoutMs, input.dependencies);
+  const sourceUrl = `https://codeload.github.com/clinkbillcom/agentic-payment-skills/zip/${sourceCommit}`;
+  const downloaded = await downloadArchive({
+    url: new URL(sourceUrl),
+    destinationPath: input.destinationPath,
+    timeoutMs: input.timeoutMs,
+    allowedOrigins: /* @__PURE__ */ new Set(["https://codeload.github.com"]),
+    sourceKind: "github-primary",
+    dependencies: input.dependencies
+  });
+  return { downloaded, sourceCommit, sourceUrl };
+}
+async function fetchAgenticPaymentFallbackManifest(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: new URL(AGENTIC_PAYMENT_FALLBACK_MANIFEST),
+        allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Cache-Control": "no-cache"
+        },
+        dependencies: input.dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    try {
+      const value = await readLimitedJson(response, MAX_JSON_BYTES);
+      return parseFallbackManifest(value);
+    } catch (error) {
+      if (error instanceof ResponseBodyUnavailableError) {
+        throw networkError(FALLBACK_NETWORK_ERROR);
+      }
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function downloadFallbackAgenticPaymentSkill(input) {
+  try {
+    return await downloadArchive({
+      url: new URL(AGENTIC_PAYMENT_FALLBACK_ARCHIVE),
+      destinationPath: input.destinationPath,
+      timeoutMs: input.timeoutMs,
+      allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
+      expectedSha256: input.manifest.archiveSha256,
+      expectedSizeBytes: input.manifest.archiveSizeBytes,
+      sourceKind: "verified-fallback",
+      dependencies: input.dependencies
+    });
+  } catch (error) {
+    if (error instanceof SourceUnavailableError) {
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    throw error;
+  }
+}
+async function resolveGithubMainCommit(timeoutMs, dependencies) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: new URL(GITHUB_COMMIT_API),
+        allowedOrigins: /* @__PURE__ */ new Set(["https://api.github.com"]),
+        signal: controller.signal,
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "clink-cli-agentic-payment-skill-sync",
+          "X-GitHub-Api-Version": "2022-11-28"
+        },
+        dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw new SourceUnavailableError();
+    }
+    if (isGithubFallbackResponse(response)) {
+      await cancelBody(response);
+      throw new SourceUnavailableError();
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    let value;
+    try {
+      value = await readLimitedJson(response, MAX_JSON_BYTES);
+    } catch (error) {
+      if (error instanceof ResponseBodyUnavailableError) {
+        throw new SourceUnavailableError();
+      }
+      throw error;
+    }
+    if (!isRecord6(value) || typeof value.sha !== "string" || !COMMIT_PATTERN.test(value.sha)) {
+      throw installError(SOURCE_ERROR);
+    }
+    return value.sha;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function downloadArchive(input) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(input.timeoutMs, MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS));
+  let created = false;
+  try {
+    let response;
+    try {
+      response = await fetchWithRedirects({
+        url: input.url,
+        allowedOrigins: input.allowedOrigins,
+        signal: controller.signal,
+        headers: {
+          Accept: "application/zip, application/octet-stream",
+          ...input.url.origin === "https://www.clinkbill.com" ? { "Cache-Control": "no-cache" } : {}
+        },
+        dependencies: input.dependencies
+      });
+    } catch (error) {
+      if (error instanceof CliError) {
+        throw error;
+      }
+      throw new SourceUnavailableError();
+    }
+    if (input.sourceKind === "github-primary" && isGithubFallbackResponse(response)) {
+      await cancelBody(response);
+      throw new SourceUnavailableError();
+    }
+    if (input.sourceKind === "verified-fallback" && isFallbackArchiveUnavailableStatus(response.status)) {
+      await cancelBody(response);
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      await cancelBody(response);
+      throw installError(SOURCE_ERROR);
+    }
+    if (response.body === null) {
+      if (input.sourceKind === "github-primary") {
+        throw new SourceUnavailableError();
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    const contentEncoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+    const declaredLengthHeader = contentEncoding === void 0 || contentEncoding === "identity" ? response.headers.get("content-length") : null;
+    let declaredLength = null;
+    if (declaredLengthHeader !== null) {
+      const parsedLength = Number(declaredLengthHeader);
+      if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > MAX_ARCHIVE_BYTES || input.expectedSizeBytes !== void 0 && parsedLength !== input.expectedSizeBytes) {
+        await cancelBody(response);
+        throw installError(SOURCE_ERROR);
+      }
+      declaredLength = parsedLength;
+    }
+    let handle;
+    try {
+      handle = await open6(input.destinationPath, constants4.O_WRONLY | constants4.O_CREAT | constants4.O_EXCL | constants4.O_NOFOLLOW, 384);
+    } catch {
+      throw installError("failed to stage official agentic payment skill");
+    }
+    created = true;
+    const hash = createHash4("sha256");
+    let sizeBytes = 0;
+    try {
+      const reader = response.body.getReader();
+      try {
+        for (; ; ) {
+          let item;
+          try {
+            item = await reader.read();
+          } catch {
+            if (input.sourceKind === "github-primary") {
+              throw new SourceUnavailableError();
+            }
+            throw networkError(FALLBACK_NETWORK_ERROR);
+          }
+          const { done, value } = item;
+          if (done) {
+            break;
+          }
+          sizeBytes += value.byteLength;
+          if (!Number.isSafeInteger(sizeBytes) || sizeBytes > MAX_ARCHIVE_BYTES) {
+            try {
+              await reader.cancel();
+            } catch {
+            }
+            throw installError(SOURCE_ERROR);
+          }
+          hash.update(value);
+          try {
+            await handle.writeFile(value);
+          } catch {
+            throw installError("failed to stage official agentic payment skill");
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      try {
+        await handle.sync();
+      } catch {
+        throw installError("failed to stage official agentic payment skill");
+      }
+    } finally {
+      await handle.close();
+    }
+    const sha256 = hash.digest("hex");
+    if (declaredLength !== null && sizeBytes !== declaredLength) {
+      if (input.expectedSizeBytes !== void 0) {
+        throw installError(SOURCE_ERROR);
+      }
+      if (input.sourceKind === "github-primary") {
+        throw new SourceUnavailableError();
+      }
+      throw networkError(FALLBACK_NETWORK_ERROR);
+    }
+    if (input.expectedSizeBytes !== void 0 && sizeBytes !== input.expectedSizeBytes || input.expectedSha256 !== void 0 && sha256 !== input.expectedSha256) {
+      throw installError(SOURCE_ERROR);
+    }
+    return { path: input.destinationPath, sizeBytes, sha256 };
+  } catch (error) {
+    if (created) {
+      try {
+        await rm5(input.destinationPath, { force: true });
+      } catch {
+      }
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function fetchWithRedirects(input) {
+  let current = validateSourceUrl(input.url, input.allowedOrigins);
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+    const response = await input.dependencies.fetch(current, {
+      method: "GET",
+      redirect: "manual",
+      headers: input.headers,
+      signal: input.signal
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return response;
+    }
+    const location = response.headers.get("location");
+    await cancelBody(response);
+    if (location === null || redirects === MAX_REDIRECTS) {
+      throw installError(SOURCE_ERROR);
+    }
+    current = validateSourceUrl(new URL(location, current), input.allowedOrigins);
+  }
+  throw installError(SOURCE_ERROR);
+}
+function validateSourceUrl(url, allowedOrigins) {
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || !allowedOrigins.has(url.origin)) {
+    throw installError(SOURCE_ERROR);
+  }
+  return url;
+}
+async function readLimitedJson(response, maxBytes) {
+  if (response.body === null) {
+    throw new ResponseBodyUnavailableError();
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (; ; ) {
+      let item;
+      try {
+        item = await reader.read();
+      } catch {
+        throw new ResponseBodyUnavailableError();
+      }
+      const { done, value } = item;
+      if (done) {
+        break;
+      }
+      size += value.byteLength;
+      if (size > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+        }
+        throw installError(SOURCE_ERROR);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw installError(SOURCE_ERROR);
+  }
+}
+function parseFallbackManifest(value) {
+  if (!isRecord6(value)) {
+    throw installError(SOURCE_ERROR);
+  }
+  const expectedKeys = [
+    "archiveFile",
+    "archiveSha256",
+    "archiveSizeBytes",
+    "contentSha256",
+    "generatedAt",
+    "name",
+    "prunedDirectories",
+    "schemaVersion",
+    "skillVersion",
+    "sourceCommit",
+    "sourceRepository"
+  ];
+  const keys = Object.keys(value).sort();
+  const pruned = value.prunedDirectories;
+  if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index]) || value.schemaVersion !== 1 || value.name !== "agentic-payment-skills" || typeof value.skillVersion !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.skillVersion) || value.sourceRepository !== AGENTIC_PAYMENT_REPOSITORY || typeof value.sourceCommit !== "string" || !COMMIT_PATTERN.test(value.sourceCommit) || value.archiveFile !== "agentic-payment-skill.zip" || typeof value.archiveSha256 !== "string" || !SHA256_PATTERN.test(value.archiveSha256) || typeof value.archiveSizeBytes !== "number" || !Number.isSafeInteger(value.archiveSizeBytes) || value.archiveSizeBytes <= 0 || value.archiveSizeBytes > MAX_ARCHIVE_BYTES || typeof value.contentSha256 !== "string" || !SHA256_PATTERN.test(value.contentSha256) || typeof value.generatedAt !== "string" || !isIsoDate(value.generatedAt) || !Array.isArray(pruned) || pruned.length !== 2 || !pruned.every((entry) => typeof entry === "string") || [...pruned].sort().join(",") !== "docs,tests") {
+    throw installError(SOURCE_ERROR);
+  }
+  return value;
+}
+function isGithubFallbackResponse(response) {
+  return response.status === 404 || response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 403 && hasExplicitRateLimitHeader(response.headers);
+}
+function hasExplicitRateLimitHeader(headers) {
+  return headers.get("x-ratelimit-remaining")?.trim() === "0" || headers.has("retry-after");
+}
+function isFallbackArchiveUnavailableStatus(status) {
+  return status === 401 || status === 403 || status === 404 || status === 408 || status === 429 || status >= 500;
+}
+function isIsoDate(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+function isRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+async function cancelBody(response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+  }
+}
+var AGENTIC_PAYMENT_REPOSITORY, AGENTIC_PAYMENT_FALLBACK_ARCHIVE, AGENTIC_PAYMENT_FALLBACK_MANIFEST, GITHUB_COMMIT_API, MAX_ARCHIVE_BYTES, MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS, MAX_JSON_BYTES, MAX_REDIRECTS, SHA256_PATTERN, COMMIT_PATTERN, SOURCE_ERROR, FALLBACK_NETWORK_ERROR, SourceUnavailableError, ResponseBodyUnavailableError;
+var init_source_download = __esm({
+  "dist/skills/source-download.js"() {
+    "use strict";
+    init_errors();
+    AGENTIC_PAYMENT_REPOSITORY = "https://github.com/clinkbillcom/agentic-payment-skills";
+    AGENTIC_PAYMENT_FALLBACK_ARCHIVE = "https://www.clinkbill.com/public/skills/agentic-payment-skill.zip";
+    AGENTIC_PAYMENT_FALLBACK_MANIFEST = "https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json";
+    GITHUB_COMMIT_API = "https://api.github.com/repos/clinkbillcom/agentic-payment-skills/commits/main";
+    MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
+    MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS = 3e5;
+    MAX_JSON_BYTES = 64 * 1024;
+    MAX_REDIRECTS = 3;
+    SHA256_PATTERN = /^[a-f0-9]{64}$/;
+    COMMIT_PATTERN = /^[a-f0-9]{40}$/;
+    SOURCE_ERROR = "invalid official agentic payment skill source";
+    FALLBACK_NETWORK_ERROR = "failed to download fallback agentic payment skill";
+    SourceUnavailableError = class extends Error {
+      constructor(message = "primary agentic payment skill source is unavailable") {
+        super(message);
+        this.name = "SourceUnavailableError";
+      }
+    };
+    ResponseBodyUnavailableError = class extends Error {
+      constructor() {
+        super("official source response body became unavailable");
+        this.name = "ResponseBodyUnavailableError";
+      }
+    };
+  }
+});
+
+// dist/skills/store-publication.js
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { constants as constants5 } from "node:fs";
+import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat5, mkdir as mkdir5, open as open7, readdir as readdir4, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm6, symlink as symlink2, utimes } from "node:fs/promises";
+import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative as relative4, resolve as resolve3, sep as sep3 } from "node:path";
+async function publishSkillRelease(input) {
+  const paths = input.paths;
+  validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
+  let current;
+  let existingRelease;
+  try {
+    current = await inspectCurrent(paths);
+    if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
+      if (!input.force) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+    }
+    if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
+      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
+      if (expectedRelease !== current.managed.canonicalReleasePath) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      const confirmedCurrent = await inspectCurrent(paths);
+      if (confirmedCurrent?.managed === null || confirmedCurrent?.managed === void 0 || !samePathFingerprint(confirmedCurrent.fingerprint, current.fingerprint) || confirmedCurrent.managed.canonicalReleasePath !== expectedRelease || confirmedCurrent.managed.marker.publisher !== input.marker.publisher || confirmedCurrent.managed.marker.skillName !== input.marker.skillName || confirmedCurrent.managed.marker.sha256 !== input.marker.sha256) {
+        throw installError(PUBLISH_CONFLICT_MESSAGE);
+      }
+      return createUnchangedPublication(paths);
+    }
+    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const transaction = {
+    paths,
+    marker: input.marker,
+    uuid: input.uuid,
+    oldCurrent: current,
+    backup: null,
+    newCurrent: null,
+    createdRelease: null
+  };
+  try {
+    if (existingRelease === null) {
+      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker);
+    }
+    const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (selectedRelease === null) {
+      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
+    }
+    const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
+    if (expectedRelease === null) {
+      throw new Error("published release is missing");
+    }
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    if (current !== null) {
+      const compatibleManaged = current.managed !== null && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName;
+      const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
+      try {
+        await paths.publicationMutationHook?.({ phase: "before-current-backup" });
+        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
+      } catch (error) {
+        if (error instanceof MovedBackupError) {
+          transaction.backup = error.backup;
+        }
+        throw error;
+      }
+      await paths.publicationMutationHook?.({ phase: "after-backup" });
+      await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    }
+    const target = relative4(dirname3(paths.currentPath), paths.releasePath);
+    await symlink2(target, paths.currentPath, "dir");
+    const newCurrent = await fingerprintPath2(paths.currentPath);
+    if (newCurrent.kind !== "symlink" || newCurrent.linkTarget !== target) {
+      throw new Error("current link changed during creation");
+    }
+    transaction.newCurrent = newCurrent;
+    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
+    await paths.publicationMutationHook?.({ phase: "after-current-switch" });
+    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
+  } catch (error) {
+    try {
+      await rollbackPublicationTransaction(transaction);
+    } catch {
+    }
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function createUnchangedPublication(paths) {
+  let state = "active";
+  return {
+    action: "unchanged",
+    releasePath: paths.releasePath,
+    currentPath: paths.currentPath,
+    backupPath: null,
+    async rollback() {
+      if (state === "active") {
+        state = "rolled-back";
+      }
+    },
+    async finalize() {
+      if (state === "active") {
+        state = "committed";
+      }
+    }
+  };
+}
+function createPublishedTransaction(transaction, action) {
+  let state = "active";
+  return {
+    action,
+    releasePath: transaction.paths.releasePath,
+    currentPath: transaction.paths.currentPath,
+    backupPath: transaction.backup?.retained === true ? transaction.backup.containerPath : null,
+    async rollback() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        await rollbackPublicationTransaction(transaction);
+        state = "rolled-back";
+      } catch {
+        throw installError(PUBLISH_ROLLBACK_MESSAGE);
+      }
+    },
+    async finalize() {
+      if (state !== "active") {
+        return;
+      }
+      try {
+        if (transaction.backup !== null && !transaction.backup.retained) {
+          await removeAuthenticatedBackup(transaction.backup);
+          transaction.backup = null;
+        }
+        state = "committed";
+      } catch {
+        throw installError(PUBLISH_FINALIZE_MESSAGE);
+      }
+    }
+  };
+}
+function validatePublicationInput(paths, extractedRoot, marker, uuid) {
+  if (!isInstallMarker(marker) || !SHA256_PATTERN2.test(marker.sha256)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(marker.publisher) || !isSafePathSegment(marker.skillName)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  if (!isSafePathSegment(uuid)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
+  if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
+    throw installError(PUBLISH_FAILURE_MESSAGE);
+  }
+}
+function isSafePathSegment(value) {
+  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
+}
+async function inspectCurrent(paths) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(paths.currentPath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "symlink" || fingerprint.linkTarget === null) {
+    return { fingerprint, managed: null };
+  }
+  const managed = await inspectManagedCurrent(paths, fingerprint);
+  return { fingerprint, managed };
+}
+async function inspectManagedCurrent(paths, fingerprint) {
+  try {
+    const canonicalRoot = await realpath2(paths.releasesRoot);
+    const rootStat = await lstat5(paths.releasesRoot);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+      return null;
+    }
+    const canonicalReleasePath = await realpath2(paths.currentPath);
+    const releaseStat = await lstat5(canonicalReleasePath);
+    if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink()) {
+      return null;
+    }
+    const releaseParts = pathPartsBelow(canonicalRoot, canonicalReleasePath);
+    if (releaseParts === null || releaseParts.length !== 3) {
+      return null;
+    }
+    const [publisher, skillName, sha256] = releaseParts;
+    if (!SHA256_PATTERN2.test(sha256)) {
+      return null;
+    }
+    const marker = await readNoFollowInstallMarker(join4(canonicalReleasePath, INSTALL_MARKER_NAME2));
+    if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
+      return null;
+    }
+    const confirmed = await fingerprintPath2(paths.currentPath);
+    if (!samePathFingerprint(fingerprint, confirmed)) {
+      return null;
+    }
+    return {
+      fingerprint,
+      linkTarget: fingerprint.linkTarget,
+      canonicalReleasePath,
+      marker
+    };
+  } catch {
+    return null;
+  }
+}
+async function canonicalExistingReleasePath(releasePath, releasesRoot) {
+  const releaseStat = await lstat5(releasePath);
+  const rootStat = await lstat5(releasesRoot);
+  if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRoot = await realpath2(releasesRoot);
+  const canonicalRelease = await realpath2(releasePath);
+  const parts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  if (parts === null || parts.length !== 3) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return canonicalRelease;
+}
+async function inspectExistingRelease(releasePath, releasesRoot, marker) {
+  let fingerprint;
+  try {
+    fingerprint = await fingerprintPath2(releasePath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+  if (fingerprint.kind !== "directory") {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  const canonicalRelease = await canonicalExistingReleasePath(releasePath, releasesRoot);
+  const canonicalRoot = await realpath2(releasesRoot);
+  const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
+  const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
+  const existingMarker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
+  if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
+    throw installError(PUBLISH_CONFLICT_MESSAGE);
+  }
+  return fingerprint;
+}
+async function assertReleaseAuthenticated(paths, marker, expected) {
+  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (current === null || !samePathFingerprint(current, expected)) {
+    throw new Error("selected release changed during publication");
+  }
+}
+function pathPartsBelow(rootPath, candidatePath) {
+  const childPath = relative4(rootPath, candidatePath);
+  if (childPath.length === 0 || childPath === ".." || childPath.startsWith(`..${sep3}`) || isAbsolute3(childPath)) {
+    return null;
+  }
+  return childPath.split(sep3);
+}
+async function createImmutableRelease(paths, extractedRoot, marker) {
+  const extracted = await fingerprintPath2(extractedRoot);
+  if (extracted.kind !== "directory") {
+    throw new Error("extracted skill root is not a real directory");
+  }
+  await ensureReleaseParent(paths, marker);
+  await writeInstallMarker(extractedRoot, marker);
+  await paths.publicationMutationHook?.({ phase: "before-release-rename" });
+  const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
+  if (existingRelease !== null) {
+    return null;
+  }
+  await rename3(extractedRoot, paths.releasePath);
+  const releaseFingerprint = await fingerprintPath2(paths.releasePath);
+  if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
+    throw new Error("release changed during publication");
+  }
+  const installedMarker = await readNoFollowInstallMarker(join4(paths.releasePath, INSTALL_MARKER_NAME2));
+  if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
+    throw new Error("release marker changed during publication");
+  }
+  return { fingerprint: releaseFingerprint, marker };
+}
+async function ensureReleaseParent(paths, marker) {
+  await ensureRealDirectory(paths.releasesRoot);
+  const publisherPath = join4(paths.releasesRoot, marker.publisher);
+  await ensureRealDirectory(publisherPath);
+  await ensureRealDirectory(join4(publisherPath, marker.skillName));
+}
+async function ensureRealDirectory(path4) {
+  await mkdir5(path4, { recursive: true, mode: 448 });
+  const pathStat = await lstat5(path4);
+  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
+    throw new Error("store path is not a real directory");
+  }
+}
+async function writeInstallMarker(rootPath, marker) {
+  const markerPath = join4(rootPath, INSTALL_MARKER_NAME2);
+  const handle = await open7(markerPath, constants5.O_WRONLY | constants5.O_CREAT | constants5.O_EXCL | constants5.O_NOFOLLOW, 420);
+  try {
+    await handle.writeFile(JSON.stringify(marker), "utf8");
+    await handle.chmod(420);
+  } finally {
+    await handle.close();
+  }
+}
+async function readNoFollowInstallMarker(path4) {
+  const parsed = await readNoFollowJson(path4);
+  return isInstallMarker(parsed) ? parsed : null;
+}
+async function readNoFollowJson(path4) {
+  let handle;
+  try {
+    handle = await open7(path4, constants5.O_RDONLY | constants5.O_NOFOLLOW);
+    const before = await handle.stat();
+    if (!before.isFile()) {
+      return null;
+    }
+    const raw = await handle.readFile("utf8");
+    const after = await handle.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || !after.isFile()) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+function isInstallMarker(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const marker = value;
+  const keys = Object.keys(marker).sort();
+  const expectedKeys = [
+    "installedAt",
+    "publisher",
+    "requestedVersion",
+    "schemaVersion",
+    "sha256",
+    "sizeBytes",
+    "skillName"
+  ];
+  return keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index]) && marker.schemaVersion === 1 && typeof marker.publisher === "string" && typeof marker.skillName === "string" && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && SHA256_PATTERN2.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string" && marker.installedAt.length > 0;
+}
+function sameInstallMarker(first, second) {
+  return first.schemaVersion === second.schemaVersion && first.publisher === second.publisher && first.skillName === second.skillName && first.requestedVersion === second.requestedVersion && first.sha256 === second.sha256 && first.sizeBytes === second.sizeBytes && first.installedAt === second.installedAt;
+}
+async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
+  await assertPathFingerprint(paths.currentPath, expectedCurrent);
+  await ensureRealDirectory(paths.backupsRoot);
+  const containerPath = join4(paths.backupsRoot, backupName);
+  await mkdir5(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  if (containerFingerprint.kind !== "directory") {
+    throw new Error("backup container is not a directory");
+  }
+  const entryPath = join4(containerPath, basename(paths.currentPath));
+  try {
+    await assertPathFingerprint(paths.currentPath, expectedCurrent);
+    await rename3(paths.currentPath, entryPath);
+  } catch (error) {
+    await removeEmptyOwnedContainer(containerPath, containerFingerprint);
+    throw error;
+  }
+  const entryFingerprint2 = await fingerprintPath2(entryPath);
+  const backup = {
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint: entryFingerprint2,
+    retained
+  };
+  if (!samePathFingerprint(entryFingerprint2, expectedCurrent)) {
+    throw new MovedBackupError(backup);
+  }
+  try {
+    await lstat5(paths.currentPath);
+    throw new MovedBackupError(backup);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return backup;
+    }
+    throw error;
+  }
+}
+async function removeEmptyOwnedContainer(containerPath, expected) {
+  try {
+    const current = await fingerprintPath2(containerPath);
+    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir4(containerPath)).length === 0) {
+      await rm6(containerPath, { recursive: true });
+    }
+  } catch {
+  }
+}
+async function rollbackPublicationTransaction(transaction) {
+  let rollbackFailed = false;
+  let currentSafeForReleaseCleanup = true;
+  if (transaction.newCurrent !== null) {
+    try {
+      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
+      transaction.newCurrent = null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  } else {
+    try {
+      const current = await fingerprintPath2(transaction.paths.currentPath);
+      if (transaction.oldCurrent === null || !samePathFingerprint(current, transaction.oldCurrent.fingerprint)) {
+        currentSafeForReleaseCleanup = false;
+      }
+    } catch (error) {
+      if (!isErrorCode4(error, "ENOENT")) {
+        rollbackFailed = true;
+        currentSafeForReleaseCleanup = false;
+      }
+    }
+  }
+  if (transaction.backup !== null) {
+    try {
+      await restoreBackup(transaction.paths.currentPath, transaction.backup);
+      if (!transaction.backup.retained) {
+        await removeAuthenticatedBackup(transaction.backup);
+      }
+      transaction.backup = transaction.backup.retained ? transaction.backup : null;
+    } catch {
+      rollbackFailed = true;
+      currentSafeForReleaseCleanup = false;
+    }
+  }
+  if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
+    try {
+      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
+      transaction.createdRelease = null;
+    } catch {
+      rollbackFailed = true;
+    }
+  }
+  if (rollbackFailed) {
+    throw new Error("publication rollback was incomplete");
+  }
+}
+async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanupName) {
+  let current;
+  try {
+    current = await fingerprintPath2(currentPath);
+  } catch (error) {
+    if (isErrorCode4(error, "ENOENT")) {
+      return;
+    }
+    throw error;
+  }
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("current was replaced before rollback");
+  }
+  await ensureRealDirectory(backupsRoot);
+  const containerPath = join4(backupsRoot, cleanupName);
+  await mkdir5(containerPath, { mode: 448 });
+  const containerFingerprint = await fingerprintPath2(containerPath);
+  const entryPath = join4(containerPath, basename(currentPath));
+  await rename3(currentPath, entryPath);
+  const moved = await fingerprintPath2(entryPath);
+  if (!samePathFingerprint(moved, expected)) {
+    await restoreBackup(currentPath, {
+      containerPath,
+      entryPath,
+      containerFingerprint,
+      entryFingerprint: moved,
+      retained: true
+    });
+    throw new Error("current changed while rollback moved it");
+  }
+  await removeAuthenticatedBackup({
+    containerPath,
+    entryPath,
+    containerFingerprint,
+    entryFingerprint: expected,
+    retained: false
+  });
+}
+async function restoreBackup(currentPath, backup) {
+  await assertBackupAuthenticated(backup);
+  try {
+    await lstat5(currentPath);
+    throw new Error("current path is occupied during restoration");
+  } catch (error) {
+    if (!isErrorCode4(error, "ENOENT")) {
+      throw error;
+    }
+  }
+  switch (backup.entryFingerprint.kind) {
+    case "symlink": {
+      if (backup.entryFingerprint.linkTarget === null) {
+        throw new Error("backup link target is unavailable");
+      }
+      await symlink2(backup.entryFingerprint.linkTarget, currentPath, "dir");
+      break;
+    }
+    case "file":
+      if (backup.retained) {
+        await copyFile2(backup.entryPath, currentPath, constants5.COPYFILE_EXCL);
+        await chmod3(currentPath, backup.entryFingerprint.mode & 4095);
+        await assertBackupAuthenticated(backup);
+        const atime = backup.entryFingerprint.atimeMs / 1e3;
+        const mtime = backup.entryFingerprint.mtimeMs / 1e3;
+        await utimes(currentPath, atime, mtime);
+        await utimes(backup.entryPath, atime, mtime);
+      } else {
+        await link(backup.entryPath, currentPath);
+      }
+      break;
+    case "directory":
+      await restoreDirectory(backup.entryPath, currentPath, backup.entryFingerprint.mode);
+      break;
+    default:
+      throw new Error("backup type cannot be restored safely");
+  }
+  const restored = await fingerprintPath2(currentPath);
+  if (backup.entryFingerprint.kind === "symlink") {
+    if (restored.kind !== "symlink" || restored.linkTarget !== backup.entryFingerprint.linkTarget) {
+      throw new Error("restored link does not match its backup");
+    }
+  } else if (backup.entryFingerprint.kind === "file" && (restored.kind !== "file" || (backup.retained ? restored.dev !== backup.entryFingerprint.dev || restored.ino === backup.entryFingerprint.ino || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095) || Math.abs(restored.atimeMs - backup.entryFingerprint.atimeMs) > 1 || Math.abs(restored.mtimeMs - backup.entryFingerprint.mtimeMs) > 1 : restored.dev !== backup.entryFingerprint.dev || restored.ino !== backup.entryFingerprint.ino))) {
+    throw new Error("restored file does not match its backup");
+  } else if (backup.entryFingerprint.kind === "directory" && (restored.kind !== "directory" || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095))) {
+    throw new Error("restored directory does not match its backup");
+  }
+}
+async function restoreDirectory(sourcePath, destinationPath, mode) {
+  await mkdir5(destinationPath, { mode: mode & 4095 });
+  for (const entry of await readdir4(sourcePath)) {
+    await cp2(join4(sourcePath, entry), join4(destinationPath, entry), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      preserveTimestamps: true,
+      verbatimSymlinks: true
+    });
+  }
+  await chmod3(destinationPath, mode & 4095);
+}
+async function assertBackupAuthenticated(backup) {
+  const container = await fingerprintPath2(backup.containerPath);
+  const entry = await fingerprintPath2(backup.entryPath);
+  const entries = await readdir4(backup.containerPath);
+  if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
+    throw new Error("backup authentication failed");
+  }
+}
+async function removeAuthenticatedBackup(backup) {
+  await assertBackupAuthenticated(backup);
+  const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
+  await rename3(backup.containerPath, cleanupPath);
+  const movedContainer = await fingerprintPath2(cleanupPath);
+  const movedEntry = await fingerprintPath2(join4(cleanupPath, basename(backup.entryPath)));
+  if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
+    try {
+      await rename3(cleanupPath, backup.containerPath);
+    } catch {
+    }
+    throw new Error("backup changed during removal");
+  }
+  await rm6(cleanupPath, { recursive: true });
+}
+async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
+  const current = await fingerprintPath2(releasePath);
+  const marker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
+  await canonicalExistingReleasePath(releasePath, releasesRoot);
+  if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
+    throw new Error("created release changed before rollback");
+  }
+  const cleanupPath = `${releasePath}.rollback-${uuid}`;
+  await rename3(releasePath, cleanupPath);
+  const moved = await fingerprintPath2(cleanupPath);
+  const movedMarker = await readNoFollowInstallMarker(join4(cleanupPath, INSTALL_MARKER_NAME2));
+  if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
+    try {
+      await rename3(cleanupPath, releasePath);
+    } catch {
+    }
+    throw new Error("created release changed during rollback");
+  }
+  await rm6(cleanupPath, { recursive: true });
+}
+async function fingerprintPath2(path4) {
+  const before = await lstat5(path4);
+  const kind = pathKind(before);
+  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
+  const after = await lstat5(path4);
+  if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
+    throw new Error("path changed during inspection");
+  }
+  return {
+    dev: after.dev,
+    ino: after.ino,
+    mode: after.mode,
+    atimeMs: after.atimeMs,
+    mtimeMs: after.mtimeMs,
+    kind,
+    linkTarget
+  };
+}
+function pathKind(pathStat) {
+  if (pathStat.isSymbolicLink()) {
+    return "symlink";
+  }
+  if (pathStat.isFile()) {
+    return "file";
+  }
+  if (pathStat.isDirectory()) {
+    return "directory";
+  }
+  return "other";
+}
+async function assertPathFingerprint(path4, expected) {
+  const current = await fingerprintPath2(path4);
+  if (!samePathFingerprint(current, expected)) {
+    throw new Error("path changed before mutation");
+  }
+}
+function samePathFingerprint(first, second) {
+  return first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.kind === second.kind && first.linkTarget === second.linkTarget;
+}
+function isErrorCode4(error, code) {
+  return error?.code === code;
+}
+var PUBLISH_CONFLICT_MESSAGE, PUBLISH_FAILURE_MESSAGE, PUBLISH_ROLLBACK_MESSAGE, PUBLISH_FINALIZE_MESSAGE, INSTALL_MARKER_NAME2, SHA256_PATTERN2, MovedBackupError;
+var init_store_publication = __esm({
+  "dist/skills/store-publication.js"() {
+    "use strict";
+    init_errors();
+    PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
+    PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
+    PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
+    PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
+    INSTALL_MARKER_NAME2 = ".clink-install.json";
+    SHA256_PATTERN2 = /^[a-f0-9]{64}$/;
+    MovedBackupError = class extends Error {
+      backup;
+      constructor(backup) {
+        super("current changed while being backed up");
+        this.backup = backup;
+      }
+    };
+  }
+});
+
+// dist/skills/store.js
+import { join as join5 } from "node:path";
+function resolveStorePaths(homeDir, spec, sha256, uuid) {
+  const skillsRoot = join5(homeDir, ".agents", "skills");
+  const clinkRoot = join5(skillsRoot, ".clink");
+  const releasesRoot = join5(clinkRoot, "releases");
+  return {
+    skillsRoot,
+    clinkRoot,
+    stagingPath: join5(clinkRoot, "staging", uuid),
+    releasesRoot,
+    releasePath: join5(releasesRoot, spec.publisher, spec.skillName, sha256),
+    backupsRoot: join5(clinkRoot, "backups"),
+    currentPath: join5(skillsRoot, spec.skillName)
+  };
+}
+var init_store = __esm({
+  "dist/skills/store.js"() {
+    "use strict";
+    init_store_publication();
+  }
+});
+
+// dist/skills/agentic-payment-sync.js
+import { randomUUID as createRandomUUID } from "node:crypto";
+import { constants as constants6 } from "node:fs";
+import { lstat as lstat6, mkdir as mkdir6, mkdtemp, open as open8, readlink as readlink3, rm as rm7 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname as dirname4, join as join6, relative as relative5, resolve as resolve4, sep as sep4 } from "node:path";
+async function syncAgenticPaymentSkill(input, overrides = {}) {
+  const dependencies = {
+    ...DEFAULT_DEPENDENCIES,
+    ...overrides,
+    ...input.log === void 0 ? {} : { log: input.log }
+  };
+  const checkOnly = input.checkOnly === true;
+  const packageSpec = {
+    publisher: AGENTIC_PAYMENT_PUBLISHER,
+    skillName: AGENTIC_PAYMENT_SKILL_NAME,
+    requestedVersion: null
+  };
+  const skillsRoot = join6(input.homeDir, ".agents", "skills");
+  const installPath = join6(skillsRoot, AGENTIC_PAYMENT_SKILL_NAME);
+  const stagingUuid = dependencies.randomUUID();
+  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
+  let lock = null;
+  let stagingPath = null;
+  let primaryError;
+  let completedResult;
+  try {
+    if (checkOnly) {
+      stagingPath = await mkdtemp(join6(dependencies.tempDirectory(), "clink-agentic-payment-check-"));
+    } else {
+      lock = await dependencies.acquireLock({
+        homeDir: input.homeDir,
+        now: dependencies.now()
+      });
+      stagingPath = preliminaryPaths.stagingPath;
+      await mkdir6(stagingPath, { recursive: true, mode: 448 });
+    }
+    const candidate = await prepareCandidate(stagingPath, input.timeoutMs, dependencies);
+    const current = await readCurrentInstall(installPath);
+    assertNoFallbackDowngrade(candidate, current);
+    const updateAvailable = current.contentSha256 !== candidate.contentSha256;
+    if (checkOnly) {
+      completedResult = createResult({
+        candidate,
+        action: updateAvailable ? "planned" : "unchanged",
+        installPath,
+        updateAvailable,
+        checkOnly,
+        agents: []
+      });
+      return completedResult;
+    }
+    const installedAt = dependencies.now();
+    const provenance = createProvenance(candidate, installedAt);
+    await writeProvenance(candidate.skillRoot, provenance);
+    const paths = resolveStorePaths(input.homeDir, packageSpec, candidate.contentSha256, stagingUuid);
+    const marker = {
+      schemaVersion: 1,
+      publisher: AGENTIC_PAYMENT_PUBLISHER,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME,
+      requestedVersion: null,
+      sha256: candidate.contentSha256,
+      sizeBytes: candidate.downloaded.sizeBytes,
+      installedAt: installedAt.toISOString()
+    };
+    const detected = await dependencies.detectAgentRoots({
+      homeDir: input.homeDir,
+      env: input.env,
+      skillsRoot,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME
+    });
+    const plans = await dependencies.prepareAgents({
+      detected,
+      currentPath: paths.currentPath,
+      publisher: AGENTIC_PAYMENT_PUBLISHER,
+      skillName: AGENTIC_PAYMENT_SKILL_NAME,
+      force: input.force === true,
+      backupsRoot: paths.backupsRoot,
+      uuid: dependencies.randomUUID()
+    });
+    const transaction = await publishAndApply({
+      paths,
+      marker,
+      skillRoot: candidate.skillRoot,
+      force: input.force === true,
+      plans,
+      publicationUuid: dependencies.randomUUID(),
+      dependencies
+    });
+    completedResult = createResult({
+      candidate,
+      action: transaction.published.action,
+      installPath: transaction.published.currentPath,
+      updateAvailable: transaction.published.action !== "unchanged",
+      checkOnly,
+      agents: transaction.agentResults
+    });
+    completedResult.warnings.push(...transaction.warnings);
+    return completedResult;
+  } catch (error) {
+    primaryError = error;
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw installError(SYNC_FAILURE);
+  } finally {
+    const cleanupWarnings = [];
+    if (stagingPath !== null) {
+      try {
+        await dependencies.remove(stagingPath);
+      } catch {
+        cleanupWarnings.push("temporary Skill files could not be removed");
+      }
+    }
+    if (lock !== null) {
+      try {
+        await lock.release();
+      } catch {
+        cleanupWarnings.push("the Skill synchronization lock could not be released");
+      }
+    }
+    if (primaryError === void 0 && completedResult !== void 0) {
+      completedResult.warnings.push(...cleanupWarnings);
+      for (const warning of cleanupWarnings) {
+        try {
+          dependencies.log(`Warning: ${warning}`);
+        } catch {
+        }
+      }
+    }
+  }
+}
+async function prepareCandidate(stagingPath, timeoutMs, dependencies) {
+  const sourceDependencies = {
+    fetch: dependencies.fetch
+  };
+  let downloaded;
+  let source;
+  let sourceUrl;
+  let sourceCommit;
+  let integrity;
+  let manifest = null;
+  try {
+    dependencies.log("Resolving official agentic payment skill from GitHub");
+    const github = await downloadGithubAgenticPaymentSkill({
+      destinationPath: join6(stagingPath, "github-package.zip"),
+      timeoutMs,
+      dependencies: sourceDependencies
+    });
+    downloaded = github.downloaded;
+    source = "github";
+    sourceUrl = github.sourceUrl;
+    sourceCommit = github.sourceCommit;
+    integrity = "github-commit";
+  } catch (error) {
+    if (!(error instanceof SourceUnavailableError)) {
+      throw error;
+    }
+    dependencies.log("GitHub source unavailable; using Clink fallback archive");
+    manifest = await fetchAgenticPaymentFallbackManifest({
+      timeoutMs,
+      dependencies: sourceDependencies
+    });
+    downloaded = await downloadFallbackAgenticPaymentSkill({
+      destinationPath: join6(stagingPath, "fallback-package.zip"),
+      timeoutMs,
+      manifest,
+      dependencies: sourceDependencies
+    });
+    source = "fallback";
+    sourceUrl = AGENTIC_PAYMENT_FALLBACK_ARCHIVE;
+    sourceCommit = manifest.sourceCommit;
+    integrity = "manifest";
+  }
+  dependencies.log("Validating official agentic payment skill content");
+  const extracted = await dependencies.materializePackage(downloaded.path, join6(stagingPath, "extract"));
+  if (extracted.layout !== "single") {
+    throw installError("official agentic payment skill must contain one skill root");
+  }
+  await pruneAgenticPaymentSkillRoot(extracted.skillRoot);
+  const validated = await validateAgenticPaymentSkillRoot(extracted.skillRoot);
+  if (parseSemanticVersion(validated.skillVersion) === null) {
+    throw installError("official agentic payment skill version is not valid SemVer");
+  }
+  const contentSha256 = await hashAgenticPaymentSkillTree(extracted.skillRoot);
+  if (manifest !== null) {
+    if (manifest.contentSha256 !== contentSha256 || manifest.skillVersion !== validated.skillVersion) {
+      throw installError("fallback agentic payment skill manifest does not match content");
+    }
+  }
+  return {
+    downloaded,
+    skillRoot: extracted.skillRoot,
+    skillVersion: validated.skillVersion,
+    contentSha256,
+    source,
+    sourceUrl,
+    sourceCommit,
+    integrity,
+    manifest
+  };
+}
+async function publishAndApply(input) {
+  let published = null;
+  const applied = [];
+  const agentResults = [];
+  const warnings = [];
+  let publicationCommitted = false;
+  try {
+    input.dependencies.log("Publishing official agentic payment skill release");
+    published = await input.dependencies.publishRelease({
+      paths: input.paths,
+      extractedRoot: input.skillRoot,
+      marker: input.marker,
+      force: input.force,
+      uuid: input.publicationUuid
+    });
+    input.dependencies.log("Updating detected agent skill roots");
+    for (const plan of input.plans) {
+      const result = await plan.apply({
+        releasePath: published.releasePath,
+        marker: input.marker
+      });
+      applied.push(plan);
+      agentResults.push(result);
+    }
+    await published.finalize();
+    publicationCommitted = true;
+    for (const plan of applied) {
+      try {
+        await plan.finalize();
+      } catch {
+        warnings.push(AGENT_FINALIZE_WARNING);
+        try {
+          input.dependencies.log(`Warning: ${AGENT_FINALIZE_WARNING}`);
+        } catch {
+        }
+      }
+    }
+    return { published, agentResults, warnings };
+  } catch (error) {
+    if (!publicationCommitted) {
+      for (const plan of [...applied].reverse()) {
+        try {
+          await plan.rollback();
+        } catch {
+        }
+      }
+      if (published !== null) {
+        try {
+          await published.rollback();
+        } catch {
+        }
+      }
+    }
+    throw error;
+  }
+}
+function createProvenance(candidate, installedAt) {
+  return {
+    schemaVersion: 1,
+    name: AGENTIC_PAYMENT_SKILL_NAME,
+    skillVersion: candidate.skillVersion,
+    sourceRepository: AGENTIC_PAYMENT_REPOSITORY,
+    sourceCommit: candidate.sourceCommit,
+    source: candidate.source,
+    sourceUrl: candidate.sourceUrl,
+    integrity: candidate.integrity,
+    archiveSha256: candidate.downloaded.sha256,
+    archiveSizeBytes: candidate.downloaded.sizeBytes,
+    contentSha256: candidate.contentSha256,
+    installedAt: installedAt.toISOString(),
+    manifestUrl: candidate.manifest === null ? null : AGENTIC_PAYMENT_FALLBACK_MANIFEST,
+    prunedDirectories: ["docs", "tests"]
+  };
+}
+async function writeProvenance(skillRoot, provenance) {
+  const path4 = join6(skillRoot, PROVENANCE_FILE_NAME);
+  const handle = await open8(path4, constants6.O_WRONLY | constants6.O_CREAT | constants6.O_EXCL | constants6.O_NOFOLLOW, 420);
+  try {
+    await handle.writeFile(JSON.stringify(provenance), "utf8");
+    await handle.sync();
+    await handle.chmod(420);
+  } finally {
+    await handle.close();
+  }
+}
+async function readCurrentInstall(installPath) {
+  let installStats;
+  try {
+    installStats = await lstat6(installPath);
+  } catch (error) {
+    if (isErrorCode5(error, "ENOENT")) {
+      return {
+        exists: false,
+        managed: false,
+        contentSha256: null,
+        skillVersion: null,
+        provenance: null
+      };
+    }
+    throw error;
+  }
+  if (!installStats.isSymbolicLink()) {
+    return unmanagedCurrentInstall();
+  }
+  let snapshot;
+  try {
+    const inspected = await inspectManagedReleaseSnapshot(installPath, installStats);
+    if (inspected === null) {
+      return unmanagedCurrentInstall();
+    }
+    snapshot = inspected;
+  } catch {
+    return unmanagedCurrentInstall();
+  }
+  let markerRead;
+  try {
+    markerRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, INSTALL_MARKER_FILE_NAME2), MAX_METADATA_BYTES);
+  } catch {
+    return unmanagedCurrentInstall();
+  }
+  const marker = markerRead.value;
+  if (!isRecord7(marker) || marker.schemaVersion !== 1 || marker.publisher !== AGENTIC_PAYMENT_PUBLISHER || marker.skillName !== AGENTIC_PAYMENT_SKILL_NAME || typeof marker.sha256 !== "string" || marker.sha256 !== snapshot.contentSha256 || !SHA256_PATTERN3.test(marker.sha256)) {
+    return unmanagedCurrentInstall();
+  }
+  let packageRead = null;
+  let skillVersion = null;
+  try {
+    packageRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, "package.json"), MAX_METADATA_BYTES);
+    const packageJson = packageRead.value;
+    if (isRecord7(packageJson) && packageJson.name === "clink-payment-skill" && typeof packageJson.version === "string" && parseSemanticVersion(packageJson.version) !== null) {
+      skillVersion = packageJson.version;
+    }
+  } catch {
+  }
+  let provenanceRead = null;
+  let provenance = null;
+  try {
+    provenanceRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, PROVENANCE_FILE_NAME), MAX_METADATA_BYTES);
+    const value = provenanceRead.value;
+    if (isAgenticPaymentProvenance(value, marker.sha256)) {
+      provenance = value;
+    }
+  } catch {
+  }
+  if (!await managedReleaseSnapshotIsUnchanged(snapshot) || !await namedFileIsUnchanged(markerRead) || packageRead !== null && !await namedFileIsUnchanged(packageRead) || provenanceRead !== null && !await namedFileIsUnchanged(provenanceRead)) {
+    throw installError("installed agentic payment skill changed during inspection");
+  }
+  return {
+    exists: true,
+    managed: true,
+    contentSha256: marker.sha256,
+    skillVersion,
+    provenance
+  };
+}
+function unmanagedCurrentInstall() {
+  return {
+    exists: true,
+    managed: false,
+    contentSha256: null,
+    skillVersion: null,
+    provenance: null
+  };
+}
+async function inspectManagedReleaseSnapshot(installPath, installStats) {
+  const installFingerprint = entryFingerprint(installStats);
+  const linkText = await readlink3(installPath);
+  const confirmedInstallStats = await lstat6(installPath);
+  if (!confirmedInstallStats.isSymbolicLink() || !sameEntryFingerprint(installFingerprint, entryFingerprint(confirmedInstallStats))) {
+    return null;
+  }
+  const skillsRoot = dirname4(installPath);
+  const clinkRoot = resolve4(skillsRoot, ".clink");
+  const releasesRoot = resolve4(clinkRoot, "releases");
+  const releasePath = resolve4(skillsRoot, linkText);
+  const relativeRelease = relative5(releasesRoot, releasePath);
+  const releaseParts = relativeRelease.split(sep4);
+  if (relativeRelease.length === 0 || relativeRelease.startsWith(`..${sep4}`) || releaseParts.length !== 3 || releaseParts[0] !== AGENTIC_PAYMENT_PUBLISHER || releaseParts[1] !== AGENTIC_PAYMENT_SKILL_NAME || !SHA256_PATTERN3.test(releaseParts[2] ?? "")) {
+    return null;
+  }
+  const directories = [];
+  for (const path4 of [
+    clinkRoot,
+    releasesRoot,
+    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER),
+    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER, AGENTIC_PAYMENT_SKILL_NAME),
+    releasePath
+  ]) {
+    const stats = await lstat6(path4);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      return null;
+    }
+    directories.push({ path: path4, fingerprint: entryFingerprint(stats) });
+  }
+  return {
+    installPath,
+    installFingerprint,
+    linkText,
+    releasePath,
+    contentSha256: releaseParts[2],
+    directories
+  };
+}
+async function managedReleaseSnapshotIsUnchanged(snapshot) {
+  try {
+    const installStats = await lstat6(snapshot.installPath);
+    if (!installStats.isSymbolicLink() || !sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(installStats)) || await readlink3(snapshot.installPath) !== snapshot.linkText) {
+      return false;
+    }
+    const confirmedInstallStats = await lstat6(snapshot.installPath);
+    if (!sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(confirmedInstallStats))) {
+      return false;
+    }
+    for (const directory of snapshot.directories) {
+      const stats = await lstat6(directory.path);
+      if (!stats.isDirectory() || stats.isSymbolicLink() || !sameEntryFingerprint(directory.fingerprint, entryFingerprint(stats))) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function readBoundedNoFollowJson(path4, maximumBytes) {
+  const handle = await open8(path4, constants6.O_RDONLY | constants6.O_NOFOLLOW | constants6.O_NONBLOCK);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || !Number.isSafeInteger(before.size) || before.size < 0 || before.size > maximumBytes) {
+      throw new Error("metadata is not a bounded regular file");
+    }
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+      if (bytesRead === 0) {
+        throw new Error("metadata was truncated while reading");
+      }
+      offset += bytesRead;
+    }
+    const trailing = Buffer.alloc(1);
+    if ((await handle.read(trailing, 0, 1, offset)).bytesRead !== 0) {
+      throw new Error("metadata grew while reading");
+    }
+    const after = await handle.stat();
+    const beforeFingerprint = entryFingerprint(before);
+    if (!sameEntryFingerprint(beforeFingerprint, entryFingerprint(after)) || after.size !== bytes.byteLength) {
+      throw new Error("metadata changed while reading");
+    }
+    const namedStats = await lstat6(path4);
+    if (!namedStats.isFile() || namedStats.isSymbolicLink() || !sameEntryFingerprint(beforeFingerprint, entryFingerprint(namedStats))) {
+      throw new Error("metadata path changed while reading");
+    }
+    const text2 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return {
+      path: path4,
+      fingerprint: beforeFingerprint,
+      value: JSON.parse(text2)
+    };
+  } finally {
+    await handle.close();
+  }
+}
+async function namedFileIsUnchanged(read) {
+  try {
+    const stats = await lstat6(read.path);
+    return stats.isFile() && !stats.isSymbolicLink() && sameEntryFingerprint(read.fingerprint, entryFingerprint(stats));
+  } catch {
+    return false;
+  }
+}
+function entryFingerprint(stats) {
+  return {
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode,
+    size: stats.size,
+    mtimeMs: stats.mtimeMs,
+    ctimeMs: stats.ctimeMs
+  };
+}
+function sameEntryFingerprint(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+function isAgenticPaymentProvenance(value, contentSha256) {
+  if (!isRecord7(value)) {
+    return false;
+  }
+  return value.schemaVersion === 1 && value.name === AGENTIC_PAYMENT_SKILL_NAME && typeof value.skillVersion === "string" && value.sourceRepository === AGENTIC_PAYMENT_REPOSITORY && (value.sourceCommit === null || typeof value.sourceCommit === "string") && (value.source === "github" || value.source === "fallback") && typeof value.sourceUrl === "string" && (value.integrity === "github-commit" || value.integrity === "manifest" || value.integrity === "unverified") && typeof value.archiveSha256 === "string" && typeof value.archiveSizeBytes === "number" && value.contentSha256 === contentSha256 && typeof value.installedAt === "string";
+}
+function assertNoFallbackDowngrade(candidate, current) {
+  if (candidate.source !== "fallback" || !current.managed) {
+    return;
+  }
+  if (current.skillVersion === null) {
+    throw installError(DOWNGRADE_INSPECTION_FAILURE);
+  }
+  if (compareVersions(candidate.skillVersion, current.skillVersion) < 0) {
+    throw installError(DOWNGRADE_FAILURE);
+  }
+}
+function compareVersions(left, right) {
+  const parsedLeft = parseSemanticVersion(left);
+  const parsedRight = parseSemanticVersion(right);
+  if (parsedLeft === null || parsedRight === null) {
+    throw installError(DOWNGRADE_INSPECTION_FAILURE);
+  }
+  for (const key of ["major", "minor", "patch"]) {
+    if (parsedLeft[key] < parsedRight[key]) {
+      return -1;
+    }
+    if (parsedLeft[key] > parsedRight[key]) {
+      return 1;
+    }
+  }
+  if (parsedLeft.prerelease.length === 0 || parsedRight.prerelease.length === 0) {
+    if (parsedLeft.prerelease.length === parsedRight.prerelease.length) {
+      return 0;
+    }
+    return parsedLeft.prerelease.length === 0 ? 1 : -1;
+  }
+  const identifierCount = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+  for (let index = 0; index < identifierCount; index += 1) {
+    const leftIdentifier = parsedLeft.prerelease[index];
+    const rightIdentifier = parsedRight.prerelease[index];
+    if (leftIdentifier === void 0 || rightIdentifier === void 0) {
+      return leftIdentifier === void 0 ? -1 : 1;
+    }
+    if (typeof leftIdentifier === "bigint" && typeof rightIdentifier === "bigint") {
+      if (leftIdentifier !== rightIdentifier) {
+        return leftIdentifier < rightIdentifier ? -1 : 1;
+      }
+      continue;
+    }
+    if (typeof leftIdentifier !== typeof rightIdentifier) {
+      return typeof leftIdentifier === "bigint" ? -1 : 1;
+    }
+    if (leftIdentifier !== rightIdentifier) {
+      return leftIdentifier < rightIdentifier ? -1 : 1;
+    }
+  }
+  return 0;
+}
+function parseSemanticVersion(value) {
+  if (value.length === 0 || value.length > 256) {
+    return null;
+  }
+  const plusIndex = value.indexOf("+");
+  if (plusIndex !== -1 && plusIndex !== value.lastIndexOf("+")) {
+    return null;
+  }
+  const versionWithoutBuild = plusIndex === -1 ? value : value.slice(0, plusIndex);
+  if (plusIndex !== -1) {
+    const build = value.slice(plusIndex + 1);
+    if (!isDotSeparatedIdentifiers(build, false)) {
+      return null;
+    }
+  }
+  const dashIndex = versionWithoutBuild.indexOf("-");
+  const core = dashIndex === -1 ? versionWithoutBuild : versionWithoutBuild.slice(0, dashIndex);
+  const prereleaseText = dashIndex === -1 ? null : versionWithoutBuild.slice(dashIndex + 1);
+  const coreParts = core.split(".");
+  if (coreParts.length !== 3 || coreParts.some((part) => !/^(?:0|[1-9][0-9]*)$/.test(part))) {
+    return null;
+  }
+  const prerelease = [];
+  if (prereleaseText !== null) {
+    if (!isDotSeparatedIdentifiers(prereleaseText, true)) {
+      return null;
+    }
+    for (const identifier of prereleaseText.split(".")) {
+      prerelease.push(/^[0-9]+$/.test(identifier) ? BigInt(identifier) : identifier);
+    }
+  }
+  return {
+    major: BigInt(coreParts[0]),
+    minor: BigInt(coreParts[1]),
+    patch: BigInt(coreParts[2]),
+    prerelease
+  };
+}
+function isDotSeparatedIdentifiers(value, prerelease) {
+  if (value.length === 0) {
+    return false;
+  }
+  return value.split(".").every((identifier) => {
+    if (!/^[0-9A-Za-z-]+$/.test(identifier)) {
+      return false;
+    }
+    return !(prerelease && /^[0-9]+$/.test(identifier) && identifier.length > 1 && identifier.startsWith("0"));
+  });
+}
+function createResult(input) {
+  return {
+    publisher: AGENTIC_PAYMENT_PUBLISHER,
+    skillName: AGENTIC_PAYMENT_SKILL_NAME,
+    skillVersion: input.candidate.skillVersion,
+    action: input.action,
+    installPath: input.installPath,
+    updateAvailable: input.updateAvailable,
+    checkOnly: input.checkOnly,
+    source: input.candidate.source,
+    integrity: input.candidate.integrity,
+    sourceCommit: input.candidate.sourceCommit,
+    archiveSha256: input.candidate.downloaded.sha256,
+    archiveSizeBytes: input.candidate.downloaded.sizeBytes,
+    contentSha256: input.candidate.contentSha256,
+    agents: input.agents,
+    warnings: []
+  };
+}
+function isRecord7(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isErrorCode5(error, code) {
+  return error.code === code;
+}
+var AGENTIC_PAYMENT_PUBLISHER, AGENTIC_PAYMENT_SKILL_NAME, PENDING_SHA_SENTINEL, INSTALL_MARKER_FILE_NAME2, SYNC_FAILURE, DOWNGRADE_FAILURE, DOWNGRADE_INSPECTION_FAILURE, AGENT_FINALIZE_WARNING, MAX_METADATA_BYTES, SHA256_PATTERN3, DEFAULT_DEPENDENCIES;
+var init_agentic_payment_sync = __esm({
+  "dist/skills/agentic-payment-sync.js"() {
+    "use strict";
+    init_errors();
+    init_agents();
+    init_archive();
+    init_content_tree();
+    init_install_lock();
+    init_source_download();
+    init_store();
+    AGENTIC_PAYMENT_PUBLISHER = "clinkbillcom";
+    AGENTIC_PAYMENT_SKILL_NAME = "agentic-payment-skills";
+    PENDING_SHA_SENTINEL = "pending";
+    INSTALL_MARKER_FILE_NAME2 = ".clink-install.json";
+    SYNC_FAILURE = "failed to synchronize official agentic payment skill";
+    DOWNGRADE_FAILURE = "fallback agentic payment skill would downgrade the installed version";
+    DOWNGRADE_INSPECTION_FAILURE = "could not safely determine the installed agentic payment skill version";
+    AGENT_FINALIZE_WARNING = "an agent Skill target cleanup could not be finalized";
+    MAX_METADATA_BYTES = 64 * 1024;
+    SHA256_PATTERN3 = /^[a-f0-9]{64}$/;
+    DEFAULT_DEPENDENCIES = {
+      fetch: (...args) => globalThis.fetch(...args),
+      materializePackage: extractSkillPackage,
+      publishRelease: publishSkillRelease,
+      detectAgentRoots: detectAgents,
+      prepareAgents: prepareAgentPlans,
+      acquireLock: acquireAgenticPaymentInstallLock,
+      randomUUID: createRandomUUID,
+      now: () => /* @__PURE__ */ new Date(),
+      tempDirectory: tmpdir,
+      remove: async (path4) => rm7(path4, { recursive: true, force: true }),
+      log: (message) => process.stderr.write(`${message}
+`)
+    };
+  }
+});
+
+// dist/self-update.js
+import { execFile as execFile2 } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp as mkdtemp2, readFile as readFile4, rm as rm8 } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname5, isAbsolute as isAbsolute4, join as join7, parse, resolve as resolve5, sep as sep5 } from "node:path";
+import { fileURLToPath } from "node:url";
+async function installCliAndSkill(options2, dependencies = {}) {
+  assertMutationAllowed(options2);
+  await assertNpmSelfUpdateSupported(dependencies);
+  const latestVersion = await readLatestCliVersion(options2, dependencies);
+  const cli = await installLatestCli("installed", options2, dependencies, latestVersion);
+  const skill = await syncAfterCliMutation(cli, options2, dependencies);
+  return {
+    action: cli.action,
+    checkOnly: false,
+    cli,
+    skill
+  };
+}
+async function updateCliAndSkill(options2, dependencies = {}) {
+  if (!options2.checkOnly) {
+    assertMutationAllowed(options2);
+  }
+  await assertNpmSelfUpdateSupported(dependencies);
+  const latestVersion = await readLatestCliVersion(options2, dependencies);
+  const comparison = compareSemver(CLI_VERSION, latestVersion);
+  const updateAvailable = comparison < 0;
+  const currentIsNewer = comparison > 0;
+  if (options2.checkOnly) {
+    const cli2 = {
+      packageName: CLI_PACKAGE_NAME,
+      action: "checked",
+      currentVersion: CLI_VERSION,
+      latestVersion,
+      updateAvailable,
+      currentIsNewer,
+      requestedVersion: "latest"
+    };
+    const skill2 = await synchronizeSkill(options2, dependencies);
+    return {
+      action: "checked",
+      checkOnly: true,
+      cli: cli2,
+      skill: skill2
+    };
+  }
+  let cli;
+  if (updateAvailable || options2.force) {
+    cli = await installLatestCli(updateAvailable ? "updated" : "reinstalled", options2, dependencies, latestVersion);
+  } else {
+    cli = {
+      packageName: CLI_PACKAGE_NAME,
+      action: "unchanged",
+      currentVersion: CLI_VERSION,
+      latestVersion,
+      updateAvailable: false,
+      currentIsNewer,
+      requestedVersion: "latest"
+    };
+  }
+  const skill = cli.action === "updated" || cli.action === "reinstalled" ? await syncAfterCliMutation(cli, options2, dependencies) : await synchronizeSkill(options2, dependencies);
+  return {
+    action: cli.action,
+    checkOnly: false,
+    cli,
+    skill
+  };
+}
+async function syncOfficialSkill(options2, dependencies = {}) {
+  return synchronizeSkill(options2, dependencies);
+}
+async function defaultExecFileRunner(request) {
+  return new Promise((resolveResult) => {
+    execFile2(request.file, request.args, {
+      encoding: "utf8",
+      env: request.env,
+      maxBuffer: MAX_NPM_OUTPUT_BYTES,
+      shell: false,
+      timeout: request.timeoutMs,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      const errorCode = error && typeof error.code === "string" ? error.code : void 0;
+      resolveResult({
+        exitCode: error ? typeof error.code === "number" ? error.code : null : EXIT_CODES.OK,
+        stdout,
+        stderr,
+        ...errorCode ? { errorCode } : {},
+        timedOut: Boolean(error && (error.killed || error.signal))
+      });
+    });
+  });
+}
+async function isCurrentNpmDistribution(moduleUrl = import.meta.url) {
+  let current = dirname5(fileURLToPath(moduleUrl));
+  const filesystemRoot = parse(current).root;
+  while (true) {
+    try {
+      const manifest = JSON.parse(await readFile4(resolve5(current, "package.json"), "utf8"));
+      if (manifest.name === CLI_PACKAGE_NAME) {
+        return isInstalledPackageRoot(current);
+      }
+    } catch (error) {
+      if (!isNonMatchingPackageManifestError(error)) {
+        throw error;
+      }
+    }
+    if (current === filesystemRoot) {
+      return false;
+    }
+    current = dirname5(current);
+  }
+}
+function compareSemver(left, right) {
+  const leftVersion = parseSemver(left);
+  const rightVersion = parseSemver(right);
+  for (const key of ["major", "minor", "patch"]) {
+    if (leftVersion[key] !== rightVersion[key]) {
+      return leftVersion[key] < rightVersion[key] ? -1 : 1;
+    }
+  }
+  return comparePrerelease(leftVersion.prerelease, rightVersion.prerelease);
+}
+async function assertNpmSelfUpdateSupported(dependencies) {
+  const isNpmDistribution = dependencies.isNpmDistribution ?? (() => isCurrentNpmDistribution());
+  if (await isNpmDistribution()) {
+    return;
+  }
+  throw new CliError("install_error", `CLI self-update is available only for the npm distribution. Install it with \`npm install --global ${CLI_PACKAGE_NAME}\`, then run \`clink update\`.`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "distribution_check", packageName: CLI_PACKAGE_NAME });
+}
+function assertMutationAllowed(options2) {
+  if (options2.checkOnly) {
+    throw validationError("install does not support --check");
+  }
+  if (options2.env[SELF_UPDATE_GUARD] === "1") {
+    throw new CliError("install_error", "Refusing recursive CLI self-update.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "recursion_guard", packageName: CLI_PACKAGE_NAME });
+  }
+}
+async function installLatestCli(action, options2, dependencies, latestVersion) {
+  const result = await runNpm([
+    "install",
+    "--global",
+    `${CLI_PACKAGE_NAME}@${latestVersion ?? "latest"}`,
+    "--no-audit",
+    "--no-fund",
+    "--loglevel=error"
+  ], {
+    ...options2,
+    timeoutMs: Math.max(options2.timeoutMs, NPM_INSTALL_MIN_TIMEOUT_MS)
+  }, dependencies);
+  if (result.exitCode !== EXIT_CODES.OK) {
+    throw npmCommandError("install the latest CLI", "cli_install", result);
+  }
+  options2.log(`${CLI_PACKAGE_NAME} npm installation completed.`);
+  return {
+    packageName: CLI_PACKAGE_NAME,
+    action,
+    currentVersion: CLI_VERSION,
+    ...latestVersion ? { latestVersion } : {},
+    ...latestVersion ? { updateAvailable: action === "updated" } : {},
+    requestedVersion: "latest"
+  };
+}
+async function readLatestCliVersion(options2, dependencies) {
+  const createCache = dependencies.createNpmCacheDirectory ?? (() => mkdtemp2(join7(tmpdir2(), "clink-npm-check-")));
+  const removeCache = dependencies.removeNpmCacheDirectory ?? ((path4) => rm8(path4, { recursive: true, force: true }));
+  let cachePath;
+  try {
+    cachePath = await createCache();
+  } catch {
+    throw new CliError("install_error", "Unable to create an isolated npm cache for the CLI version check.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check_cache", packageName: CLI_PACKAGE_NAME });
+  }
+  let primaryError;
+  try {
+    const result = await runNpm([
+      "view",
+      `${CLI_PACKAGE_NAME}@latest`,
+      "version",
+      "--json",
+      "--loglevel=error",
+      "--prefer-online",
+      "--cache",
+      cachePath
+    ], options2, dependencies);
+    if (result.exitCode !== EXIT_CODES.OK) {
+      throw npmCommandError("check the latest CLI version", "cli_check", result);
+    }
+    const parsed = JSON.parse(result.stdout.trim());
+    if (typeof parsed !== "string") {
+      throw new Error("npm returned a non-string version");
+    }
+    parseSemver(parsed);
+    return parsed;
+  } catch (error) {
+    primaryError = error;
+    if (error instanceof CliError) {
+      throw error;
+    }
+    throw new CliError("install_error", "npm returned an invalid latest CLI version.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check", packageName: CLI_PACKAGE_NAME });
+  } finally {
+    try {
+      await removeCache(cachePath);
+    } catch {
+      if (primaryError === void 0) {
+        options2.log("Warning: unable to remove the isolated npm cache after the CLI version check.");
+      }
+    }
+  }
+}
+async function runNpm(args, options2, dependencies) {
+  const invocation = resolveNpmInvocation(options2.env, dependencies.platform ?? process.platform, dependencies.execPath ?? process.execPath);
+  const runner = dependencies.execFileRunner ?? defaultExecFileRunner;
+  return runner({
+    file: invocation.file,
+    args: [...invocation.prefixArgs, ...args],
+    env: {
+      ...options2.env,
+      [SELF_UPDATE_GUARD]: "1"
+    },
+    timeoutMs: options2.timeoutMs
+  });
+}
+function resolveNpmInvocation(env, platform, execPath) {
+  const npmExecPath = env.npm_execpath;
+  if (npmExecPath && isAbsolute4(npmExecPath) && isNpmCliFilename(npmExecPath) && existsSync(npmExecPath)) {
+    return { file: execPath, prefixArgs: [npmExecPath] };
+  }
+  if (platform !== "win32") {
+    return { file: "npm", prefixArgs: [] };
+  }
+  const candidates = [
+    resolve5(dirname5(execPath), "node_modules/npm/bin/npm-cli.js"),
+    resolve5(dirname5(execPath), "../node_modules/npm/bin/npm-cli.js"),
+    resolve5(dirname5(execPath), "../lib/node_modules/npm/bin/npm-cli.js")
+  ];
+  const npmCliPath = candidates.find((candidate) => existsSync(candidate));
+  if (npmCliPath) {
+    return { file: execPath, prefixArgs: [npmCliPath] };
+  }
+  throw new CliError("install_error", "Unable to locate npm without using a command shell. Run the update from an npm-installed CLI.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "npm_resolution", packageName: CLI_PACKAGE_NAME });
+}
+async function synchronizeSkill(options2, dependencies) {
+  const syncSkill = dependencies.syncSkill ?? ((input) => syncAgenticPaymentSkill({
+    homeDir: input.homeDir,
+    env: input.env,
+    timeoutMs: input.timeoutMs,
+    force: input.force,
+    checkOnly: input.checkOnly,
+    log: input.log
+  }));
+  const result = await syncSkill(options2);
+  if (options2.checkOnly && isRecord8(result) && result.action !== "checked") {
+    return {
+      ...result,
+      action: "checked",
+      plannedAction: result.action
+    };
+  }
+  return result;
+}
+async function syncAfterCliMutation(cli, options2, dependencies) {
+  try {
+    return await synchronizeSkill(options2, dependencies);
+  } catch (error) {
+    throw new CliError("install_error", "CLI installation completed, but the official payment Skill could not be synchronized. Run `clink skills sync` to retry the Skill-only step.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
+      partial: true,
+      phase: "skill_sync",
+      cli,
+      skill: {
+        syncCompleted: false,
+        recoveryCommand: "clink skills sync",
+        errorType: error instanceof CliError ? error.type : "install_error"
+      }
+    });
+  }
+}
+function npmCommandError(operation, phase, result) {
+  const reason = result.timedOut ? "The npm command timed out." : result.errorCode === "ENOENT" ? "npm was not found on PATH." : "The npm command failed.";
+  return new CliError("install_error", `Unable to ${operation}. ${reason}`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
+    phase,
+    packageName: CLI_PACKAGE_NAME,
+    exitCode: result.exitCode,
+    timedOut: result.timedOut
+  });
+}
+function isNpmCliFilename(value) {
+  return /(?:^|[\\/])npm(?:-cli)?\.(?:c?js)$/iu.test(value);
+}
+function isInstalledPackageRoot(value) {
+  const installedSuffix = join7("node_modules", "@clink-ai", "clink-cli");
+  return value === installedSuffix || value.endsWith(`${sep5}${installedSuffix}`);
+}
+function isNonMatchingPackageManifestError(error) {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  return typeof error.code === "string" && ["ENOENT", "ENOTDIR", "EISDIR", "EACCES", "EPERM"].includes(error.code);
+}
+function isRecord8(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseSemver(value) {
+  const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(value);
+  if (!match) {
+    throw new Error("invalid semantic version");
+  }
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4]?.split(".") ?? []
+  };
+}
+function comparePrerelease(left, right) {
+  if (left.length === 0 || right.length === 0) {
+    if (left.length === right.length) {
+      return 0;
+    }
+    return left.length === 0 ? 1 : -1;
+  }
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    if (leftPart === void 0 || rightPart === void 0) {
+      return leftPart === void 0 ? -1 : 1;
+    }
+    if (leftPart === rightPart) {
+      continue;
+    }
+    const leftNumber = /^\d+$/u.test(leftPart) ? Number(leftPart) : null;
+    const rightNumber = /^\d+$/u.test(rightPart) ? Number(rightPart) : null;
+    if (leftNumber !== null && rightNumber !== null) {
+      return leftNumber < rightNumber ? -1 : 1;
+    }
+    if (leftNumber !== null || rightNumber !== null) {
+      return leftNumber !== null ? -1 : 1;
+    }
+    return leftPart < rightPart ? -1 : 1;
+  }
+  return 0;
+}
+var CLI_PACKAGE_NAME, SELF_UPDATE_GUARD, NPM_INSTALL_MIN_TIMEOUT_MS, MAX_NPM_OUTPUT_BYTES;
+var init_self_update = __esm({
+  "dist/self-update.js"() {
+    "use strict";
+    init_errors();
+    init_agentic_payment_sync();
+    init_version();
+    CLI_PACKAGE_NAME = "@clink-ai/clink-cli";
+    SELF_UPDATE_GUARD = "CLINK_CLI_SELF_UPDATE_ACTIVE";
+    NPM_INSTALL_MIN_TIMEOUT_MS = 3e5;
+    MAX_NPM_OUTPUT_BYTES = 1024 * 1024;
+  }
+});
+
+// dist/payment/authorization-api.js
+function createTipAuthorizationApi(input, overrides = {}) {
+  const dependencies = {
+    requestJson: overrides.requestJson ?? requestJson,
+    updateStoredConfig: overrides.updateStoredConfig ?? updateStoredConfig,
+    collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
+    ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
+  };
+  const getRuntimeConfig = input.getRuntimeConfig ?? (() => input.runtimeConfig);
+  const resolveStoredRuntimeConfig = input.resolveStoredRuntimeConfig ?? storedRuntimeConfig;
+  const requestRuntime = {
+    getRuntimeConfig,
+    ...input.getRuntimeConfig ? { reloadRuntimeConfig: input.getRuntimeConfig } : {},
+    ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {}
+  };
+  const refreshPaymentMethods = async () => {
+    let requestedIdentity = { type: "none" };
+    const binding = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => {
+      requestedIdentity = runtimeAuthorizationIdentity(runtimeConfig);
+      return {
+        baseUrl: runtimeConfig.baseUrl,
+        method: "POST",
+        path: "/agent/cwallet/card/bindingLink",
+        headers: buildCustomerHeaders(runtimeConfig),
+        body: {
+          customerId: runtimeConfig.customerId,
+          hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
+        },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      };
+    }, dependencies.requestJson);
+    const data = unwrapResponse(binding, "invalid card binding response");
+    const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
+    const storedPaymentMethods = paymentMethods.map((method) => ({ ...method }));
+    const nextConfig = await dependencies.updateStoredConfig((current) => {
+      const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
+      if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
+        throw authError("Authentication changed while payment methods were refreshing; retry the command.");
+      }
+      current.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+      return current;
+    });
+    input.storedConfig.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
+    input.setStoredConfig?.(nextConfig);
+    return paymentMethods;
+  };
+  return {
+    refreshPaymentMethods,
+    refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
+    listInstructions: async (paymentInstrumentId) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
+        method: "GET",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(runtimeConfig),
+        query: { status: "ACTIVE", paymentInstrumentId },
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      return unwrapResponse(result, "invalid instruction list response");
+    },
+    createInstruction: async (draft) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
+        baseUrl: runtimeConfig2.baseUrl,
+        method: "POST",
+        path: INSTRUCTION_PATH,
+        headers: buildInstructionHeaders(runtimeConfig2),
+        body: draft,
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      const data = unwrapResponse(result, "invalid instruction create response");
+      const instructionId2 = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
+      if (!instructionId2) {
+        throw apiError("missing instructionId in instruction create response", 502);
+      }
+      const runtimeConfig = await getRuntimeConfig();
+      return {
+        instructionId: instructionId2,
+        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId2, runtimeConfig.email)
+      };
+    },
+    waitForActivation: async (instructionId2) => {
+      const collected = await dependencies.collectWebhookEvents({
+        runtimeConfig: await getRuntimeConfig(),
+        getRuntimeConfig,
+        resolveStoredRuntimeConfig,
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
+        timeoutMs: input.timeoutMs,
+        type: "purchase_instruction.activated",
+        ack: false
+      });
+      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId2));
+      if (matches.length === 0) {
+        return { activated: false };
+      }
+      const eventIds = matches.map((event) => event.eventId).filter(Boolean);
+      const ackRuntimeConfig = await getRuntimeConfig();
+      await dependencies.ackWebhookEvents({
+        runtimeConfig: ackRuntimeConfig,
+        getRuntimeConfig,
+        expectedIdentity: runtimeAuthorizationIdentity(ackRuntimeConfig),
+        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
+        timeoutMs: input.timeoutMs
+      }, eventIds);
+      return { activated: true };
+    },
+    getInstruction: async (instructionId2) => {
+      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
+        baseUrl: runtimeConfig.baseUrl,
+        method: "GET",
+        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId2)}`,
+        headers: buildInstructionHeaders(runtimeConfig),
+        timeoutMs: input.timeoutMs,
+        dryRun: false
+      }), dependencies.requestJson);
+      return unwrapResponse(result, "invalid instruction response");
+    },
+    now: input.now,
+    watch: input.watch,
+    onPasskeyUrl: input.onPasskeyUrl
+  };
+}
+function unwrapResponse(result, invalidMessage) {
+  if ("dryRun" in result) {
+    throw apiError(invalidMessage, 502);
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord9(data)) {
+    throw apiError(invalidMessage, 502);
+  }
+  return data;
+}
+function normalizePaymentMethods(value) {
+  if (!Array.isArray(value)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  if (!value.every((item) => isRecord9(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
+    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
+  }
+  return value.map((item) => ({ ...item }));
+}
+function optionalString2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord9(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var INSTRUCTION_PATH;
+var init_authorization_api = __esm({
+  "dist/payment/authorization-api.js"() {
+    "use strict";
+    init_config();
+    init_auth_identity();
+    init_events();
+    init_errors();
+    init_http();
+    init_oauth_request();
+    init_utils();
+    INSTRUCTION_PATH = "/agent/cwallet/instructions";
+  }
+});
+
+// dist/payment/post-payment-refresh.js
+async function executePaymentRequestWithRefresh(input) {
+  if (input.dryRun) {
+    return { result: await input.request() };
+  }
+  let result;
+  try {
+    result = await input.request();
+  } catch (error) {
+    await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+    throw error;
+  }
+  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
+  return {
+    result,
+    ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
+  };
+}
+function addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) {
+  return paymentMethodsRefreshWarning ? { ...data, paymentMethodsRefreshWarning } : data;
+}
+async function refreshPaymentMethodsBestEffort(refreshPaymentMethods) {
+  try {
+    await refreshPaymentMethods();
+    return void 0;
+  } catch (error) {
+    return `${PAYMENT_METHODS_REFRESH_WARNING_PREFIX}: ${errorMessage(error)}`;
+  }
+}
+function errorMessage(error) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return String(error);
+}
+var PAYMENT_METHODS_REFRESH_WARNING_PREFIX;
+var init_post_payment_refresh = __esm({
+  "dist/payment/post-payment-refresh.js"() {
+    "use strict";
+    PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
+  }
+});
+
+// dist/payment/charge.js
+function buildChargeBody(input) {
+  const authorization = input.authorization;
+  const aiAgentInstructionBo = compact({
+    instructionId: authorization?.instructionId,
+    mandateId: authorization?.mandateId,
+    shippingAddressJson: input.shippingAddress === void 0 ? void 0 : JSON.stringify(input.shippingAddress),
+    merchantInfo: { merchantCategoryCode: "5999" },
+    products: input.products
+  });
+  const shared = compact({
+    paymentInstrumentId: input.paymentInstrumentId,
+    paymentMethodType: input.paymentMethodType,
+    instruction_id: authorization?.instructionId,
+    mandate_id: authorization?.mandateId,
+    shippingaddress: input.shippingAddress,
+    aiAgentInstructionBo,
+    purchaseInstructionId: authorization?.legacyInstructionId
+  });
+  return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
+    ...shared,
+    merchantId: input.merchantId,
+    ...input.customerPointsAmount === void 0 ? {} : { customerPointsAmount: input.customerPointsAmount },
+    customAmount: input.amount,
+    paymentCurrency: input.currency
+  };
+}
+function classifyChargeData(data) {
+  const channel = isRecord10(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
+  const action = isRecord10(channel.action) ? channel.action : {};
+  const walletAction = isRecord10(action.walletHandleRedirectOrDisplayQrCode) ? action.walletHandleRedirectOrDisplayQrCode : {};
+  const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
+  const status = finiteNumber2(channel.status);
+  const imageUrlPng = typeof walletAction.imageUrlPng === "string" && walletAction.imageUrlPng.length > 0 ? walletAction.imageUrlPng : void 0;
+  const qrCodeContent = typeof walletAction.qrCodeContent === "string" && walletAction.qrCodeContent.trim().length > 0 ? walletAction.qrCodeContent : void 0;
+  const qrCode = status === 5 && imageUrlPng ? {
+    dataUrl: imageUrlPng,
+    ...qrCodeContent ? { content: qrCodeContent } : {},
+    orderId: nonEmptyString2(data.orderId),
+    paymentExecutionDetailId: nonEmptyString2(channel.paymentExecutionDetailId) ?? nonEmptyString2(isRecord10(channel.processingDetail) ? channel.processingDetail.paymentExecutionDetailId : void 0),
+    expiresAt: nonNegativeInteger(walletAction.expiresAt),
+    expiresSecond: nonNegativeInteger(walletAction.expiresSecond)
+  } : void 0;
+  return {
+    status,
+    requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
+    ...redirectUrl ? { redirectUrl } : {},
+    ...qrCode ? { qrCode } : {}
+  };
+}
+async function executeCharge(input, runtime) {
+  const refreshed = await executePaymentRequestWithRefresh({
+    request: () => requestJsonWithOAuthRetry({
+      getRuntimeConfig: runtime.getRuntimeConfig ?? (() => runtime.runtimeConfig),
+      ...runtime.getRuntimeConfig ? { reloadRuntimeConfig: runtime.getRuntimeConfig } : {},
+      ...runtime.refreshRuntimeConfig ? { refreshRuntimeConfig: runtime.refreshRuntimeConfig } : {}
+    }, (runtimeConfig) => ({
+      baseUrl: runtimeConfig.baseUrl,
+      method: "POST",
+      path: "/agent/order/charge",
+      headers: buildCustomerHeaders(runtimeConfig),
+      body: buildChargeBody(input),
+      timeoutMs: runtime.timeoutMs,
+      dryRun: runtime.dryRun
+    })),
+    refreshPaymentMethods: runtime.refreshPaymentMethods,
+    dryRun: runtime.dryRun
+  });
+  const result = refreshed.result;
+  if ("dryRun" in result) {
+    return { dryRun: true, request: result };
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  return {
+    dryRun: false,
+    data,
+    ...classifyChargeData(data),
+    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
+  };
+}
+function isRecord10(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function finiteNumber2(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : void 0;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return void 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function nonNegativeInteger(value) {
+  const parsed = finiteNumber2(value);
+  return parsed !== void 0 && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+function nonEmptyString2(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized || null;
+}
+function compact(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
+}
+var init_charge = __esm({
+  "dist/payment/charge.js"() {
+    "use strict";
+    init_oauth_request();
+    init_utils();
+    init_post_payment_refresh();
+  }
+});
+
+// dist/pending-instruction.js
+async function preparePendingInstruction(instructionContext, maxWaitSeconds, dependencies) {
+  const created = await dependencies.createPendingInstruction(instructionContext);
+  const initialStatus = normalizedStatus(created.status);
+  if (initialStatus === "UNKNOWN") {
+    throw apiError("missing status in pending instruction response", 502);
+  }
+  const cardReady = initialStatus === "CARD_READY" || initialStatus === "VIC_READY";
+  if (cardReady && !created.instructionId) {
+    return {
+      instructionStatus: initialStatus,
+      state: "CARD_READY",
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false
+    };
+  }
+  const instructionId2 = requiredText(created.instructionId, "missing instructionId in pending instruction response");
+  if (dependencies.deferBrowserActions && initialStatus === "PENDING") {
+    const instruction = await dependencies.getInstruction(instructionId2);
+    if (instruction) {
+      assertExactInstruction(instruction, instructionId2);
+    }
+    return {
+      instructionId: instructionId2,
+      instructionStatus: normalizedStatus(instruction?.status ?? instruction?.state) || initialStatus,
+      state: "PENDING",
+      ...instruction ? { instruction } : {},
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false,
+      resumeCommand: dependencies.resumeCommand(instructionId2)
+    };
+  }
+  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && initialStatus !== "CREATED" && !cardReady && !isTerminalInstructionStatus(initialStatus)) {
+    throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
+  }
+  if (initialStatus === "ACTIVE" || initialStatus === "CREATED" || cardReady || isTerminalInstructionStatus(initialStatus) || dependencies.portalManaged && created.detail.activationExpected === false) {
+    return finalizePendingInstruction({
+      instructionId: instructionId2,
+      initialStatus,
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false,
+      ...initialStatus === "PENDING" ? {
+        waitError: "The existing Portal authorization is not associated with this Instruction; continue in Portal with this exact purchase context"
+      } : {}
+    }, dependencies);
+  }
+  let bindingUrl;
+  let bindingLinkError;
+  if (!dependencies.portalManaged) {
+    try {
+      bindingUrl = await dependencies.resolveBindingUrl();
+    } catch (error) {
+      rethrowAuthError(error);
+      bindingLinkError = errorMessage2(error);
+    }
+  }
+  let timedOut = false;
+  let eventTypes = [];
+  let waitError;
+  let watchReady = false;
+  try {
+    const wait = await dependencies.waitForInstructionActivation(instructionId2, maxWaitSeconds, dependencies.onWatchReady ? () => {
+      watchReady = true;
+      dependencies.onWatchReady?.({
+        instructionId: instructionId2,
+        instructionStatus: initialStatus,
+        ...bindingUrl ? { bindingUrl } : {},
+        ...bindingLinkError ? { bindingLinkError } : {}
+      });
+    } : void 0);
+    timedOut = wait.timedOut;
+    eventTypes = wait.eventTypes;
+  } catch (error) {
+    rethrowAuthError(error);
+    waitError = errorMessage2(error);
+  }
+  return finalizePendingInstruction({
+    instructionId: instructionId2,
+    initialStatus,
+    createdDetail: created.detail,
+    timedOut,
+    eventTypes,
+    watchReady,
+    bindingLinkPresented: watchReady && bindingUrl !== void 0,
+    ...bindingLinkError ? { bindingLinkError } : {},
+    ...waitError ? { waitError } : {}
+  }, dependencies);
+}
+async function finalizePendingInstruction(input, dependencies) {
+  let instruction;
+  let exactGetError;
+  try {
+    instruction = await dependencies.getInstruction(input.instructionId);
+  } catch (error) {
+    rethrowAuthError(error);
+    exactGetError = errorMessage2(error);
+  }
+  if (instruction) {
+    assertExactInstruction(instruction, input.instructionId);
+  }
+  const instructionStatus3 = instruction ? normalizedStatus(instruction.status ?? instruction.state) : input.initialStatus;
+  let state = instructionStatus3 === "ACTIVE" ? "ACTIVE" : instructionStatus3 === "CREATED" ? "CREATED" : instructionStatus3 === "PENDING" ? "PENDING" : "TERMINAL";
+  if (input.initialStatus === "CREATED" || instructionStatus3 === "CREATED") {
+    const pi = instruction && optionalText2(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
+    const createdPi = optionalText2(input.createdDetail.paymentInstrumentId ?? input.createdDetail.payment_instrument_id);
+    if (!instruction || !pi || createdPi && createdPi !== pi || !["CREATED", "ACTIVE"].includes(instructionStatus3)) {
+      state = "TERMINAL";
+      exactGetError ??= "CREATED requires the exact Instruction and unchanged backend-bound paymentInstrumentId";
+    }
+  }
+  return {
+    instructionId: input.instructionId,
+    instructionStatus: instructionStatus3,
+    state,
+    ...instruction ? { instruction } : {},
+    createdDetail: input.createdDetail,
+    timedOut: input.timedOut,
+    eventTypes: input.eventTypes,
+    watchReady: input.watchReady,
+    bindingLinkPresented: input.bindingLinkPresented,
+    resumeCommand: dependencies.resumeCommand(input.instructionId),
+    ...input.bindingLinkError ? { bindingLinkError: input.bindingLinkError } : {},
+    ...input.waitError ? { waitError: input.waitError } : {},
+    ...exactGetError ? { exactGetError } : {}
+  };
+}
+function pendingInstructionId(instruction) {
+  return optionalText2(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+}
+function isTerminalInstructionStatus(status) {
+  return TERMINAL_INSTRUCTION_STATUSES.has(normalizedStatus(status));
+}
+function assertExactInstruction(instruction, expectedInstructionId) {
+  if (pendingInstructionId(instruction) !== expectedInstructionId) {
+    throw apiError("pending Instruction identity mismatch during exact GET", 502);
+  }
+}
+function requiredText(value, message) {
+  const text2 = optionalText2(value);
+  if (!text2) {
+    throw apiError(message, 502);
+  }
+  return text2;
+}
+function optionalText2(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function normalizedStatus(value) {
+  return optionalText2(value)?.toUpperCase() ?? "UNKNOWN";
+}
+function errorMessage2(error) {
+  return error instanceof Error && error.message.trim() ? error.message.trim() : String(error);
+}
+function rethrowAuthError(error) {
+  if (error instanceof CliError && error.type === "auth_error") {
+    throw error;
+  }
+}
+var TERMINAL_INSTRUCTION_STATUSES;
+var init_pending_instruction = __esm({
+  "dist/pending-instruction.js"() {
+    "use strict";
+    init_errors();
+    TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+      "CANCELLED",
+      "CANCELED",
+      "EXPIRED",
+      "DECLINED",
+      "FAILED"
+    ]);
+  }
+});
+
+// dist/payment/method-selection.js
+function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
+  return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+}
+function allowsMissingPaymentInstrument(paymentMethodType) {
+  return OPTIONAL_PAYMENT_INSTRUMENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
+}
+function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  const candidates = /* @__PURE__ */ new Map();
+  if (Array.isArray(paymentMethods)) {
+    for (const item of paymentMethods) {
+      if (!isRecord11(item) || paymentMethodTypeOf(item) !== normalizedType) {
+        continue;
+      }
+      const paymentInstrumentId = nonEmptyString3(item.paymentInstrumentId);
+      if (!paymentInstrumentId) {
+        continue;
+      }
+      const existing = candidates.get(paymentInstrumentId);
+      candidates.set(paymentInstrumentId, {
+        paymentInstrumentId,
+        isDefault: Boolean(existing?.isDefault || isDefaultPaymentMethod(item))
+      });
+    }
+  }
+  const matches = [...candidates.values()];
+  if (matches.length === 0) {
+    throw validationError(`no ${normalizedType} payment method is available; bind one and refresh payment methods`);
+  }
+  if (matches.length === 1) {
+    return matches[0].paymentInstrumentId;
+  }
+  const defaultMatches = matches.filter((candidate) => candidate.isDefault);
+  if (defaultMatches.length === 1) {
+    return defaultMatches[0].paymentInstrumentId;
+  }
+  throw validationError(`multiple ${normalizedType} payment methods are available without one unique default; pass --payment-instrument-id explicitly`);
+}
+function validatePaymentInstrumentType(paymentMethods, paymentInstrumentId, paymentMethodType) {
+  const normalizedId = nonEmptyString3(paymentInstrumentId);
+  const normalizedType = normalizePaymentMethodType(paymentMethodType);
+  if (!normalizedId) {
+    throw validationError("--payment-instrument-id must not be blank");
+  }
+  const matchingIdRecords = Array.isArray(paymentMethods) ? paymentMethods.filter((item) => isRecord11(item) && nonEmptyString3(item.paymentInstrumentId) === normalizedId) : [];
+  if (matchingIdRecords.length === 0) {
+    throw validationError(`payment instrument ${normalizedId} was not found after refreshing payment methods`);
+  }
+  if (matchingIdRecords.some((item) => paymentMethodTypeOf(item) === normalizedType)) {
+    return normalizedId;
+  }
+  const actualTypes = [...new Set(matchingIdRecords.map((item) => paymentMethodTypeOf(item) ?? "UNKNOWN"))].join(", ");
+  throw validationError(`payment instrument ${normalizedId} has type ${actualTypes}, not ${normalizedType}`);
+}
+function normalizePaymentMethodType(value) {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    throw validationError("--payment-method-type must not be blank");
+  }
+  return normalized;
+}
+function normalizeOptionalType(value) {
+  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : void 0;
+}
+function paymentMethodTypeOf(item) {
+  return normalizeOptionalType(item.paymentMethodType) ?? normalizeOptionalType(item.paymentInstrumentType);
+}
+function isDefaultPaymentMethod(item) {
+  return item.isDefault === true || item.default === true || item.defaultPaymentMethod === true;
+}
+function nonEmptyString3(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function isRecord11(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES, OPTIONAL_PAYMENT_INSTRUMENT_TYPES;
+var init_method_selection = __esm({
+  "dist/payment/method-selection.js"() {
+    "use strict";
+    init_errors();
+    LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
+    OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
   }
 });
 
@@ -9334,10871 +20399,10 @@ var require_lib = __commonJS({
   }
 });
 
-// dist/errors.js
-var EXIT_CODES = {
-  OK: 0,
-  GENERAL: 1,
-  VALIDATION: 2,
-  CONFIG: 3,
-  AUTH: 4,
-  API: 5,
-  NETWORK: 6,
-  THREE_DS: 7,
-  INSTALL: 8
-};
-var CliError = class extends Error {
-  type;
-  exitCode;
-  code;
-  details;
-  constructor(type, message, exitCode, code, details) {
-    super(message);
-    this.name = "CliError";
-    this.type = type;
-    this.exitCode = exitCode;
-    this.code = code ?? exitCode;
-    this.details = details;
-  }
-};
-function validationError(message) {
-  return new CliError("validation_error", message, EXIT_CODES.VALIDATION);
-}
-function configError(message) {
-  return new CliError("config_error", message, EXIT_CODES.CONFIG);
-}
-function authError(message, code = 401) {
-  return new CliError("auth_error", message, EXIT_CODES.AUTH, code);
-}
-function apiError(message, code = 400) {
-  return new CliError("api_error", message, EXIT_CODES.API, code);
-}
-function paymentStateUnknownError(message, details) {
-  return new CliError("payment_state_unknown", message, EXIT_CODES.API, 500, details);
-}
-function networkError(message) {
-  return new CliError("network_error", message, EXIT_CODES.NETWORK);
-}
-function installError(message) {
-  return new CliError("install_error", message, EXIT_CODES.INSTALL);
-}
-
-// dist/command-branding.js
-var MAIN_EXECUTABLE_NAME = "clink";
-var VISA_EXECUTABLE_NAME = "visa-cli";
-var CLI_COMMAND_PATTERN = /\bclink(?= (?:--help|<command>|install|update|wallet|card|risk|skills|pay|refund|ucp-checkout|ucp-catalog|catalog|ucp-order|instruction|events|tool|config|visa))/gu;
-function renderCliCommandText(value, executableName = MAIN_EXECUTABLE_NAME) {
-  if (executableName === MAIN_EXECUTABLE_NAME) {
-    return value;
-  }
-  return value.replace(/^clink(?=\r?\n)/u, executableName).replace(CLI_COMMAND_PATTERN, executableName);
-}
-
-// dist/output.js
-function printSuccess(data, format) {
-  const envelope = {
-    ok: true,
-    data
-  };
-  process.stdout.write(serialize(envelope, format));
-}
-function printJson(value, format) {
-  process.stdout.write(serialize(value, format));
-}
-function printError(error, options2) {
-  const cliError = error instanceof CliError ? error : new CliError("api_error", error.message, 1);
-  const message = renderCliCommandText(cliError.message, options2.executableName ?? MAIN_EXECUTABLE_NAME);
-  if (!options2.explicitFormat) {
-    process.stderr.write(renderHumanError(message, options2.helpHint));
-    return cliError.exitCode;
-  }
-  const envelope = {
-    ok: false,
-    error: {
-      type: cliError.type,
-      code: cliError.code,
-      message,
-      ...cliError.details ? { details: cliError.details } : {}
-    }
-  };
-  process.stderr.write(serialize(envelope, options2.format));
-  return cliError.exitCode;
-}
-function serialize(value, format) {
-  if (format === "pretty") {
-    return `${JSON.stringify(value, null, 2)}
-`;
-  }
-  return `${JSON.stringify(value)}
-`;
-}
-function renderHumanError(message, helpHint) {
-  const lines = [`Error: ${message}`];
-  if (helpHint) {
-    lines.push(`Hint: ${helpHint}`);
-  }
-  return `${lines.join("\n")}
-`;
-}
-
-// dist/entrypoint.js
-var MAIN_HELP_COMMANDS = [
-  "install",
-  "update",
-  "wallet",
-  "card",
-  "risk",
-  "skills",
-  "pay",
-  "refund",
-  "ucp-checkout",
-  "ucp-catalog",
-  "catalog",
-  "ucp-order",
-  "instruction",
-  "events",
-  "tool",
-  "config"
-];
-async function runEntrypoint(runner, argv, helpCommands, executableName = MAIN_EXECUTABLE_NAME) {
-  try {
-    const exitCode = await runner(argv);
-    process.exitCode = exitCode;
-  } catch (error) {
-    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands, executableName));
-  }
-}
-function detectErrorPresentation(argv, helpCommands, executableName) {
-  const format = detectFormat(argv);
-  const explicitFormat = hasExplicitFormat(argv);
-  const helpHint = detectHelpHint(argv, helpCommands, executableName);
-  return {
-    format,
-    explicitFormat,
-    executableName,
-    ...!explicitFormat && helpHint ? { helpHint } : {}
-  };
-}
-function detectFormat(argv) {
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === "--format" && argv[index + 1] === "json") {
-      return "json";
-    }
-    if (token === "--format" && argv[index + 1] === "pretty") {
-      return "pretty";
-    }
-    if (token === "--format=json") {
-      return "json";
-    }
-    if (token === "--format=pretty") {
-      return "pretty";
-    }
-  }
-  return "json";
-}
-function hasExplicitFormat(argv) {
-  return argv.some((token) => token === "--format" || token.startsWith("--format="));
-}
-function detectHelpHint(argv, helpCommands, executableName) {
-  const command = argv.find((token) => !token.startsWith("-"));
-  if (!command) {
-    return `Run \`${executableName} --help\`.`;
-  }
-  if (helpCommands.includes(command)) {
-    return `Run \`${executableName} ${command} --help\`.`;
-  }
-  return `Run \`${executableName} --help\`.`;
-}
-
-// dist/visa/edition.js
-import { performance as performance2 } from "node:perf_hooks";
-
-// node_modules/commander/esm.mjs
-var import_index = __toESM(require_commander(), 1);
-var {
-  program,
-  createCommand,
-  createArgument,
-  createOption,
-  CommanderError,
-  InvalidArgumentError,
-  InvalidOptionArgumentError,
-  // deprecated old name
-  Command,
-  Argument,
-  Option,
-  Help
-} = import_index.default;
-
-// dist/args.js
-var OPTION_DEFINITIONS = [
-  { name: "help", flags: "-h, --help" },
-  { name: "format", flags: "--format <format>" },
-  { name: "dry-run", flags: "--dry-run" },
-  { name: "confirm-purchase", flags: "--confirm-purchase" },
-  { name: "wait-delivery", flags: "--wait-delivery" },
-  { name: "all", flags: "--all" },
-  { name: "tippable", flags: "--tippable" },
-  { name: "check", flags: "--check" },
-  { name: "force", flags: "--force" },
-  { name: "open", flags: "--open" },
-  { name: "customer-id", flags: "--customer-id <id>" },
-  { name: "customer-api-key", flags: "--customer-api-key <key>" },
-  { name: "timeout", flags: "--timeout <ms>" },
-  { name: "email", flags: "--email <email>" },
-  { name: "otp", flags: "--otp <email_otp>" },
-  { name: "name", flags: "--name <name>" },
-  { name: "publisher", flags: "--publisher <publisher>" },
-  { name: "version", flags: "--version <versionNo>" },
-  { name: "source", flags: "--source <value>" },
-  { name: "payment-instrument-id", flags: "--payment-instrument-id <id>" },
-  { name: "idempotency-key", flags: "--idempotency-key <key>" },
-  { name: "checkout-id", flags: "--checkout-id <id>" },
-  { name: "ucp-order-id", flags: "--ucp-order-id <id>" },
-  { name: "next-token", flags: "--next-token <token>" },
-  { name: "event-only", flags: "--event-only" },
-  { name: "endpoint", flags: "--endpoint <url>" },
-  { name: "endpont", flags: "--endpont <url>" },
-  { name: "merchant-url", flags: "--merchant-url <url>" },
-  { name: "product-url", flags: "--product-url <url>" },
-  { name: "merchant-name", flags: "--merchant-name <name>" },
-  { name: "merchant-category-code", flags: "--merchant-category-code <code>" },
-  { name: "order-channel-id", flags: "--order-channel-id <id>" },
-  { name: "line-items", flags: "--line-items <json>" },
-  { name: "buyer", flags: "--buyer <json>" },
-  { name: "metadata", flags: "--metadata <json>" },
-  { name: "credential-token", flags: "--credential-token <token>" },
-  { name: "merchant-id", flags: "--merchant-id <id>" },
-  { name: "product-id", flags: "--product-id <id>" },
-  { name: "query", flags: "--query <text>" },
-  { name: "language", flags: "--language <tag>" },
-  { name: "context", flags: "--context <json>" },
-  { name: "filters", flags: "--filters <json>" },
-  { name: "signals", flags: "--signals <json>" },
-  { name: "attribution", flags: "--attribution <json>" },
-  { name: "cursor", flags: "--cursor <cursor>" },
-  { name: "request-id", flags: "--request-id <id>" },
-  { name: "ucp-agent", flags: "--ucp-agent <value>" },
-  { name: "ext", flags: "--ext <json>" },
-  { name: "channel-type", flags: "--channel-type <type>" },
-  { name: "form-type", flags: "--form-type <type>" },
-  { name: "amount", flags: "--amount <amount>" },
-  { name: "currency", flags: "--currency <currency>" },
-  { name: "instruction-id", flags: "--instruction-id <id>" },
-  { name: "mandate-id", flags: "--mandate-id <id>" },
-  { name: "session-id", flags: "--session-id <id>" },
-  { name: "payment-method-type", flags: "--payment-method-type <type>" },
-  { name: "terminal-qr", flags: "--terminal-qr" },
-  { name: "order-id", flags: "--order-id <id>" },
-  { name: "refund-id", flags: "--refund-id <id>" },
-  { name: "purchase-instruction-id", flags: "--purchase-instruction-id <id>" },
-  { name: "status", flags: "--status <status>" },
-  { name: "valid-only", flags: "--valid-only" },
-  { name: "title", flags: "--title <title>" },
-  { name: "description", flags: "--description <text>" },
-  { name: "effective-until-time", flags: "--effective-until-time <datetime>" },
-  { name: "mandates", flags: "--mandates <json>" },
-  { name: "mandates-file", flags: "--mandates-file <path>" },
-  { name: "products", flags: "--products <json>" },
-  { name: "is-recurring", flags: "--is-recurring" },
-  { name: "shipping-address", flags: "--shipping-address <json>" },
-  { name: "sandbox", flags: "--sandbox" },
-  { name: "test", flags: "--test" },
-  { name: "extra", flags: "--extra <json>" },
-  { name: "max-wait", flags: "--max-wait <seconds>" },
-  { name: "limit", flags: "--limit <n>" },
-  { name: "page", flags: "--page <n>" },
-  { name: "size", flags: "--size <n>" },
-  { name: "start-time", flags: "--start-time <datetime>" },
-  { name: "end-time", flags: "--end-time <datetime>" },
-  { name: "type", flags: "--type <eventType>" },
-  { name: "url", flags: "--url <url>" }
-];
-function parseArgs(argv, options2 = {}) {
-  const optionDefinitions = [
-    ...OPTION_DEFINITIONS,
-    ...options2.optionDefinitions ?? []
-  ];
-  const multiValueOptions = options2.multiValueOptions ?? /* @__PURE__ */ new Map();
-  const preFlags = {};
-  const forwarded = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    const equalsIndex = token.indexOf("=");
-    const rawOption = equalsIndex >= 0 ? token.slice(0, equalsIndex) : token;
-    const multiValueName = multiValueOptions.get(rawOption);
-    if (multiValueName) {
-      const values = [];
-      if (equalsIndex >= 0) {
-        const inline = token.slice(equalsIndex + 1);
-        if (inline) {
-          values.push(inline);
-        }
-      } else {
-        while (index + 1 < argv.length && !argv[index + 1]?.startsWith("--")) {
-          values.push(argv[index + 1]);
-          index += 1;
-        }
-      }
-      if (values.length === 0) {
-        throw validationError(`option ${rawOption} requires at least one value`);
-      }
-      const previous = preFlags[multiValueName];
-      preFlags[multiValueName] = [
-        ...typeof previous === "string" ? previous.split(",") : [],
-        ...values
-      ].join(",");
-      continue;
-    }
-    if (token === "--no-watch") {
-      preFlags["no-watch"] = true;
-      continue;
-    }
-    if (token === "--watch") {
-      preFlags.watch = true;
-      continue;
-    }
-    if (token === "--no-open") {
-      preFlags["no-open"] = true;
-      continue;
-    }
-    if (token === "--no-ack") {
-      preFlags["no-ack"] = true;
-      continue;
-    }
-    forwarded.push(token);
-  }
-  const parser = new Command().helpOption(false).allowUnknownOption(true);
-  for (const option of optionDefinitions) {
-    parser.option(option.flags);
-  }
-  const { operands, unknown } = parser.parseOptions(forwarded);
-  const unknownOption = unknown.find((token) => token.startsWith("-"));
-  if (unknownOption) {
-    throw validationError(`unknown option: ${unknownOption}`);
-  }
-  const parsedOptions = parser.opts();
-  const flags = { ...preFlags };
-  for (const option of optionDefinitions) {
-    const value = parsedOptions[toCommanderOptionName(option.name)];
-    if (value === void 0 || value === false) {
-      continue;
-    }
-    flags[option.name] = value;
-  }
-  return { positionals: [...operands, ...unknown], flags };
-}
-function getStringFlag(flags, ...names) {
-  for (const name of names) {
-    const value = flags[name];
-    if (typeof value === "string") {
-      return value;
-    }
-  }
-  return void 0;
-}
-function getBooleanFlag(flags, ...names) {
-  for (const name of names) {
-    const value = flags[name];
-    if (typeof value === "boolean") {
-      return value;
-    }
-    if (typeof value === "string") {
-      return value === "true";
-    }
-  }
-  return false;
-}
-function requireStringFlag(flags, message, ...names) {
-  const value = getStringFlag(flags, ...names);
-  if (!value) {
-    throw validationError(message);
-  }
-  return value;
-}
-function toCommanderOptionName(value) {
-  return value.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
-}
-
-// dist/cli.js
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { homedir } from "node:os";
-import { performance } from "node:perf_hooks";
-
-// dist/domains.js
-var API_BASE_URLS = {
-  sandbox: "https://uat-api.clinkbill.com",
-  test: "https://api.clinkbill.dev",
-  production: "https://api.clinkbill.com"
-};
-function clinkEnvironmentForApiBaseUrl(apiBaseUrl) {
-  let origin;
-  try {
-    origin = new URL(apiBaseUrl).origin;
-  } catch {
-    return void 0;
-  }
-  const entries = Object.entries(API_BASE_URLS);
-  return entries.find(([, baseUrl]) => new URL(baseUrl).origin === origin)?.[0];
-}
-var AGENT_BASE_URLS = {
-  sandbox: "https://uat-agent.clinkbill.com",
-  test: "https://agent.clinkbill.dev",
-  production: "https://agent.clinkbill.com"
-};
-var DASHBOARD_BASE_URLS = {
-  sandbox: "https://uat-dashboard.clinkbill.com",
-  test: "https://dashboard.clinkbill.dev",
-  production: "https://dashboard.clinkbill.com"
-};
-var DEFAULT_BASE_URL = API_BASE_URLS.production;
-
-// dist/portal-order-link.js
-var ORDER_ID = /^[A-Za-z0-9_-]{1,160}$/u;
-function portalOrderLink(apiBaseUrl, resources, paymentEvents = [], expectedCheckoutId) {
-  const environment = clinkEnvironmentForApiBaseUrl(apiBaseUrl);
-  if (!environment)
-    return {};
-  const origin = AGENT_BASE_URLS[environment];
-  const ids = /* @__PURE__ */ new Set();
-  let invalid = false;
-  const addId = (value) => {
-    if (value === void 0 || value === null)
-      return;
-    if (typeof value !== "string" || !ORDER_ID.test(value.trim())) {
-      invalid = true;
-    } else {
-      ids.add(value.trim());
-    }
-  };
-  const addUrl = (value) => {
-    if (typeof value !== "string")
-      return;
-    try {
-      const url = new URL(value);
-      if (url.origin !== origin || url.username || url.password)
-        return;
-      const match = /^\/transaction\/([^/]+)\/?$/u.exec(url.pathname);
-      if (match)
-        addId(decodeURIComponent(match[1]));
-    } catch {
-    }
-  };
-  for (const resource of resources) {
-    const value = object(resource);
-    const ucp = object(value.ucp);
-    for (const source of [value, ucp]) {
-      addId(source.clinkOrderId);
-      addId(source.clink_order_id);
-      addId(source.paymentOrderId);
-      addId(source.payment_order_id);
-    }
-    const order = object(value.order);
-    const success = object(ucp.success_info);
-    for (const source of [value, order, success]) {
-      addUrl(source.orderUrl);
-      addUrl(source.permalink_url);
-      addUrl(source.permalinkUrl);
-    }
-  }
-  for (const event of paymentEvents) {
-    if (!["agent_order.succeeded", "agent_order.failed"].includes(event.eventType))
-      continue;
-    if (!expectedCheckoutId || event.data.checkoutId !== expectedCheckoutId)
-      continue;
-    addId(event.resourceId);
-    addId(event.data.orderId);
-    addId(event.data.order_id);
-    addId(event.data.paymentOrderId);
-    addId(event.data.payment_order_id);
-  }
-  if (invalid || ids.size > 1)
-    return { orderUrlUnavailable: "conflicting_payment_order_identity" };
-  const id = [...ids][0];
-  return id ? {
-    clinkOrderId: id,
-    orderUrl: `${origin}/transaction/${encodeURIComponent(id)}`
-  } : {};
-}
-function object(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-// dist/card-vic-readiness.js
-function optionalText(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function cardSchemeText(card) {
-  return (optionalText(card.cardScheme) ?? optionalText(card.cardBrand) ?? optionalText(card.brand) ?? optionalText(card.network) ?? "").toUpperCase();
-}
-function cardSchemeIsVisa(card) {
-  return cardSchemeText(card) === "VISA";
-}
-function resolveVisaVicCapability(card) {
-  if (!cardSchemeIsVisa(card)) {
-    return "unsupported";
-  }
-  if (typeof card.cardSchemeRegistrationEnabled === "boolean") {
-    return card.cardSchemeRegistrationEnabled ? "supported" : "unsupported";
-  }
-  return "unknown";
-}
-function resolveVisaRegistrationCompletion(card) {
-  if (typeof card.strongAuthRegistered === "boolean") {
-    if (!card.strongAuthRegistered) {
-      return false;
-    }
-    const authProtocol = optionalText(card.authProtocol)?.toUpperCase();
-    return !authProtocol || authProtocol === "VISA";
-  }
-  return typeof card.visaRegistrationSucceeded === "boolean" ? card.visaRegistrationSucceeded : void 0;
-}
-function resolveVisaVicReadiness(card) {
-  if (!cardSchemeIsVisa(card)) {
-    return "not_ready";
-  }
-  const capability = resolveVisaVicCapability(card);
-  if (capability === "unsupported") {
-    return "not_ready";
-  }
-  if (capability === "unknown") {
-    return "unknown";
-  }
-  const completion = resolveVisaRegistrationCompletion(card);
-  return completion === void 0 ? "unknown" : completion ? "ready" : "not_ready";
-}
-function visaVicReady(card) {
-  return resolveVisaVicReadiness(card) === "ready";
-}
-function visaVicReadinessEvidence(card) {
-  return {
-    vicReadiness: resolveVisaVicReadiness(card),
-    ...typeof card.strongAuthRegistered === "boolean" ? { strongAuthRegistered: card.strongAuthRegistered } : {},
-    ...optionalText(card.authProtocol) ? { authProtocol: optionalText(card.authProtocol) } : {},
-    ...typeof card.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: card.visaRegistrationSucceeded } : {},
-    ...typeof card.cardSchemeRegistrationEnabled === "boolean" ? { cardSchemeRegistrationEnabled: card.cardSchemeRegistrationEnabled } : {}
-  };
-}
-
-// dist/browser-handoff.js
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-
-// dist/url.js
-function httpOrigin(value) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return void 0;
-    }
-    return url.origin;
-  } catch {
-    return void 0;
-  }
-}
-function sameHttpOrigin(left, right) {
-  const leftOrigin = httpOrigin(left);
-  const rightOrigin = httpOrigin(right);
-  return leftOrigin !== void 0 && leftOrigin === rightOrigin;
-}
-
-// dist/browser-handoff.js
-var BROWSER_HANDOFF_CALLBACK_PATH = "/callback";
-var CREATE_HANDOFF_PATH = "/agent/cwallet/oauth/browser-handoffs";
-var HANDOFF_PAGE_PREFIX = "/oauth/cli-handoff/";
-var MAX_HANDOFF_LIFETIME_SECONDS = 300;
-var MAX_COMPLETE_URL_LENGTH = 2048;
-var OPAQUE_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/u;
-function canUseBrowserHandoff(runtimeConfig) {
-  return Boolean(runtimeConfig.authorization && sameHttpOrigin(runtimeConfig.authorization.issuerOrigin, runtimeConfig.baseUrl));
-}
-async function openBrowserHandoff(options2) {
-  if (!options2.open) {
-    return completedLaunch(notRequestedBrowserLaunch(), "direct_fallback");
-  }
-  const target = validateTargetUrl(options2.targetUrl, options2.portalOrigin);
-  if (!target) {
-    throw new Error("browser handoff target URL is not trusted");
-  }
-  if (!canUseBrowserHandoff(options2.runtimeConfig)) {
-    return directFallback(options2);
-  }
-  const clock = options2.clock ?? systemClock();
-  const bindLoopback = options2.bindLoopback ?? bindRandomLoopback;
-  const randomSecret = options2.randomSecret ?? defaultRandomSecret;
-  let binding;
-  let pending;
-  let timeoutHandle;
-  let processingCallback = false;
-  let completionSettled = false;
-  let resolveCompletion = () => {
-  };
-  const completion = new Promise((resolve6) => {
-    resolveCompletion = resolve6;
-  });
-  const settle = async (status) => {
-    if (completionSettled) {
-      return;
-    }
-    completionSettled = true;
-    if (timeoutHandle !== void 0) {
-      clock.clearTimeout(timeoutHandle);
-      timeoutHandle = void 0;
-    }
-    await binding?.close();
-    resolveCompletion(status);
-  };
-  const handleRequest = async (request, response) => {
-    if (completionSettled) {
-      sendStatus(response, 410);
-      return;
-    }
-    const currentBinding = binding;
-    if (!currentBinding) {
-      sendStatus(response, 503);
-      return;
-    }
-    const requestUrl = parseLoopbackRequestUrl(request, currentBinding.origin);
-    if (!requestUrl || requestUrl.pathname !== BROWSER_HANDOFF_CALLBACK_PATH) {
-      sendStatus(response, 404);
-      return;
-    }
-    if (request.method !== "GET") {
-      sendStatus(response, 405);
-      return;
-    }
-    if (!pending) {
-      sendStatus(response, 409);
-      return;
-    }
-    if (processingCallback) {
-      sendStatus(response, 409);
-      return;
-    }
-    const expectedHost = new URL(currentBinding.origin).host;
-    const handoffId = singleQueryValue(requestUrl, "handoff_id");
-    const claimId = singleQueryValue(requestUrl, "claim_id");
-    const browserNonce = singleQueryValue(requestUrl, "browser_nonce");
-    const loopbackState = singleQueryValue(requestUrl, "loopback_state");
-    const callbackValid = request.headers.host === expectedHost && handoffId === pending.handoffId && isOpaqueValue(claimId) && isOpaqueValue(browserNonce) && secureEqual(loopbackState, pending.loopbackState);
-    if (!callbackValid) {
-      await sendRedirect(response, pending.fallbackLoginUrl);
-      await settle("email_login_fallback");
-      return;
-    }
-    processingCallback = true;
-    try {
-      const approved = await options2.request({
-        path: `${CREATE_HANDOFF_PATH}/${encodeURIComponent(pending.handoffId)}/approve`,
-        body: {
-          claim_id: claimId,
-          browser_nonce: browserNonce,
-          cli_verifier: pending.verifier
-        }
-      });
-      if (!isSuccessfulResponse(approved)) {
-        throw new Error("approve rejected");
-      }
-      await sendRedirect(response, pending.completeUrl);
-      await settle("approved");
-    } catch {
-      await sendRedirect(response, pending.fallbackLoginUrl);
-      await settle("email_login_fallback");
-    }
-  };
-  try {
-    binding = await bindLoopback((request, response) => {
-      void handleRequest(request, response).catch(() => {
-        if (!response.headersSent) {
-          sendStatus(response, 500);
-        } else if (!response.writableEnded) {
-          response.end();
-        }
-        void settle("email_login_fallback");
-      });
-    });
-    const loopbackOrigin = validateLoopbackOrigin(binding.origin);
-    if (!loopbackOrigin) {
-      await binding.close();
-      return directFallback(options2);
-    }
-    const verifier = randomSecret();
-    const loopbackState = randomSecret();
-    const loopbackRedirectUri = new URL(BROWSER_HANDOFF_CALLBACK_PATH, loopbackOrigin).toString();
-    const created = await options2.request({
-      path: CREATE_HANDOFF_PATH,
-      body: {
-        cli_challenge: s256(verifier),
-        loopback_redirect_uri: loopbackRedirectUri,
-        loopback_state: loopbackState,
-        return_path: target.returnPath
-      }
-    });
-    const createResult2 = parseCreateResponse(created, target.portalOrigin);
-    pending = {
-      handoffId: createResult2.handoffId,
-      verifier,
-      loopbackState,
-      fallbackLoginUrl: buildFallbackLoginUrl(target.portalOrigin, target.returnPath, options2.email),
-      completeUrl: createResult2.completeUrl
-    };
-    timeoutHandle = clock.setTimeout(() => {
-      void settle("timeout");
-    }, createResult2.expiresIn * 1e3);
-    const browserLaunch = await safeOpenBrowser(options2.openBrowser, createResult2.browserUrl);
-    if (browserLaunch.status !== "launched") {
-      await settle("direct_fallback");
-      const fallbackLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-      return { browserLaunch: fallbackLaunch, completion };
-    }
-    return { browserLaunch, completion };
-  } catch {
-    await settle("direct_fallback");
-    const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-    return { browserLaunch, completion };
-  }
-}
-async function bindRandomLoopback(handler) {
-  const server = createServer(handler);
-  server.on("clientError", (_error, socket) => {
-    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-  });
-  await new Promise((resolve6, reject) => {
-    const onError = (error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve6();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen({
-      host: "127.0.0.1",
-      port: 0,
-      exclusive: true
-    });
-  });
-  let closed = false;
-  const address = server.address();
-  if (!address || address.address !== "127.0.0.1") {
-    await closeServer();
-    throw new Error("loopback listener did not bind to 127.0.0.1");
-  }
-  server.on("error", () => {
-  });
-  return {
-    origin: `http://127.0.0.1:${address.port}`,
-    close: closeServer
-  };
-  async function closeServer() {
-    if (closed) {
-      return;
-    }
-    closed = true;
-    if (!server.listening) {
-      return;
-    }
-    await new Promise((resolve6) => {
-      server.close(() => resolve6());
-      server.closeIdleConnections();
-      server.closeAllConnections();
-    });
-  }
-}
-function validateTargetUrl(targetUrl, portalOrigin) {
-  try {
-    const trustedOrigin = new URL(portalOrigin).origin;
-    const target = new URL(targetUrl);
-    if (target.origin !== trustedOrigin || target.username || target.password) {
-      return void 0;
-    }
-    return {
-      portalOrigin: trustedOrigin,
-      returnPath: `${target.pathname}${target.search}${target.hash}`
-    };
-  } catch {
-    return void 0;
-  }
-}
-function validateLoopbackOrigin(origin) {
-  try {
-    const parsed = new URL(origin);
-    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !parsed.port || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
-      return void 0;
-    }
-    return parsed.origin;
-  } catch {
-    return void 0;
-  }
-}
-function parseCreateResponse(response, portalOrigin) {
-  if (!isSuccessfulResponse(response)) {
-    throw new Error("create rejected");
-  }
-  const data = unwrapData(response.body);
-  if (!isRecord(data)) {
-    throw new Error("invalid create response");
-  }
-  const handoffId = requiredOpaqueValue(data.handoff_id);
-  const browserUrl = requiredString(data.browser_url);
-  const completeUrl = parseCompleteUrl(requiredString(data.complete_url), portalOrigin, handoffId);
-  const expiresIn = Number(data.expires_in);
-  if (!Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > MAX_HANDOFF_LIFETIME_SECONDS) {
-    throw new Error("invalid create response");
-  }
-  const actual = new URL(browserUrl);
-  const expected = new URL(`${HANDOFF_PAGE_PREFIX}${encodeURIComponent(handoffId)}`, portalOrigin);
-  if (actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search || actual.hash || actual.username || actual.password) {
-    throw new Error("invalid create response");
-  }
-  if (!completeUrl) {
-    throw new Error("invalid create response");
-  }
-  return {
-    handoffId,
-    browserUrl: actual.toString(),
-    completeUrl,
-    expiresIn
-  };
-}
-function parseCompleteUrl(completeUrl, portalOrigin, handoffId) {
-  try {
-    if (completeUrl.length > MAX_COMPLETE_URL_LENGTH) {
-      return void 0;
-    }
-    const parsed = new URL(completeUrl);
-    if (parsed.protocol !== "https:" || parsed.origin !== new URL(portalOrigin).origin || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname === "/") {
-      return void 0;
-    }
-    const lastSegment = parsed.pathname.split("/").at(-1);
-    if (!lastSegment || decodeURIComponent(lastSegment) !== handoffId) {
-      return void 0;
-    }
-    const normalized = parsed.toString();
-    return normalized.length <= MAX_COMPLETE_URL_LENGTH ? normalized : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function isSuccessfulResponse(response) {
-  if (response.status < 200 || response.status >= 300) {
-    return false;
-  }
-  if (!isRecord(response.body) || !("code" in response.body)) {
-    return true;
-  }
-  const code = Number(response.body.code);
-  return code >= 200 && code < 300;
-}
-function unwrapData(value) {
-  return isRecord(value) && "data" in value ? value.data : value;
-}
-function parseLoopbackRequestUrl(request, loopbackOrigin) {
-  try {
-    const parsed = new URL(request.url ?? "/", loopbackOrigin);
-    return parsed.origin === loopbackOrigin ? parsed : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function singleQueryValue(url, name) {
-  const values = url.searchParams.getAll(name);
-  return values.length === 1 ? values[0] : void 0;
-}
-function requiredOpaqueValue(value) {
-  const text2 = requiredString(value);
-  if (!isOpaqueValue(text2)) {
-    throw new Error("invalid opaque value");
-  }
-  return text2;
-}
-function requiredString(value) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error("missing string");
-  }
-  return value.trim();
-}
-function isOpaqueValue(value) {
-  return Boolean(value && value.length <= 256 && OPAQUE_VALUE_PATTERN.test(value));
-}
-function secureEqual(left, right) {
-  if (left === void 0) {
-    return false;
-  }
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-function s256(verifier) {
-  return createHash("sha256").update(verifier).digest("base64url");
-}
-function defaultRandomSecret() {
-  return randomBytes(32).toString("base64url");
-}
-function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
-  const login = new URL("/login", portalOrigin);
-  login.searchParams.set("redirectUrl", returnPath);
-  if (email) {
-    login.searchParams.set("email", email);
-  }
-  return login.toString();
-}
-async function sendRedirect(response, location) {
-  if (response.destroyed || response.writableEnded) {
-    return;
-  }
-  await new Promise((resolve6) => {
-    const complete = () => resolve6();
-    response.once("finish", complete);
-    response.once("close", complete);
-    response.once("error", complete);
-    try {
-      response.writeHead(302, {
-        "Cache-Control": "no-store",
-        Connection: "close",
-        Location: location
-      });
-      response.end();
-      if (response.destroyed || response.writableFinished) {
-        complete();
-      }
-    } catch {
-      complete();
-    }
-  });
-}
-function sendStatus(response, status) {
-  response.writeHead(status, {
-    "Cache-Control": "no-store",
-    Connection: "close"
-  });
-  response.end();
-}
-async function safeOpenBrowser(openBrowser, url) {
-  try {
-    return await openBrowser(url);
-  } catch {
-    return {
-      requested: true,
-      status: "failed",
-      opener: null,
-      attempts: []
-    };
-  }
-}
-async function directFallback(options2) {
-  const browserLaunch = await safeOpenBrowser(options2.openBrowser, options2.targetUrl);
-  return completedLaunch(browserLaunch, "direct_fallback");
-}
-function completedLaunch(browserLaunch, status) {
-  return {
-    browserLaunch,
-    completion: Promise.resolve(status)
-  };
-}
-function notRequestedBrowserLaunch() {
-  return {
-    requested: false,
-    status: "not_requested",
-    opener: null,
-    attempts: []
-  };
-}
-function systemClock() {
-  return {
-    setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds),
-    clearTimeout: (handle) => clearTimeout(handle)
-  };
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/auth-identity.js
-function runtimeAuthorizationIdentity(config) {
-  if (config.authorization) {
-    return {
-      type: "oauth",
-      customerId: config.authorization.customerId,
-      deviceId: config.authorization.deviceId,
-      issuerOrigin: config.authorization.issuerOrigin,
-      ...config.authorization.sessionId ? { sessionId: config.authorization.sessionId } : {}
-    };
-  }
-  if (config.customerApiKey) {
-    return {
-      type: "csk",
-      ...config.customerId ? { customerId: config.customerId } : {},
-      customerApiKey: config.customerApiKey,
-      baseUrl: config.baseUrl
-    };
-  }
-  return { type: "none" };
-}
-function authorizationIdentityCanContinue(expected, current) {
-  if (expected.type === "none" || current.type === "none") {
-    return expected.type === "none" && current.type === "none";
-  }
-  if (expected.type === "oauth" && current.type === "oauth") {
-    return expected.customerId === current.customerId && expected.deviceId === current.deviceId && expected.issuerOrigin === current.issuerOrigin && (expected.sessionId === void 0 || expected.sessionId === current.sessionId);
-  }
-  if (expected.type === "csk" && current.type === "csk") {
-    return (expected.customerId === void 0 || current.customerId === void 0 || expected.customerId === current.customerId) && expected.customerApiKey === current.customerApiKey && sameHttpOrigin(expected.baseUrl, current.baseUrl);
-  }
-  return expected.type === "csk" && current.type === "oauth" && Boolean(expected.customerId) && expected.customerId === current.customerId && sameHttpOrigin(expected.baseUrl, current.issuerOrigin);
-}
-function authorizationIdentityCustomerId(identity) {
-  return identity.type === "none" ? void 0 : identity.customerId;
-}
-function storedConfigCanCacheForIdentity(storedConfig, expected) {
-  if (expected.type === "none") {
-    return false;
-  }
-  if (storedConfig.authorization) {
-    return authorizationIdentityCanContinue(expected, runtimeAuthorizationIdentity(storedRuntimeConfig(storedConfig)));
-  }
-  if (storedConfig.oauthRequired) {
-    return false;
-  }
-  if (storedConfig.customerId && expected.customerId && storedConfig.customerId !== expected.customerId) {
-    return false;
-  }
-  if (storedConfig.customerApiKey && (expected.type !== "csk" || storedConfig.customerApiKey !== expected.customerApiKey)) {
-    return false;
-  }
-  return true;
-}
-function storedRuntimeConfig(storedConfig) {
-  const runtimeConfig = {
-    baseUrl: storedConfig.baseUrl,
-    defaultOpenLinks: storedConfig.defaultOpenLinks
-  };
-  if (storedConfig.authorization) {
-    runtimeConfig.customerId = storedConfig.authorization.customerId;
-    runtimeConfig.authorization = { ...storedConfig.authorization };
-  } else if (!storedConfig.oauthRequired) {
-    if (storedConfig.customerId) {
-      runtimeConfig.customerId = storedConfig.customerId;
-    }
-    if (storedConfig.customerApiKey) {
-      runtimeConfig.customerApiKey = storedConfig.customerApiKey;
-    }
-  }
-  return runtimeConfig;
-}
-
-// dist/config.js
-import { randomUUID } from "node:crypto";
-import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-var CONFIG_DIR = path.join(os.homedir(), ".clink-cli");
-var CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
-var CONFIG_LOCK_PATH = `${CONFIG_PATH}.lock`;
-var WALLET_INIT_GENERATION_PATH = path.join(CONFIG_DIR, "wallet-init-generation");
-var CONFIG_LOCK_TIMEOUT_MS = 1e4;
-var CONFIG_LOCK_STALE_MS = 5 * 6e4;
-function defaultConfig() {
-  return {
-    baseUrl: DEFAULT_BASE_URL,
-    defaultOpenLinks: false
-  };
-}
-async function readStoredConfig() {
-  try {
-    const content = await readFile(CONFIG_PATH, "utf8");
-    return normalizeStoredConfig(JSON.parse(content));
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return defaultConfig();
-    }
-    throw configError(`failed to read config file: ${error.message}`);
-  }
-}
-async function updateStoredConfig(update) {
-  return withConfigLock(async () => {
-    const current = await readStoredConfig();
-    const updated = await update(cloneStoredConfig(current));
-    const next = enforceCredentialInvariant(current, updated);
-    await writeStoredConfigUnlocked(next);
-    return next;
-  });
-}
-async function beginWalletInit(startedAt = Date.now()) {
-  if (!Number.isFinite(startedAt) || startedAt < 0) {
-    throw configError("wallet init start time is invalid");
-  }
-  return withConfigLock(async () => {
-    const current = await readWalletInitState();
-    if (current?.startedAt !== void 0 && current.startedAt > startedAt) {
-      return void 0;
-    }
-    const generation = randomUUID();
-    await writeAtomicTextFile(WALLET_INIT_GENERATION_PATH, `${JSON.stringify({ generation, startedAt })}
-`, 384);
-    return generation;
-  });
-}
-async function isWalletInitCurrent(generation) {
-  return (await readWalletInitState())?.generation === generation;
-}
-async function runIfWalletInitCurrent(generation, operation) {
-  return withConfigLock(async () => {
-    if ((await readWalletInitState())?.generation !== generation) {
-      return false;
-    }
-    operation();
-    return true;
-  });
-}
-function enforceCredentialInvariant(current, next) {
-  if (current.oauthRequired || current.authorization || next.oauthRequired || next.authorization) {
-    next.oauthRequired = true;
-    delete next.customerApiKey;
-  }
-  return next;
-}
-function resolveRuntimeConfig(storedConfig, flags) {
-  const oauthRequired = Boolean(storedConfig.oauthRequired || storedConfig.authorization);
-  const envConfig = compactDefined({
-    customerId: process.env.CLINK_CUSTOMER_ID,
-    customerApiKey: process.env.CLINK_CUSTOMER_API_KEY
-  });
-  const flagConfig = compactDefined({
-    customerId: getStringFlag(flags, "customer-id"),
-    customerApiKey: getStringFlag(flags, "customer-api-key")
-  });
-  const legacyConfig = {
-    ...storedConfig,
-    ...envConfig,
-    ...flagConfig
-  };
-  const runtimeConfig = {
-    // wallet init persists the selected environment. CLINK_BASE_URL remains available as an
-    // advanced process override, but --sandbox/--test are scoped to wallet init.
-    baseUrl: process.env.CLINK_BASE_URL ?? storedConfig.baseUrl,
-    defaultOpenLinks: storedConfig.defaultOpenLinks
-  };
-  if (storedConfig.authorization) {
-    runtimeConfig.customerId = storedConfig.authorization.customerId;
-    runtimeConfig.authorization = { ...storedConfig.authorization };
-  } else if (!oauthRequired) {
-    assignIfDefined(runtimeConfig, "customerId", legacyConfig.customerId);
-    assignIfDefined(runtimeConfig, "customerApiKey", legacyConfig.customerApiKey);
-  }
-  assignIfDefined(runtimeConfig, "email", storedConfig.email);
-  assignIfDefined(runtimeConfig, "name", storedConfig.name);
-  return runtimeConfig;
-}
-function resolveWalletInitBaseUrl(flags) {
-  const selectedEnvironment = resolveSelectedEnvironment(flags);
-  return (selectedEnvironment ? API_BASE_URLS[selectedEnvironment] : void 0) ?? process.env.CLINK_BASE_URL ?? API_BASE_URLS.production;
-}
-function resolvePublicCatalogBaseUrl(flags) {
-  return API_BASE_URLS[resolveExplicitEnvironment(flags) ?? "production"];
-}
-function resolveSelectedEnvironment(flags) {
-  const explicitEnvironment = resolveExplicitEnvironment(flags);
-  const distributionEnvironment = walletInitDistributionEnvironment();
-  if (explicitEnvironment && distributionEnvironment && explicitEnvironment !== distributionEnvironment) {
-    throw validationError(`wallet init environment is fixed to ${distributionEnvironment} by this CLI distribution`);
-  }
-  return explicitEnvironment ?? distributionEnvironment;
-}
-function resolveExplicitEnvironment(flags) {
-  const sandbox = getBooleanFlag(flags, "sandbox");
-  const test = getBooleanFlag(flags, "test");
-  if (sandbox && test) {
-    throw validationError("--sandbox and --test cannot be used together");
-  }
-  return sandbox ? "sandbox" : test ? "test" : void 0;
-}
-function walletInitDistributionEnvironment() {
-  const value = process.env.CLINK_WALLET_INIT_ENVIRONMENT?.trim().toLowerCase();
-  if (!value) {
-    return void 0;
-  }
-  if (value === "production" || value === "sandbox" || value === "test") {
-    return value;
-  }
-  throw validationError("invalid CLINK_WALLET_INIT_ENVIRONMENT");
-}
-function normalizeConfigKey(rawKey) {
-  const key = rawKey.trim();
-  switch (key) {
-    case "base-url":
-    case "baseUrl":
-      return "baseUrl";
-    case "customer-id":
-    case "customerId":
-      return "customerId";
-    case "customer-api-key":
-    case "customerApiKey":
-      return "customerApiKey";
-    case "default-open-links":
-    case "defaultOpenLinks":
-      return "defaultOpenLinks";
-    case "email":
-      return "email";
-    case "name":
-      return "name";
-    default:
-      throw configError(`unsupported config key: ${rawKey}`);
-  }
-}
-function parseConfigValue(key, rawValue) {
-  if (key === "defaultOpenLinks") {
-    if (rawValue !== "true" && rawValue !== "false") {
-      throw configError("defaultOpenLinks must be true or false");
-    }
-    return rawValue === "true";
-  }
-  if (key === "baseUrl" && !httpOrigin(rawValue)) {
-    throw configError("baseUrl must be an absolute http(s) URL");
-  }
-  return rawValue;
-}
-function resolveOpenFlag(storedConfig, flags) {
-  if (getBooleanFlag(flags, "no-open")) {
-    return false;
-  }
-  if (flags.open !== void 0) {
-    return getBooleanFlag(flags, "open");
-  }
-  return storedConfig.defaultOpenLinks;
-}
-function isCustomerConfigKey(key) {
-  return key === "customerId" || key === "customerApiKey" || key === "email" || key === "name";
-}
-function cloneStoredConfig(config) {
-  return {
-    ...config,
-    baseUrl: config.baseUrl,
-    defaultOpenLinks: config.defaultOpenLinks,
-    ...config.authorization ? { authorization: { ...config.authorization } } : {},
-    ...config.paymentMethods ? { paymentMethods: config.paymentMethods.map((item) => ({ ...item })) } : {},
-    ...config.riskRules ? { riskRules: config.riskRules.map((item) => ({ ...item })) } : {},
-    ...config.visa ? { visa: cloneOpaqueVisaState(config.visa) } : {}
-  };
-}
-function normalizeStoredConfig(raw) {
-  const config = defaultConfig();
-  if (typeof raw !== "object" || raw === null) {
-    return config;
-  }
-  const record2 = raw;
-  if (typeof record2.baseUrl === "string" && record2.baseUrl.length > 0) {
-    config.baseUrl = record2.baseUrl;
-  }
-  if (typeof record2.defaultOpenLinks === "boolean") {
-    config.defaultOpenLinks = record2.defaultOpenLinks;
-  }
-  assignStoredCustomerState(config, parseStoredCustomerState(record2));
-  if (isRecord2(record2.visa)) {
-    config.visa = cloneOpaqueVisaState(record2.visa);
-  }
-  return config;
-}
-function cloneOpaqueVisaState(state) {
-  return structuredClone(state);
-}
-function isRecord2(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function parseStoredCustomerState(raw) {
-  const customer = {};
-  if (typeof raw !== "object" || raw === null) {
-    return customer;
-  }
-  const record2 = raw;
-  assignCustomerString(customer, "customerId", record2.customerId);
-  assignCustomerString(customer, "customerApiKey", record2.customerApiKey ?? record2.customerAPIKey);
-  const authorization = parseStoredAuthorization(record2.authorization, customer.customerId);
-  const oauthRequired = record2.oauthRequired === true || record2.authorization !== void 0;
-  if (authorization) {
-    customer.authorization = authorization;
-    customer.customerId = authorization.customerId;
-  }
-  if (oauthRequired) {
-    customer.oauthRequired = true;
-    delete customer.customerApiKey;
-  }
-  assignCustomerString(customer, "email", record2.email);
-  assignCustomerString(customer, "name", record2.name);
-  assignPaymentMethods(customer, record2.paymentMethods);
-  assignRiskRules(customer, record2.riskRules);
-  return customer;
-}
-function assignStoredCustomerState(target, value) {
-  assignIfDefined(target, "customerId", value.customerId);
-  assignIfDefined(target, "customerApiKey", value.customerApiKey);
-  assignIfDefined(target, "authorization", value.authorization ? { ...value.authorization } : void 0);
-  assignIfDefined(target, "oauthRequired", value.oauthRequired);
-  assignIfDefined(target, "email", value.email);
-  assignIfDefined(target, "name", value.name);
-  if (value.paymentMethods) {
-    target.paymentMethods = value.paymentMethods.map((item) => ({ ...item }));
-  }
-  if (value.riskRules) {
-    target.riskRules = value.riskRules.map((item) => ({ ...item }));
-  }
-}
-function parseStoredAuthorization(raw, fallbackCustomerId) {
-  if (typeof raw !== "object" || raw === null) {
-    return void 0;
-  }
-  const record2 = raw;
-  const customerId = nonEmptyString(record2.customerId) ?? fallbackCustomerId;
-  const customerIdVerified = record2.customerIdVerified === true;
-  const sessionId = nonEmptyString(record2.sessionId);
-  const deviceId = nonEmptyString(record2.deviceId);
-  const issuerOrigin = httpOrigin(nonEmptyString(record2.issuerOrigin) ?? "");
-  const accessToken = nonEmptyString(record2.accessToken);
-  const refreshToken = nonEmptyString(record2.refreshToken);
-  const agentClientId = nonEmptyString(record2.agentClientId);
-  const visaRegistrationStatus = parseVisaRegistrationStatus(record2.visaRegistrationStatus);
-  const scope = nonEmptyString(record2.scope);
-  const accessTokenExpiresAt = finiteNumber(record2.accessTokenExpiresAt);
-  const refreshTokenExpiresAt = finiteNumber(record2.refreshTokenExpiresAt);
-  if (!customerId || !deviceId || !issuerOrigin || !accessToken || !refreshToken || !scope || accessTokenExpiresAt === void 0 || refreshTokenExpiresAt === void 0) {
-    return void 0;
-  }
-  return {
-    type: "oauth",
-    customerId,
-    ...customerIdVerified ? { customerIdVerified: true } : {},
-    ...sessionId ? { sessionId } : {},
-    deviceId,
-    issuerOrigin,
-    tokenType: "Bearer",
-    accessToken,
-    accessTokenExpiresAt,
-    refreshToken,
-    refreshTokenExpiresAt,
-    ...agentClientId ? { agentClientId } : {},
-    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
-    scope
-  };
-}
-function nonEmptyString(value) {
-  return typeof value === "string" && value.length > 0 ? value : void 0;
-}
-function finiteNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
-}
-function parseVisaRegistrationStatus(value) {
-  if (typeof value !== "string") {
-    return void 0;
-  }
-  const normalized = value.trim().toUpperCase();
-  return normalized === "PENDING" || normalized === "REGISTERING" || normalized === "SUCCEEDED" || normalized === "FAILED" || normalized === "UNKNOWN" ? normalized : void 0;
-}
-async function writeStoredConfigUnlocked(config) {
-  await ensureConfigDirectory();
-  const tempPath = `${CONFIG_PATH}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(tempPath, `${JSON.stringify(config, null, 2)}
-`, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 384
-    });
-    if (process.platform !== "win32") {
-      await chmod(tempPath, 384);
-    }
-    await rename(tempPath, CONFIG_PATH);
-    if (process.platform !== "win32") {
-      await chmod(CONFIG_PATH, 384);
-    }
-  } finally {
-    await rm(tempPath, { force: true });
-  }
-}
-async function writeAtomicTextFile(filePath, content, mode) {
-  await ensureConfigDirectory();
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(tempPath, content, {
-      encoding: "utf8",
-      flag: "wx",
-      mode
-    });
-    if (process.platform !== "win32") {
-      await chmod(tempPath, mode);
-    }
-    await rename(tempPath, filePath);
-    if (process.platform !== "win32") {
-      await chmod(filePath, mode);
-    }
-  } finally {
-    await rm(tempPath, { force: true });
-  }
-}
-async function readWalletInitState() {
-  try {
-    const content = (await readFile(WALLET_INIT_GENERATION_PATH, "utf8")).trim();
-    if (!content) {
-      return void 0;
-    }
-    try {
-      const parsed = JSON.parse(content);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        const record2 = parsed;
-        const generation = nonEmptyString(record2.generation);
-        const startedAt = finiteNumber(record2.startedAt);
-        if (generation && startedAt !== void 0 && startedAt >= 0) {
-          return { generation, startedAt };
-        }
-      }
-    } catch {
-    }
-    return { generation: content };
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return void 0;
-    }
-    throw configError(`failed to read wallet init generation: ${error.message}`);
-  }
-}
-async function withConfigLock(operation) {
-  await ensureConfigDirectory();
-  const deadline = Date.now() + CONFIG_LOCK_TIMEOUT_MS;
-  for (; ; ) {
-    let handle;
-    try {
-      handle = await open(CONFIG_LOCK_PATH, "wx", 384);
-    } catch (error) {
-      if (error.code !== "EEXIST") {
-        throw configError(`failed to lock config file: ${error.message}`);
-      }
-      await removeStaleConfigLock();
-      if (Date.now() >= deadline) {
-        throw configError("timed out waiting for config file lock");
-      }
-      await sleep(100);
-      continue;
-    }
-    try {
-      await handle.writeFile(`${process.pid}
-${Date.now()}
-`, "utf8");
-      return await operation();
-    } finally {
-      await handle.close();
-      await rm(CONFIG_LOCK_PATH, { force: true });
-    }
-  }
-}
-async function ensureConfigDirectory() {
-  await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
-  if (process.platform !== "win32") {
-    await chmod(CONFIG_DIR, 448);
-  }
-}
-async function removeStaleConfigLock() {
-  try {
-    const lockStat = await stat(CONFIG_LOCK_PATH);
-    if (Date.now() - lockStat.mtimeMs > CONFIG_LOCK_STALE_MS) {
-      await rm(CONFIG_LOCK_PATH, { force: true });
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      throw error;
-    }
-  }
-}
-function sleep(ms) {
-  return new Promise((resolve6) => setTimeout(resolve6, ms));
-}
-function compactDefined(value) {
-  return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== void 0));
-}
-function assignIfDefined(target, key, value) {
-  if (value !== void 0) {
-    target[key] = value;
-  }
-}
-function assignCustomerString(target, key, value) {
-  if (typeof value === "string" && value.length > 0) {
-    target[key] = value;
-  }
-}
-function assignPaymentMethods(target, value) {
-  if (!Array.isArray(value)) {
-    return;
-  }
-  const paymentMethods = value.filter((item) => {
-    if (typeof item !== "object" || item === null) {
-      return false;
-    }
-    const paymentInstrumentId = item.paymentInstrumentId;
-    return typeof paymentInstrumentId === "string" && paymentInstrumentId.length > 0;
-  }).map((item) => ({ ...item }));
-  if (paymentMethods.length > 0) {
-    target.paymentMethods = paymentMethods;
-  }
-}
-function assignRiskRules(target, value) {
-  if (!Array.isArray(value)) {
-    return;
-  }
-  const riskRules = value.filter((item) => {
-    if (typeof item !== "object" || item === null) {
-      return false;
-    }
-    const customerId = item.customerId;
-    return typeof customerId === "string" && customerId.length > 0;
-  }).map((item) => ({ ...item }));
-  if (riskRules.length > 0) {
-    target.riskRules = riskRules;
-  }
-}
-
-// dist/device-identity.js
-import { execFile } from "node:child_process";
-import { createHash as createHash2 } from "node:crypto";
-import { readFile as readFile2 } from "node:fs/promises";
-import os2 from "node:os";
-
-// dist/version.js
-var CLI_VERSION = "0.2.71";
-var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
-
-// dist/device-identity.js
-var DEFAULT_RUNTIME = {
-  platform: process.platform,
-  architecture: process.arch,
-  readTextFile: (filePath) => readFile2(filePath, "utf8"),
-  executeFile: execute,
-  hostname: os2.hostname,
-  osRelease: os2.release
-};
-async function resolveAgentClientBootstrap(installationId, options2 = {}) {
-  const runtime = { ...DEFAULT_RUNTIME, ...options2.runtime };
-  const platform = requireSupportedPlatform(runtime.platform);
-  const nativeDeviceId = await readNativeDeviceId(platform, runtime);
-  const metadata = {
-    installationId,
-    deviceId: deriveDeviceId(platform, nativeDeviceId),
-    clientVersion: CLI_VERSION,
-    platform,
-    architecture: runtime.architecture
-  };
-  const hostname = optionalMetadata(runtime.hostname, 255);
-  const osRelease = optionalMetadata(runtime.osRelease, 128);
-  if (hostname) {
-    metadata.hostname = hostname;
-  }
-  if (osRelease) {
-    metadata.osRelease = osRelease;
-  }
-  return metadata;
-}
-function deriveDeviceId(platform, nativeDeviceId) {
-  const normalized = normalizeNativeDeviceId(nativeDeviceId);
-  return createHash2("sha256").update(`${platform}\0${normalized}`, "utf8").digest("hex");
-}
-async function readNativeDeviceId(platform, runtime) {
-  try {
-    switch (platform) {
-      case "darwin":
-        return parseMacDeviceId(await runtime.executeFile("/usr/sbin/ioreg", ["-rd1", "-c", "IOPlatformExpertDevice"]));
-      case "win32":
-        return parseWindowsDeviceId(await runtime.executeFile("reg.exe", [
-          "query",
-          "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
-          "/v",
-          "MachineGuid",
-          "/reg:64"
-        ]));
-      case "linux":
-        return readLinuxDeviceId(runtime);
-    }
-  } catch (error) {
-    throw configError(`failed to read the ${platform} native device ID: ${error.message}`);
-  }
-}
-async function readLinuxDeviceId(runtime) {
-  const failures = [];
-  for (const filePath of ["/etc/machine-id", "/var/lib/dbus/machine-id"]) {
-    try {
-      const value = (await runtime.readTextFile(filePath)).trim().toLowerCase();
-      if (value && value !== "uninitialized") {
-        return value;
-      }
-      failures.push(`${filePath} is blank or uninitialized`);
-    } catch (error) {
-      failures.push(`${filePath}: ${error.message}`);
-    }
-  }
-  throw new Error(`no usable Linux machine ID (${failures.join("; ")})`);
-}
-function parseMacDeviceId(output) {
-  const value = output.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/i)?.[1];
-  if (!value) {
-    throw new Error("ioreg did not return IOPlatformUUID");
-  }
-  return value;
-}
-function parseWindowsDeviceId(output) {
-  const value = output.match(/MachineGuid\s+REG_SZ\s+([^\r\n]+)/i)?.[1];
-  if (!value) {
-    throw new Error("registry query did not return MachineGuid");
-  }
-  return value;
-}
-function normalizeNativeDeviceId(value) {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    throw configError("native device ID must not be blank");
-  }
-  return normalized;
-}
-function requireSupportedPlatform(platform) {
-  if (platform === "darwin" || platform === "win32" || platform === "linux") {
-    return platform;
-  }
-  throw configError(`Agent Client registration is not supported on ${platform}`);
-}
-function optionalMetadata(read, maxLength) {
-  try {
-    const value = read().trim();
-    return value ? value.slice(0, maxLength) : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function execute(filePath, args) {
-  return new Promise((resolve6, reject) => {
-    execFile(filePath, args, { encoding: "utf8", windowsHide: true }, (error, stdout) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve6(stdout);
-    });
-  });
-}
-
-// dist/http.js
-async function requestJson(options2) {
-  const url = new URL(options2.path, ensureTrailingSlash(options2.baseUrl));
-  for (const [key, value] of Object.entries(options2.query ?? {})) {
-    if (Array.isArray(value)) {
-      value.forEach((item) => url.searchParams.append(key, String(item)));
-    } else if (value !== void 0) {
-      url.searchParams.set(key, String(value));
-    }
-  }
-  const acceptLanguage = options2.acceptLanguage === void 0 ? "en-US" : options2.acceptLanguage;
-  const headers = {
-    Accept: "application/json",
-    ...acceptLanguage ? { "Accept-Language": acceptLanguage } : {},
-    ...options2.headers ?? {}
-  };
-  if (options2.body !== void 0) {
-    headers["Content-Type"] = "application/json";
-  }
-  setHeader(headers, CLI_VERSION_HEADER, CLI_VERSION);
-  if (options2.dryRun) {
-    return {
-      dryRun: true,
-      request: {
-        method: options2.method,
-        url: url.toString(),
-        // Redact credential headers: --dry-run is meant to show request shape, and its output lands
-        // in logs / CI / shell history. The CLI never echoes customerApiKey elsewhere (see cli.ts).
-        headers: redactSensitiveHeaders(headers),
-        body: redactSensitiveBody(options2.body)
-      }
-    };
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options2.timeoutMs);
-  try {
-    const init = {
-      method: options2.method,
-      headers,
-      signal: controller.signal
-    };
-    if (options2.body !== void 0) {
-      init.body = JSON.stringify(options2.body);
-    }
-    const response = await fetch(url, init);
-    const rawText = await response.text();
-    const body = parseBody(rawText);
-    return {
-      status: response.status,
-      url: response.url,
-      body
-    };
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw networkError(`request timed out after ${options2.timeoutMs}ms`);
-    }
-    throw networkError(formatNetworkFailure(error));
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-function setHeader(headers, name, value) {
-  for (const existingName of Object.keys(headers)) {
-    if (existingName.toLowerCase() === name.toLowerCase()) {
-      delete headers[existingName];
-    }
-  }
-  headers[name] = value;
-}
-function formatNetworkFailure(error) {
-  const message = error instanceof Error && error.message.trim() ? error.message.trim() : "network request failed";
-  const cause = isRecord3(error) && isRecord3(error.cause) ? error.cause : void 0;
-  if (!cause) {
-    return message;
-  }
-  const details = [
-    diagnosticField("code", cause.code),
-    diagnosticField("errno", cause.errno),
-    diagnosticField("syscall", cause.syscall),
-    diagnosticField("hostname", cause.hostname),
-    diagnosticField("address", cause.address),
-    diagnosticField("port", cause.port)
-  ].filter((value) => Boolean(value));
-  return details.length > 0 ? `${message} (${details.join(", ")})` : message;
-}
-function diagnosticField(name, value) {
-  if (typeof value !== "string" && typeof value !== "number") {
-    return void 0;
-  }
-  const normalized = String(value).replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 200);
-  return normalized ? `${name}=${normalized}` : void 0;
-}
-function isRecord3(value) {
-  return typeof value === "object" && value !== null;
-}
-function ensureTrailingSlash(value) {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-var SENSITIVE_HEADERS = /* @__PURE__ */ new Set(["x-customer-api-key", "authorization"]);
-var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
-  "access_token",
-  "accessToken",
-  "refresh_token",
-  "refreshToken",
-  "device_code",
-  "deviceCode",
-  "device_id",
-  "deviceId",
-  "installationId",
-  "hostname",
-  "cli_challenge",
-  "cli_verifier",
-  "loopback_redirect_uri",
-  "loopback_state",
-  "return_path",
-  "claim_id",
-  "browser_nonce",
-  "customerApiKey",
-  "customerAPIKey"
-]);
-function redactSensitiveHeaders(headers) {
-  return Object.fromEntries(Object.entries(headers).map(([key, value]) => SENSITIVE_HEADERS.has(key.toLowerCase()) && value ? [key, "***"] : [key, value]));
-}
-function redactSensitiveBody(value) {
-  if (Array.isArray(value)) {
-    return value.map(redactSensitiveBody);
-  }
-  if (typeof value !== "object" || value === null) {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-    key,
-    SENSITIVE_BODY_KEYS.has(key) && item ? "***" : redactSensitiveBody(item)
-  ]));
-}
-function parseBody(rawText) {
-  if (!rawText) {
-    return {};
-  }
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    return rawText;
-  }
-}
-
-// dist/oauth-request.js
-async function requestJsonWithOAuthRetry(runtime, buildRequest, requester = requestJson) {
-  const initialConfig = await runtime.getRuntimeConfig();
-  const initialRequest = buildRequest(initialConfig);
-  const failedAuthorization = bearerAuthorizationSnapshot(initialConfig, initialRequest);
-  const initialResult = await requester(initialRequest);
-  if (!failedAuthorization || !runtime.refreshRuntimeConfig || isDryRun(initialResult) || !isUnauthorizedResponse(initialResult)) {
-    return initialResult;
-  }
-  const refreshedConfig = await runtime.refreshRuntimeConfig(failedAuthorization);
-  const retryConfig = runtime.reloadRuntimeConfig ? await runtime.reloadRuntimeConfig() : refreshedConfig;
-  return requester(buildRequest(retryConfig));
-}
-function bearerAuthorizationSnapshot(runtimeConfig, request) {
-  const authorization = runtimeConfig.authorization;
-  if (!authorization) {
-    return void 0;
-  }
-  const authorizationHeader = Object.entries(request.headers ?? {}).find(([name]) => name.toLowerCase() === "authorization")?.[1];
-  if (authorizationHeader !== `${authorization.tokenType} ${authorization.accessToken}`) {
-    return void 0;
-  }
-  return {
-    accessToken: authorization.accessToken,
-    customerId: authorization.customerId,
-    issuerOrigin: authorization.issuerOrigin,
-    deviceId: authorization.deviceId,
-    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
-  };
-}
-function isUnauthorizedResponse(response) {
-  if (response.status === 401) {
-    return true;
-  }
-  if (typeof response.body !== "object" || response.body === null) {
-    return false;
-  }
-  return Number(response.body.code) === 401;
-}
-function isDryRun(value) {
-  return "dryRun" in value;
-}
-
-// dist/utils.js
-import { spawn } from "node:child_process";
-import path2 from "node:path";
-var LOGIN_REQUIRED_MESSAGE = "Login required; run `clink wallet init` to sign in.";
-var BROWSER_OPEN_FAILURE_MESSAGE = "Could not open a browser automatically. Open the URL above in any browser.";
-var BROWSER_OPEN_COMMAND_TIMEOUT_MS = 5e3;
-var BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS = 250;
-function buildCustomerHeaders(config, requestBaseUrl = config.baseUrl) {
-  if (config.authorization) {
-    assertCredentialRequestOrigin(config, requestBaseUrl);
-    return {
-      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
-    };
-  }
-  if (!config.customerId) {
-    throw configError(LOGIN_REQUIRED_MESSAGE);
-  }
-  if (!config.customerApiKey) {
-    throw configError(LOGIN_REQUIRED_MESSAGE);
-  }
-  assertCredentialRequestOrigin(config, requestBaseUrl);
-  return {
-    "X-Customer-ID": config.customerId,
-    "X-Customer-API-Key": config.customerApiKey,
-    "X-Timestamp": Date.now().toString()
-  };
-}
-function buildCustomerApiKeyHeaders(config, requestBaseUrl = config.baseUrl) {
-  if (config.authorization) {
-    assertCredentialRequestOrigin(config, requestBaseUrl);
-    return {
-      Authorization: `${config.authorization.tokenType} ${config.authorization.accessToken}`
-    };
-  }
-  if (!config.customerApiKey) {
-    throw configError(LOGIN_REQUIRED_MESSAGE);
-  }
-  assertCredentialRequestOrigin(config, requestBaseUrl);
-  return {
-    "X-Customer-API-Key": config.customerApiKey,
-    "X-Timestamp": Date.now().toString()
-  };
-}
-function buildInstructionHeaders(config, requestBaseUrl = config.baseUrl) {
-  return buildCustomerApiKeyHeaders(config, requestBaseUrl);
-}
-function assertCredentialRequestOrigin(config, requestBaseUrl) {
-  const requestOrigin = strictCredentialOrigin(requestBaseUrl);
-  const walletOrigin = strictCredentialOrigin(config.baseUrl);
-  if (requestOrigin !== walletOrigin) {
-    throw configError("authenticated request origin does not match the effective wallet API origin (different API environment)");
-  }
-  if (config.authorization && strictCredentialOrigin(config.authorization.issuerOrigin) !== requestOrigin) {
-    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
-  }
-}
-function strictCredentialOrigin(value) {
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw configError("authenticated requests require an absolute HTTPS API URL");
-  }
-  if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) {
-    throw configError("authenticated requests require an absolute HTTPS API URL");
-  }
-  return parsed.origin;
-}
-function buildAgentPortalUrl(bindingUrl, expectedPortalOrigin, pathname, email) {
-  const bindingOrigin = new URL(bindingUrl).origin;
-  const trustedOrigin = new URL(expectedPortalOrigin).origin;
-  if (!sameHttpOrigin(bindingOrigin, trustedOrigin)) {
-    throw configError("card binding URL belongs to an unexpected Portal environment");
-  }
-  const url = new URL(pathname, trustedOrigin);
-  if (email) {
-    url.searchParams.set("email", email);
-  }
-  return url.toString();
-}
-function resolveAgentBaseUrl(apiBaseUrl) {
-  try {
-    const url = new URL(apiBaseUrl);
-    if (url.origin === API_BASE_URLS.sandbox) {
-      return AGENT_BASE_URLS.sandbox;
-    }
-    if (url.origin === API_BASE_URLS.test) {
-      return AGENT_BASE_URLS.test;
-    }
-    if (url.origin === API_BASE_URLS.production) {
-      return AGENT_BASE_URLS.production;
-    }
-    const segments = url.hostname.split(".");
-    const first = segments[0] ?? "";
-    if (/(^|-)api$/i.test(first)) {
-      segments[0] = first.replace(/(^|-)api$/i, "$1agent");
-      url.hostname = segments.join(".");
-      return url.origin;
-    }
-  } catch {
-  }
-  return AGENT_BASE_URLS.production;
-}
-function resolveDashboardBaseUrl(apiBaseUrl) {
-  try {
-    const url = new URL(apiBaseUrl);
-    if (url.origin === API_BASE_URLS.sandbox) {
-      return DASHBOARD_BASE_URLS.sandbox;
-    }
-    if (url.origin === API_BASE_URLS.test) {
-      return DASHBOARD_BASE_URLS.test;
-    }
-    if (url.origin === API_BASE_URLS.production) {
-      return DASHBOARD_BASE_URLS.production;
-    }
-    const segments = url.hostname.split(".");
-    const first = segments[0] ?? "";
-    if (/(^|-)api$/i.test(first)) {
-      segments[0] = first.replace(/(^|-)api$/i, "$1dashboard");
-      url.hostname = segments.join(".");
-      return url.origin;
-    }
-  } catch {
-  }
-  return DASHBOARD_BASE_URLS.production;
-}
-function buildAgentPasskeyUrl(agentBaseUrl, paymentInstrumentId, instructionId2, email) {
-  const url = new URL(`/passkey-auth/${encodeURIComponent(paymentInstrumentId)}`, agentBaseUrl);
-  url.searchParams.set("type", "visa");
-  if (instructionId2) {
-    url.searchParams.set("instructionId", instructionId2);
-  }
-  if (email) {
-    url.searchParams.set("email", email);
-  }
-  return url.toString();
-}
-function maybeOpenBrowser(open9, url, onFailure = (message) => process.stderr.write(`${message}
-`)) {
-  if (!open9) {
-    return;
-  }
-  let failureReported = false;
-  const reportFailure = () => {
-    if (failureReported) {
-      return;
-    }
-    failureReported = true;
-    onFailure(BROWSER_OPEN_FAILURE_MESSAGE);
-  };
-  try {
-    const command = resolveBrowserOpenCommand(process.platform, url);
-    const child = spawn(command.executable, command.args, {
-      detached: true,
-      stdio: "ignore"
-    });
-    child.once("error", reportFailure);
-    child.once("exit", (code) => {
-      if (code !== 0) {
-        reportFailure();
-      }
-    });
-    child.unref();
-  } catch {
-    reportFailure();
-  }
-}
-function resolveBrowserOpenCommand(platform, url, env = process.env) {
-  return resolveBrowserOpenCommands(platform, url, env)[0];
-}
-async function openBrowserWithResult(open9, url, options2 = {}) {
-  if (!open9) {
-    return {
-      requested: false,
-      status: "not_requested",
-      opener: null,
-      attempts: []
-    };
-  }
-  const commands = resolveBrowserOpenCommands(options2.platform ?? process.platform, url, options2.env ?? process.env);
-  const launch = options2.launch ?? launchBrowserOpenCommand;
-  const attempts = [];
-  for (const command of commands) {
-    attempts.push(command.executable);
-    try {
-      await launch(command);
-      return {
-        requested: true,
-        status: "launched",
-        opener: command.executable,
-        attempts
-      };
-    } catch {
-    }
-  }
-  (options2.onFailure ?? ((message) => process.stderr.write(`${message}
-`)))(BROWSER_OPEN_FAILURE_MESSAGE);
-  return {
-    requested: true,
-    status: "failed",
-    opener: null,
-    attempts
-  };
-}
-function resolveBrowserOpenCommands(platform, url, env = process.env) {
-  if (platform === "darwin") {
-    return [{ executable: "open", args: [url] }];
-  }
-  if (platform === "win32") {
-    const windowsDirectory = env.SystemRoot?.trim() || env.WINDIR?.trim();
-    const rundll32 = windowsDirectory ? path2.win32.join(windowsDirectory, "System32", "rundll32.exe") : "rundll32.exe";
-    const explorer = windowsDirectory ? path2.win32.join(windowsDirectory, "explorer.exe") : "explorer.exe";
-    return [
-      {
-        executable: rundll32,
-        args: ["url.dll,FileProtocolHandler", url]
-      },
-      {
-        executable: explorer,
-        args: [url]
-      }
-    ];
-  }
-  return [
-    { executable: "xdg-open", args: [url] },
-    { executable: "gio", args: ["open", url] }
-  ];
-}
-async function launchBrowserOpenCommand(command, timeoutMs = BROWSER_OPEN_COMMAND_TIMEOUT_MS) {
-  const child = spawn(command.executable, command.args, {
-    stdio: "ignore",
-    windowsHide: true
-  });
-  const outcome = new Promise((resolve6) => {
-    let reported = false;
-    const report = (result2) => {
-      if (reported) {
-        return;
-      }
-      reported = true;
-      resolve6(result2);
-    };
-    child.once("error", (error) => report({ type: "error", error }));
-    child.once("exit", (code, signal) => report({ type: "exit", code, signal }));
-  });
-  const waitForOutcome = async (waitMs) => {
-    let timeout;
-    try {
-      return await Promise.race([
-        outcome,
-        new Promise((resolve6) => {
-          timeout = setTimeout(resolve6, waitMs, null);
-        })
-      ]);
-    } finally {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    }
-  };
-  const result = await waitForOutcome(timeoutMs);
-  if (result?.type === "error") {
-    throw result.error;
-  }
-  if (result?.type === "exit") {
-    if (result.code === 0) {
-      return;
-    }
-    throw new Error(result.signal ? `${command.executable} exited on signal ${result.signal}` : `${command.executable} exited with code ${result.code ?? "unknown"}`);
-  }
-  const timeoutError = new Error(`${command.executable} timed out after ${timeoutMs}ms`);
-  child.kill("SIGTERM");
-  if (await waitForOutcome(BROWSER_OPEN_COMMAND_TERMINATION_GRACE_MS)) {
-    throw timeoutError;
-  }
-  child.kill("SIGKILL");
-  await outcome;
-  throw timeoutError;
-}
-function parseJsonFlag(value, flagName) {
-  try {
-    return JSON.parse(value.replace(/^\uFEFF/u, ""));
-  } catch (error) {
-    throw apiError(`invalid JSON for ${flagName}: ${error.message}`);
-  }
-}
-function unwrapApiData(body) {
-  if (typeof body === "object" && body !== null && "data" in body) {
-    return body.data;
-  }
-  return body;
-}
-function assertApiSuccess(status, body) {
-  if (status === 401 || status === 403) {
-    throw authError(extractMessage(body) ?? `request failed with status ${status}`, status);
-  }
-  if (status < 200 || status >= 300) {
-    throw apiError(extractMessage(body) ?? `request failed with status ${status}`, status);
-  }
-  if (typeof body === "object" && body !== null && "code" in body) {
-    const code = Number(body.code);
-    if (!Number.isNaN(code) && code !== 200) {
-      if (code === 401 || code === 403) {
-        throw authError(extractMessage(body) ?? `request failed with code ${code}`, code);
-      }
-      throw apiError(extractMessage(body) ?? `request failed with code ${code}`, code);
-    }
-  }
-}
-function extractMessage(body) {
-  if (typeof body !== "object" || body === null) {
-    return void 0;
-  }
-  const candidate = body.message ?? body.msg ?? body.error;
-  if (typeof candidate === "string") {
-    return sanitizeApiMessage(candidate);
-  }
-  const messages = body.messages;
-  if (Array.isArray(messages)) {
-    for (const item of messages) {
-      if (typeof item === "string") {
-        return sanitizeApiMessage(item);
-      }
-      if (typeof item !== "object" || item === null) {
-        continue;
-      }
-      const messageContent = item.content ?? item.message ?? item.msg;
-      if (typeof messageContent === "string") {
-        return sanitizeApiMessage(messageContent);
-      }
-    }
-  }
-  return void 0;
-}
-function sanitizeApiMessage(message) {
-  const trimmed = message.trim();
-  if (!hasInternalServiceDiagnostics(trimmed)) {
-    return trimmed;
-  }
-  const publicPrefix = extractPublicErrorPrefix(trimmed);
-  const publicReason = /timeout|timed out/i.test(trimmed) ? "downstream service timeout" : "downstream service invocation failed";
-  return publicPrefix ? `${publicPrefix}: ${publicReason}` : publicReason;
-}
-function hasInternalServiceDiagnostics(message) {
-  return [
-    /org\.apache\.dubbo/i,
-    /DefaultServiceInstance/i,
-    /GenericService/i,
-    /from the registry/i,
-    /\bproviders?\s+\[[^\]]+\]/i,
-    /\bconsumer\s+\d{1,3}(?:\.\d{1,3}){3}/i,
-    /\bprovider\.application\b/i,
-    /\bservice\{name=/i,
-    /Failed to invoke the method/i
-  ].some((pattern) => pattern.test(message));
-}
-function extractPublicErrorPrefix(message) {
-  const markerIndexes = [
-    "Failed to invoke the method",
-    "org.apache.dubbo",
-    "DefaultServiceInstance",
-    "GenericService",
-    "from the registry",
-    "Tried 1 times of the providers"
-  ].map((marker) => message.indexOf(marker)).filter((index) => index > 0);
-  const firstMarkerIndex = markerIndexes.length > 0 ? Math.min(...markerIndexes) : -1;
-  if (firstMarkerIndex <= 0) {
-    return void 0;
-  }
-  const prefix = message.slice(0, firstMarkerIndex).replace(/[\s:：,，.。]+$/u, "").trim();
-  return prefix.length > 0 ? prefix : void 0;
-}
-function pickDefaultPaymentMethod(items) {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw configError("no payment methods available; pass --payment-instrument-id explicitly");
-  }
-  const preferred = items.find((item) => {
-    if (typeof item !== "object" || item === null) {
-      return false;
-    }
-    const record2 = item;
-    return record2.isDefault === true || record2.default === true || record2.defaultPaymentMethod === true;
-  }) ?? items[0];
-  if (typeof preferred !== "object" || preferred === null) {
-    throw configError("unable to resolve default payment method");
-  }
-  const paymentInstrumentId = preferred.paymentInstrumentId;
-  if (typeof paymentInstrumentId !== "string" || paymentInstrumentId.length === 0) {
-    throw configError("unable to resolve paymentInstrumentId from default card");
-  }
-  return preferred;
-}
-function pickDefaultPaymentInstrument(items) {
-  return pickDefaultPaymentMethod(items).paymentInstrumentId;
-}
-
-// dist/events.js
-var EVENT_POLL_PATH = "/agent/event-hub/webhook-events/poll";
-var EVENT_ACK_PATH = "/agent/event-hub/webhook-events/ack";
-var DEFAULT_POLL_INTERVAL_MS = 5e3;
-var DEFAULT_EVENT_WATCH_DURATION_MS = 15 * 6e4;
-var DEFAULT_PAGE_SIZE = 20;
-var DEFAULT_COLLECT_POLL_INTERVAL_MS = 2e3;
-var DEFAULT_EVENT_COLLECT_DURATION_MS = 6e4;
-var KNOWN_EVENT_TYPES = /* @__PURE__ */ new Set([
-  "agent_order.succeeded",
-  "agent_order.failed",
-  "agent_order.created",
-  "agent_refund.succeeded",
-  "agent_refund.failed",
-  "agent_refund.rejected",
-  "agent_refund.approved",
-  "payment_method.added",
-  // Backend `VtsAppService` currently publishes `payment_method.update` (no trailing "d"); accept
-  // both spellings so card-change summaries survive a future rename to `payment_method.updated`.
-  "payment_method.update",
-  "payment_method.updated",
-  "payment_method.delete",
-  "payment_method.deleted",
-  "payment_method.default_change",
-  "risk_rule.updated",
-  // The VIC device event remains provisional until its producer contract is verified.
-  "vic_device.binding_succeeded",
-  // CWallet publishes the purchase-instruction lifecycle events. Matching also accepts the poll
-  // record's top-level resourceId because Event Hub may normalize the event-specific payload.
-  "purchase_instruction.created",
-  "purchase_instruction.activated",
-  "purchase_instruction.updated",
-  "purchase_instruction.cancelled"
-]);
-function eventMatchesInstruction(event, instructionId2) {
-  const expectedInstructionId = resolvedTypedIdentifierAliases([instructionId2]);
-  const candidate = resolvedTypedIdentifierAliases([
-    event.data.instructionId,
-    event.data.instruction_id,
-    event.data.purchaseInstructionId,
-    event.data.purchase_instruction_id,
-    event.resourceId
-  ]);
-  return event.eventType === "purchase_instruction.activated" && expectedInstructionId !== void 0 && candidate === expectedInstructionId;
-}
-var realSleep = (ms) => new Promise((resolve6) => setTimeout(resolve6, ms));
-var stderrLog = (message) => {
-  process.stderr.write(`\u2022 ${message}
-`);
-};
-async function pollWebhookEvents(options2) {
-  return (await pollWebhookEventPage(options2)).records;
-}
-async function pollWebhookEventPage(options2) {
-  const result = await requestJsonWithOAuthRetry({
-    getRuntimeConfig: options2.getRuntimeConfig ?? (() => options2.runtimeConfig),
-    ...options2.getRuntimeConfig ? { reloadRuntimeConfig: options2.getRuntimeConfig } : {},
-    ...options2.refreshRuntimeConfig ? { refreshRuntimeConfig: options2.refreshRuntimeConfig } : {}
-  }, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
-    method: "POST",
-    path: EVENT_POLL_PATH,
-    headers: buildInstructionHeaders(runtimeConfig),
-    body: {
-      pageSize: options2.pageSize ?? DEFAULT_PAGE_SIZE,
-      ...options2.eventTypes && options2.eventTypes.length > 0 ? { eventTypes: options2.eventTypes } : {},
-      ...options2.checkoutId ? { selectors: { checkoutId: options2.checkoutId } } : {},
-      ...options2.nextToken ? { nextToken: options2.nextToken } : {}
-    },
-    timeoutMs: options2.timeoutMs,
-    dryRun: false
-  }));
-  if ("dryRun" in result) {
-    return { records: [] };
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  const dataObject = typeof data === "object" && data !== null ? data : void 0;
-  const records = dataObject ? dataObject.records : void 0;
-  if (!Array.isArray(records)) {
-    throw apiError("invalid Event Hub poll response: expected data.records to be an array", 502);
-  }
-  if (!records.every(isWebhookEventRecord)) {
-    throw apiError("invalid Event Hub poll response: expected every record to contain non-empty eventId and eventType", 502);
-  }
-  const nextTokenValue = dataObject?.nextToken;
-  if (nextTokenValue === void 0 || nextTokenValue === null) {
-    return { records };
-  }
-  if (typeof nextTokenValue !== "string" || nextTokenValue.trim().length === 0) {
-    throw apiError("invalid Event Hub poll response: expected data.nextToken to be a non-empty string", 502);
-  }
-  return { records, nextToken: nextTokenValue.trim() };
-}
-async function ackWebhookEvents(options2, eventIds) {
-  const requestedEventIds = [...new Set(eventIds)];
-  if (requestedEventIds.length === 0) {
-    return [];
-  }
-  const refreshRuntimeConfig = options2.refreshRuntimeConfig;
-  const result = await requestJsonWithOAuthRetry({
-    getRuntimeConfig: async () => {
-      const runtimeConfig = options2.getRuntimeConfig ? await options2.getRuntimeConfig() : options2.runtimeConfig;
-      assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
-      return runtimeConfig;
-    },
-    ...options2.getRuntimeConfig ? {
-      reloadRuntimeConfig: async () => {
-        const runtimeConfig = await options2.getRuntimeConfig();
-        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
-        return runtimeConfig;
-      }
-    } : {},
-    ...refreshRuntimeConfig ? {
-      refreshRuntimeConfig: async (failedAuthorization) => {
-        const runtimeConfig = await refreshRuntimeConfig(failedAuthorization);
-        assertRuntimeIdentity(runtimeConfig, options2.expectedIdentity);
-        return runtimeConfig;
-      }
-    } : {}
-  }, (runtimeConfig) => ({
-    baseUrl: runtimeConfig.baseUrl,
-    method: "POST",
-    path: EVENT_ACK_PATH,
-    headers: buildInstructionHeaders(runtimeConfig),
-    body: { eventIds: requestedEventIds },
-    timeoutMs: options2.timeoutMs,
-    dryRun: false
-  }));
-  if ("dryRun" in result) {
-    return [];
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  if (typeof data !== "object" || data === null) {
-    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
-  }
-  const deletedCount = data.deletedCount;
-  const notFoundEventIds = data.notFoundEventIds;
-  if (!Number.isInteger(deletedCount) || deletedCount < 0 || !Array.isArray(notFoundEventIds) || !notFoundEventIds.every((eventId) => typeof eventId === "string")) {
-    throw apiError("invalid Event Hub ack response: expected data.deletedCount and data.notFoundEventIds", 502);
-  }
-  const requestedEventIdSet = new Set(requestedEventIds);
-  const notFoundEventIdSet = new Set(notFoundEventIds);
-  if (notFoundEventIdSet.size !== notFoundEventIds.length || notFoundEventIds.some((eventId) => !requestedEventIdSet.has(eventId))) {
-    throw apiError("invalid Event Hub ack response: unexpected notFoundEventIds", 502);
-  }
-  const ackedEventIds = requestedEventIds.filter((eventId) => !notFoundEventIdSet.has(eventId));
-  if (ackedEventIds.length !== deletedCount) {
-    throw apiError("invalid Event Hub ack response: deletedCount does not match event IDs", 502);
-  }
-  return ackedEventIds;
-}
-async function watchEvents(options2) {
-  assertValidWatchTarget(options2);
-  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_WATCH_DURATION_MS;
-  const sleep3 = options2.sleep ?? realSleep;
-  const now = options2.now ?? Date.now;
-  const log = options2.log ?? stderrLog;
-  const startedAtMs = now();
-  const staleEventCutoffMs = options2.staleEventCutoffMs ?? startedAtMs;
-  const ackUnmatchedEvents = options2.ackUnmatchedEvents ?? true;
-  const runtimeState = { value: options2.runtimeConfig };
-  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
-  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
-  const logHandoff = () => {
-    log(`Open this link in your browser to complete the ${options2.label}:`);
-    log(`  ${options2.url}`);
-    log(`Waiting for events (polling every ${Math.round(pollIntervalMs / 1e3)}s, up to ${Math.round(maxDurationMs / 6e4)} min). This will continue automatically once an event arrives.`);
-  };
-  if (!options2.onReady) {
-    logHandoff();
-  }
-  let ready = false;
-  let lastRecoverablePollError;
-  let deadline = startedAtMs + maxDurationMs;
-  const markReady = () => {
-    if (ready) {
-      return;
-    }
-    ready = true;
-    if (options2.onReady) {
-      deadline = now() + maxDurationMs;
-    }
-    options2.onReady?.();
-    if (options2.onReady) {
-      logHandoff();
-    }
-  };
-  for (; ; ) {
-    let records;
-    let polledIdentity = { type: "none" };
-    try {
-      records = await pollWebhookEvents({
-        runtimeConfig: runtimeState.value,
-        ...getRuntimeConfig ? { getRuntimeConfig } : {},
-        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-        timeoutMs: options2.timeoutMs,
-        ...options2.pageSize !== void 0 ? { pageSize: options2.pageSize } : {},
-        ...options2.eventType && !ackUnmatchedEvents ? { eventTypes: [options2.eventType] } : {}
-      });
-      polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-      if (getRuntimeConfig) {
-        const currentRuntimeConfig = await getRuntimeConfig();
-        assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
-      }
-      assertPolledEventCustomers(records, polledIdentity);
-      markReady();
-    } catch (error) {
-      if (!isRecoverableWatchPollError(error)) {
-        throw error;
-      }
-      lastRecoverablePollError = error;
-      if (now() + pollIntervalMs >= deadline) {
-        break;
-      }
-      await sleep3(pollIntervalMs);
-      continue;
-    }
-    if (records.length > 0) {
-      const staleRecords = records.filter((record2) => isStaleForWatch(record2, staleEventCutoffMs));
-      const currentRecords = records.filter((record2) => !isStaleForWatch(record2, staleEventCutoffMs));
-      const watchTargetEnabled = hasWatchTarget(options2);
-      const staleEvents = staleRecords.map(toProcessedEvent);
-      const staleAckableEvents = watchTargetEnabled && !ackUnmatchedEvents ? staleEvents.filter((event) => eventMatchesWatchTarget(event, options2)) : staleEvents;
-      const staleEventIds = staleAckableEvents.map((event) => event.eventId).filter((id) => id.length > 0);
-      if (staleEventIds.length > 0) {
-        const ackedStaleEventIds = await ackWebhookEvents({
-          runtimeConfig: runtimeState.value,
-          ...getRuntimeConfig ? { getRuntimeConfig } : {},
-          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-          expectedIdentity: polledIdentity,
-          timeoutMs: options2.timeoutMs
-        }, staleEventIds);
-        if (ackedStaleEventIds.length > 0) {
-          log(`Ignored ${ackedStaleEventIds.length} stale event(s) from before the watch started.`);
-        }
-      }
-      if (currentRecords.length === 0) {
-        if (now() + pollIntervalMs >= deadline) {
-          break;
-        }
-        await sleep3(pollIntervalMs);
-        continue;
-      }
-      const events = await processEvents(currentRecords, polledIdentity, options2.resolveStoredRuntimeConfig);
-      log(`Received ${events.length} event(s):`);
-      for (const event of events) {
-        log(`  ${event.summary}`);
-      }
-      const matchedEvents = watchTargetEnabled ? events.filter((event) => eventMatchesWatchTarget(event, options2)) : events;
-      if (watchTargetEnabled && matchedEvents.length === 0) {
-        const ignoredEventIds = events.map((event) => event.eventId).filter((id) => id.length > 0);
-        if (ackUnmatchedEvents) {
-          const ackedIgnoredEventIds = await ackWebhookEvents({
-            runtimeConfig: runtimeState.value,
-            ...getRuntimeConfig ? { getRuntimeConfig } : {},
-            ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-            expectedIdentity: polledIdentity,
-            timeoutMs: options2.timeoutMs
-          }, ignoredEventIds);
-          log(`No event matched the watched resource yet; acknowledged ${ackedIgnoredEventIds.length} unrelated event(s) and continuing to poll.`);
-        } else {
-          log(`No event matched the watched resource yet; preserved ${ignoredEventIds.length} unrelated event(s) and continuing to poll.`);
-        }
-        if (now() + pollIntervalMs >= deadline) {
-          break;
-        }
-        await sleep3(pollIntervalMs);
-        continue;
-      }
-      const matchedEventIds = matchedEvents.map((event) => event.eventId).filter((id) => id.length > 0);
-      const ackedEventIds = await ackWebhookEvents({
-        runtimeConfig: runtimeState.value,
-        ...getRuntimeConfig ? { getRuntimeConfig } : {},
-        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-        expectedIdentity: polledIdentity,
-        timeoutMs: options2.timeoutMs
-      }, matchedEventIds);
-      const ackedEventIdSet = new Set(ackedEventIds);
-      const acknowledgedEvents = matchedEvents.filter((event) => ackedEventIdSet.has(event.eventId));
-      if (acknowledgedEvents.length === 0) {
-        log("The matching event was already acknowledged by another watcher; continuing to poll.");
-        if (now() + pollIntervalMs >= deadline) {
-          break;
-        }
-        await sleep3(pollIntervalMs);
-        continue;
-      }
-      log(`Acknowledged ${ackedEventIds.length} event(s).`);
-      return {
-        watched: true,
-        url: options2.url,
-        timedOut: false,
-        events: acknowledgedEvents,
-        ackedEventIds
-      };
-    }
-    if (now() + pollIntervalMs >= deadline) {
-      break;
-    }
-    await sleep3(pollIntervalMs);
-  }
-  if (options2.onReady && !ready && lastRecoverablePollError !== void 0) {
-    throw lastRecoverablePollError;
-  }
-  log(`Timed out after ${Math.round(maxDurationMs / 6e4)} min without receiving any events.`);
-  return { watched: true, url: options2.url, timedOut: true, events: [], ackedEventIds: [] };
-}
-function isStaleForWatch(record2, staleEventCutoffMs) {
-  const rawEventTime = record2.eventTime;
-  const eventTimeMs = parseEventTimeMs(rawEventTime);
-  if (eventTimeMs === void 0) {
-    return false;
-  }
-  const precisionMs = eventTimePrecisionMs(rawEventTime);
-  const comparableCutoffMs = Math.floor(staleEventCutoffMs / precisionMs) * precisionMs;
-  return eventTimeMs < comparableCutoffMs;
-}
-function eventTimePrecisionMs(value) {
-  if (typeof value === "number") {
-    return Number.isInteger(value) && value < 1e12 ? 1e3 : 1;
-  }
-  if (typeof value !== "string") {
-    return 1;
-  }
-  const trimmed = value.trim();
-  if (/^\d+$/.test(trimmed)) {
-    return Number(trimmed) < 1e12 ? 1e3 : 1;
-  }
-  const timestamp = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.(\d{1,3}))?(?:Z|[+-]\d{2}:?\d{2})?$/.exec(trimmed);
-  if (!timestamp) {
-    return 1;
-  }
-  const fractionalDigits = timestamp[1]?.length ?? 0;
-  return fractionalDigits === 0 ? 1e3 : 10 ** (3 - fractionalDigits);
-}
-function hasWatchTarget(options2) {
-  return Boolean(options2.eventType || Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0));
-}
-function eventMatchesWatchTarget(event, options2) {
-  if (options2.eventType && event.eventType !== options2.eventType) {
-    return false;
-  }
-  const expectedResource = options2.expectedResource ?? {};
-  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
-  if (expectedEntries.length === 0) {
-    return true;
-  }
-  const instructionExpectedAliases = [
-    expectedResource.instructionId,
-    expectedResource.instruction_id,
-    expectedResource.purchaseInstructionId,
-    expectedResource.purchase_instruction_id
-  ];
-  if (instructionExpectedAliases.some((value) => value !== void 0)) {
-    const expectedInstructionId = resolvedTypedIdentifierAliases(instructionExpectedAliases);
-    const eventInstructionId = resolvedTypedIdentifierAliases([
-      event.resourceId,
-      event.data.instructionId,
-      event.data.instruction_id,
-      event.data.purchaseInstructionId,
-      event.data.purchase_instruction_id
-    ]);
-    if (expectedInstructionId === void 0 || eventInstructionId !== expectedInstructionId) {
-      return false;
-    }
-    return expectedEntries.filter(([key]) => !isInstructionIdentifierKey(key)).every(([key, value]) => eventFieldValues(event, key).includes(value));
-  }
-  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
-}
-function eventFieldValues(event, key) {
-  const snakeKey = key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
-  const identifier = resolvedTypedIdentifierAliases([
-    event.data[key],
-    event.data[snakeKey],
-    key.toLowerCase().endsWith("id") ? event.resourceId : void 0
-  ]);
-  return identifier === void 0 ? [] : [identifier];
-}
-function normalizedValue(value) {
-  if (typeof value !== "string") {
-    return void 0;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : void 0;
-}
-function resolvedTypedIdentifierAliases(values) {
-  let resolved;
-  for (const value of values) {
-    if (value === void 0) {
-      continue;
-    }
-    if (typeof value !== "string") {
-      return void 0;
-    }
-    const candidate = value.trim();
-    if (!candidate) {
-      return void 0;
-    }
-    if (resolved !== void 0 && resolved !== candidate) {
-      return void 0;
-    }
-    resolved = candidate;
-  }
-  return resolved;
-}
-function isInstructionIdentifierKey(key) {
-  return key === "instructionId" || key === "instruction_id" || key === "purchaseInstructionId" || key === "purchase_instruction_id";
-}
-function assertValidWatchTarget(options2) {
-  if (options2.eventType !== void 0 && normalizedValue(options2.eventType) === void 0) {
-    throw validationError("eventType must be a non-blank string when provided");
-  }
-  assertValidExpectedResource(options2.expectedResource);
-}
-function assertValidCollectTarget(options2) {
-  if (options2.checkoutId !== void 0 && normalizedValue(options2.checkoutId) === void 0) {
-    throw validationError("checkoutId must be a non-blank string when provided");
-  }
-  if (options2.nextToken !== void 0 && normalizedValue(options2.nextToken) === void 0) {
-    throw validationError("nextToken must be a non-blank string when provided");
-  }
-  if (options2.nextToken !== void 0 && options2.checkoutId === void 0) {
-    throw validationError("nextToken requires checkoutId");
-  }
-  assertValidExpectedResource(options2.expectedResource);
-}
-function assertValidExpectedResource(expectedResource) {
-  if (expectedResource === void 0) {
-    return;
-  }
-  const entries = Object.entries(expectedResource);
-  if (entries.length === 0 || entries.some(([, value]) => normalizedValue(value) === void 0)) {
-    throw validationError("expectedResource must contain only non-blank string identifiers when provided");
-  }
-  const instructionAliases = entries.filter(([key]) => isInstructionIdentifierKey(key)).map(([, value]) => value);
-  if (instructionAliases.length > 0 && resolvedTypedIdentifierAliases(instructionAliases) === void 0) {
-    throw validationError("expectedResource contains conflicting instruction identifiers");
-  }
-}
-function parseEventTimeMs(value) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return normalizeEpochMs(value);
-  }
-  if (typeof value !== "string") {
-    return void 0;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return void 0;
-  }
-  if (/^\d+$/.test(trimmed)) {
-    return normalizeEpochMs(Number(trimmed));
-  }
-  const utcDateTime = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(trimmed);
-  if (utcDateTime) {
-    const [, year, month, day, hour, minute, second, millisecond = "0"] = utcDateTime;
-    return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), Number(millisecond.padEnd(3, "0")));
-  }
-  const parsed = Date.parse(trimmed);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function normalizeEpochMs(value) {
-  return value < 1e12 ? value * 1e3 : value;
-}
-function isRecoverableWatchPollError(error) {
-  return error instanceof CliError && (error.type === "network_error" || error.type === "api_error" && error.code === 429);
-}
-function trackRuntimeConfigLoader(runtimeState, getRuntimeConfig) {
-  if (!getRuntimeConfig) {
-    return void 0;
-  }
-  return async () => {
-    const loaded = await getRuntimeConfig();
-    runtimeState.value = loaded;
-    return loaded;
-  };
-}
-function trackRuntimeConfigRefresher(runtimeState, refreshRuntimeConfig) {
-  if (!refreshRuntimeConfig) {
-    return void 0;
-  }
-  return async (failedAuthorization) => {
-    const refreshed = await refreshRuntimeConfig(failedAuthorization);
-    runtimeState.value = refreshed;
-    return refreshed;
-  };
-}
-async function collectWebhookEvents(options2) {
-  assertValidCollectTarget(options2);
-  const pollIntervalMs = options2.pollIntervalMs ?? DEFAULT_COLLECT_POLL_INTERVAL_MS;
-  const maxDurationMs = options2.maxDurationMs ?? DEFAULT_EVENT_COLLECT_DURATION_MS;
-  const ack = options2.ack ?? true;
-  const sleep3 = options2.sleep ?? realSleep;
-  const now = options2.now ?? Date.now;
-  const requestedTypes = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
-  const hasTypeFilter = requestedTypes.size > 0;
-  const matchesRequestedType = (event) => requestedTypes.has(event.eventType);
-  const checkoutId = normalizedValue(options2.checkoutId);
-  const hasCheckoutFilter = checkoutId !== void 0;
-  const effectivePageSize = options2.pageSize ?? DEFAULT_PAGE_SIZE;
-  const checkoutEventType = [...requestedTypes][0];
-  if (hasCheckoutFilter && (requestedTypes.size !== 1 || checkoutEventType !== "agent_order.succeeded" && checkoutEventType !== "agent_order.failed")) {
-    throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
-  }
-  const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
-  const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
-  const matchesTarget = (event, sourceRecord) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || recordMatchesCheckoutId(sourceRecord, checkoutId) && recordHasConsistentPaymentOrderIdAliases(sourceRecord)) && matchesExpectedResource(event);
-  const runtimeState = { value: options2.runtimeConfig };
-  const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
-  const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
-  const collected = [];
-  const ackedEventIds = [];
-  let watchReady = false;
-  let lastRecoverablePollError;
-  let checkoutNextToken = normalizedValue(options2.nextToken);
-  const targetReached = () => collected.length > 0;
-  const processPolledRecords = async (records) => {
-    if (records.length === 0) {
-      return false;
-    }
-    const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-    const events = await processEvents(records, polledIdentity, options2.resolveStoredRuntimeConfig);
-    const matchingEvents = events.flatMap((event, index) => {
-      if (!matchesTarget(event, records[index])) {
-        return [];
-      }
-      return [hasCheckoutFilter ? { ...event, data: { ...event.data, checkoutId } } : event];
-    });
-    const ackable = hasCheckoutFilter ? ack ? matchingEvents : [] : hasResourceFilter ? events.filter((event) => hasTypeFilter && !matchesRequestedType(event) ? true : ack && matchesTarget(event)) : hasTypeFilter ? events.filter((event) => ack || !matchesRequestedType(event)) : ack ? events : [];
-    const ids = ackable.map((event) => event.eventId).filter((id) => id.length > 0);
-    const confirmedAckedEventIds = await ackWebhookEvents({
-      runtimeConfig: runtimeState.value,
-      ...getRuntimeConfig ? { getRuntimeConfig } : {},
-      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-      expectedIdentity: polledIdentity,
-      timeoutMs: options2.timeoutMs
-    }, ids);
-    ackedEventIds.push(...confirmedAckedEventIds);
-    if (ack) {
-      const confirmedAckedEventIdSet = new Set(confirmedAckedEventIds);
-      collected.push(...matchingEvents.filter((event) => confirmedAckedEventIdSet.has(event.eventId)));
-    } else {
-      collected.push(...matchingEvents);
-    }
-    return targetReached();
-  };
-  let deadline = now() + maxDurationMs;
-  for (; ; ) {
-    try {
-      const page = hasCheckoutFilter ? await pollWebhookEventPage({
-        runtimeConfig: runtimeState.value,
-        ...getRuntimeConfig ? { getRuntimeConfig } : {},
-        ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-        timeoutMs: options2.timeoutMs,
-        pageSize: effectivePageSize,
-        eventTypes: [...requestedTypes],
-        checkoutId,
-        ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
-      }) : {
-        records: await pollWebhookEvents({
-          runtimeConfig: runtimeState.value,
-          ...getRuntimeConfig ? { getRuntimeConfig } : {},
-          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-          timeoutMs: options2.timeoutMs,
-          pageSize: effectivePageSize,
-          ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
-        })
-      };
-      const records = page.records;
-      if (!watchReady) {
-        if (options2.onReady) {
-          const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
-          if (getRuntimeConfig) {
-            const currentRuntimeConfig = await getRuntimeConfig();
-            assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
-          }
-          assertPolledEventCustomers(records, polledIdentity);
-          deadline = now() + maxDurationMs;
-        }
-        watchReady = true;
-        options2.onReady?.();
-      }
-      if (await processPolledRecords(records)) {
-        return { ready: true, timedOut: false, events: collected, ackedEventIds };
-      }
-      if (hasCheckoutFilter) {
-        if (page.nextToken !== void 0) {
-          if (records.length > 0 && page.nextToken === checkoutNextToken) {
-            throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
-          }
-          checkoutNextToken = page.nextToken;
-        } else if (records.length >= effectivePageSize) {
-          throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
-        }
-      }
-    } catch (error) {
-      if (options2.onReady && !watchReady && isRecoverableWatchPollError(error)) {
-        lastRecoverablePollError = error;
-        if (now() + pollIntervalMs >= deadline) {
-          break;
-        }
-        await sleep3(pollIntervalMs);
-        continue;
-      }
-      throw error;
-    }
-    if (now() + pollIntervalMs >= deadline) {
-      break;
-    }
-    await sleep3(pollIntervalMs);
-  }
-  if (options2.onReady && !watchReady && lastRecoverablePollError !== void 0) {
-    throw lastRecoverablePollError;
-  }
-  return {
-    ready: false,
-    timedOut: true,
-    events: collected,
-    ackedEventIds,
-    ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
-  };
-}
-function recordMatchesCheckoutId(record2, expectedCheckoutId) {
-  const payload = strictPayloadObject(record2?.payload);
-  if (!payload) {
-    return false;
-  }
-  const dataValue = strictObjectValue(payload, "data");
-  const data = isRecord4(dataValue) ? dataValue : void 0;
-  return resolvedTypedIdentifierAliases([
-    ...dataValue === null ? [null] : [],
-    data?.checkoutId,
-    data?.checkout_id,
-    strictNestedValue(payload, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"]),
-    ...data ? [
-      strictNestedValue(data, ["requestParams", "extra", "agentInstructionInfo", "ucpCheckoutId"])
-    ] : []
-  ]) === expectedCheckoutId;
-}
-function recordHasConsistentPaymentOrderIdAliases(record2) {
-  const payload = strictPayloadObject(record2?.payload);
-  if (!payload) {
-    return false;
-  }
-  const dataValue = strictObjectValue(payload, "data");
-  const data = isRecord4(dataValue) ? dataValue : void 0;
-  const paymentData = data ?? (dataValue === void 0 ? payload : void 0);
-  const aliases = [
-    record2?.resourceId,
-    ...dataValue === null ? [null] : [],
-    paymentData?.resourceId,
-    paymentData?.resource_id,
-    paymentData?.orderId,
-    paymentData?.order_id,
-    paymentData?.paymentOrderId,
-    paymentData?.payment_order_id
-  ];
-  return aliases.every((value) => value === void 0) || resolvedTypedIdentifierAliases(aliases) !== void 0;
-}
-function strictObjectValue(record2, key) {
-  if (!(key in record2)) {
-    return void 0;
-  }
-  const value = record2[key];
-  return isRecord4(value) ? value : null;
-}
-function isRecord4(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function strictNestedValue(record2, path4) {
-  let current = record2;
-  for (const key of path4) {
-    if (!isRecord4(current)) {
-      return null;
-    }
-    if (!(key in current)) {
-      return void 0;
-    }
-    current = current[key];
-  }
-  return current;
-}
-function strictPayloadObject(payload) {
-  if (!payload) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(payload);
-    return isRecord4(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-function eventMatchesExpectedResource(event, expectedResource) {
-  const expectedEntries = Object.entries(expectedResource).map(([key, value]) => [key, normalizedValue(value)]).filter((entry) => entry[1] !== void 0);
-  if (expectedEntries.length === 0) {
-    return true;
-  }
-  return expectedEntries.every(([key, value]) => eventFieldValues(event, key).includes(value));
-}
-async function processEvents(records, expectedIdentity, resolveStoredRuntimeConfig = storedRuntimeConfig) {
-  const events = records.map(toProcessedEvent);
-  await updateStoredConfig((current) => {
-    if (expectedIdentity) {
-      assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig);
-    }
-    for (const event of events) {
-      applyEventToConfig(current, event);
-    }
-    return current;
-  });
-  return events;
-}
-function assertEventCacheIdentity(current, events, expectedIdentity, resolveStoredRuntimeConfig) {
-  const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
-  if (expectedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, expectedIdentity) || !authorizationIdentityCanContinue(expectedIdentity, currentIdentity)) {
-    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
-  }
-  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
-  const mismatchedEvent = events.find((event) => eventCustomerIds(event).some((customerId) => expectedCustomerId !== void 0 && customerId !== expectedCustomerId) || eventCustomerIds(event).length > 1);
-  if (mismatchedEvent) {
-    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
-  }
-}
-function assertRuntimeIdentity(runtimeConfig, expectedIdentity) {
-  if (!expectedIdentity) {
-    return;
-  }
-  if (!authorizationIdentityCanContinue(expectedIdentity, runtimeAuthorizationIdentity(runtimeConfig))) {
-    throw authError("Wallet login changed while webhook events were in progress; retry the command.");
-  }
-}
-function assertPolledEventCustomers(records, expectedIdentity) {
-  const expectedCustomerId = authorizationIdentityCustomerId(expectedIdentity);
-  if (!expectedCustomerId) {
-    return;
-  }
-  const mismatchedEvent = records.map(toProcessedEvent).find((event) => {
-    const customerIds = eventCustomerIds(event);
-    return customerIds.length > 1 || customerIds.some((customerId) => customerId !== expectedCustomerId);
-  });
-  if (mismatchedEvent) {
-    throw authError("Webhook event customer does not match the authenticated wallet; retry the command.");
-  }
-}
-function eventCustomerIds(event) {
-  const customerIds = [event.customerId, asString(event.data.customerId)];
-  if (event.eventType === "risk_rule.updated") {
-    customerIds.push(event.resourceId);
-  }
-  return [...new Set(customerIds.filter((value) => Boolean(value)))];
-}
-function toProcessedEvent(record2) {
-  const data = parsePayloadData(record2.payload);
-  return {
-    eventId: record2.eventId,
-    eventType: record2.eventType,
-    ...record2.customerId ? { customerId: record2.customerId } : {},
-    ...record2.resourceId ? { resourceId: record2.resourceId } : {},
-    ...record2.businessStatus ? { businessStatus: record2.businessStatus } : {},
-    ...record2.eventTime ? { eventTime: record2.eventTime } : {},
-    known: KNOWN_EVENT_TYPES.has(record2.eventType),
-    summary: summarizeEvent(record2, data),
-    data
-  };
-}
-function applyEventToConfig(config, event) {
-  if (event.eventType.startsWith("payment_method.")) {
-    applyPaymentMethodEvent(config.paymentMethods ?? (config.paymentMethods = []), event);
-  }
-  if (event.eventType === "risk_rule.updated") {
-    applyRiskRuleEvent(config.riskRules ?? (config.riskRules = []), event);
-  }
-}
-function applyPaymentMethodEvent(paymentMethods, event) {
-  const paymentInstrumentId = asString(event.data.paymentInstrumentId) ?? event.resourceId;
-  if (event.eventType === "payment_method.default_change") {
-    const defaultId = asString(event.data.defaultPaymentMethodId) ?? paymentInstrumentId;
-    for (const method of paymentMethods) {
-      method.isDefault = method.paymentInstrumentId === defaultId;
-    }
-    return;
-  }
-  if (event.eventType === "payment_method.delete" || event.eventType === "payment_method.deleted") {
-    if (!paymentInstrumentId) {
-      return;
-    }
-    const index = paymentMethods.findIndex((method) => method.paymentInstrumentId === paymentInstrumentId);
-    if (index >= 0) {
-      paymentMethods.splice(index, 1);
-    }
-    return;
-  }
-  if (!paymentInstrumentId) {
-    return;
-  }
-  const existing = paymentMethods.find((method) => method.paymentInstrumentId === paymentInstrumentId);
-  if (existing) {
-    Object.assign(existing, event.data, { paymentInstrumentId });
-  } else {
-    paymentMethods.push({ ...event.data, paymentInstrumentId });
-  }
-}
-function applyRiskRuleEvent(riskRules, event) {
-  const customerId = asString(event.data.customerId) ?? event.resourceId ?? event.customerId;
-  if (!customerId) {
-    return;
-  }
-  const nextRiskRule = {
-    ...event.data,
-    customerId
-  };
-  const existing = riskRules.find((riskRule) => riskRule.customerId === customerId);
-  if (existing) {
-    Object.assign(existing, nextRiskRule);
-  } else {
-    riskRules.push(nextRiskRule);
-  }
-}
-function summarizeEvent(record2, data) {
-  switch (record2.eventType) {
-    case "agent_order.succeeded":
-      return `order ${str(data, "orderId", record2.resourceId)} succeeded${amountSuffix(data)}`;
-    case "agent_order.failed":
-      return `order ${str(data, "orderId", record2.resourceId)} failed${failureSuffix(data)}`;
-    case "agent_order.created":
-      return `order ${str(data, "orderId", record2.resourceId)} created${amountSuffix(data)}`;
-    case "agent_refund.succeeded":
-      return `refund ${str(data, "refundId", record2.resourceId)} succeeded for order ${str(data, "orderId")}`;
-    case "agent_refund.failed":
-      return `refund ${str(data, "refundId", record2.resourceId)} failed${failureSuffix(data)}`;
-    case "agent_refund.rejected":
-      return `refund ${str(data, "refundId", record2.resourceId)} rejected${reasonSuffix(data)}`;
-    case "agent_refund.approved":
-      return `refund ${str(data, "refundId", record2.resourceId)} approved`;
-    case "payment_method.added":
-      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} added${cardSuffix(data)}`;
-    case "payment_method.update":
-    case "payment_method.updated":
-      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} updated${cardSuffix(data)}`;
-    case "payment_method.delete":
-    case "payment_method.deleted":
-      return `payment method ${str(data, "paymentInstrumentId", record2.resourceId)} deleted${cardSuffix(data)}`;
-    case "payment_method.default_change":
-      return `default payment method changed to ${str(data, "defaultPaymentMethodId", str(data, "paymentInstrumentId", record2.resourceId))}`;
-    case "risk_rule.updated":
-      return `risk rules updated for ${str(data, "customerId", record2.customerId)}`;
-    case "vic_device.binding_succeeded":
-      return `VIC device bound for payment method ${str(data, "paymentInstrumentId", record2.resourceId)}`;
-    case "purchase_instruction.created":
-      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} created${titleSuffix(data)}`;
-    case "purchase_instruction.activated":
-      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} activated (Passkey/FIDO authorized)`;
-    case "purchase_instruction.updated":
-      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} updated${statusSuffix(data)}`;
-    case "purchase_instruction.cancelled":
-      return `purchase instruction ${str(data, "instructionId", record2.resourceId)} cancelled${reasonSuffix(data)}`;
-    default:
-      return `received ${record2.eventType}${record2.resourceId ? ` (${record2.resourceId})` : ""}`;
-  }
-}
-function amountSuffix(data) {
-  const amount = data.amount;
-  const currency = asString(data.currency);
-  if (amount === void 0 || amount === null) {
-    return "";
-  }
-  return ` (${String(amount)}${currency ? ` ${currency}` : ""})`;
-}
-function failureSuffix(data) {
-  const code = asString(data.failureCode);
-  const message = asString(data.failureMessage);
-  if (!code && !message) {
-    return "";
-  }
-  return `: ${[code, message].filter(Boolean).join(" ")}`;
-}
-function reasonSuffix(data) {
-  const reason = asString(data.reason);
-  return reason ? `: ${reason}` : "";
-}
-function statusSuffix(data) {
-  const status = asString(data.status);
-  return status ? ` (status: ${status})` : "";
-}
-function titleSuffix(data) {
-  const title = asString(data.title);
-  return title ? `: ${title}` : "";
-}
-function cardSuffix(data) {
-  const brand = asString(data.cardBrand) ?? asString(data.cardScheme);
-  const last4 = asString(data.cardLast4) ?? asString(data.cardLastFour);
-  if (!brand && !last4) {
-    return "";
-  }
-  return ` (${[brand, last4 ? `****${last4}` : ""].filter(Boolean).join(" ")})`;
-}
-function parsePayloadData(payload) {
-  if (!payload) {
-    return {};
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return {};
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return {};
-  }
-  const record2 = parsed;
-  if (typeof record2.data === "object" && record2.data !== null) {
-    return record2.data;
-  }
-  return record2;
-}
-function isWebhookEventRecord(value) {
-  return typeof value === "object" && value !== null && typeof value.eventId === "string" && value.eventId.trim().length > 0 && typeof value.eventType === "string" && value.eventType.trim().length > 0;
-}
-function str(data, key, fallback) {
-  return asString(data[key]) ?? fallback ?? "unknown";
-}
-function asString(value) {
-  return typeof value === "string" && value.length > 0 ? value : void 0;
-}
-
-// dist/help.js
-var HELP_OPTION = `  --help, -h                    Show this help`;
-var OUTPUT_OPTIONS = `  --format <json|pretty>        Output format, defaults to json
-${HELP_OPTION}`;
-var TOOL_NETWORK_OPTIONS = `  --timeout <ms>                Request timeout in milliseconds
-${OUTPUT_OPTIONS}`;
-var CUSTOMER_AUTH_OPTIONS = `  --customer-id <id>            Override customer ID
-  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
-var CUSTOMER_API_KEY_OPTIONS = `  --customer-api-key <key>      Legacy API key override for never-OAuth wallets only`;
-var CUSTOMER_REQUEST_OPTIONS = `${CUSTOMER_AUTH_OPTIONS}
-  --timeout <ms>                Request timeout in milliseconds
-  --dry-run                     Print the request without executing it
-${OUTPUT_OPTIONS}`;
-var CUSTOMER_API_KEY_REQUEST_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
-  --timeout <ms>                Request timeout in milliseconds
-  --dry-run                     Print the request without executing it
-${OUTPUT_OPTIONS}`;
-var PUBLIC_CATALOG_ENVIRONMENT_OPTIONS = `  --sandbox                    Use the sandbox/UAT API for this command
-  --test                       Use the test API for this command; cannot be combined with --sandbox`;
-var PUBLIC_CATALOG_REQUEST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
-  --timeout <ms>                Request timeout in milliseconds
-  --dry-run                     Print the request without executing it
-${OUTPUT_OPTIONS}`;
-var PUBLIC_CATALOG_LIST_OPTIONS = `${PUBLIC_CATALOG_ENVIRONMENT_OPTIONS}
-  --timeout <ms>                Request timeout in milliseconds
-${OUTPUT_OPTIONS}`;
-var CUSTOMER_API_KEY_LINK_OPTIONS = `${CUSTOMER_API_KEY_OPTIONS}
-  --timeout <ms>                Request timeout in milliseconds
-  --open                        Open the generated link in the browser
-  --no-watch                    Do not poll for webhook events after printing the link
-  --dry-run                     Print the link without polling for webhook events
-${OUTPUT_OPTIONS}`;
-var ROOT_HELP = `clink
-
-Clink customer wallet CLI.
-
-Usage:
-  clink <command> [subcommand] [options]
-
-Commands:
-  install           Install the latest npm CLI, then synchronize the official payment Skill
-  update            Check or update the npm CLI, then synchronize the official payment Skill
-  wallet            Initialize wallet and inspect local wallet status
-  card              Generate card links and manage payment methods
-  risk              Inspect or open risk rule settings
-  skills            Discover, install, and tip skills; synchronize the official Skill
-  pay               Charge a payment instrument
-  refund            Create refund and query refund status
-  ucp-checkout      Manage UCP checkout sessions for shadow merchants
-  ucp-catalog       Search merchant UCP catalogs
-  catalog           Search catalogs across merchants without naming one
-  ucp-order         Query UCP orders and wait for digital delivery
-  instruction       Manage purchase instruction mandates (agentic authorization)
-  pending-instruction Create a new non-idempotent PENDING instruction
-  events            Poll the webhook-event queue for state-change events
-  tool              Utility tools for UCP and checkout workflows
-  config            Read and update local config
-
-Global Options:
-  --format <json|pretty>        Output format
-  --dry-run                     Print request without executing
-  --open                        Open generated link in browser
-  --no-open                     Do not open generated links; overrides --open and saved defaults
-  --no-watch                    Do not poll for webhook events after printing a link
-  --customer-id <id>            Override customer ID for authenticated commands
-  --customer-api-key <key>      Legacy API key override for authenticated never-OAuth wallets only
-  --timeout <ms>                Request timeout in milliseconds
-  --help, -h                    Show help
-
-Wallet Environment:
-  Select an official environment with wallet init: --sandbox uses sandbox and --test uses test.
-  The main distribution uses production when neither is present; packaged distributions may fix
-  their wallet-init environment internally. Successful initialization saves the environment, and
-  later authenticated commands use it without --sandbox or --test. CLINK_BASE_URL remains an advanced
-  process override for those authenticated commands.
-
-Public Discovery Environment:
-  ucp-catalog search/product, catalog search, and tool internal-ucp get-merchant-list are public,
-  config-independent commands. They default to production and accept --sandbox or --test per call.
-
-Event Watching:
-  Link commands normally print the browser handoff and then poll
-  /agent/event-hub/webhook-events/poll (pageSize=20, every 5s up to 15 min),
-  process events (logging progress to stderr and updating the local cache), ACK
-  the records consumed by that workflow, and print a watch envelope to stdout.
-  card binding-link is readiness-gated: it first starts a server-side
-  payment_method.added selector, then prints its sanitized Portal handoff, and ACKs only
-  the matching event. Pass --no-watch to skip polling (for scripted or
-  non-interactive use, including card binding-link refreshes). To pull state
-  changes on demand without printing a link, use 'clink events poll'
-  (see 'clink events --help').
-
-Examples:
-  npx @clink-ai/clink-cli@latest install
-  clink update
-  clink update --check --format pretty
-  clink skills sync --force
-  clink wallet init --email alice@example.com
-  clink wallet init --sandbox --email alice@example.com
-  clink wallet init --test --email alice@example.com
-  clink wallet status --format pretty
-  clink card setup-link --open
-  clink skills list --all --format pretty
-  clink skills tip --publisher clinkpay --name PollyReach --amount 2
-  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
-  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink catalog search --query "iced latte" --format json
-  clink ucp-checkout get --checkout-id chk_xxx
-  clink ucp-order get --order-id order_xxx
-  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900
-  clink ucp-order list --status paid --start-time 2026-07-01T00:00:00Z
-  clink tool item-id --url https://shop.example/products/t-shirt?variant=123
-  clink refund create --order-id order_xxx
-
-More Help:
-  clink install --help
-  clink update --help
-  clink wallet --help
-  clink card --help
-  clink skills --help
-  clink ucp-catalog --help
-  clink catalog --help
-  clink ucp-checkout --help
-  clink ucp-order --help
-  clink refund --help
-  clink instruction --help
-  clink events --help
-  clink tool --help
-  clink config --help
-`;
-var INSTALL_HELP = `clink install
-
-Install the latest npm CLI globally, then synchronize the official agentic-payment-skills package.
-
-Usage:
-  npx @clink-ai/clink-cli@latest install [options]
-
-Options:
-  --force                     Replace a conflicting unmanaged official Skill installation
-  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
-${OUTPUT_OPTIONS}
-
-Behavior:
-  Runs an argv-based npm global install without a command shell, then synchronizes the official
-  payment Skill at ~/.agents/skills/agentic-payment-skills. This is an explicit setup command.
-  npm postinstall does not download Skills, and ordinary wallet/payment commands never perform
-  Skill synchronization.
-  Self-install is supported only by the npm distribution. A vendored CLI reports a clear error.
-  If npm succeeds but Skill synchronization fails, the error reports a partial result and the
-  previously active Skill release remains in place.
-
-Example:
-  npx @clink-ai/clink-cli@latest install --format pretty
-`;
-var UPDATE_HELP = `clink update
-
-Check or update the npm CLI, then synchronize the official agentic-payment-skills package.
-
-Usage:
-  clink update [options]
-
-Options:
-  --check                     Check without modifying installed CLI or Skill state
-  --force                     Reinstall the latest CLI and replace a conflicting unmanaged Skill
-  --timeout <ms>              Network timeout; npm installation uses at least 300000 ms
-${OUTPUT_OPTIONS}
-
-Behavior:
-  Queries the npm latest tag. A newer version is installed globally without a command shell; an
-  already-current CLI skips npm installation but still synchronizes the Skill. --check does not
-  modify installed CLI or Skill state and reports action=checked plus the Skill plannedAction.
-  Self-update is supported only by the npm distribution.
-
-Examples:
-  clink update
-  clink update --check --format pretty
-  clink update --force
-`;
-var SKILLS_HELP = `clink skills
-
-Usage:
-  clink skills <list|install|sync|tip> [options]
-
-Actions:
-  list              List all public skills in reversed NEW order with one-based Number fields
-  install           Download and install a skill package into local agent skill directories
-  sync              Synchronize the official agentic-payment-skills package without updating CLI
-  tip               Tip a skill publisher using the refreshed default payment method
-
-Examples:
-  clink skills list --all --format pretty
-  clink skills install clinkpay/PollyReach@v1.0.0
-  clink skills install clinkpay/PollyReach --force
-  clink skills sync --force
-  clink skills tip --publisher clinkpay --name PollyReach --amount 2
-`;
-var SKILLS_SYNC_HELP = `clink skills sync
-
-Synchronize the official agentic-payment-skills package without updating the CLI.
-
-Usage:
-  clink skills sync [options]
-
-Options:
-  --check                     Check without modifying installed Skill state
-  --force                     Replace a conflicting unmanaged official Skill installation
-  --timeout <ms>              Source download timeout in milliseconds
-${OUTPUT_OPTIONS}
-
-Behavior:
-  Uses GitHub as the primary source and the Clink-hosted ZIP as its availability fallback. The
-  validated package is published at ~/.agents/skills/agentic-payment-skills using the managed
-  release transaction.
-  This is the recovery entry point when CLI installation already succeeded but Skill sync did not.
-  --check reports action=checked and exposes the would-be install action as plannedAction.
-
-Examples:
-  clink skills sync
-  clink skills sync --check --format pretty
-  clink skills sync --force
-`;
-var SKILLS_LIST_HELP = `clink skills list
-
-Usage:
-  clink skills list --all [options]
-
-Required Arguments:
-  --all                        Request all public skills with pageSize=999
-
-Options:
-  --tippable                  Also require valid skillId/merchantId and tipsConfigJson.enabled=true
-  --timeout <ms>               Request timeout in milliseconds
-${OUTPUT_OPTIONS}
-
-Endpoint:
-  GET /prod-api/skill-marketplace/public/skills?pageSize=999&sort=NEW
-
-Behavior:
-  Keeps only rows with nonempty publisher, name, and versionNo.
-  With --tippable, also requires nonempty skillId/merchantId and boolean tipsConfigJson.enabled=true.
-  Filtering happens before the CLI reverses rows and assigns contiguous one-based Number values.
-  The resulting JSON array is returned through the standard success envelope.
-
-Examples:
-  clink skills list --all --format pretty
-  clink skills list --all --tippable --format pretty
-`;
-var SKILLS_INSTALL_HELP = `clink skills install
-
-Usage:
-  clink skills install <publisher>/<skillName>[@<version>] [options]
-
-Arguments:
-  <publisher>/<skillName>[@<version>]
-                              Skill package identity. When @<version> is omitted, the marketplace
-                              returns the latest downloadable version. Publisher and skill names
-                              may contain Unicode and internal spaces; quote the full identity.
-
-Options:
-  --force                     Replace an existing installation and agent link/copy backups
-  --timeout <ms>              Request timeout; package downloads use at least 300000 ms
-  --dry-run                   Plan the install without network calls or filesystem writes
-${OUTPUT_OPTIONS}
-
-Install Location:
-  A single-skill download may be a raw UTF-8 SKILL.md file or a ZIP containing SKILL.md at its root.
-  Otherwise, archive-root directories with their own direct SKILL.md files are selected. One uses
-  the requested Skill name; two or more form a multi-skill archive and use their directory names as
-  sibling entries.
-  Ordinary files and other directories are ignored. When no root Skill directory exists and there
-  is exactly one top-level directory, the same selection applies inside that common wrapper directory.
-  Selected Skills are exposed under ~/.agents/skills.
-  Multi-skill releases and Agent updates are committed or rolled back together.
-
-Agent Integration:
-  Existing local agent homes are detected automatically and updated where supported:
-  Cursor/Claude/Codex/CodeBuddy/Trae, OpenCode/GitHub Copilot/Gemini CLI,
-  OpenClaw/Hermes, and CodeWork/ChatGPT.
-
-Endpoint:
-  GET /prod-api/skill-marketplace/public/skills/download-url?publisher=...&skillName=...[&versionNo=...]
-
-Examples:
-  clink skills install clinkpay/PollyReach@v1.0.0
-  clink skills install clinkpay/PollyReach
-  clink skills install clinkpay/PollyReach --force
-  clink skills install clinkpay/PollyReach --dry-run --format pretty
-`;
-var SKILLS_TIP_HELP = `clink skills tip
-
-Usage:
-  clink skills tip --publisher <publisher> --name <skillName> --amount <amount> [options]
-
-Target:
-  --publisher <publisher>      Exact publisher; requires --name
-  --name <skillName>           Exact skill name; requires --publisher
-
-Required Argument:
-  --amount <amount>            USD amount from 1 to 100 (inclusive)
-
-Options:
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Publisher and skill names accept Unicode letters, numbers, and internal ASCII spaces.
-  Quote publisher or skill-name values that contain spaces.
-  Tips select the latest Marketplace version with sort=NEW.
-  Successful results include the resolved versionNo when the Marketplace supplies it.
-  Tips use the refreshed explicit default payment method.
-  A default CARD is charged without a Credit balance check.
-  A default BALANCE must have enough finite availableBalance to cover the full amount.
-  No explicit default fails with: No default payment method
-  An unsupported explicit default fails with: Unsupported default payment method
-  Insufficient or invalid default Credit fails with 402: Credit \u4F59\u989D\u4E0D\u8DB3\uFF0C\u8BF7\u5148\u7ED1\u5B9A\u94F6\u884C\u5361
-  Payment results expose rawPaymentStatus, rawPaymentMessage, and the original payment payload.
-  The backend calculates Credit allocation.
-`;
-var TOOL_HELP = `clink tool
-
-Usage:
-  clink tool item-id --url <url> [options]
-  clink tool parse-site --url <url> [options]
-  clink tool parse-item --url <url> [options]
-  clink tool checkout-total --url <url> [options]
-  clink tool get-ucp-profile --url <url> [options]
-  clink tool get-rest-endpoint --url <url> [options]
-  clink tool internal-ucp get-endpoint --product-url <url> [options]
-  clink tool internal-ucp get-merchant-list [options]
-
-Tools:
-  item-id        Extract a UCP item_id from a product URL
-  parse-site     Detect the site type from a URL
-  parse-item     Extract Shopify item facts with merchant, currency, and variant details
-  checkout-total Extract the total amount from a Shopify checkout URL
-  get-ucp-profile Fetch a merchant UCP discovery profile
-  get-rest-endpoint Resolve the UCP REST endpoint and provider
-  internal-ucp   Read supported merchants or resolve an internal Clink UCP endpoint
-
-Examples:
-  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format json
-  clink tool parse-site --url https://store.example.com --format json
-  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format json
-  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format json
-  clink tool get-ucp-profile --url https://merchant.example.com --format json
-  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format json
-  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format json
-  clink tool internal-ucp get-merchant-list --format json
-`;
-var TOOL_ITEM_ID_HELP = `clink tool item-id
-
-Usage:
-  clink tool item-id --url <url> [options]
-
-Arguments:
-  --url <url>   Product URL to inspect
-
-Options:
-${OUTPUT_OPTIONS}
-
-Behavior:
-  Shopify is detected when the hostname ends with .myshopify.com, or when any CNAME in the chain
-  has canonical name shops.myshopify.com. For Shopify URLs, item_id is the variant query parameter.
-  Other sites return item_id "unknown".
-
-Examples:
-  clink tool item-id --url https://uebmaw-it.myshopify.com/products/t-shirt?variant=45085516365894 --format pretty
-`;
-var TOOL_PARSE_SITE_HELP = `clink tool parse-site
-
-Usage:
-  clink tool parse-site --url <url> [options]
-
-Arguments:
-  --url <url>   Site URL to inspect
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  Shopify is detected first when the hostname ends with .myshopify.com, then eats365 when it ends
-  with .eats365pos.com. Otherwise the CLI sends a browser-like GET request to https://<host> and
-  detects Shopify when a powered-by response header contains Shopify. If the header is absent or
-  the request fails, the CLI checks whether the hostname's CNAME chain reaches
-  shops.myshopify.com. A rate-limited request returns site_detection_rate_limited only when DNS
-  cannot confirm Shopify. Other sites return site_type "unknown".
-
-Examples:
-  clink tool parse-site --url https://store.example.com --format pretty
-  clink tool parse-site --url https://store.eats365pos.com --format pretty
-`;
-var TOOL_PARSE_ITEM_HELP = `clink tool parse-item
-
-Usage:
-  clink tool parse-item --url <url> [options]
-
-Arguments:
-  --url <url>   Product detail URL to inspect
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  First detects the site type with the same detector as parse-site. Unknown sites return
-  error_code "unkonw site type"; inconclusive rate-limited detection returns
-  site_detection_rate_limited. eats365 sites return a normal success envelope with
-  resolution "manual_item_facts", an empty items array, and a required_fields list: the platform
-  publishes no machine-readable product data, so this is an instruction to source those fields
-  from the conversation context and pass them to ucp-checkout create, not a failure to handle.
-  That envelope also carries checkout_mapping, which maps each field to its ucp-checkout create
-  flag, and unit_price_format. eats365 unitPrice is a major-unit decimal such as "28.00" because
-  create scales line_items price by --currency; minor units there would overcharge by that scale.
-  Both the unknown and eats365 cases exit 0. For custom Shopify domains, the standard UCP
-  profile's validated merchant_origin is used as the canonical storefront origin when available.
-  Product URLs are normalized by removing query/hash parameters and appending .js, then the
-  command reads the Shopify product JSON and returns one top-level item fact object. The items
-  array contains one entry per variant with itemId, title, unitPriceMinor, available, itemUrl,
-  options, and inventoryStatus. Shopify unitPriceMinor is in minor units, unlike the eats365
-  unitPrice field. itemId is the raw Shopify variant ID. Currency is read from product JSON when
-  present, otherwise from Shopify /cart.js. The command does not infer MCC or
-  merchantCategoryCode.
-
-Examples:
-  clink tool parse-item --url https://uebmaw-it.myshopify.com/products/t-shirt --format pretty
-`;
-var TOOL_CHECKOUT_TOTAL_HELP = `clink tool checkout-total
-
-Usage:
-  clink tool checkout-total --url <url> [options]
-
-Arguments:
-  --url <url>   Shopify checkout URL to inspect
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  Reads Shopify checkout serialized GraphQL state from meta[name="serialized-graphql"] and returns
-  buyerProposal.runningTotal.value amount/currencyCode. sellerProposal.runningTotal is accepted only
-  when it matches the same total. The command does not parse page text or use regex fallbacks.
-  When the serialized state is absent, the command exits successfully with error_message
-  "checkout_state_not_found".
-
-Examples:
-  clink tool checkout-total --url https://store.example.com/checkouts/cn/token/en-cn --format pretty
-`;
-var TOOL_GET_UCP_PROFILE_HELP = `clink tool get-ucp-profile
-
-Usage:
-  clink tool get-ucp-profile --url <url> [options]
-
-Arguments:
-  --url <url>   Merchant URL or domain to inspect
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  Reads the merchant origin from --url, then fetches https://<domain>/.well-known/ucp-clink first.
-  If absent, it fetches https://<domain>/.well-known/ucp. On success, the command prints the
-  discovery JSON directly. When both discovery paths are absent, it exits successfully with
-  error_code "NO_UCP_SITE".
-
-Examples:
-  clink tool get-ucp-profile --url https://merchant.example.com --format pretty
-`;
-var TOOL_GET_REST_ENDPOINT_HELP = `clink tool get-rest-endpoint
-
-Usage:
-  clink tool get-rest-endpoint --url <url> [options]
-
-Arguments:
-  --url <url>   UCP site URL or domain to inspect
-
-Options:
-${OUTPUT_OPTIONS}
-
-Behavior:
-  Parses the URL hostname and resolves the UCP provider from the primary domain. For clinkbill.com
-  and its subdomains, provider is "clinkbill" and endpoint is returned as an empty string. Unknown
-  domains return error_code "NO_UCP_REST_ENDPOINT".
-
-Examples:
-  clink tool get-rest-endpoint --url https://agent.clinkbill.com/login --format pretty
-`;
-var TOOL_INTERNAL_UCP_HELP = `clink tool internal-ucp
-
-Usage:
-  clink tool internal-ucp get-endpoint --product-url <url> [options]
-  clink tool internal-ucp get-merchant-list [options]
-
-Subcommands:
-  get-endpoint       Resolve an internal Clink UCP endpoint from a product URL
-  get-merchant-list  Return the supported merchant-list document for a public environment
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  get-endpoint uses the effective wallet API base and does not accept environment flags.
-  get-merchant-list defaults to production and accepts --sandbox or --test for that invocation.
-  Both commands load the selected environment's anonymous GET /agent/ucp/merchants API.
-  A product domain outside that list returns error_code "NOT_IN_INTERNAL_UCP_LIST".
-  Conflicting merchant IDs for the target hostname are a terminal API configuration error.
-
-Examples:
-  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
-  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
-  clink tool internal-ucp get-merchant-list --format pretty
-`;
-var TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP = `clink tool internal-ucp get-endpoint
-
-Usage:
-  clink tool internal-ucp get-endpoint --product-url <url> [options]
-
-Arguments:
-  --product-url <url>   Product URL whose exact hostname identifies the merchant
-
-Options:
-${TOOL_NETWORK_OPTIONS}
-
-Behavior:
-  Resolves an internal merchant by exact product hostname and generates its Clink UCP REST endpoint
-  using the environment saved by wallet init. Re-run wallet init to switch environments.
-  It loads the selected environment's anonymous GET /agent/ucp/merchants API. Validated successes
-  use a short per-process cache and concurrent loads share one in-flight request. A cached hostname
-  miss is refreshed before it can become an external-route decision; errors are never cached.
-  Each domain is a safe HTTP(S) merchant route URL that may include a path. Only its canonical
-  hostname is matched exactly against the product URL hostname; the Clink endpoint is generated
-  independently from the effective wallet API base and merchant_id.
-  Missing domains return error_code "NOT_IN_INTERNAL_UCP_LIST" with exit code 0.
-  Conflicting merchant IDs for the target hostname are a terminal API error and never fall back.
-  The read-only GET retries transport, 408, 429, and 5xx once within one total timeout. Other HTTP
-  and response-contract failures are API errors (exit 5); exhausted transport/timeouts exit 6.
-
-Examples:
-  clink tool internal-ucp get-endpoint --product-url https://shop.example.com/products/demo --format pretty
-  clink tool internal-ucp get-endpoint --product-url https://uebmaw-it.myshopify.com/products/demo --format pretty
-`;
-var TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP = `clink tool internal-ucp get-merchant-list
-
-Usage:
-  clink tool internal-ucp get-merchant-list [options]
-
-Options:
-${PUBLIC_CATALOG_LIST_OPTIONS}
-
-Behavior:
-  Returns {"merchants":[...]} from the public merchant-list API after validation.
-  The command defaults to production; --sandbox selects sandbox/UAT and --test selects test.
-  It does not read ~/.clink-cli/config.json or inherit the saved wallet environment, CLINK_BASE_URL,
-  CLINK_WALLET_INIT_ENVIRONMENT, OAuth, or CSK credentials.
-  It sends anonymous GET /agent/ucp/merchants to the selected API environment with no query or body.
-  The backend filters enabled merchants. Each result contains merchant_id, merchant_name,
-  description, domain, and ext; ext is opaque JSON and domain is a safe HTTP(S) merchant route URL
-  that may include a path.
-
-Examples:
-  clink tool internal-ucp get-merchant-list --format json
-`;
-var WALLET_HELP = `clink wallet
-
-Usage:
-  clink wallet init --email <email> [options]
-  clink wallet logout [options]
-  clink wallet status [options]
-
-Subcommands:
-  init         Authorize this CLI and persist OAuth credentials locally
-  logout       Revoke OAuth authorization and remove local credentials
-  status       Show effective wallet configuration without network request
-
-Examples:
-  clink wallet init --email alice@example.com
-  clink wallet init --sandbox --email alice@example.com
-  clink wallet init --test --email alice@example.com
-  clink wallet logout
-  clink wallet status --format pretty
-`;
-var WALLET_INIT_HELP = `clink wallet init
-
-Usage:
-  clink wallet init --email <email> [options]
-
-Arguments:
-  --email <email>              Customer email verified in the browser
-
-Options:
-  --sandbox                    Use sandbox API base from domains.ts
-  --test                       Use test API base from domains.ts; cannot be combined with --sandbox
-  --timeout <ms>               Request timeout in milliseconds
-  --open                       Open the authorization URL in the browser
-  --no-open                    Do not open the browser; overrides --open and default-open-links
-  --dry-run                    Print the Device Authorization request without executing it
-  --title <text>               Purchase intent title; enables the Quick Instruction context
-  --mandates <json>            JSON array of 1-10 mandates; required with Quick Instruction options
-  --mandates-file <path>       UTF-8 mandate JSON array file; cannot be combined with --mandates
-  --description <text>         Optional Quick Instruction description
-  --is-recurring               Mark it recurring; mandates require recurringFrequency
-  --shipping-address <json>    Optional Quick Instruction shipping-address JSON object
-  --effective-until-time <utc> Optional expiry in UTC yyyy-MM-dd HH:mm:ss
-${OUTPUT_OPTIONS}
-
-Device Authorization:
-  An explicit --sandbox/--test or a distribution-fixed environment takes precedence. Otherwise
-  wallet init uses CLINK_BASE_URL when present and production when absent. A successful initialization
-  saves the selected base URL for every later command. Re-run wallet init to switch environments.
-  The CLI keeps user_code in the browser URL query and carries email/derived name in its fragment.
-  The Portal removes those values from the address bar immediately after reading them.
-  The CLI prints the URL, opens it only when --open or default-open-links is enabled, then polls
-  until authorization completes. --no-open always disables browser launch. If launch fails, open
-  the displayed URL manually while polling continues.
-  Email OTP entry and confirmation happen in the browser.
-  Existing customers keep their server-side name. New customers get the email text before @ as
-  their initial name; --name is rejected. Use \`config set name\` to change the local name later.
-
-Quick Instruction:
-  Passing any Quick Instruction option sends instruction_context with Device Authorization;
-  --title and one of --mandates/--mandates-file are then required. --payment-instrument-id and
-  --extra are rejected because card selection belongs to CWallet and the context is intentionally bounded.
-  Title is non-blank and at most 256 characters, description is at most 1024 characters, mandates
-  contain 1-10 entries, and the serialized context is at most 16384 UTF-8 bytes. Each mandate
-  requires description, a positive amountLimit with at most two decimals, and currencyCode.
-  Recurring contexts require recurringFrequency WEEKLY, MONTHLY, or YEARLY on every mandate.
-  After browser authorization, CWallet creates/reuses a Quick: CREATED bound to a selected
-  VIC-ready Visa when available, otherwise no-card PENDING. The legacy pendingInstructionId
-  field can refer to CREATED, PENDING or ACTIVE; exact-GET its actual status and keep the original ID.
-  A null value means no usable Quick ID was returned and does not
-  distinguish a deliberate skip from creation failure. The PENDING instruction activates after
-  VIC card binding completes and emits purchase_instruction.activated; it does not appear in
-  \`instruction list --valid-only\` until it is ACTIVE.
-
-Payment Methods:
-  After authorization succeeds, wallet init refreshes cached payment methods through the
-  card binding-link endpoint and returns the trusted add-card bindingUrl. It uses the local
-  add-card path and locally stored email; backend path, query, fragment, and token data are
-  discarded. A refresh failure is reported in output but does not fail wallet initialization.
-
-Examples:
-  clink wallet init --email alice@example.com
-  clink wallet init --sandbox --email alice@example.com
-  clink wallet init --test --email alice@example.com
-  clink wallet init --test --email alice@example.com --title "Buy running shoes" \\
-    --mandates '[{"description":"Running shoes","amountLimit":"25.50","currencyCode":"USD"}]'
-`;
-var WALLET_LOGOUT_HELP = `clink wallet logout
-
-Usage:
-  clink wallet logout [options]
-
-Behavior:
-  Best-effort revokes the current OAuth Refresh Token, then removes both OAuth credentials
-  and any legacy customer API key from local config. It also removes customerId, payment-method
-  cache, and risk-rule cache so a later login may safely bind a different customer.
-
-Options:
-  --timeout <ms>               Request timeout in milliseconds
-  --dry-run                    Print the revoke request without changing local config
-${OUTPUT_OPTIONS}
-
-Examples:
-  clink wallet logout
-  clink wallet logout --format pretty
-`;
-var WALLET_STATUS_HELP = `clink wallet status
-
-Usage:
-  clink wallet status [options]
-
-Notes:
-  Shows the effective local wallet configuration after resolving flags, environment variables,
-  and saved config. Stored OAuth authorization takes priority over legacy CSK. OAuth wallets never
-  fall back to CSK, including after logout or expiry. No network request is made, and raw OAuth
-  tokens and customer API keys are never printed. authorizationEnvironmentMatches reports whether
-  saved OAuth can be used with the selected API base; oauthRequired remains true after logout.
-
-Options:
-${CUSTOMER_AUTH_OPTIONS}
-${OUTPUT_OPTIONS}
-
-Examples:
-  clink wallet status
-  clink wallet status --format pretty
-`;
-var CARD_HELP = `clink card
-
-Usage:
-  clink card binding-link [options]
-  clink card setup-link [--open] [options]
-  clink card modify-link [--open] [options]
-  clink card passkey-link --payment-instrument-id <id> [--open] [options]
-  clink card list [options]
-  clink card get --payment-instrument-id <id> [options]
-
-Subcommands:
-  binding-link   Fetch raw binding link and refresh cached payment methods
-  setup-link     Fetch payment method setup link and refresh cached payment methods
-  modify-link    Fetch payment method modify link and refresh cached payment methods
-  passkey-link   Open Visa card Passkey registration through Browser Handoff
-  list           List cached payment methods from local config
-  get            Get cached payment method detail from local config
-`;
-var CARD_BINDING_LINK_HELP = `clink card binding-link
-
-Usage:
-  clink card binding-link [options]
-
-Options:
-  --no-watch                   Skip Event Hub readiness/watch and return an explicit watch gap
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Calls /agent/cwallet/card/bindingLink.
-  Refreshes local cached payment methods from paymentMethodsVoList.
-  Rebuilds the returned link from its Portal origin and appends the locally stored email.
-  Other backend path, query, and fragment values are not exposed.
-  With watch enabled, waits for the first well-formed successful Event Hub poll, then prints an
-  add-card bindingUrl rebuilt from the trusted Portal origin with watchReady=true and
-  watchEventType=payment_method.added.
-  watchReady means the listener is ready; completion is the matching event in the second envelope.
-  Event Hub filters payment_method.added before pagination. Only matching events are ACKed;
-  unrelated current and stale events remain queued. A malformed successful poll fails before the
-  binding handoff is exposed.
-  Pass --no-watch when you only need to refresh the cached card list; it does not poll and returns
-  watchReady=false plus watchEventType=null while stderr identifies the missing listener.
-
-Examples:
-  clink card binding-link
-  clink card binding-link --no-watch --format pretty
-`;
-var CARD_SETUP_LINK_HELP = `clink card setup-link
-
-Usage:
-  clink card setup-link [--open] [options]
-
-Options:
-  --open                       Open the generated setup link in the browser
-  --no-watch                   Skip polling for webhook events after printing the link
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Derives the add-card page from the binding link response.
-  Refreshes local cached payment methods before returning the setup URL.
-  Appends the locally stored email so a signed-out browser can prefill login.
-  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
-  failures open the trusted setup URL directly; callback/approve failures use email-code login.
-  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
-
-Examples:
-  clink card setup-link
-  clink card setup-link --open
-`;
-var CARD_MODIFY_LINK_HELP = `clink card modify-link
-
-Usage:
-  clink card modify-link [--open] [options]
-
-Options:
-  --open                       Open the generated manage-card link in the browser
-  --no-watch                   Skip polling for webhook events after printing the link
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Derives the manage-card page from the binding link response.
-  Refreshes local cached payment methods before returning the modify URL.
-  Appends the locally stored email so a signed-out browser can prefill login.
-  With --open and Agent OAuth, first attempts a one-time loopback browser handoff. Listener/create
-  failures open the trusted modify URL directly; callback/approve failures use email-code login.
-  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
-
-Examples:
-  clink card modify-link
-  clink card modify-link --open
-`;
-var CARD_PASSKEY_LINK_HELP = `clink card passkey-link
-
-Usage:
-  clink card passkey-link --payment-instrument-id <id> [--open] [options]
-
-Required Arguments:
-  --payment-instrument-id <id> Payment instrument ID for the Visa card
-
-Options:
-  --customer-api-key <key>     Legacy API key override for never-OAuth wallets only
-  --timeout <ms>               Browser Handoff request timeout in milliseconds
-  --open                       Open the Visa Passkey page in the browser
-  --dry-run                    Print the link without opening the browser
-${OUTPUT_OPTIONS}
-
-Notes:
-  Builds the Visa card Passkey URL locally without creating an Instruction.
-  With --open and Agent OAuth, first completes a one-time loopback Browser Handoff so the Portal
-  receives a browser session before navigating to the Passkey page.
-  After Passkey registration, refresh the card through clink card binding-link --no-watch.
-  Output includes manualOpenUrl and browserLaunch for caller diagnostics.
-
-Examples:
-  clink card passkey-link --payment-instrument-id pi_xxx --open
-`;
-var CARD_LIST_HELP = `clink card list
-
-Usage:
-  clink card list [options]
-
-Notes:
-  Reads payment methods from local config only and does not make a network request.
-
-Options:
-${OUTPUT_OPTIONS}
-
-Examples:
-  clink card list
-  clink card list --format pretty
-`;
-var CARD_GET_HELP = `clink card get
-
-Usage:
-  clink card get --payment-instrument-id <id> [options]
-
-Arguments:
-  --payment-instrument-id <id> Payment instrument ID to read from local cached payment methods
-
-Options:
-${OUTPUT_OPTIONS}
-
-Notes:
-  Reads payment method detail from local config only and does not make a network request.
-
-Examples:
-  clink card get --payment-instrument-id pi_xxx
-  clink card get --payment-instrument-id pi_xxx --format pretty
-`;
-var RISK_RULE_HELP = `clink risk
-
-Usage:
-  clink risk get [options]
-  clink risk link [--open] [options]
-
-Subcommands:
-  get          Fetch current risk rule settings
-  link         Print the agent risk-rule setup page URL
-`;
-var RISK_RULE_GET_HELP = `clink risk get
-
-Usage:
-  clink risk get [options]
-
-Options:
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Calls GET /agent/risk/rule/settings.
-
-Examples:
-  clink risk get
-  clink risk get --format pretty
-`;
-var RISK_RULE_LINK_HELP = `clink risk link
-
-Usage:
-  clink risk link [--open] [options]
-
-Options:
-${CUSTOMER_API_KEY_LINK_OPTIONS}
-
-Notes:
-  Prints the agent risk-rule setup page at /risk-rules-setup. The agent domain mirrors the
-  environment saved by wallet init, or the environment derived from an explicit base override.
-  No network request.
-  After printing the link, polls for webhook events until one arrives (max 15 min); use --no-watch to skip.
-
-Examples:
-  clink risk link
-  clink risk link --open
-`;
-var PAY_HELP = `clink pay
-
-Usage:
-  clink pay --merchant-id <id> --amount <amount> --currency <currency> [--payment-instrument-id <id>] [options]
-  clink pay --session-id <id> [--payment-instrument-id <id>] [options]
-
-Arguments:
-  --merchant-id <id>           Merchant ID for direct charge mode
-  --amount <amount>            Charge amount for direct charge mode
-  --currency <currency>        Charge currency for direct charge mode, for example USD
-  --session-id <id>            Checkout session ID for session mode
-  --payment-instrument-id <id> Payment instrument to charge; optional for ALIPAY
-  --instruction-id <id>          VIC purchase instruction ID sent as instruction_id
-  --purchase-instruction-id <id> Backward-compatible alias for --instruction-id
-  --mandate-id <id>              VIC mandate ID sent as mandate_id
-  --shipping-address <json>      UCP Postal Address JSON object sent as shippingaddress
-  --products <json>              Product list JSON array for aiAgentInstructionBo.products
-
-Options:
-  --payment-method-type <type> Payment method type, defaults to CARD
-  --terminal-qr               Render a returned payment QR in the terminal
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  If --payment-instrument-id is omitted, ALIPAY sends no payment instrument and lets the backend
-  resolve or create it. CARD and BALANCE keep using the cached default payment method. Other types
-  refresh payment methods and require one matching type. If none match, bind one and refresh
-  payment methods. When several match, exactly one must be marked default or the caller must pass
-  --payment-instrument-id explicitly.
-  An explicit payment instrument for ALIPAY or those other types is validated against the refreshed
-  list and must have the requested type. Explicit CARD and BALANCE behavior is unchanged.
-  Refresh cached payment methods with clink card binding-link when needed.
-  For VIC-routed charge, pass instruction_id and mandate_id via --instruction-id and --mandate-id.
-  For shipped physical goods, pass --shipping-address as UCP Postal Address JSON:
-  street_address, extended_address, address_locality, address_region, address_country,
-  postal_code, first_name, last_name, and phone_number.
-  For product-level VIC credential context, pass --products as a JSON array with productId,
-  productName, productUrl, quantity, unitPrice, currencyCode, and optional extra.
-  Old agent pay always sends aiAgentInstructionBo.merchantInfo.merchantCategoryCode = 5999.
-  A status 5 payment with a PNG QR response returns customerAction.type=QR_CODE_REQUIRED,
-  mediaType=image/png, a private temporary imagePath, cleanupRequired=true, a directory-level
-  cleanupPath, order/payment execution IDs, and expiry metadata. expiresAt is Unix epoch seconds;
-  event consumers use expiresSecond with a maximum of 900 seconds. The PNG Data URL is never
-  printed. After payment reaches a terminal state or expires, the caller must remove
-  customerAction.cleanupPath recursively.
-  With --terminal-qr, pay also renders the QR as UTF-8 characters on stderr while stdout remains
-  one machine-readable result. The raw QR payload is never printed. If terminal rendering is
-  unavailable, pay prints a safe warning and keeps customerAction.imagePath for fallback display.
-  If the payment was submitted but the QR cannot be validated or stored, pay returns
-  error.type=payment_state_unknown with retryAllowed=false and the existing order/payment
-  execution IDs. Do not retry automatically; verify the existing payment first.
-
-Examples:
-  clink pay --merchant-id merchant_xxx --amount 10 --currency USD --payment-instrument-id pi_xxx
-  clink pay --merchant-id merchant_xxx --amount 1 --currency USD --payment-method-type ALIPAY --terminal-qr --format json
-  clink pay --session-id sess_xxx --payment-instrument-id pi_xxx
-  clink pay --session-id sess_xxx --instruction-id ins_xxx --mandate-id mndt_xxx --shipping-address '{"street_address":"1 Market St","address_locality":"San Francisco","address_region":"CA","address_country":"US","postal_code":"94105","first_name":"Ada","last_name":"Lovelace","phone_number":"+14155550100"}' --products '[{"productId":"sku_1","productName":"Demo","quantity":1,"unitPrice":12.99,"currencyCode":"USD"}]'
-`;
-var REFUND_HELP = `clink refund
-
-Usage:
-  clink refund create --order-id <id> [options]
-  clink refund get --refund-id <id> [options]
-
-Subcommands:
-  create       Apply full refund for an order
-  get          Query refund status
-`;
-var REFUND_CREATE_HELP = `clink refund create
-
-Usage:
-  clink refund create --order-id <id> [options]
-
-Arguments:
-  --order-id <id>              Order ID to refund
-
-Options:
-${CUSTOMER_REQUEST_OPTIONS}
-
-Notes:
-  Applies a full refund for the given order.
-
-Examples:
-  clink refund create --order-id order_xxx
-  clink refund create --order-id order_xxx --format pretty
-`;
-var REFUND_GET_HELP = `clink refund get
-
-Usage:
-  clink refund get --refund-id <id> [options]
-
-Arguments:
-  --refund-id <id>             Refund order ID to query
-
-Options:
-${CUSTOMER_REQUEST_OPTIONS}
-
-Examples:
-  clink refund get --refund-id rfd_xxx
-  clink refund get --refund-id rfd_xxx --format pretty
-`;
-var UCP_CHECKOUT_HELP = `clink ucp-checkout
-
-Usage:
-  clink ucp-checkout <run|create|get|update|cancel|complete> [options]
-
-Actions:
-  run       Create, complete exactly once, and optionally wait for digital delivery
-  create    Create a UCP checkout session for an external/shadow merchant
-  get       Fetch one checkout session by --checkout-id
-  update    Replace editable checkout fields by --checkout-id
-  cancel    Cancel one checkout session by --checkout-id
-  complete  Complete checkout with a payment instrument
-
-Arguments:
-  --checkout-id <id>              Checkout ID for get/update/cancel/complete
-  --merchant-url <url>            External merchant checkout URL for create
-  --merchant-name <name>          Optional merchant display name override for create
-  --merchant-category-code <code> Merchant category code for create
-  --order-channel-id <id>         Optional advanced override; backend derives it from merchant-url
-  --currency <currency>           Checkout currency for create; update validation/dry-run hint
-  --line-items <json>             UCP line_items JSON array for create/update
-  --buyer <json>                  UCP buyer JSON object for create/update
-  --shipping-address <json>       Shipping address JSON object for create/update
-  --metadata <json>               Metadata JSON object for create/update
-  --payment-instrument-id <id>    Payment instrument ID for run/complete; defaults to the cached default card
-  --confirm-purchase              Required for a live run; confirms the user-approved purchase
-  --wait-delivery                 After a completed run, wait for the returned digital order
-  --max-wait <seconds>            Delivery wait bound for run; defaults to 900
-  --endpoint <url>                Optional checkout endpoint prefix; appends checkout-sessions paths
-
-Notes:
-  Calls /agent/ucp/external/checkout-sessions internally because CLI-discovered merchants use the
-  shadow-merchant external checkout path by default. The command surface intentionally does not
-  expose an "external" mode or subcommand.
-  When --endpoint is provided, create appends /checkout-sessions, get/update append
-  /checkout-sessions/{checkoutId}, and cancel/complete append the corresponding action path.
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  create sends merchant_url, customer_id, buyer.email, and context.currency.
-  customer_id and buyer.email come from the local clink config JSON.
-  Idempotency-Key is generated by clink for create/update/complete; callers do not pass it.
-  create treats line_items price/amount fields as decimal major-unit values and converts them to
-  minor units by --currency. Live update reads the existing checkout currency and converts decimal
-  strings such as "12.00"; integer JSON numbers remain accepted as minor units for compatibility.
-  update --dry-run requires --currency because it performs no read request.
-  complete sends a standard UCP payment object with payment.instruments[0].id as local
-  config customerId#paymentInstrumentId and credential.token as the payment instrument ID; when
-  omitted, it uses the local cached default card.
-  run requires --confirm-purchase before any live request. It never retries create or complete,
-  calls complete exactly once, and returns a read-only get resumeCommand for non-completed states.
-  --wait-delivery starts only when complete returns status=completed and data.order.id. It reuses
-  the bounded, read-only ucp-order delivery wait and never retries payment or Checkout.
-  run --dry-run needs no confirmation and prints the create, exactly-once complete, and optional
-  delivery plan without making network requests or payment side effects.
-  A completed get/complete response carries the OMS/UCP order ID in data.order.id. Pass that exact
-  value to ucp-order get; do not infer the ID kind from an order_ prefix. agent_order event
-  resourceId, data.orderId, and data.paymentOrderId are Clink Payment order IDs, not UCP order IDs.
-
-Examples:
-  clink ucp-checkout run \\
-    --merchant-url https://shop.example/checkout/abc \\
-    --merchant-category-code 5311 --currency USD \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
-    --payment-instrument-id pi_xxx --confirm-purchase --wait-delivery --format json
-  clink ucp-checkout create \\
-    --merchant-url https://shop.example/checkout/abc \\
-    --merchant-category-code 5311 --currency USD \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
-    --format json
-  clink ucp-checkout get --checkout-id chk_xxx --format json
-  clink ucp-checkout update --checkout-id chk_xxx --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' --format json
-  clink ucp-checkout complete --checkout-id chk_xxx --format json
-  clink ucp-checkout cancel --checkout-id chk_xxx --format json
-`;
-var UCP_CATALOG_HELP = `clink ucp-catalog
-
-Usage:
-  clink ucp-catalog search --merchant-id <id> --query <text> [options]
-
-Actions:
-  search     Search one merchant's UCP Catalog
-  product    Get one product by the ID returned from Catalog search
-
-Examples:
-  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink ucp-catalog product --merchant-id merchant_xxx --product-id product_xxx --format json
-  clink ucp-catalog search --merchant-id merchant_xxx --query watch --context '{"currency":"USD","language":"en-US"}' --limit 10 --format pretty
-`;
-var UCP_CATALOG_SEARCH_HELP = `clink ucp-catalog search
-
-Usage:
-  clink ucp-catalog search --merchant-id <id> --query <text> [options]
-
-Required Arguments:
-  --merchant-id <id>          Merchant-scoped UCP Catalog owner
-  --query <text>              Catalog search text
-
-Optional Request Fields:
-  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
-                              zh-Hans, or fr-CA. Omitted means results are not translated
-  --context <json>            UCP Catalog context JSON object. Fields:
-                              - address_country: ISO 3166-1 alpha-2 context hint (e.g., "SG", "HK")
-                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
-                              - currency: ISO 4217 code (e.g., "USD", "HKD")
-  --language <tag>            Convenience override for context.language
-  --filters <json>            UCP Catalog filters JSON object; prices use minor units
-  --signals <json>            UCP Catalog signals JSON object
-  --attribution <json>        UCP Catalog attribution JSON object
-  --cursor <cursor>           Pagination cursor from a previous response
-  --limit <n>                 Page size from 1 to 100; server default is 10
-  --request-id <id>           Request-Id header; defaults to a generated UUID
-  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
-
-Options:
-${PUBLIC_CATALOG_REQUEST_OPTIONS}
-
-Behavior:
-  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/search. It defaults to
-  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
-  It does not read ~/.clink-cli/config.json or inherit saved/environment OAuth, CSK, customer ID,
-  CLINK_BASE_URL, or wallet environment values. A 401/403 is returned as an API error without token
-  refresh or a wallet-login recovery prompt.
-  Localization is opt-in and comes only from context.language: pass --language <tag> or set the
-  field inside --context, never both. Omit them and results keep the merchant's original titles
-  and descriptions; the query text is never used to guess a target language.
-
-Examples:
-  clink ucp-catalog search --merchant-id merchant_xxx --query keyboard --format json
-  clink ucp-catalog search --merchant-id merchant_xxx --query \u718A\u732B\u5916\u5356 --language en --format json
-  clink ucp-catalog search     --merchant-id merchant_xxx --query watch     --language en-US --context '{"currency":"USD"}'     --filters '{"price":{"min":1000,"max":50000},"offer_types":["one_time"]}'     --limit 10 --format pretty
-`;
-var UCP_CATALOG_PRODUCT_HELP = `clink ucp-catalog product
-
-Usage:
-  clink ucp-catalog product --merchant-id <id> --product-id <id> [options]
-
-Required Arguments:
-  --merchant-id <id>          Merchant-scoped UCP Catalog owner
-  --product-id <id>           Product ID returned by ucp-catalog search
-
-Optional Request Fields:
-  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
-                              zh-Hans, or fr-CA. Omitted means results are not translated
-  --context <json>            UCP Catalog context JSON object
-  --language <tag>            Convenience override for context.language
-  --filters <json>            UCP Catalog filters JSON object; prices use minor units
-  --signals <json>            UCP Catalog signals JSON object
-  --attribution <json>        UCP Catalog attribution JSON object
-  --request-id <id>           Request-Id header; defaults to a generated UUID
-  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
-
-Options:
-${PUBLIC_CATALOG_REQUEST_OPTIONS}
-
-Behavior:
-  Sends an anonymous request to POST /agent/ucp/{merchantId}/catalog/product. It defaults to
-  production; --sandbox selects sandbox/UAT and --test selects test for this invocation.
-  It does not read ~/.clink-cli/config.json or inherit saved/environment credentials or API bases.
-  Localization is opt-in and comes only from context.language: pass --language <tag> or set the
-  field inside --context, never both. Omit them and the product keeps its original title and
-  description. Pass the same language Search used, or the two views disagree.
-
-Examples:
-  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en-US --context '{"currency":"USD"}'     --format json
-  clink ucp-catalog product     --merchant-id merchant_xxx     --product-id product_xxx     --language en     --format json
-`;
-var CATALOG_HELP = `clink catalog
-
-Usage:
-  clink catalog search --query <text> [options]
-
-Actions:
-  search     Search catalogs across merchants without naming one
-
-Examples:
-  clink catalog search --query "iced latte" --format json
-  clink catalog search --query shoes --channel-type shopify --format pretty
-`;
-var CATALOG_SEARCH_HELP = `clink catalog search
-
-Usage:
-  clink catalog search --query <text> [options]
-
-Required Arguments:
-  --query <text>              Catalog search text
-
-Optional Request Fields:
-  --channel-type <type>       Narrow to one channel, for example shopify or eats365.
-                              Omitted means discovery across every channel
-  --form-type <type>          Caller-declared form or scenario type; echoed back in discovery mode
-  --ext <json>                Caller-defined extension map, passed through and logged only.
-                              It never affects search conditions or the response shape
-  --language <tag>            UCP context.language shortcut; an IETF BCP 47 tag such as en,
-                              zh-Hans, or fr-CA
-  --context <json>            UCP Catalog context JSON object. Fields:
-                              - address_region: regional discovery hint (e.g., "SG", "HK")
-                              - language: IETF BCP 47 language tag (e.g., "en", "zh-Hans")
-                              - currency: ISO 4217 code (e.g., "USD", "HKD")
-  --language <tag>            Convenience override for context.language
-  --filters <json>            UCP Catalog filters JSON object; prices use minor units
-  --signals <json>            UCP Catalog signals JSON object
-  --attribution <json>        UCP Catalog attribution JSON object
-  --request-id <id>           Request-Id header; defaults to a generated UUID
-  --ucp-agent <value>         UCP-Agent header; defaults to clink-cli
-
-Options:
-${PUBLIC_CATALOG_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/ucp/extra/catalog/search
-
-Behavior:
-  Sends an anonymous request, defaults to production, and accepts --sandbox or --test for this
-  invocation. It does not read ~/.clink-cli/config.json or inherit wallet credentials/environment.
-  Takes no --merchant-id: this endpoint finds which merchants carry the item, so the caller does
-  not need to know one up front. Use ucp-catalog search when the merchant is already known.
-  address_region is a discovery hint, not a strict filter. Published external-store mappings
-  currently cover HK and SG; other ISO codes may leave results un-narrowed.
-  Broad discovery returns a bounded, non-exhaustive result window and currently exposes no pagination.
-  Use ucp-catalog search for real cursor pagination when a merchant is already known.
-  Results come back grouped by target, each group carrying channel_type plus either merchant_id
-  (internal merchant) or store_id (external platform store). The shape does not change with
-  --channel-type; only the number of groups does.
-  Set context.language, with --language <tag> or the field inside --context, to declare the
-  caller's language; the two cannot be combined and the query text is never used to guess one.
-  Broad discovery forwards that language to each provider but does not run UCP's LLM translation
-  pass; provider localization may vary. The result translation is implemented for merchant-scoped
-  ucp-catalog search and product only.
-
-Examples:
-  clink catalog search --query "iced latte" --format json
-  clink catalog search \\
-    --query shoes --channel-type shopify \\
-    --ext '{"trace":"demo-1"}' \\
-    --language en-US --context '{"currency":"USD"}' \\
-    --format pretty
-  clink catalog search \\
-    --query coffee \\
-    --language en --context '{"address_region":"SG","currency":"SGD"}' \\
-    --format json
-`;
-var UCP_ORDER_HELP = `clink ucp-order
-
-Usage:
-  clink ucp-order <get|wait-delivery|list> [options]
-
-Actions:
-  get             Get one UCP order's current status by order ID
-  wait-delivery   Poll an expected digital delivery until ready, failed, or timed out
-  list            List the calling wallet's orders, newest first
-
-Examples:
-  clink ucp-order get --order-id order_xxx --format json
-  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
-  clink ucp-order list --status paid --format json
-  clink ucp-order list --status paid,refunded --start-time 2026-07-01T00:00:00Z --format pretty
-`;
-var UCP_ORDER_GET_HELP = `clink ucp-order get
-
-Usage:
-  clink ucp-order get --order-id <id> [options]
-
-Required Arguments:
-  --order-id <id>             Order ID to fetch
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  GET /agent/ucp/orders/{orderId}
-
-Behavior:
-  Uses the environment saved by wallet init. The endpoint is not merchant-scoped: ownership is
-  checked against the caller's wallet identity, so another buyer's order returns not_found.
-  OAuth wallets use Bearer authentication with automatic 401 refresh; never-OAuth wallets use
-  their legacy customer API key.
-  --order-id must be data.order.id from a completed ucp-checkout get/complete response. Do not infer
-  the ID kind from an order_ prefix: agent_order event resourceId, data.orderId, and
-  data.paymentOrderId are Clink Payment order IDs and must not be used here. A successful response
-  can include the merchant completion details in data.ucp.success_info.
-
-Examples:
-  clink ucp-order get --order-id order_xxx --format json
-`;
-var UCP_ORDER_WAIT_DELIVERY_HELP = `clink ucp-order wait-delivery
-
-Usage:
-  clink ucp-order wait-delivery --order-id <id> [--max-wait <seconds>] [options]
-
-Required Arguments:
-  --order-id <id>             UCP Order ID whose digital delivery is expected
-
-Optional Arguments:
-  --max-wait <seconds>        Bounded wait across order reads (default 900)
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  Repeated GET /agent/ucp/orders/{orderId}
-
-Behavior:
-  Use only when the frozen product context expects a digital delivery such as a voucher, coupon,
-  card secret, redemption link, or image. A missing digital_delivery field is treated as pending
-  because the asynchronous payment projection may not have initialized it yet. Pending reads honor
-  digital_delivery.next_retry_at with a 3-to-30-second local clamp. The command stops at ready or
-  failed; ready requires at least one artifact. It never retries payment, checkout completion, or
-  order creation.
-
-  Output contains ready, timedOut, deliveryStatus, attempts, and the last authoritative order.
-  A timeout also contains resumeCommand. Payment success and delivery status remain independent:
-  failed or timed-out delivery must not downgrade an already confirmed payment.
-
-Examples:
-  clink ucp-order wait-delivery --order-id order_xxx --max-wait 900 --format json
-`;
-var UCP_ORDER_LIST_HELP = `clink ucp-order list
-
-Usage:
-  clink ucp-order list [--status <statuses>] [--start-time <utc>] [--end-time <utc>] [options]
-
-Optional Arguments:
-  --status <statuses>         Comma-separated order statuses; matches any of them. One of
-                              draft, pending, paid, cancelled, partially_refunded, refunded
-  --start-time <utc>          Created-at lower bound, inclusive; UTC RFC 3339
-  --end-time <utc>            Created-at upper bound, inclusive; UTC RFC 3339
-  --page <n>                  Page number starting at 1; server default is 1
-  --size <n>                  Page size; the server applies its own default and upper bound
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  GET /agent/ucp/orders?created_from=&created_to=&status=&page=&size=
-  Multiple statuses are sent as repeated status params, for example status=paid&status=refunded.
-
-Behavior:
-  Returns only the calling wallet's own orders, newest first: ownership comes from the wallet
-  identity and cannot be passed in. Timestamps without a zone offset are read as UTC and sent as
-  RFC 3339. Rows carry id, checkout_id, status, payment_status, amount, currency, and created_at;
-  use ucp-order get for the full order.
-
-Examples:
-  clink ucp-order list --status paid --format json
-  clink ucp-order list \\
-    --status paid,partially_refunded,refunded \\
-    --start-time 2026-07-01T00:00:00Z \\
-    --end-time 2026-07-31T23:59:59Z \\
-    --size 20 --format pretty
-`;
-var UCP_CHECKOUT_CREATE_HELP = `clink ucp-checkout create
-
-Usage:
-  clink ucp-checkout create --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
-
-Required Arguments:
-  --merchant-url <url>            External merchant checkout URL
-  --merchant-category-code <code> Merchant category code, ISO 18245 MCC
-  --currency <currency>           Checkout currency, for example USD
-  --line-items <json>             UCP line_items JSON array
-
-Optional Arguments:
-  --merchant-name <name>          Merchant display name override
-  --order-channel-id <id>         Advanced override; backend normally derives it from merchant-url
-  --buyer <json>                  UCP buyer JSON object
-  --shipping-address <json>       Shipping address JSON object
-  --metadata <json>               Metadata JSON object
-  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/ucp/external/checkout-sessions
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  customer_id and buyer.email are read from the local clink config JSON.
-  Idempotency-Key is generated by clink.
-  line_items price/amount fields are decimal major-unit values and are converted by --currency;
-  --currency is sent as context.currency.
-
-Examples:
-  clink ucp-checkout create \\
-    --merchant-url https://shop.example/checkout/abc \\
-    --merchant-category-code 5311 --currency USD \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
-    --format json
-`;
-var UCP_CHECKOUT_RUN_HELP = `clink ucp-checkout run
-
-Usage:
-  clink ucp-checkout run --merchant-url <url> --merchant-category-code <code> --currency <currency> --line-items <json> [options]
-
-Required Arguments:
-  --merchant-url <url>            External merchant checkout URL
-  --merchant-category-code <code> Merchant category code, ISO 18245 MCC
-  --currency <currency>           Checkout currency, for example USD
-  --line-items <json>             UCP line_items JSON array
-  --confirm-purchase              Required for live execution; omit only with --dry-run
-
-Optional Arguments:
-  --merchant-name <name>          Merchant display name override
-  --order-channel-id <id>         Advanced override; backend normally derives it from merchant-url
-  --buyer <json>                  UCP buyer JSON object
-  --shipping-address <json>       Shipping address JSON object
-  --metadata <json>               Metadata JSON object
-  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
-  --wait-delivery                 Wait for digital delivery after authoritative completion
-  --max-wait <seconds>            Delivery wait bound; defaults to 900 and requires --wait-delivery
-  --endpoint <url>                Optional checkout endpoint prefix; appends /checkout-sessions
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoints:
-  POST /agent/ucp/external/checkout-sessions
-  POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
-  GET  /agent/ucp/orders/{orderId} only with --wait-delivery after completed + data.order.id
-
-Safety:
-  Missing --confirm-purchase on a live run is rejected before any network request.
-  create and complete are each called once and are never automatically retried. complete is the
-  only payment-submitting step. A complete_in_progress or any other non-completed response returns
-  stage=complete plus a read-only resumeCommand bound to the original endpoint and checkoutId.
-  --wait-delivery starts only for status=completed with data.order.id. ready, failed, and timeout
-  return the authoritative order and digital_delivery snapshot; timeout reuses the ucp-order
-  wait-delivery resumeCommand. Delivery polling never retries create, complete, or payment.
-  --dry-run performs no network request and prints an auditable create/complete/delivery plan.
-
-Examples:
-  clink ucp-checkout run \\
-    --merchant-url https://shop.example/checkout/abc \\
-    --merchant-category-code 5311 --currency USD \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"10.00"},"quantity":1}]' \\
-    --payment-instrument-id pi_xxx --confirm-purchase --format json
-  clink ucp-checkout run \\
-    --merchant-url https://shop.example/checkout/abc \\
-    --merchant-category-code 5311 --currency USD \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Voucher","price":"10.00"},"quantity":1}]' \\
-    --confirm-purchase --wait-delivery --max-wait 900 --format json
-`;
-var UCP_CHECKOUT_GET_HELP = `clink ucp-checkout get
-
-Usage:
-  clink ucp-checkout get --checkout-id <id> [options]
-
-Required Arguments:
-  --checkout-id <id>              Checkout ID to fetch
-
-Optional Arguments:
-  --endpoint <url>                Optional checkout endpoint prefix
-  --max-wait <seconds>            Poll only this Checkout until terminal; defaults to 900
-  --wait-delivery                 After completed + data.order.id, also wait for digital delivery
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  GET /agent/ucp/external/checkout-sessions/{checkoutId}
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Without wait flags, performs one GET. With --max-wait, polls only the same Checkout by GET and
-  never creates, completes, or submits payment. --wait-delivery continues from an authoritative
-  completed Checkout into the same order's digital-delivery wait. A timeout returns one bound
-  ucp-checkout get resumeCommand; callers must not append ucp-order commands.
-  Once completed, data.order.id is the OMS/UCP order ID accepted by ucp-order get. Do not use an
-  agent_order event's resourceId, data.orderId, or data.paymentOrderId; those are Clink Payment
-  order IDs, and an order_ prefix does not distinguish the two ID domains.
-
-Examples:
-  clink ucp-checkout get --checkout-id chk_xxx --format json
-  clink ucp-checkout get --checkout-id chk_xxx --wait-delivery --max-wait 900 --format json
-`;
-var UCP_CHECKOUT_UPDATE_HELP = `clink ucp-checkout update
-
-Usage:
-  clink ucp-checkout update --checkout-id <id> --line-items <json> [options]
-
-Required Arguments:
-  --checkout-id <id>              Checkout ID to update
-  --line-items <json>             Replacement UCP line_items JSON array
-
-Optional Arguments:
-  --currency <currency>           Expected checkout currency; required only with --dry-run
-  --buyer <json>                  Replacement UCP buyer JSON object
-  --shipping-address <json>       Replacement shipping address JSON object
-  --metadata <json>               Replacement metadata JSON object
-  --endpoint <url>                Optional checkout endpoint prefix
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  PUT /agent/ucp/external/checkout-sessions/{checkoutId}
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Idempotency-Key is generated by clink.
-  Live update fetches the existing checkout first and converts line_items price/amount decimal
-  strings such as "12.00" to minor-unit integers using its currency. Existing integer JSON numbers
-  remain minor-unit values for backward compatibility. --currency, when supplied, must match the
-  fetched checkout and is not sent in the PUT body. --dry-run performs no fetch, so it requires
-  --currency as the conversion hint.
-
-Examples:
-  clink ucp-checkout update \\
-    --checkout-id chk_xxx \\
-    --line-items '[{"id":"li_1","item":{"id":"sku_1","title":"Demo","price":"12.00"},"quantity":1}]' \\
-    --format json
-`;
-var UCP_CHECKOUT_CANCEL_HELP = `clink ucp-checkout cancel
-
-Usage:
-  clink ucp-checkout cancel --checkout-id <id> [options]
-
-Required Arguments:
-  --checkout-id <id>              Checkout ID to cancel
-
-Optional Arguments:
-  --endpoint <url>                Optional checkout endpoint prefix
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/ucp/external/checkout-sessions/{checkoutId}/cancel
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-
-Examples:
-  clink ucp-checkout cancel --checkout-id chk_xxx --format json
-`;
-var UCP_CHECKOUT_COMPLETE_HELP = `clink ucp-checkout complete
-
-Usage:
-  clink ucp-checkout complete --checkout-id <id> [--payment-instrument-id <id>] [options]
-
-Required Arguments:
-  --checkout-id <id>              Checkout ID to complete
-
-Optional Arguments:
-  --payment-instrument-id <id>    Payment instrument ID to charge; defaults to the cached default card
-  --endpoint <url>                Optional checkout endpoint prefix
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/ucp/external/checkout-sessions/{checkoutId}/complete
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Idempotency-Key is generated by clink.
-  Sends a standard UCP payment object in the request body. The selected instrument id is local
-  config customerId#paymentInstrumentId, and credential.token is the payment instrument ID. When
-  --payment-instrument-id is omitted or empty, the CLI uses the local cached default card.
-  The response is passed through unchanged, including data.ucp.success_info. When completion
-  returns data.order.id, use that exact OMS/UCP order ID with ucp-order get. Do not substitute an
-  agent_order event's resourceId, data.orderId, or data.paymentOrderId, even when it starts order_.
-
-Examples:
-  clink ucp-checkout complete --checkout-id chk_xxx --format json
-  clink ucp-checkout complete --checkout-id chk_xxx --payment-instrument-id pi_xxx --format json
-`;
-var CONFIG_HELP = `clink config
-
-Usage:
-  clink config set <key> <value>
-  clink config get
-  clink config unset <key>
-
-Subcommands:
-  set        Update local config
-  get        Show local config
-  unset      Remove or reset a local config key
-
-Settable Keys:
-  base-url
-  customer-id
-  default-open-links
-  email
-  name
-
-Notes:
-  customer-api-key cannot be stored with config set. Use config unset customer-api-key to remove
-  an existing saved legacy key.
-  customer-id can be set directly only for wallets that have never used OAuth.
-  wallet init stores a single local customer. Running wallet init again overwrites customer
-  credentials and clears cached payment methods/risk rules for the previous customer.
-`;
-var CONFIG_SET_HELP = `clink config set
-
-Usage:
-  clink config set <key> <value>
-
-Arguments:
-  <key>                        Config key to update
-  <value>                      Value to save
-
-Options:
-${OUTPUT_OPTIONS}
-
-Settable Keys:
-  base-url
-  customer-id
-  default-open-links
-  email
-  name
-
-Examples:
-  clink config set base-url https://api.clinkbill.com
-  clink config set customer-id cus_xxx
-  clink config set default-open-links true
-`;
-var CONFIG_GET_HELP = `clink config get
-
-Usage:
-  clink config get [options]
-
-Options:
-${OUTPUT_OPTIONS}
-
-Examples:
-  clink config get
-  clink config get --format pretty
-`;
-var CONFIG_UNSET_HELP = `clink config unset
-
-Usage:
-  clink config unset <key> [options]
-
-Arguments:
-  <key>                        Config key to remove or reset
-
-Options:
-${OUTPUT_OPTIONS}
-
-Supported Keys:
-  base-url
-  customer-id
-  customer-api-key
-  default-open-links
-  email
-  name
-
-Examples:
-  clink config unset customer-api-key
-  clink config unset base-url
-`;
-var PENDING_INSTRUCTION_HELP = `clink pending-instruction
-
-Usage:
-  clink pending-instruction create [options]
-
-Action:
-  create    Always create one new PENDING Instruction through the Agent API
-
-Behavior:
-  This is a direct atomic command. It does not match or reuse ACTIVE, PENDING,
-  CREATED, or historical Instructions, does not select a card, and does not
-  open a browser or wait for activation. The endpoint is intentionally
-  non-idempotent: an unknown response must not be blindly retried. Use the
-  activatable Instruction query for read-only reconciliation before any retry.
-
-Options:
-  --title <title>              Instruction title
-  --mandates <json>            Mandate JSON array
-  --mandates-file <path>       UTF-8 JSON array file
-  --description <text>         Instruction description
-  --effective-until-time <datetime>
-  --is-recurring               Mark the instruction as recurring
-  --shipping-address <json>    Shipping address JSON object
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/cwallet/instructions/pending
-
-Examples:
-  clink pending-instruction create \\
-    --title "Test pending instruction" \\
-    --mandates '[{"title":"Test","description":"Test authorization","amountLimit":10.00,"currencyCode":"USD","merchantCategoryCode":"5411"}]' \\
-    --format json
-`;
-var INSTRUCTION_HELP = `clink instruction
-
-Usage:
-  clink instruction <prepare|create|sign-url|list|get|update|cancel> [options]
-
-Actions:
-  prepare   Create/reuse a Quick: bound CREATED authorization or no-card PENDING binding wait
-  create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
-  sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
-  list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
-  get       Get one instruction by --purchase-instruction-id
-  update    Print the agent page URL for user-managed changes; no backend update call in this phase
-  cancel    Print the agent page URL for user-managed cancellation; no backend cancel call in this phase
-
-Notes:
-  prepare POSTs the complete restricted instructionContext to
-  /agent/cwallet/instructions/pending. Only after CWallet returns the exact PENDING instructionId
-  does the CLI resolve the trusted card binding link. After the first successful exact-ID Event Hub
-  poll, it prints a machine-readable PENDING handoff envelope with watchReady=true, then keeps
-  waiting in the foreground. It never opens that link or a standalone VIC page. Activation is
-  exact-GET verified and timeout returns an instruction get continuation bound to the original ID;
-  it never creates a second Instruction or retries Checkout/payment.
-  A CREATED response returns the exact backend-bound card's manual authorization URL and a
-  read-only instruction get continuation, without opening a browser or waiting for binding.
-  create POSTs /agent/cwallet/instructions and creates the instruction in CREATED (draft) state,
-  then prints the Passkey page URL for the returned instructionId.
-  An instruction turns ACTIVE only after the Passkey/FIDO signature completes on the agent page
-  (that page calls the backend sign API with the WebAuthn authResult). The CLI does not call the
-  backend sign/update/cancel APIs itself \u2014 those require a Passkey authResult produced in the
-  browser, so sign-url/update/cancel only print the agent page URL for the user to complete there.
-  Agent page URL environment mirrors the environment saved by wallet init or an explicit API base.
-  Only valid for Visa cards the card list reports as VIC-registered: card-level
-  strongAuthRegistered = true, or visaRegistrationSucceeded = true on backends that
-  predate it. strongAuthReady is the requesting device's state and is never the gate.
-  Instruction-level currency/amount are NOT sent \u2014 currency and amountLimit live on each mandate.
-  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
-  Do not send clientReferenceId / channelTokenId / consumerId \u2014 the server derives them.
-  --effective-until-time / mandate effectiveUntilTime use UTC datetime format "yyyy-MM-dd HH:mm:ss".
-  --valid-only lists ACTIVE instructions and, for one-time instructions, keeps only mandates with reserveStatus=0.
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
-
-Examples:
-  clink instruction prepare \\
-    --title "Business trip" \\
-    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
-    --max-wait 900 --format json
-  clink instruction create \\
-    --payment-instrument-id pi_xxx --title "Business trip" \\
-    --effective-until-time "2026-06-25 00:00:00" \\
-    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
-    --format json
-  clink instruction sign-url \\
-    --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --format json
-  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
-  clink instruction get --purchase-instruction-id ins_xxx --format json
-  clink instruction cancel --format json
-`;
-var INSTRUCTION_PREPARE_HELP = `clink instruction prepare
-
-Usage:
-  clink instruction prepare --title <title> \\
-    (--mandates <json> | --mandates-file <path>) [options]
-
-Required Arguments:
-  --title <title>              Instruction title
-  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
-  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
-
-Optional Arguments:
-  --description <text>         Instruction description
-  --effective-until-time <datetime>
-                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
-  --is-recurring               Mark the instruction as reusable/recurring
-  --shipping-address <json>    Shipping address JSON object for physical goods
-  --max-wait <seconds>         Foreground activation wait bound, defaults to 900
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/cwallet/instructions/pending
-
-Behavior:
-  Sends the complete restricted instructionContext without paymentInstrumentId or extra. CWallet
-  creates or reuses one no-card PENDING Instruction and returns its exact instructionId/status.
-  If a VIC-ready card is selected at creation, /pending may instead return CREATED with its
-  backend-bound paymentInstrumentId. The CLI exact-GETs that ID and returns user_action_required,
-  the same card's manualOpenUrl for authorization, and a read-only instruction get continuation.
-  It does not wait for binding, open a browser, replace the bound card, or create another ID.
-  Only ACTIVE is ready for use.
-  The CLI then obtains the existing card binding link but withholds it until the first successful
-  Event Hub poll and identity validation. At readiness it writes the stable English prompt to stderr
-  and stdout emits a structured handoff envelope:
-  status=PENDING, the exact instructionId, trusted bindingUrl, watchReady=true,
-  watchEventType=purchase_instruction.activated, terminal=false, and processRunning=true.
-  The process remains in the foreground and later emits one final exact-ID envelope.
-  The CLI never opens the card binding link or a standalone VIC page. Portal owns card binding,
-  3DS, and VIC; after Portal completion CWallet attaches that card and activates the same ID.
-  The activation event is only a wake-up signal: the CLI exact-GETs the returned ID before reporting
-  ready. Timeout or a wait failure returns a read-only instruction get continuation for the same ID.
-  It never creates a replacement Instruction and never starts Checkout or payment.
-  Pending expiry is server-owned: exact verification requires one valid future Instruction expiry
-  shared by every Mandate, but does not require equality with caller-supplied expiry values.
-  If CWallet returns CARD_READY or VIC_READY without an instructionId because VIC completed during
-  the request race, the command returns card_ready without another POST or a binding handoff.
-  --open and --no-watch are intentionally unsupported.
-
-Mandate Fields:
-  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
-  merchantCategoryCode, preferredMerchantName or merchantCategory, and effectiveUntilTime.
-  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
-
-Example:
-  clink instruction prepare \\
-    --title "Business trip" \\
-    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
-    --max-wait 900 --format json
-`;
-var INSTRUCTION_CREATE_HELP = `clink instruction create
-
-Usage:
-  clink instruction create --payment-instrument-id <id> --title <title> \\
-    (--mandates <json> | --mandates-file <path>) [options]
-
-Required Arguments:
-  --payment-instrument-id <id> Payment instrument ID for the Visa card
-  --title <title>              Instruction title
-  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
-  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
-
-Optional Arguments:
-  --description <text>         Instruction description
-  --effective-until-time <datetime>
-                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
-  --is-recurring               Mark the instruction as reusable/recurring
-  --shipping-address <json>    Shipping address JSON object for physical goods
-  --extra <json>               Extra JSON object passed through to the backend
-
-Options:
-  --open                       Open the generated Passkey link in the browser
-  --no-watch                   Do not poll for webhook events after printing the link
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  POST /agent/cwallet/instructions
-
-Mandate Fields:
-  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
-  merchantCategoryCode, and effectiveUntilTime.
-  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
-
-Notes:
-  Creates a CREATED draft instruction and prints a Passkey URL. The instruction becomes ACTIVE only
-  after the user completes Passkey/FIDO authorization on the agent page.
-  --mandates and --mandates-file are mutually exclusive. On Windows PowerShell, prefer
-  --mandates-file so JSON quotes are not reinterpreted by the shell.
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-  Do not send clientReferenceId, channelTokenId, or consumerId; the server derives them.
-
-Examples:
-  clink instruction create \\
-    --payment-instrument-id pi_xxx --title "Business trip" \\
-    --effective-until-time "2026-06-25 00:00:00" \\
-    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011","effectiveUntilTime":"2026-06-25 00:00:00"}]' \\
-    --format json
-  clink instruction create \\
-    --payment-instrument-id pi_xxx --title "Business trip" \\
-    --mandates-file .\\mandates.json --format json
-`;
-var INSTRUCTION_SIGN_URL_HELP = `clink instruction sign-url
-
-Usage:
-  clink instruction sign-url --payment-instrument-id <id> --purchase-instruction-id <id> [options]
-
-Required Arguments:
-  --payment-instrument-id <id>    Payment instrument ID for the Visa card
-  --purchase-instruction-id <id>  Purchase instruction ID to authorize
-
-Options:
-${CUSTOMER_API_KEY_LINK_OPTIONS}
-
-Notes:
-  Builds the Passkey URL locally. The browser page performs the backend sign call with WebAuthn
-  authResult after the user authorizes.
-  Output includes manualOpenUrl and browserLaunch so callers can handle manual browser fallback.
-
-Examples:
-  clink instruction sign-url --payment-instrument-id pi_xxx --purchase-instruction-id ins_xxx --open
-`;
-var INSTRUCTION_LIST_HELP = `clink instruction list
-
-Usage:
-  clink instruction list [options]
-
-Optional Arguments:
-  --status <status>              Filter by status: CREATED, ACTIVE, PENDING, INPROGRESS, COMPLETED,
-                                 CANCELLED, EXPIRED, DECLINED
-  --valid-only                   List ACTIVE instructions only; one-time mandates are filtered to reserveStatus=0
-  --payment-instrument-id <id>   Filter by payment instrument ID
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  GET /agent/cwallet/instructions
-
-Notes:
-  --valid-only cannot be combined with a non-ACTIVE --status.
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-
-Examples:
-  clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
-  clink instruction list --status ACTIVE --format pretty
-`;
-var INSTRUCTION_GET_HELP = `clink instruction get
-
-Usage:
-  clink instruction get --purchase-instruction-id <id> [options]
-
-Required Arguments:
-  --purchase-instruction-id <id>  Purchase instruction ID to fetch
-
-Options:
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Endpoint:
-  GET /agent/cwallet/instructions/{purchaseInstructionId}
-
-Notes:
-  Uses OAuth for OAuth wallets; legacy CSK is limited to wallets that have never used OAuth.
-
-Examples:
-  clink instruction get --purchase-instruction-id ins_xxx --format json
-`;
-var INSTRUCTION_UPDATE_HELP = `clink instruction update
-
-Usage:
-  clink instruction update [options]
-
-Options:
-${CUSTOMER_API_KEY_LINK_OPTIONS}
-
-Notes:
-  Prints the agent page URL for user-managed changes. The CLI does not call a backend update API
-  because updates require Passkey/WebAuthn authorization in the browser.
-
-Examples:
-  clink instruction update --open
-`;
-var INSTRUCTION_CANCEL_HELP = `clink instruction cancel
-
-Usage:
-  clink instruction cancel [options]
-
-Options:
-${CUSTOMER_API_KEY_LINK_OPTIONS}
-
-Notes:
-  Prints the agent page URL for user-managed cancellation. The CLI does not call a backend cancel API
-  because cancellation requires Passkey/WebAuthn authorization in the browser.
-
-Examples:
-  clink instruction cancel --open
-`;
-var EVENTS_HELP = `clink events
-
-Usage:
-  clink events poll [options]
-
-Subcommands:
-  poll              Poll the webhook-event queue for state-change events
-
-Examples:
-  clink events poll --format json
-  clink events poll --type payment_method.added --format json
-`;
-var EVENTS_POLL_HELP = `clink events poll
-
-Poll the latest state-change events (POST /agent/event-hub/webhook-events/poll)
-within a bounded window, process and cache them, and (by default) acknowledge them via
-POST /agent/event-hub/webhook-events/ack. Use this to consume state changes on demand
-instead of relying on the link-command watch.
-
-Usage:
-  clink events poll [options]
-
-Options:
-  --max-wait <seconds>         Bounded window across retries (default 60)
-  --limit <n>                  Max events per poll (pageSize, default 20)
-  --type <type[,type...]>      Return these exact types (any-of); acknowledge and skip others
-  --checkout-id <id>           Match one agent_order event by canonical checkout aliases or the
-                               UCP agentInstructionInfo checkout ID; preserve every nonmatch
-  --ucp-order-id <id>          Frozen UCP order ID from checkout data; after a verified succeeded
-                               event, fetch this order before ACK without re-reading checkout
-  --endpoint <url>             Original internal UCP endpoint used to re-read checkout when
-                               --ucp-order-id is unavailable
-  --payment-instrument-id <id> Match typed card/VIC events to one exact payment instrument
-  --no-ack                     Keep selected events unacknowledged (untyped polls peek the batch)
-  --event-only                 ACK and return the exact succeeded event without UCP order lookup
-${CUSTOMER_API_KEY_REQUEST_OPTIONS}
-
-Output (data):
-  { "ready": bool, "timedOut": bool, "events": [...], "ackedEventIds": [...],
-    "nextToken"?: string, "paymentConfirmed"?: true, "ucpOrderId"?: string,
-    "orderLookupStatus"?: "FETCHED"|"ERROR"|"IDENTIFIER_CONFLICT"|"PENDING",
-    "order"?: object, "orderWarning"?: string, "orderResumeCommand"?: string,
-    "eventAckWarning"?: string }
-  On timeout, "resumeCommand" is included. Ordinary polls need no cursor because ACKed
-  events are removed server-side. Checkout polls may also return nextToken, which the
-  generated resumeCommand carries automatically, together with --ucp-order-id and --endpoint.
-
-Notes:
-  Every record read is processed: payment_method.* events refresh cached payment methods
-  and risk_rule.updated events upsert local risk rule state. With --type, "events" contains
-  only matching records; a comma-separated list waits for any listed type. Unrelated records
-  are acknowledged and skipped so an older page cannot block the requested type. Matching
-  records are also acknowledged by default.
-  With both --type and --no-ack, matching records stay queued but unrelated records are still
-  acknowledged. Without --type, a poll returns the whole batch and --no-ack acknowledges none.
-  --checkout-id requires exactly agent_order.succeeded or agent_order.failed. The request sends
-  eventTypes plus selectors.checkoutId to Event Hub before pagination. Event Hub returns nextToken
-  so the CLI can continue past unacknowledged events owned by another Checkout. Missing, malformed,
-  or conflicting checkout aliases fail closed; resourceId/orderId never substitute. A full page
-  without nextToken fails explicitly instead of polling the same page forever. Only an exact match
-  with absent or mutually consistent Payment Order aliases is eligible for ACK; malformed aliases
-  stay queued. resumeCommand preserves the selector and nextToken.
-  By default an agent_order.succeeded selected with --checkout-id continues in the same process
-  to UCP order lookup while the event remains queued, then ACKs immediately before output.
-  --ucp-order-id is the fast path and is the only supplied ID passed
-  to ucp-order get; event resourceId/orderId remain Payment Order IDs and are never reused. Without
-  --ucp-order-id, the CLI re-reads the same checkout (and --endpoint) immediately, then after
-  1/2/4/8 seconds while projection is pending, and accepts only mutually consistent canonical,
-  legacy OMS, or completed data.order identifiers. Checkout/order lookup failures keep
-  paymentConfirmed=true, exit 0, and return a separate warning/resume command. An uncertain ACK
-  also exits 0 with payment evidence plus eventAckWarning, so a later harmless duplicate can be
-  observed. --no-ack and --event-only suppress this automatic lookup.
-  --payment-instrument-id requires --type, is mutually exclusive with --checkout-id, and matches
-  canonical payload aliases or the event resourceId. Same-type events for another card remain
-  unacknowledged, and resumeCommand preserves the card selector.
-
-Examples:
-  clink events poll --format json
-  clink events poll --type payment_method.updated --format json
-  clink events poll --type payment_method.update,vic_device.binding_succeeded --payment-instrument-id pi_123 --format json
-  clink events poll --type account-created,account-reloaded --format json
-  clink events poll --type agent_order.succeeded --checkout-id checkout_123 --format json
-  clink events poll --type agent_order.succeeded --checkout-id checkout_123 --ucp-order-id ucp_order_123 --max-wait 900 --format json
-  clink events poll --no-ack --format json
-`;
-function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
-  const output = getHelpText(command, subcommand, nestedCommand, executableName);
-  process.stdout.write(output);
-}
-function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
-  const help = getRawHelpText(command, subcommand, nestedCommand);
-  return renderCliCommandText(help, executableName);
-}
-function getRawHelpText(command, subcommand, nestedCommand) {
-  switch (command) {
-    case "install":
-      return INSTALL_HELP;
-    case "update":
-      return UPDATE_HELP;
-    case "skills":
-      switch (subcommand) {
-        case "list":
-          return SKILLS_LIST_HELP;
-        case "install":
-          return SKILLS_INSTALL_HELP;
-        case "sync":
-          return SKILLS_SYNC_HELP;
-        case "tip":
-          return SKILLS_TIP_HELP;
-        default:
-          return SKILLS_HELP;
-      }
-    case "wallet":
-      switch (subcommand) {
-        case "init":
-          return WALLET_INIT_HELP;
-        case "logout":
-          return WALLET_LOGOUT_HELP;
-        case "status":
-          return WALLET_STATUS_HELP;
-        default:
-          return WALLET_HELP;
-      }
-    case "card":
-      switch (subcommand) {
-        case "binding-link":
-          return CARD_BINDING_LINK_HELP;
-        case "setup-link":
-          return CARD_SETUP_LINK_HELP;
-        case "modify-link":
-          return CARD_MODIFY_LINK_HELP;
-        case "passkey-link":
-          return CARD_PASSKEY_LINK_HELP;
-        case "list":
-          return CARD_LIST_HELP;
-        case "get":
-          return CARD_GET_HELP;
-        default:
-          return CARD_HELP;
-      }
-    case "risk":
-      switch (subcommand) {
-        case "get":
-          return RISK_RULE_GET_HELP;
-        case "link":
-          return RISK_RULE_LINK_HELP;
-        default:
-          return RISK_RULE_HELP;
-      }
-    case "pay":
-      return PAY_HELP;
-    case "instruction":
-      switch (subcommand) {
-        case "prepare":
-          return INSTRUCTION_PREPARE_HELP;
-        case "create":
-          return INSTRUCTION_CREATE_HELP;
-        case "sign-url":
-          return INSTRUCTION_SIGN_URL_HELP;
-        case "list":
-          return INSTRUCTION_LIST_HELP;
-        case "get":
-          return INSTRUCTION_GET_HELP;
-        case "update":
-          return INSTRUCTION_UPDATE_HELP;
-        case "cancel":
-          return INSTRUCTION_CANCEL_HELP;
-        default:
-          return INSTRUCTION_HELP;
-      }
-    case "pending-instruction":
-      return PENDING_INSTRUCTION_HELP;
-    case "events":
-      switch (subcommand) {
-        case "poll":
-          return EVENTS_POLL_HELP;
-        default:
-          return EVENTS_HELP;
-      }
-    case "tool":
-      switch (subcommand) {
-        case "item-id":
-          return TOOL_ITEM_ID_HELP;
-        case "parse-site":
-          return TOOL_PARSE_SITE_HELP;
-        case "parse-item":
-          return TOOL_PARSE_ITEM_HELP;
-        case "checkout-total":
-          return TOOL_CHECKOUT_TOTAL_HELP;
-        case "get-ucp-profile":
-          return TOOL_GET_UCP_PROFILE_HELP;
-        case "get-rest-endpoint":
-          return TOOL_GET_REST_ENDPOINT_HELP;
-        case "internal-ucp":
-          switch (nestedCommand) {
-            case "get-endpoint":
-              return TOOL_INTERNAL_UCP_GET_ENDPOINT_HELP;
-            case "get-merchant-list":
-              return TOOL_INTERNAL_UCP_GET_MERCHANT_LIST_HELP;
-            default:
-              return TOOL_INTERNAL_UCP_HELP;
-          }
-        default:
-          return TOOL_HELP;
-      }
-    case "refund":
-      switch (subcommand) {
-        case "create":
-          return REFUND_CREATE_HELP;
-        case "get":
-          return REFUND_GET_HELP;
-        default:
-          return REFUND_HELP;
-      }
-    case "ucp-checkout":
-      switch (subcommand) {
-        case "run":
-          return UCP_CHECKOUT_RUN_HELP;
-        case "create":
-          return UCP_CHECKOUT_CREATE_HELP;
-        case "get":
-          return UCP_CHECKOUT_GET_HELP;
-        case "update":
-          return UCP_CHECKOUT_UPDATE_HELP;
-        case "cancel":
-          return UCP_CHECKOUT_CANCEL_HELP;
-        case "complete":
-          return UCP_CHECKOUT_COMPLETE_HELP;
-        default:
-          return UCP_CHECKOUT_HELP;
-      }
-    case "ucp-catalog":
-      switch (subcommand) {
-        case "search":
-          return UCP_CATALOG_SEARCH_HELP;
-        case "product":
-          return UCP_CATALOG_PRODUCT_HELP;
-        default:
-          return UCP_CATALOG_HELP;
-      }
-    case "catalog":
-      switch (subcommand) {
-        case "search":
-          return CATALOG_SEARCH_HELP;
-        default:
-          return CATALOG_HELP;
-      }
-    case "ucp-order":
-      switch (subcommand) {
-        case "get":
-          return UCP_ORDER_GET_HELP;
-        case "wait-delivery":
-          return UCP_ORDER_WAIT_DELIVERY_HELP;
-        case "list":
-          return UCP_ORDER_LIST_HELP;
-        default:
-          return UCP_ORDER_HELP;
-      }
-    case "config":
-      switch (subcommand) {
-        case "set":
-          return CONFIG_SET_HELP;
-        case "get":
-          return CONFIG_GET_HELP;
-        case "unset":
-          return CONFIG_UNSET_HELP;
-        default:
-          return CONFIG_HELP;
-      }
-    default:
-      return ROOT_HELP;
-  }
-}
-
-// dist/internal-ucp.js
-var MERCHANT_LIST_PATH = "/agent/ucp/merchants";
-var MERCHANT_LIST_USER_AGENT = "clink-cli";
-var MERCHANT_LIST_TIMEOUT_MS = 15e3;
-var MERCHANT_LIST_CACHE_TTL_MS = 3e4;
-var MERCHANT_LIST_MAX_ATTEMPTS = 2;
-var MERCHANT_LIST_RETRY_DELAY_MS = 50;
-var merchantListRequests = /* @__PURE__ */ new WeakMap();
-async function getInternalUcpMerchantList(options2 = {}) {
-  return (await loadInternalUcpMerchantList(options2)).merchants;
-}
-function validateInternalUcpMerchantList(value, source) {
-  if (!Array.isArray(value)) {
-    throw invalidMerchantList(source, "expected an array");
-  }
-  const merchants = [];
-  for (const record2 of value) {
-    if (!record2 || typeof record2 !== "object" || Array.isArray(record2)) {
-      continue;
-    }
-    const fields = record2;
-    const merchantId = nonBlankString(fields.merchant_id);
-    const merchantName = nonBlankString(fields.merchant_name);
-    const description = optionalDescription(fields.description);
-    const domain = merchantRouteUrl(fields.domain);
-    if (!merchantId || !merchantName || description === void 0 || !domain) {
-      continue;
-    }
-    const merchant = {
-      merchant_id: merchantId,
-      merchant_name: merchantName,
-      description,
-      domain
-    };
-    if (Object.hasOwn(fields, "ext")) {
-      const ext = safeCloneJsonValue(fields.ext);
-      if (ext !== void 0) {
-        merchant.ext = ext;
-      }
-    }
-    merchants.push(merchant);
-  }
-  if (value.length > 0 && merchants.length === 0) {
-    throw invalidMerchantList(source, "no valid merchant identities");
-  }
-  return merchants;
-}
-async function resolveInternalUcpEndpoint(rawProductUrl, options2 = {}) {
-  let productUrl2;
-  try {
-    productUrl2 = new URL(rawProductUrl);
-  } catch {
-    throw validationError("invalid --product-url");
-  }
-  const environment = options2.environment ?? "production";
-  const domainName = canonicalDomain(productUrl2.hostname);
-  if (!domainName) {
-    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
-  }
-  let merchantId;
-  if (options2.merchants) {
-    merchantId = options2.merchants.get(domainName);
-  } else {
-    let loaded = await loadInternalUcpMerchants(options2);
-    merchantId = loaded.merchants.get(domainName);
-    if (!merchantId && loaded.fromCache) {
-      loaded = await loadInternalUcpMerchants(options2, true);
-      merchantId = loaded.merchants.get(domainName);
-    }
-  }
-  if (!merchantId) {
-    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
-  }
-  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
-}
-async function resolveInternalUcpEndpointByMerchantId(rawMerchantId, options2 = {}) {
-  const merchantId = nonBlankString(rawMerchantId);
-  if (!merchantId) {
-    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
-  }
-  const environment = options2.environment ?? "production";
-  let domainName;
-  if (options2.merchants) {
-    domainName = domainNameForMerchantId(options2.merchants, merchantId);
-  } else {
-    let loaded = await loadInternalUcpMerchantList(options2);
-    domainName = merchantListDomainName(loaded.merchants, merchantId);
-    if (!domainName && loaded.fromCache) {
-      loaded = await loadInternalUcpMerchantList(options2, true);
-      domainName = merchantListDomainName(loaded.merchants, merchantId);
-    }
-  }
-  if (!domainName) {
-    throw validationError("NOT_IN_INTERNAL_UCP_LIST");
-  }
-  return internalUcpEndpointResult(domainName, merchantId, options2.baseUrl ?? API_BASE_URLS[environment]);
-}
-function internalUcpMerchantRouteUrl(domainName) {
-  return `https://${domainName}/`;
-}
-function internalUcpEndpointResult(domainName, merchantId, baseUrl) {
-  let endpoint;
-  try {
-    endpoint = new URL(`/agent/ucp/${encodeURIComponent(merchantId)}`, baseUrl);
-  } catch {
-    throw validationError("invalid internal UCP base URL");
-  }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:" || endpoint.username || endpoint.password || !canonicalDomain(endpoint.hostname) || endpoint.port === "0" || endpoint.search || endpoint.hash) {
-    throw validationError("invalid internal UCP base URL");
-  }
-  return {
-    domainName,
-    merchantId,
-    provider: "clinkbill",
-    endpoint: endpoint.toString()
-  };
-}
-function domainNameForMerchantId(merchants, merchantId) {
-  for (const [domainName, mappedMerchantId] of merchants) {
-    if (mappedMerchantId === merchantId) {
-      return domainName;
-    }
-  }
-  return void 0;
-}
-function merchantListDomainName(merchants, merchantId) {
-  for (const merchant of merchants) {
-    if (merchant.merchant_id !== merchantId) {
-      continue;
-    }
-    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
-    if (domainName) {
-      return domainName;
-    }
-  }
-  return void 0;
-}
-async function loadInternalUcpMerchants(options2, forceRefresh = false) {
-  const loaded = await loadInternalUcpMerchantList(options2, forceRefresh);
-  const environment = options2.environment ?? "production";
-  const source = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
-  return {
-    merchants: merchantMap(loaded.merchants, source),
-    fromCache: loaded.fromCache
-  };
-}
-async function loadInternalUcpMerchantList(options2, forceRefresh = false) {
-  const environment = options2.environment ?? "production";
-  const url = new URL(MERCHANT_LIST_PATH, API_BASE_URLS[environment]).toString();
-  const fetchMerchantList = options2.fetchMerchantList ?? fetch;
-  let requestsByUrl = merchantListRequests.get(fetchMerchantList);
-  if (!requestsByUrl) {
-    requestsByUrl = /* @__PURE__ */ new Map();
-    merchantListRequests.set(fetchMerchantList, requestsByUrl);
-  }
-  let state = requestsByUrl.get(url);
-  if (!state) {
-    state = {};
-    requestsByUrl.set(url, state);
-  }
-  const now = Date.now();
-  if (!forceRefresh && state.cached && state.cached.expiresAt > now) {
-    return { merchants: cloneMerchantList(state.cached.merchants), fromCache: true };
-  }
-  const timeoutMs = options2.timeoutMs ?? MERCHANT_LIST_TIMEOUT_MS;
-  const inFlight = state.inFlightByTimeout?.get(timeoutMs);
-  if (inFlight) {
-    return { merchants: cloneMerchantList(await inFlight), fromCache: false };
-  }
-  const requestState = state;
-  const request = (async () => {
-    const document2 = await fetchMerchantListDocument(url, timeoutMs, fetchMerchantList);
-    const validated = validateInternalUcpMerchantList(document2, url).map((merchant) => Object.freeze({ ...merchant }));
-    const cached = Object.freeze(validated);
-    requestState.cached = {
-      expiresAt: Date.now() + MERCHANT_LIST_CACHE_TTL_MS,
-      merchants: cached
-    };
-    return cached;
-  })();
-  requestState.inFlightByTimeout ??= /* @__PURE__ */ new Map();
-  requestState.inFlightByTimeout.set(timeoutMs, request);
-  try {
-    return { merchants: cloneMerchantList(await request), fromCache: false };
-  } finally {
-    if (requestState.inFlightByTimeout?.get(timeoutMs) === request) {
-      requestState.inFlightByTimeout.delete(timeoutMs);
-      if (requestState.inFlightByTimeout.size === 0) {
-        delete requestState.inFlightByTimeout;
-      }
-    }
-  }
-}
-async function fetchMerchantListDocument(url, timeoutMs = MERCHANT_LIST_TIMEOUT_MS, fetchMerchantList = fetch) {
-  const deadline = Date.now() + timeoutMs;
-  let lastFailure;
-  for (let attempt = 1; attempt <= MERCHANT_LIST_MAX_ATTEMPTS; attempt += 1) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
-      break;
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), remainingMs);
-    let response;
-    try {
-      response = await fetchMerchantList(url, {
-        method: "GET",
-        credentials: "omit",
-        headers: {
-          Accept: "application/json",
-          "Accept-Language": "en-US",
-          "User-Agent": MERCHANT_LIST_USER_AGENT,
-          [CLI_VERSION_HEADER]: CLI_VERSION
-        },
-        signal: controller.signal
-      });
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    if (!response.ok) {
-      clearTimeout(timeout);
-      discardMerchantListResponse(response);
-      lastFailure = apiError(`internal UCP merchant list request failed with status ${response.status}`, response.status);
-      if (retryableMerchantListStatus(response.status) && attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    }
-    let rawText;
-    try {
-      rawText = await response.text();
-    } catch (error) {
-      clearTimeout(timeout);
-      lastFailure = merchantListNetworkFailure(error, timeoutMs, true);
-      if (attempt < MERCHANT_LIST_MAX_ATTEMPTS && await waitForMerchantListRetry(deadline)) {
-        continue;
-      }
-      throw lastFailure;
-    } finally {
-      clearTimeout(timeout);
-    }
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      throw apiError("internal UCP merchant list response is not valid JSON", 502);
-    }
-  }
-  throw lastFailure ?? networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-}
-function merchantRouteUrl(value) {
-  const rawDomain = nonBlankString(value);
-  if (!rawDomain) {
-    return void 0;
-  }
-  if (/[\\?#]/.test(rawDomain) || /[\u0000-\u0020\u007f]/.test(rawDomain) || /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i.test(rawDomain)) {
-    return void 0;
-  }
-  let domain;
-  try {
-    domain = new URL(rawDomain);
-  } catch {
-    return void 0;
-  }
-  const domainName = canonicalDomain(domain.hostname);
-  if (domain.protocol !== "http:" && domain.protocol !== "https:" || domain.username || domain.password || domain.search || domain.hash || !domainName || domain.port === "0") {
-    return void 0;
-  }
-  domain.hostname = domainName;
-  if (domain.protocol === "http:" && domain.port === "80" || domain.protocol === "https:" && domain.port === "443") {
-    domain.port = "";
-  }
-  return domain.pathname === "/" ? domain.origin : `${domain.origin}${domain.pathname}`;
-}
-function nonBlankString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function stringValue(value) {
-  return typeof value === "string" ? value.trim() : void 0;
-}
-function optionalDescription(value) {
-  return value === null || value === void 0 ? "" : stringValue(value);
-}
-function safeCloneJsonValue(value) {
-  try {
-    return cloneJsonValue(value, /* @__PURE__ */ new Set());
-  } catch {
-    return void 0;
-  }
-}
-function cloneJsonValue(value, ancestors) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (!value || typeof value !== "object" || ancestors.has(value)) {
-    return void 0;
-  }
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const result = [];
-      for (const item of value) {
-        const cloned = cloneJsonValue(item, ancestors);
-        if (cloned === void 0) {
-          return void 0;
-        }
-        result.push(cloned);
-      }
-      return result;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      return void 0;
-    }
-    const entries = [];
-    for (const [key, item] of Object.entries(value)) {
-      const cloned = cloneJsonValue(item, ancestors);
-      if (cloned === void 0) {
-        return void 0;
-      }
-      entries.push([key, cloned]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
-  }
-}
-function canonicalDomain(value) {
-  return nonBlankString(value)?.toLowerCase().replace(/\.+$/, "");
-}
-function merchantMap(merchants, source) {
-  const merchantIdsByDomain = /* @__PURE__ */ new Map();
-  for (const merchant of merchants) {
-    const domainName = canonicalDomain(new URL(merchant.domain).hostname);
-    if (!domainName) {
-      continue;
-    }
-    const merchantIds = merchantIdsByDomain.get(domainName) ?? /* @__PURE__ */ new Set();
-    merchantIds.add(merchant.merchant_id);
-    merchantIdsByDomain.set(domainName, merchantIds);
-  }
-  const mapped = new ConflictAwareMerchantMap(source);
-  for (const [domainName, merchantIds] of merchantIdsByDomain) {
-    if (merchantIds.size === 1) {
-      mapped.set(domainName, merchantIds.values().next().value);
-    } else {
-      mapped.addConflict(domainName);
-    }
-  }
-  return mapped;
-}
-var ConflictAwareMerchantMap = class extends Map {
-  source;
-  conflicts = /* @__PURE__ */ new Set();
-  constructor(source) {
-    super();
-    this.source = source;
-  }
-  addConflict(domainName) {
-    this.delete(domainName);
-    this.conflicts.add(domainName);
-  }
-  get(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.get(domainName);
-  }
-  has(domainName) {
-    this.assertUnambiguous(domainName);
-    return super.has(domainName);
-  }
-  assertUnambiguous(domainName) {
-    if (this.conflicts.has(domainName)) {
-      throw invalidMerchantList(this.source, `conflicting merchant IDs for domain: ${domainName}`);
-    }
-  }
-};
-function cloneMerchantList(merchants) {
-  return merchants.map((merchant) => {
-    const cloned = {
-      merchant_id: merchant.merchant_id,
-      merchant_name: merchant.merchant_name,
-      description: merchant.description,
-      domain: merchant.domain
-    };
-    if (Object.hasOwn(merchant, "ext")) {
-      const ext = safeCloneJsonValue(merchant.ext);
-      if (ext !== void 0) {
-        cloned.ext = ext;
-      }
-    }
-    return cloned;
-  });
-}
-function retryableMerchantListStatus(status) {
-  return status === 408 || status === 429 || status >= 500 && status <= 599;
-}
-function discardMerchantListResponse(response) {
-  if (response.body) {
-    void response.body.cancel().catch(() => {
-    });
-  }
-}
-async function waitForMerchantListRetry(deadline) {
-  if (deadline - Date.now() <= MERCHANT_LIST_RETRY_DELAY_MS) {
-    return false;
-  }
-  await new Promise((resolve6) => {
-    setTimeout(resolve6, MERCHANT_LIST_RETRY_DELAY_MS);
-  });
-  return Date.now() < deadline;
-}
-function merchantListNetworkFailure(error, timeoutMs, responseBody = false) {
-  if (error?.name === "AbortError") {
-    return networkError(`internal UCP merchant list request timed out after ${timeoutMs}ms`);
-  }
-  const message = error instanceof Error && error.message.trim() ? error.message.trim() : responseBody ? "network response failed" : "network request failed";
-  return networkError(`internal UCP merchant list ${responseBody ? "response" : "request"} failed: ${message}`);
-}
-function invalidMerchantList(source, reason) {
-  return apiError(`invalid internal UCP merchant list from ${source}: ${reason}`, 502);
-}
-
-// dist/instruction-context.js
-import { readFile as readFile3 } from "node:fs/promises";
-var RECURRING_FREQUENCIES = ["WEEKLY", "MONTHLY", "YEARLY"];
-var RECURRING_FREQUENCY_SET = new Set(RECURRING_FREQUENCIES);
-var MAX_MANDATE_DESCRIPTION_LENGTH = 150;
-var UTC_DATETIME_FORMAT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
-var QUICK_INSTRUCTION_CONTEXT_MAX_BYTES = 16 * 1024;
-var QUICK_INSTRUCTION_CONTEXT_FLAGS = [
-  "title",
-  "description",
-  "mandates",
-  "mandates-file",
-  "is-recurring",
-  "shipping-address",
-  "effective-until-time"
-];
-var QUICK_INSTRUCTION_OPTIONS = [
-  ...QUICK_INSTRUCTION_CONTEXT_FLAGS,
-  "payment-instrument-id",
-  "extra"
-];
-function hasQuickInstructionOptions(flags) {
-  return QUICK_INSTRUCTION_OPTIONS.some((name) => name in flags);
-}
-async function buildQuickInstructionContext(flags, commandLabel) {
-  if ("payment-instrument-id" in flags) {
-    throw validationError(`--payment-instrument-id is not supported by ${commandLabel}; the card is bound after login`);
-  }
-  if ("extra" in flags) {
-    throw validationError(`--extra is not supported by the ${commandLabel} Quick Instruction context`);
-  }
-  if (!QUICK_INSTRUCTION_CONTEXT_FLAGS.some((name) => name in flags)) {
-    return void 0;
-  }
-  const title = requireNonBlankStringFlag(flags, "missing --title", "title");
-  if (title.length > 256) {
-    throw validationError(`--title must be at most 256 characters, got ${title.length}`);
-  }
-  const description = getStringFlag(flags, "description");
-  if (description !== void 0 && description.length > 1024) {
-    throw validationError(`--description must be at most 1024 characters, got ${description.length}`);
-  }
-  const isRecurring = getBooleanFlag(flags, "is-recurring");
-  const mandates = normalizeInstructionMandates(await readInstructionMandates(flags), isRecurring, { maxEntries: 10, requireCoreFields: true });
-  const effectiveUntilTime = utcDateTimeFlag(flags, "effective-until-time");
-  const context = {
-    title,
-    mandates,
-    ...description !== void 0 ? { description } : {},
-    ...effectiveUntilTime !== void 0 ? { effectiveUntilTime } : {},
-    ...isRecurring ? { isRecurring: true } : {}
-  };
-  const shippingAddress = optionalJsonObjectFlag(flags, "shipping-address");
-  if (shippingAddress !== void 0) {
-    context.shippingAddress = shippingAddress;
-  }
-  const contextBytes = Buffer.byteLength(JSON.stringify(context), "utf8");
-  if (contextBytes > QUICK_INSTRUCTION_CONTEXT_MAX_BYTES) {
-    throw validationError(`${commandLabel} instruction context must be at most 16384 UTF-8 bytes, got ${contextBytes}`);
-  }
-  return context;
-}
-async function readInstructionMandates(flags) {
-  const inlineJson = getStringFlag(flags, "mandates");
-  const filePath = getStringFlag(flags, "mandates-file");
-  if (inlineJson !== void 0 && filePath !== void 0) {
-    throw validationError("--mandates and --mandates-file cannot be used together");
-  }
-  if (inlineJson === void 0 && filePath === void 0) {
-    throw validationError("missing --mandates or --mandates-file (JSON array)");
-  }
-  let source = inlineJson;
-  let sourceName = "--mandates";
-  if (filePath !== void 0) {
-    if (!filePath.trim()) {
-      throw validationError("--mandates-file path must not be blank");
-    }
-    sourceName = "--mandates-file";
-    try {
-      source = await readFile3(filePath, "utf8");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw validationError(`could not read --mandates-file "${filePath}": ${message}`);
-    }
-  }
-  const parsed = parseJsonFlag(source, sourceName);
-  if (!Array.isArray(parsed)) {
-    throw validationError(`${sourceName} must be a JSON array`);
-  }
-  return parsed;
-}
-function normalizeInstructionMandates(mandates, isRecurring, options2 = {}) {
-  if (options2.requireCoreFields && mandates.length === 0) {
-    throw validationError("--mandates must contain at least one entry");
-  }
-  if (options2.maxEntries !== void 0 && mandates.length > options2.maxEntries) {
-    throw validationError(`--mandates cannot exceed ${options2.maxEntries} entries, got ${mandates.length}`);
-  }
-  return mandates.map((mandate, index) => {
-    if (!isJsonObject(mandate)) {
-      if (options2.requireCoreFields) {
-        throw validationError(`--mandates[${index}] must be a JSON object`);
-      }
-      if (isRecurring) {
-        throw validationError(`--mandates[${index}] must be a JSON object when --is-recurring is set`);
-      }
-      return mandate;
-    }
-    if (typeof mandate.description === "string" && mandate.description.length > MAX_MANDATE_DESCRIPTION_LENGTH) {
-      throw validationError(`--mandates[${index}].description must not exceed ${MAX_MANDATE_DESCRIPTION_LENGTH} characters`);
-    }
-    if (options2.requireCoreFields) {
-      requireMandateText(mandate, "description", index);
-      requireMandateAmountLimit(mandate, index);
-      requireMandateText(mandate, "currencyCode", index);
-      validateUtcDateTime(mandate.effectiveUntilTime, `--mandates[${index}].effectiveUntilTime`);
-    }
-    if (!isRecurring) {
-      return mandate;
-    }
-    const frequency = mandate.recurringFrequency;
-    if (typeof frequency !== "string" || frequency.trim().length === 0) {
-      throw validationError(`--mandates[${index}].recurringFrequency is required when --is-recurring is set`);
-    }
-    const normalizedFrequency = frequency.trim().toUpperCase();
-    if (!RECURRING_FREQUENCY_SET.has(normalizedFrequency)) {
-      throw validationError(`--mandates[${index}].recurringFrequency must be one of ${RECURRING_FREQUENCIES.join(", ")}`);
-    }
-    return {
-      ...mandate,
-      recurringFrequency: normalizedFrequency
-    };
-  });
-}
-function utcDateTimeFlag(flags, name) {
-  const value = getStringFlag(flags, name);
-  if (value === void 0) {
-    return void 0;
-  }
-  if (!UTC_DATETIME_FORMAT.test(value)) {
-    throw validationError(`--${name} must use UTC datetime format yyyy-MM-dd HH:mm:ss, got "${value}"`);
-  }
-  return value;
-}
-function requireNonBlankStringFlag(flags, missingMessage, name) {
-  const value = requireStringFlag(flags, missingMessage, name);
-  if (!value.trim()) {
-    throw validationError(`--${name} is required and cannot be blank`);
-  }
-  return value;
-}
-function optionalJsonObjectFlag(flags, name) {
-  const value = getStringFlag(flags, name);
-  if (value === void 0) {
-    return void 0;
-  }
-  const parsed = parseJsonFlag(value, `--${name}`);
-  if (!isJsonObject(parsed)) {
-    throw validationError(`--${name} must be a JSON object`);
-  }
-  return parsed;
-}
-function validateUtcDateTime(value, field) {
-  if (value === void 0 || value === null) {
-    return;
-  }
-  if (typeof value !== "string" || !UTC_DATETIME_FORMAT.test(value)) {
-    throw validationError(`${field} must use UTC datetime format yyyy-MM-dd HH:mm:ss`);
-  }
-}
-function requireMandateText(mandate, field, index) {
-  const value = mandate[field];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw validationError(`--mandates[${index}].${field} is required and cannot be blank`);
-  }
-}
-function requireMandateAmountLimit(mandate, index) {
-  const value = mandate.amountLimit;
-  if (value === void 0 || value === null) {
-    throw validationError(`--mandates[${index}].amountLimit is required`);
-  }
-  const text2 = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
-  if (!/^\d{1,18}(\.\d{1,2})?$/.test(text2) || Number(text2) <= 0) {
-    throw validationError(`--mandates[${index}].amountLimit must be a positive number with at most 2 decimal places, got ${JSON.stringify(value)}`);
-  }
-  if (typeof value === "number") {
-    const [integerPart, fractionPart = ""] = text2.split(".");
-    const minorUnits2 = Number(`${integerPart}${fractionPart.padEnd(2, "0")}`);
-    if (!Number.isSafeInteger(minorUnits2)) {
-      throw validationError(`--mandates[${index}].amountLimit is too precise for a JSON number; provide it as a JSON string`);
-    }
-  }
-}
-function isJsonObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/oauth.js
-import { randomUUID as randomUUID2 } from "node:crypto";
-var OAUTH_CLIENT_ID = "clink-cli";
-var OAUTH_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
-var OAUTH_REFRESH_GRANT_TYPE = "refresh_token";
-var OAUTH_DEFAULT_SCOPE = [
-  "wallet:read",
-  "wallet:setup",
-  "payment:execute",
-  "instruction:read",
-  "instruction:write",
-  "browser:handoff",
-  "refund:read",
-  "refund:write",
-  "events:read",
-  "offline_access"
-].join(" ");
-var OAUTH_DEVICE_AUTHORIZATION_PATH = "/agent/cwallet/oauth/device/authorization";
-var OAUTH_TOKEN_PATH = "/agent/cwallet/oauth/token";
-var OAUTH_REVOKE_PATH = "/agent/cwallet/oauth/revoke";
-var DEFAULT_SERVER_POLL_INTERVAL_SECONDS = 5;
-var CLIENT_POLL_PADDING_SECONDS = 1;
-var SLOW_DOWN_INCREMENT_SECONDS = 5;
-var ACCESS_TOKEN_REFRESH_WINDOW_MS = 6e4;
-var WALLET_INIT_SUPERSEDED_MESSAGE = "A newer wallet init started; this login attempt has been cancelled.";
-var OAuthProtocolError = class extends Error {
-  errorCode;
-  status;
-  constructor(errorCode, description, status) {
-    super(description || errorCode);
-    this.name = "OAuthProtocolError";
-    this.errorCode = errorCode;
-    this.status = status;
-  }
-};
-function resolveOAuthDeviceId(config) {
-  return config.authorization?.deviceId ?? randomUUID2();
-}
-async function createDeviceAuthorization(options2) {
-  const result = await requestJson({
-    baseUrl: options2.baseUrl,
-    method: "POST",
-    path: OAUTH_DEVICE_AUTHORIZATION_PATH,
-    body: {
-      client_id: OAUTH_CLIENT_ID,
-      device_id: options2.deviceId,
-      scope: options2.scope ?? OAUTH_DEFAULT_SCOPE,
-      source: OAUTH_CLIENT_ID,
-      agentClient: options2.agentClient,
-      ...options2.instructionContext ? { instruction_context: options2.instructionContext } : {}
-    },
-    timeoutMs: options2.timeoutMs,
-    dryRun: options2.dryRun
-  });
-  if (isDryRun2(result)) {
-    return result;
-  }
-  const data = requireOAuthSuccess(result);
-  return {
-    deviceCode: requiredString2(data.device_code, "OAuth response is missing device_code"),
-    userCode: requiredString2(data.user_code, "OAuth response is missing user_code"),
-    verificationUri: requiredString2(data.verification_uri, "OAuth response is missing verification_uri"),
-    verificationUriComplete: requiredString2(data.verification_uri_complete, "OAuth response is missing verification_uri_complete"),
-    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
-    interval: nonNegativeNumber(data.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS
-  };
-}
-function buildVerificationUrl(authorization, email, name) {
-  const url = new URL(authorization.verificationUriComplete);
-  if (!url.searchParams.has("user_code")) {
-    url.searchParams.set("user_code", authorization.userCode);
-  }
-  url.searchParams.delete("email");
-  url.searchParams.delete("name");
-  const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
-  fragment.set("email", email);
-  fragment.set("name", name);
-  url.hash = fragment.toString();
-  return url.toString();
-}
-async function pollDeviceToken(options2) {
-  const deadline = Date.now() + options2.expiresIn * 1e3;
-  let intervalSeconds = (nonNegativeNumber(options2.interval) ?? DEFAULT_SERVER_POLL_INTERVAL_SECONDS) + CLIENT_POLL_PADDING_SECONDS;
-  for (; ; ) {
-    await assertWalletInitIsCurrent(options2.isCurrent);
-    if (Date.now() >= deadline) {
-      throw authError("Authorization expired; run `clink wallet init` again.");
-    }
-    try {
-      const token = await requestToken({
-        baseUrl: options2.baseUrl,
-        timeoutMs: options2.timeoutMs,
-        requireAgentClientId: true,
-        body: {
-          grant_type: OAUTH_DEVICE_GRANT_TYPE,
-          client_id: OAUTH_CLIENT_ID,
-          device_id: options2.deviceId,
-          device_code: options2.deviceCode
-        }
-      });
-      return token;
-    } catch (error) {
-      if (!(error instanceof OAuthProtocolError)) {
-        throw error;
-      }
-      if (error.errorCode === "authorization_pending") {
-        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
-        continue;
-      }
-      if (error.errorCode === "slow_down") {
-        intervalSeconds += SLOW_DOWN_INCREMENT_SECONDS;
-        await sleepUntilNextPoll(intervalSeconds, deadline, options2.sleep ?? sleep2);
-        continue;
-      }
-      throw publicOAuthError(error, "device");
-    }
-  }
-}
-function toStoredAuthorization(deviceId, token, issuerBaseUrl, now = Date.now(), sessionId = randomUUID2()) {
-  const issuerOrigin = httpOrigin(issuerBaseUrl);
-  if (!issuerOrigin) {
-    throw configError("OAuth issuer must be an absolute http(s) URL");
-  }
-  return {
-    type: "oauth",
-    customerId: token.customerId,
-    customerIdVerified: true,
-    sessionId,
-    deviceId,
-    issuerOrigin,
-    tokenType: "Bearer",
-    accessToken: token.accessToken,
-    accessTokenExpiresAt: now + token.expiresIn * 1e3,
-    refreshToken: token.refreshToken,
-    refreshTokenExpiresAt: now + token.refreshExpiresIn * 1e3,
-    ...token.agentClientId ? { agentClientId: token.agentClientId } : {},
-    ...token.visaRegistrationStatus ? { visaRegistrationStatus: token.visaRegistrationStatus } : {},
-    scope: token.scope
-  };
-}
-async function ensureFreshOAuthAuthorization(options2) {
-  const authorization = options2.storedConfig.authorization;
-  if (!authorization) {
-    return options2.storedConfig;
-  }
-  assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
-  if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
-    return options2.storedConfig;
-  }
-  const expectedAuthorization = {
-    accessToken: authorization.accessToken,
-    customerId: authorization.customerId,
-    issuerOrigin: authorization.issuerOrigin,
-    deviceId: authorization.deviceId,
-    ...authorization.sessionId ? { sessionId: authorization.sessionId } : {}
-  };
-  return refreshStoredAuthorization({ ...options2, expectedAuthorization });
-}
-async function revokeStoredAuthorization(options2) {
-  const result = await requestJson({
-    baseUrl: options2.authorization.issuerOrigin,
-    method: "POST",
-    path: OAUTH_REVOKE_PATH,
-    body: {
-      client_id: OAUTH_CLIENT_ID,
-      device_id: options2.authorization.deviceId,
-      refresh_token: options2.authorization.refreshToken
-    },
-    timeoutMs: options2.timeoutMs,
-    dryRun: options2.dryRun
-  });
-  if (isDryRun2(result)) {
-    return result;
-  }
-  requireOAuthSuccess(result);
-  return { revoked: true };
-}
-function assertAuthorizationEnvironment(authorization, runtimeBaseUrl) {
-  if (!sameHttpOrigin(authorization.issuerOrigin, runtimeBaseUrl)) {
-    throw configError("saved OAuth authorization belongs to a different API environment; run `clink wallet init` for the selected wallet environment");
-  }
-}
-function isAccessTokenFresh(authorization, minimumValidityMs = ACCESS_TOKEN_REFRESH_WINDOW_MS) {
-  return authorization.accessTokenExpiresAt > Date.now() + minimumValidityMs;
-}
-function clearOAuthAndLegacyCredentials(config) {
-  delete config.authorization;
-  delete config.customerApiKey;
-}
-async function refreshStoredAuthorization(options2) {
-  let refreshFailure;
-  const updated = await updateStoredConfig(async (current) => {
-    const authorization = current.authorization;
-    if (!authorization) {
-      refreshFailure = authError("OAuth login is missing; run `clink wallet init`.");
-      return current;
-    }
-    assertAuthorizationEnvironment(authorization, options2.runtimeBaseUrl);
-    if (!matchesAuthorizationIdentity(current, options2.expectedAuthorization)) {
-      refreshFailure = authError(options2.failedAuthorization ? "OAuth login changed while the request was in progress; retry the command." : "OAuth login changed while the command was in progress; retry the command.");
-      return current;
-    }
-    if (options2.failedAuthorization && !matchesAuthorizationIdentity(current, options2.failedAuthorization)) {
-      refreshFailure = authError("OAuth login changed while the request was in progress; retry the command.");
-      return current;
-    }
-    if (options2.failedAuthorization && authorization.accessToken !== options2.failedAuthorization.accessToken) {
-      return current;
-    }
-    if (authorization.customerIdVerified && !options2.force && isAccessTokenFresh(authorization, options2.minimumValidityMs)) {
-      return current;
-    }
-    if (authorization.refreshTokenExpiresAt <= Date.now()) {
-      clearOAuthAndLegacyCredentials(current);
-      refreshFailure = authError("OAuth session expired; run `clink wallet init` again.");
-      return current;
-    }
-    try {
-      const token = await requestToken({
-        baseUrl: authorization.issuerOrigin,
-        timeoutMs: options2.timeoutMs,
-        body: {
-          grant_type: OAUTH_REFRESH_GRANT_TYPE,
-          client_id: OAUTH_CLIENT_ID,
-          device_id: authorization.deviceId,
-          refresh_token: authorization.refreshToken
-        }
-      });
-      const customerChanged = token.customerId !== authorization.customerId;
-      if (authorization.customerIdVerified && customerChanged) {
-        refreshFailure = authError("OAuth refresh returned a different customer; run `clink wallet init` again.");
-        return current;
-      }
-      if (authorization.agentClientId && token.agentClientId && authorization.agentClientId !== token.agentClientId) {
-        refreshFailure = authError("OAuth refresh returned a different Agent Client; run `clink wallet init` again.");
-        return current;
-      }
-      current.authorization = toStoredAuthorization(authorization.deviceId, token, authorization.issuerOrigin, Date.now(), authorization.sessionId);
-      if (!current.authorization.agentClientId && authorization.agentClientId) {
-        current.authorization.agentClientId = authorization.agentClientId;
-      }
-      if (!current.authorization.visaRegistrationStatus && authorization.visaRegistrationStatus) {
-        current.authorization.visaRegistrationStatus = authorization.visaRegistrationStatus;
-      }
-      current.customerId = token.customerId;
-      if (customerChanged) {
-        delete current.paymentMethods;
-        delete current.riskRules;
-      }
-      return current;
-    } catch (error) {
-      if (error instanceof OAuthProtocolError && error.errorCode === "invalid_grant") {
-        clearOAuthAndLegacyCredentials(current);
-        refreshFailure = authError("OAuth session is invalid or revoked; run `clink wallet init` again.");
-        return current;
-      }
-      throw error instanceof OAuthProtocolError ? publicOAuthError(error, "refresh") : error;
-    }
-  });
-  if (refreshFailure) {
-    throw refreshFailure;
-  }
-  return updated;
-}
-function matchesAuthorizationIdentity(config, failedAuthorization) {
-  const authorization = config.authorization;
-  return Boolean(authorization && authorization.customerId === failedAuthorization.customerId && authorization.issuerOrigin === failedAuthorization.issuerOrigin && authorization.deviceId === failedAuthorization.deviceId && (failedAuthorization.sessionId === void 0 || authorization.sessionId === failedAuthorization.sessionId));
-}
-async function requestToken(options2) {
-  const result = await requestJson({
-    baseUrl: options2.baseUrl,
-    method: "POST",
-    path: OAUTH_TOKEN_PATH,
-    body: options2.body,
-    timeoutMs: options2.timeoutMs,
-    dryRun: false
-  });
-  if (isDryRun2(result)) {
-    throw apiError("unexpected OAuth token dry-run response");
-  }
-  const data = requireOAuthSuccess(result);
-  const tokenType = requiredString2(data.token_type, "OAuth response is missing token_type");
-  if (tokenType.toLowerCase() !== "bearer") {
-    throw apiError(`unsupported OAuth token type: ${tokenType}`);
-  }
-  const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
-  const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
-  const pendingInstructionId2 = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
-  return {
-    tokenType: "Bearer",
-    accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
-    expiresIn: positiveNumber(data.expires_in, "OAuth response has invalid expires_in"),
-    refreshToken: requiredString2(data.refresh_token, "OAuth response is missing refresh_token; offline_access is required"),
-    refreshExpiresIn: positiveNumber(data.refresh_expires_in, "OAuth response has invalid refresh_expires_in"),
-    customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
-    ...agentClientId ? { agentClientId } : {},
-    ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
-    ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
-    scope: requiredString2(data.scope, "OAuth response is missing scope")
-  };
-}
-function requireOAuthSuccess(response) {
-  const oauthError = parseOAuthError(response.body);
-  if (oauthError) {
-    throw new OAuthProtocolError(oauthError.error, oauthError.errorDescription, response.status);
-  }
-  if (response.status < 200 || response.status >= 300) {
-    throw apiError(extractMessage(response.body) ?? `OAuth request failed with status ${response.status}`, response.status);
-  }
-  const body = unwrapResponseData(response.body);
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    throw apiError("OAuth response body is invalid");
-  }
-  return body;
-}
-function parseOAuthError(body) {
-  const candidate = unwrapResponseData(body);
-  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
-    return void 0;
-  }
-  const record2 = candidate;
-  if (typeof record2.error !== "string" || record2.error.length === 0) {
-    return void 0;
-  }
-  const errorDescription = typeof record2.error_description === "string" ? record2.error_description : typeof record2.errorDescription === "string" ? record2.errorDescription : void 0;
-  return {
-    error: record2.error,
-    ...errorDescription ? { errorDescription } : {}
-  };
-}
-function unwrapResponseData(body) {
-  if (typeof body === "object" && body !== null && "data" in body) {
-    return body.data;
-  }
-  return body;
-}
-function publicOAuthError(error, phase) {
-  switch (error.errorCode) {
-    case "access_denied":
-      return authError("Authorization was denied.");
-    case "expired_token":
-      return authError("Authorization expired; run `clink wallet init` again.");
-    case "invalid_grant":
-      return authError(phase === "refresh" ? "OAuth session is invalid or revoked; run `clink wallet init` again." : "Authorization code is invalid or already used; run `clink wallet init` again.");
-    case "invalid_client":
-      return authError("OAuth client configuration was rejected.", error.status);
-    case "invalid_scope":
-      return configError("OAuth scope configuration was rejected by the server.");
-    case "invalid_request":
-      return apiError(error.message, error.status);
-    default:
-      return apiError(error.message, error.status);
-  }
-}
-async function sleepUntilNextPoll(intervalSeconds, deadline, pause) {
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) {
-    throw authError("Authorization expired; run `clink wallet init` again.");
-  }
-  await pause(Math.min(intervalSeconds * 1e3, remaining));
-}
-async function assertWalletInitIsCurrent(isCurrent) {
-  if (isCurrent && !await isCurrent()) {
-    throw authError(WALLET_INIT_SUPERSEDED_MESSAGE, 409);
-  }
-}
-function requiredString2(value, message) {
-  if (typeof value !== "string" || value.length === 0) {
-    throw apiError(message);
-  }
-  return value;
-}
-function optionalString(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function parseVisaRegistrationStatus2(value, required) {
-  const normalized = optionalString(value)?.toUpperCase();
-  if (!normalized) {
-    if (required) {
-      throw apiError("OAuth response is missing visa_registration_status");
-    }
-    return void 0;
-  }
-  if (normalized !== "PENDING" && normalized !== "REGISTERING" && normalized !== "SUCCEEDED" && normalized !== "FAILED" && normalized !== "UNKNOWN") {
-    throw apiError("OAuth response has invalid visa_registration_status");
-  }
-  return normalized;
-}
-function positiveNumber(value, message) {
-  const number = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(number) || number <= 0) {
-    throw apiError(message);
-  }
-  return number;
-}
-function nonNegativeNumber(value) {
-  const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : void 0;
-}
-function isDryRun2(value) {
-  return "dryRun" in value;
-}
-function sleep2(ms) {
-  return new Promise((resolve6) => setTimeout(resolve6, ms));
-}
-function mergeOAuthLoginConfig(current, options2) {
-  if (options2.authorization.customerId !== options2.customerId) {
-    throw configError("OAuth token customer does not match the wallet login response");
-  }
-  const next = cloneStoredConfig(current);
-  next.baseUrl = options2.baseUrl;
-  next.email = options2.email;
-  next.name = options2.name;
-  next.customerId = options2.customerId;
-  next.authorization = { ...options2.authorization };
-  next.oauthRequired = true;
-  delete next.customerApiKey;
-  delete next.paymentMethods;
-  delete next.riskRules;
-  return next;
-}
-
-// dist/self-update.js
-import { execFile as execFile2 } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile4, rm as rm8 } from "node:fs/promises";
-import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname5, isAbsolute as isAbsolute4, join as join7, parse, resolve as resolve5, sep as sep5 } from "node:path";
-import { fileURLToPath } from "node:url";
-
-// dist/skills/agentic-payment-sync.js
-import { randomUUID as createRandomUUID } from "node:crypto";
-import { constants as constants6 } from "node:fs";
-import { lstat as lstat6, mkdir as mkdir6, mkdtemp, open as open8, readlink as readlink3, rm as rm7 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname as dirname4, join as join6, relative as relative5, resolve as resolve4, sep as sep4 } from "node:path";
-
-// dist/skills/agents.js
-import { constants } from "node:fs";
-import { cp, copyFile, lstat, mkdir as mkdir2, open as open2, readdir, readlink, realpath, rename as rename2, rm as rm2, rmdir, symlink } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-var MARKER_FILE_NAME = ".clink-install.json";
-var DETECTION_FAILURE = "failed to detect installed agents";
-var PREPARE_FAILURE = "failed to prepare agent installation";
-var TARGET_CONFLICT = "agent target conflicts with existing content";
-var TARGET_CHANGED = "agent target changed after preflight";
-var APPLY_FAILURE = "failed to apply agent installation";
-var ROLLBACK_FAILURE = "failed to roll back agent installation";
-var UNSUPPORTED_REASON = "no supported local skill directory";
-async function detectAgents(input) {
-  const homeDir = resolve(input.homeDir);
-  const skillsRoot = resolve(input.skillsRoot);
-  const sharedTarget = join(skillsRoot, input.skillName);
-  const detected = [];
-  try {
-    await appendDetected(detected, "cursor", "link", join(homeDir, ".cursor"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "claude-code", "link", join(homeDir, ".claude"), (rootPath) => join(rootPath, "skills", input.skillName));
-    const codexRoot = resolveEnvironmentRoot(input.env.CODEX_HOME, join(homeDir, ".codex"));
-    await appendDetected(detected, "codex", "link", codexRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "codebuddy", "link", join(homeDir, ".codebuddy"), (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "openclaw", "shared", join(homeDir, ".openclaw"), () => sharedTarget);
-    const hermesRoot = resolveEnvironmentRoot(input.env.HERMES_HOME, join(homeDir, ".hermes"));
-    await appendDetected(detected, "hermes", "copy", hermesRoot, (rootPath) => join(rootPath, "skills", input.skillName));
-    await appendDetected(detected, "trae", "link", join(homeDir, ".trae"), (rootPath) => join(rootPath, "skills", input.skillName));
-    const opencodeRoot = await firstExistingRoot(uniquePaths([
-      resolveOptionalEnvironmentRoot(input.env.OPENCODE_CONFIG_DIR),
-      join(resolveEnvironmentRoot(input.env.XDG_CONFIG_HOME, join(homeDir, ".config")), "opencode"),
-      join(homeDir, ".opencode")
-    ]));
-    if (opencodeRoot !== null) {
-      detected.push({
-        agent: "opencode",
-        mode: "shared",
-        rootPath: opencodeRoot,
-        targetPath: sharedTarget
-      });
-    }
-    const copilotCliRoot = resolveEnvironmentRoot(input.env.COPILOT_HOME, join(homeDir, ".copilot"));
-    const copilotRoot = await firstExistingRoot(uniquePaths([
-      copilotCliRoot,
-      join(homeDir, ".config", "github-copilot")
-    ]));
-    if (copilotRoot !== null) {
-      detected.push({
-        agent: "github-copilot",
-        mode: "shared",
-        rootPath: copilotRoot,
-        targetPath: sharedTarget
-      });
-    }
-    const geminiHome = resolveEnvironmentRoot(input.env.GEMINI_CLI_HOME, homeDir);
-    const geminiRoot = join(geminiHome, ".gemini");
-    if (await isExistingRoot(geminiRoot)) {
-      const usesSharedHome = geminiHome === homeDir;
-      detected.push({
-        agent: "gemini-cli",
-        mode: usesSharedHome ? "shared" : "link",
-        rootPath: geminiRoot,
-        targetPath: usesSharedHome ? sharedTarget : join(geminiRoot, "skills", input.skillName)
-      });
-    }
-    await appendDetected(detected, "codework", "unsupported", join(homeDir, ".codework"), () => null);
-    await appendDetected(detected, "chatgpt", "unsupported", join(homeDir, ".chatgpt"), () => null);
-  } catch (error) {
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(DETECTION_FAILURE);
-  }
-  return detected;
-}
-async function prepareAgentPlans(input) {
-  try {
-    const preflighted = [];
-    for (const detected of input.detected) {
-      if (detected.mode === "shared" || detected.mode === "unsupported") {
-        preflighted.push({ mode: detected.mode, detected });
-        continue;
-      }
-      if (detected.targetPath === null) {
-        throw installError(PREPARE_FAILURE);
-      }
-      const writeDetected = detected;
-      const boundary = await inspectWritableBoundary(writeDetected);
-      const snapshot = await inspectTarget(writeDetected, input);
-      if (snapshot.kind === "conflict" && !input.force) {
-        throw installError(TARGET_CONFLICT);
-      }
-      const needsBackup = snapshot.kind !== "absent" && snapshot.kind !== "exact-link";
-      const copyTempPath = detected.mode === "copy" ? `${writeDetected.targetPath}.clink-${input.uuid}-${detected.agent}.copy` : null;
-      if (copyTempPath !== null && await pathEntryExists(copyTempPath)) {
-        throw installError(PREPARE_FAILURE);
-      }
-      const backupPath = needsBackup ? join(input.backupsRoot, `${input.uuid}-${detected.agent}`) : null;
-      if (backupPath !== null && await pathEntryExists(backupPath)) {
-        throw installError(PREPARE_FAILURE);
-      }
-      preflighted.push({
-        mode: "write",
-        value: {
-          detected: writeDetected,
-          snapshot,
-          boundary,
-          copyTempPath,
-          backupPath,
-          keepBackup: snapshot.kind === "conflict"
-        }
-      });
-    }
-    return preflighted.map((entry) => {
-      if (entry.mode === "write") {
-        return createWritePlan(entry.value, input);
-      }
-      if (entry.mode === "shared") {
-        return createNoWritePlan(entry.detected, "shared");
-      }
-      return createNoWritePlan(entry.detected, "unsupported");
-    });
-  } catch (error) {
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(PREPARE_FAILURE);
-  }
-}
-async function appendDetected(output, agent, mode, rootPath, targetPath) {
-  if (!await isExistingRoot(rootPath)) {
-    return;
-  }
-  output.push({ agent, mode, rootPath, targetPath: targetPath(rootPath) });
-}
-function resolveEnvironmentRoot(value, fallback) {
-  return value === void 0 || value.length === 0 ? resolve(fallback) : resolve(value);
-}
-function resolveOptionalEnvironmentRoot(value) {
-  return value === void 0 || value.length === 0 ? null : resolve(value);
-}
-function uniquePaths(paths) {
-  return [...new Set(paths.filter((value) => value !== null))];
-}
-async function firstExistingRoot(paths) {
-  for (const rootPath of paths) {
-    if (await isExistingRoot(rootPath)) {
-      return rootPath;
-    }
-  }
-  return null;
-}
-async function isExistingRoot(rootPath) {
-  const rootStat = await lstatIfExists(rootPath);
-  return rootStat !== null && (rootStat.isDirectory() || rootStat.isSymbolicLink());
-}
-function createNoWritePlan(detected, mode) {
-  return {
-    async apply() {
-      if (mode === "shared") {
-        return {
-          agent: detected.agent,
-          status: "shared",
-          path: detected.targetPath
-        };
-      }
-      return {
-        agent: detected.agent,
-        status: "unsupported",
-        path: null,
-        reason: UNSUPPORTED_REASON
-      };
-    },
-    async rollback() {
-    },
-    async finalize() {
-    }
-  };
-}
-function createWritePlan(preflight, input) {
-  const { detected, snapshot, boundary, copyTempPath, backupPath, keepBackup } = preflight;
-  const targetPath = detected.targetPath;
-  const backupObjectPath = backupPath === null ? null : join(backupPath, "target");
-  let appliedResult = null;
-  let backupMoved = false;
-  let backupVerified = false;
-  let backupContainerEntry = null;
-  let movedBackupFingerprint = null;
-  let preserveBackup = keepBackup;
-  let placedFingerprint = null;
-  let copyTempFingerprint = null;
-  let parentCreated = false;
-  let ownedParent = null;
-  let finalized = false;
-  let committed = false;
-  async function applyLink() {
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetUnchanged(detected, input, snapshot);
-    if (snapshot.kind === "exact-link") {
-      return { agent: detected.agent, status: "unchanged", path: targetPath };
-    }
-    await ensureTargetParent();
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetUnchanged(detected, input, snapshot);
-    await moveExistingTarget();
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetAbsent(targetPath);
-    const linkText = relative(dirname(targetPath), input.currentPath);
-    await symlink(linkText, targetPath, "dir");
-    placedFingerprint = await fingerprintPath(targetPath, detected.mode);
-    const installedSnapshot = await inspectTarget(detected, input);
-    if (installedSnapshot.kind !== "exact-link") {
-      throw new Error("link verification failed");
-    }
-    const installedLink = await readlink(targetPath);
-    if (installedLink !== linkText) {
-      throw new Error("link verification failed");
-    }
-    return { agent: detected.agent, status: "linked", path: targetPath };
-  }
-  async function applyCopy(releasePath, marker) {
-    if (!isMarker(marker) || marker.publisher !== input.publisher || marker.skillName !== input.skillName) {
-      throw new Error("invalid copy marker");
-    }
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetUnchanged(detected, input, snapshot);
-    if (snapshot.kind === "managed-copy" && markersMatchIdentityAndSha(snapshot.marker, marker)) {
-      return { agent: detected.agent, status: "unchanged", path: targetPath };
-    }
-    await ensureTargetParent();
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetUnchanged(detected, input, snapshot);
-    await moveExistingTarget();
-    if (copyTempPath === null) {
-      throw new Error("missing copy staging path");
-    }
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetAbsent(targetPath);
-    await assertAuxiliaryAbsent(copyTempPath);
-    await copyDirectoryExclusively(releasePath, copyTempPath);
-    copyTempFingerprint = await fingerprintPath(copyTempPath, detected.mode);
-    const stagedMarker = await readMarkerRecord(copyTempPath);
-    if (stagedMarker === null || !markersMatchIdentityAndSha(stagedMarker.marker, marker)) {
-      throw new Error("copy verification failed");
-    }
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetAbsent(targetPath);
-    await rename2(copyTempPath, targetPath);
-    placedFingerprint = copyTempFingerprint;
-    copyTempFingerprint = null;
-    await allowPendingFilesystemEvents();
-    await assertPathNamesEntry(targetPath, entryIdentityFromFingerprint(placedFingerprint));
-    const copiedFingerprint = await fingerprintPath(targetPath, detected.mode);
-    if (!sameMovedObject(placedFingerprint, copiedFingerprint)) {
-      throw new Error("copy placement verification failed");
-    }
-    placedFingerprint = copiedFingerprint;
-    const installedSnapshot = await inspectTarget(detected, input);
-    if (installedSnapshot.kind !== "managed-copy" || !markersMatchIdentityAndSha(installedSnapshot.marker, marker)) {
-      throw new Error("copy verification failed");
-    }
-    return { agent: detected.agent, status: "copied", path: targetPath };
-  }
-  async function ensureTargetParent() {
-    await assertWritableBoundary(boundary, ownedParent);
-    if (boundary.parent.kind === "existing") {
-      return;
-    }
-    await mkdir2(boundary.parentPath);
-    parentCreated = true;
-    ownedParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
-    await assertWritableBoundary(boundary, ownedParent);
-  }
-  async function moveExistingTarget() {
-    if (snapshot.kind === "absent" || snapshot.kind === "exact-link") {
-      return;
-    }
-    if (backupPath === null || backupObjectPath === null) {
-      throw new Error("missing backup path");
-    }
-    await mkdir2(input.backupsRoot, { recursive: true, mode: 448 });
-    await mkdir2(backupPath, { mode: 448 });
-    backupContainerEntry = createEntryIdentity(await lstat(backupPath));
-    await assertWritableBoundary(boundary, ownedParent);
-    await assertTargetUnchanged(detected, input, snapshot);
-    await assertPathNamesEntry(backupPath, backupContainerEntry);
-    await rename2(targetPath, backupObjectPath);
-    backupMoved = true;
-    await assertPathNamesEntry(backupPath, backupContainerEntry);
-    movedBackupFingerprint = await fingerprintPath(backupObjectPath, detected.mode);
-    if (!sameMovedObject(snapshot.fingerprint, movedBackupFingerprint)) {
-      preserveBackup = true;
-      throw new Error("moved target verification failed");
-    }
-    backupVerified = true;
-  }
-  async function undoMutation() {
-    let removedPlacedTarget = false;
-    if (copyTempPath !== null && copyTempFingerprint !== null) {
-      await removeOwnedPath(copyTempPath, copyTempFingerprint, detected.mode);
-      copyTempFingerprint = null;
-    }
-    if (placedFingerprint !== null) {
-      const currentFingerprint = await fingerprintPathIfExists(targetPath, detected.mode);
-      if (currentFingerprint !== null) {
-        if (!sameFingerprint(currentFingerprint, placedFingerprint)) {
-          throw new Error("installed target changed before rollback");
-        }
-        await rm2(targetPath, { recursive: true, force: true });
-        removedPlacedTarget = true;
-      }
-      placedFingerprint = null;
-    }
-    if (backupMoved) {
-      if (backupPath === null || backupObjectPath === null) {
-        throw new Error("missing backup path");
-      }
-      await assertWritableBoundary(boundary, ownedParent);
-      await restoreBackupExclusively(backupObjectPath, targetPath, movedBackupFingerprint, detected.mode);
-      backupMoved = false;
-      backupVerified = false;
-      movedBackupFingerprint = null;
-    }
-    if (backupContainerEntry !== null && backupPath !== null) {
-      await removeOwnedDirectory(backupPath, backupContainerEntry);
-      backupContainerEntry = null;
-    }
-    if (parentCreated && removedPlacedTarget) {
-      await removeOwnedParent(boundary, ownedParent);
-    }
-    parentCreated = false;
-    ownedParent = null;
-  }
-  return {
-    async apply({ releasePath, marker }) {
-      if (appliedResult !== null) {
-        return appliedResult;
-      }
-      if (finalized) {
-        throw installError(APPLY_FAILURE);
-      }
-      try {
-        appliedResult = detected.mode === "link" ? await applyLink() : await applyCopy(releasePath, marker);
-        return appliedResult;
-      } catch {
-        try {
-          await undoMutation();
-        } catch {
-        }
-        throw installError(APPLY_FAILURE);
-      }
-    },
-    async rollback() {
-      if (committed) {
-        return;
-      }
-      if (appliedResult === null && !backupMoved && placedFingerprint === null) {
-        return;
-      }
-      try {
-        await undoMutation();
-        appliedResult = null;
-      } catch {
-        throw installError(ROLLBACK_FAILURE);
-      }
-    },
-    async finalize() {
-      if (finalized) {
-        return;
-      }
-      finalized = true;
-      committed = true;
-      if (backupMoved && !preserveBackup && backupVerified && backupPath !== null && backupObjectPath !== null && movedBackupFingerprint !== null) {
-        try {
-          if (backupContainerEntry === null) {
-            return;
-          }
-          await assertPathNamesEntry(backupPath, backupContainerEntry);
-          const currentBackup = await fingerprintPathIfExists(backupObjectPath, detected.mode);
-          if (currentBackup !== null && sameMovedObject(movedBackupFingerprint, currentBackup)) {
-            await rm2(backupPath, { recursive: true, force: true });
-            backupMoved = false;
-            backupVerified = false;
-            backupContainerEntry = null;
-            movedBackupFingerprint = null;
-          }
-        } catch {
-        }
-      }
-    }
-  };
-}
-async function inspectWritableBoundary(detected) {
-  const rootPath = resolve(detected.rootPath);
-  const targetPath = resolve(detected.targetPath);
-  if (!isPathContained(rootPath, targetPath)) {
-    throw installError(TARGET_CONFLICT);
-  }
-  const rootStat = await lstat(rootPath);
-  if (!rootStat.isDirectory() && !rootStat.isSymbolicLink()) {
-    throw installError(TARGET_CONFLICT);
-  }
-  const canonicalRoot = await realpath(rootPath);
-  const canonicalRootStat = await lstat(canonicalRoot);
-  if (!canonicalRootStat.isDirectory()) {
-    throw installError(TARGET_CONFLICT);
-  }
-  const parentPath = dirname(targetPath);
-  const parentStat = await lstatIfExists(parentPath);
-  const parent = parentStat === null ? { kind: "missing" } : await inspectExistingDirectoryBoundary(parentPath, canonicalRoot, true);
-  return {
-    rootPath,
-    rootEntry: createEntryIdentity(rootStat),
-    canonicalRoot,
-    canonicalRootEntry: createEntryIdentity(canonicalRootStat),
-    parentPath,
-    parent
-  };
-}
-async function inspectExistingDirectoryBoundary(directoryPath, canonicalRoot, allowSymlink) {
-  const entryStat = await lstat(directoryPath);
-  if (!entryStat.isDirectory() && !(allowSymlink && entryStat.isSymbolicLink())) {
-    throw installError(TARGET_CONFLICT);
-  }
-  const canonicalPath = await realpath(directoryPath);
-  const canonicalStat = await lstat(canonicalPath);
-  if (!canonicalStat.isDirectory() || !isPathContained(canonicalRoot, canonicalPath)) {
-    throw installError(TARGET_CONFLICT);
-  }
-  return {
-    kind: "existing",
-    entry: createEntryIdentity(entryStat),
-    canonicalPath,
-    canonicalEntry: createEntryIdentity(canonicalStat)
-  };
-}
-async function assertWritableBoundary(boundary, ownedParent) {
-  const rootStat = await lstat(boundary.rootPath);
-  const canonicalRoot = await realpath(boundary.rootPath);
-  const canonicalRootStat = await lstat(canonicalRoot);
-  if (!sameEntryIdentity(createEntryIdentity(rootStat), boundary.rootEntry) || canonicalRoot !== boundary.canonicalRoot || !sameEntryIdentity(createEntryIdentity(canonicalRootStat), boundary.canonicalRootEntry)) {
-    throw installError(TARGET_CHANGED);
-  }
-  const expectedParent = ownedParent ?? boundary.parent;
-  if (expectedParent.kind === "missing") {
-    if (await pathEntryExists(boundary.parentPath)) {
-      throw installError(TARGET_CHANGED);
-    }
-    return;
-  }
-  const actualParent = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, true);
-  if (!sameEntryIdentity(actualParent.entry, expectedParent.entry) || actualParent.canonicalPath !== expectedParent.canonicalPath || !sameEntryIdentity(actualParent.canonicalEntry, expectedParent.canonicalEntry)) {
-    throw installError(TARGET_CHANGED);
-  }
-}
-async function removeOwnedParent(boundary, ownedParent) {
-  if (ownedParent === null) {
-    return;
-  }
-  try {
-    const actual = await inspectExistingDirectoryBoundary(boundary.parentPath, boundary.canonicalRoot, false);
-    if (!sameEntryIdentity(actual.entry, ownedParent.entry) || actual.canonicalPath !== ownedParent.canonicalPath || !sameEntryIdentity(actual.canonicalEntry, ownedParent.canonicalEntry)) {
-      return;
-    }
-    await rmdir(boundary.parentPath);
-  } catch (error) {
-    if (error instanceof CliError || isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTEMPTY") || isErrorCode(error, "EEXIST")) {
-      return;
-    }
-    throw error;
-  }
-}
-async function copyDirectoryContents(sourcePath, targetPath) {
-  const sourceStat = await lstat(sourcePath);
-  if (!sourceStat.isDirectory()) {
-    throw new Error("copy source is not a directory");
-  }
-  const entries = await readdir(sourcePath, { withFileTypes: true });
-  for (const entry of entries) {
-    await cp(join(sourcePath, entry.name), join(targetPath, entry.name), {
-      recursive: true,
-      dereference: false,
-      errorOnExist: true,
-      force: false
-    });
-  }
-}
-async function copyDirectoryExclusively(sourcePath, targetPath) {
-  const sourceStat = await lstat(sourcePath);
-  if (!sourceStat.isDirectory()) {
-    throw new Error("copy source is not a directory");
-  }
-  await cp(sourcePath, targetPath, {
-    recursive: true,
-    dereference: false,
-    errorOnExist: true,
-    force: false
-  });
-}
-async function allowPendingFilesystemEvents() {
-  await new Promise((resolveEvents) => setImmediate(resolveEvents));
-}
-async function assertPathNamesEntry(filePath, expectedEntry) {
-  const stats = await lstat(filePath);
-  if (!sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
-    throw installError(TARGET_CHANGED);
-  }
-}
-async function removeOwnedDirectory(directoryPath, expectedEntry) {
-  const stats = await lstatIfExists(directoryPath);
-  if (stats === null || !sameEntryIdentity(createEntryIdentity(stats), expectedEntry)) {
-    return;
-  }
-  try {
-    await rmdir(directoryPath);
-  } catch (error) {
-    if (!isErrorCode(error, "ENOENT") && !isErrorCode(error, "ENOTEMPTY") && !isErrorCode(error, "EEXIST")) {
-      throw error;
-    }
-  }
-}
-async function restoreBackupExclusively(backupPath, targetPath, expectedBackup, mode) {
-  await assertTargetAbsent(targetPath);
-  const backupFingerprint = await fingerprintPath(backupPath, mode);
-  if (expectedBackup !== null && !sameMovedObject(expectedBackup, backupFingerprint)) {
-    throw new Error("backup changed before rollback");
-  }
-  if (backupFingerprint.type === "symlink") {
-    const linkText = await readlink(backupPath);
-    await symlink(linkText, targetPath, "dir");
-    await rm2(backupPath, { force: true });
-    return;
-  }
-  if (backupFingerprint.type === "file") {
-    await copyFile(backupPath, targetPath, constants.COPYFILE_EXCL);
-    await rm2(backupPath, { force: true });
-    return;
-  }
-  if (backupFingerprint.type === "directory") {
-    await mkdir2(targetPath);
-    const placedDirectory = createEntryIdentity(await lstat(targetPath));
-    try {
-      await allowPendingFilesystemEvents();
-      await assertPathNamesEntry(targetPath, placedDirectory);
-      await copyDirectoryContents(backupPath, targetPath);
-      await assertPathNamesEntry(targetPath, placedDirectory);
-      const restoredFingerprint = await fingerprintPath(targetPath, mode);
-      if (!sameCopiedObject(backupFingerprint, restoredFingerprint)) {
-        throw new Error("restored directory verification failed");
-      }
-      await rm2(backupPath, { recursive: true });
-      return;
-    } catch (error) {
-      const currentTarget = await lstatIfExists(targetPath);
-      if (currentTarget !== null && sameEntryIdentity(createEntryIdentity(currentTarget), placedDirectory)) {
-        await rm2(targetPath, { recursive: true, force: true });
-      }
-      throw error;
-    }
-  }
-  throw new Error("unsupported backup type");
-}
-async function fingerprintPath(filePath, mode) {
-  const stats = await lstat(filePath);
-  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
-  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
-  return createFingerprint(stats, linkText, marker?.raw ?? null);
-}
-async function fingerprintPathIfExists(filePath, mode) {
-  const stats = await lstatIfExists(filePath);
-  if (stats === null) {
-    return null;
-  }
-  const linkText = stats.isSymbolicLink() ? await readlink(filePath) : null;
-  const marker = mode === "copy" && stats.isDirectory() ? await readMarkerRecord(filePath) : null;
-  return createFingerprint(stats, linkText, marker?.raw ?? null);
-}
-async function inspectTarget(detected, input) {
-  const targetStat = await lstatIfExists(detected.targetPath);
-  if (targetStat === null) {
-    return { kind: "absent" };
-  }
-  if (detected.mode === "link") {
-    if (!targetStat.isSymbolicLink()) {
-      return {
-        kind: "conflict",
-        fingerprint: createFingerprint(targetStat, null, null)
-      };
-    }
-    const linkText = await readlink(detected.targetPath);
-    const resolvedTarget = resolve(dirname(detected.targetPath), linkText);
-    const fingerprint = createFingerprint(targetStat, linkText, null);
-    if (resolvedTarget === resolve(input.currentPath)) {
-      return { kind: "exact-link", fingerprint };
-    }
-    const releaseIdentity = await managedReleaseIdentity(input.currentPath, resolvedTarget);
-    if (releaseIdentity?.publisher === input.publisher && releaseIdentity.skillName === input.skillName) {
-      return { kind: "managed-link", fingerprint };
-    }
-    return { kind: "conflict", fingerprint };
-  }
-  if (detected.mode === "copy" && targetStat.isDirectory()) {
-    const markerRecord = await readMarkerRecord(detected.targetPath);
-    const fingerprint = createFingerprint(targetStat, null, markerRecord?.raw ?? null);
-    if (markerRecord !== null && markerRecord.marker.publisher === input.publisher && markerRecord.marker.skillName === input.skillName) {
-      return { kind: "managed-copy", fingerprint, marker: markerRecord.marker };
-    }
-    return { kind: "conflict", fingerprint };
-  }
-  return {
-    kind: "conflict",
-    fingerprint: createFingerprint(targetStat, null, null)
-  };
-}
-async function managedReleaseIdentity(currentPath, resolvedTarget) {
-  try {
-    const releasesRoot = await realpath(join(dirname(currentPath), ".clink", "releases"));
-    const releasesStat = await lstat(releasesRoot);
-    const targetStat = await lstat(resolvedTarget);
-    if (!releasesStat.isDirectory() || !targetStat.isDirectory()) {
-      return null;
-    }
-    const canonicalTarget = await realpath(resolvedTarget);
-    if (!isPathContained(releasesRoot, canonicalTarget)) {
-      return null;
-    }
-    const releasePath = relative(releasesRoot, canonicalTarget);
-    if (releasePath.length === 0 || isAbsolute(releasePath)) {
-      return null;
-    }
-    const parts = releasePath.split(/[\\/]/u);
-    if (parts.length !== 3 || parts.some((part) => part.length === 0) || !/^[a-f\d]{64}$/u.test(parts[2])) {
-      return null;
-    }
-    const marker = await readMarkerRecord(canonicalTarget);
-    if (marker === null || marker.marker.publisher !== parts[0] || marker.marker.skillName !== parts[1] || marker.marker.sha256 !== parts[2]) {
-      return null;
-    }
-    return { publisher: parts[0], skillName: parts[1] };
-  } catch {
-    return null;
-  }
-}
-async function assertTargetUnchanged(detected, input, expected) {
-  const actual = await inspectTarget(detected, input);
-  if (!sameSnapshot(actual, expected)) {
-    throw installError(TARGET_CHANGED);
-  }
-}
-async function assertTargetAbsent(targetPath) {
-  if (await pathEntryExists(targetPath)) {
-    throw installError(TARGET_CHANGED);
-  }
-}
-async function assertAuxiliaryAbsent(auxiliaryPath) {
-  if (await pathEntryExists(auxiliaryPath)) {
-    throw installError(PREPARE_FAILURE);
-  }
-}
-function sameSnapshot(first, second) {
-  if (first.kind !== second.kind) {
-    return false;
-  }
-  if (first.kind === "absent" || second.kind === "absent") {
-    return first.kind === second.kind;
-  }
-  return sameFingerprint(first.fingerprint, second.fingerprint);
-}
-function sameFingerprint(first, second) {
-  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.size === second.size && first.mtimeMs === second.mtimeMs && first.ctimeMs === second.ctimeMs && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
-}
-function sameMovedObject(first, second) {
-  return sameEntryIdentity(entryIdentityFromFingerprint(first), entryIdentityFromFingerprint(second)) && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
-}
-function sameCopiedObject(first, second) {
-  return first.type === second.type && first.mode === second.mode && first.size === second.size && first.linkText === second.linkText && first.markerRaw === second.markerRaw;
-}
-async function removeOwnedPath(filePath, expected, mode) {
-  const actual = await fingerprintPathIfExists(filePath, mode);
-  if (actual === null || !sameEntryIdentity(entryIdentityFromFingerprint(actual), entryIdentityFromFingerprint(expected))) {
-    return;
-  }
-  await rm2(filePath, { recursive: true, force: true });
-}
-function createEntryIdentity(stats) {
-  return {
-    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
-    dev: stats.dev,
-    ino: stats.ino,
-    mode: stats.mode
-  };
-}
-function entryIdentityFromFingerprint(fingerprint) {
-  return {
-    type: fingerprint.type,
-    dev: fingerprint.dev,
-    ino: fingerprint.ino,
-    mode: fingerprint.mode
-  };
-}
-function sameEntryIdentity(first, second) {
-  return first.type === second.type && first.dev === second.dev && first.ino === second.ino && first.mode === second.mode;
-}
-function isPathContained(rootPath, candidatePath) {
-  const containedPath = relative(rootPath, candidatePath);
-  return containedPath === "" || !isAbsolute(containedPath) && containedPath !== ".." && !containedPath.startsWith("../") && !containedPath.startsWith("..\\");
-}
-function createFingerprint(stats, linkText, markerRaw) {
-  return {
-    type: stats.isDirectory() ? "directory" : stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : "other",
-    dev: stats.dev,
-    ino: stats.ino,
-    mode: stats.mode,
-    size: stats.size,
-    mtimeMs: stats.mtimeMs,
-    ctimeMs: stats.ctimeMs,
-    linkText,
-    markerRaw
-  };
-}
-async function readMarkerRecord(rootPath) {
-  const markerPath = join(rootPath, MARKER_FILE_NAME);
-  let markerStat;
-  try {
-    markerStat = await lstatIfExists(markerPath);
-  } catch {
-    return null;
-  }
-  if (markerStat === null || !markerStat.isFile() || markerStat.isSymbolicLink()) {
-    return null;
-  }
-  let handle;
-  try {
-    handle = await open2(markerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const raw = await handle.readFile({ encoding: "utf8" });
-    const parsed = JSON.parse(raw);
-    return isMarker(parsed) ? { marker: parsed, raw } : null;
-  } catch {
-    return null;
-  } finally {
-    await handle?.close();
-  }
-}
-function isMarker(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const marker = value;
-  return marker.schemaVersion === 1 && typeof marker.publisher === "string" && marker.publisher.length > 0 && typeof marker.skillName === "string" && marker.skillName.length > 0 && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && /^[a-f\d]{64}$/iu.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string";
-}
-function markersMatchIdentityAndSha(first, second) {
-  return first.publisher === second.publisher && first.skillName === second.skillName && first.sha256.toLowerCase() === second.sha256.toLowerCase();
-}
-async function lstatIfExists(filePath) {
-  try {
-    return await lstat(filePath);
-  } catch (error) {
-    if (isErrorCode(error, "ENOENT") || isErrorCode(error, "ENOTDIR")) {
-      return null;
-    }
-    throw error;
-  }
-}
-async function pathEntryExists(filePath) {
-  return await lstatIfExists(filePath) !== null;
-}
-function isErrorCode(error, code) {
-  return error?.code === code;
-}
-
-// dist/skills/archive.js
-var import_yauzl = __toESM(require_yauzl(), 1);
-import { createWriteStream } from "node:fs";
-import { chmod as chmod2, lstat as lstat2, mkdir as mkdir3, open as open3, readdir as readdir2, rm as rm3, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname2, isAbsolute as isAbsolute2, relative as relative2, resolve as resolve2, sep } from "node:path";
-import { Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
-
-// dist/payment/amount.js
-function parseAmount(value) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw validationError("amount must be a positive number");
-  }
-  return amount;
-}
-
-// dist/skills/spec.js
-var HUMAN_READABLE_SEGMENT_PATTERN = /^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*$/u;
-var VERSION_PATTERN = /^[A-Za-z0-9._+-]+$/;
-var MAX_SEGMENT_LENGTH = 128;
-var PACKAGE_SPEC_SYNTAX = "<publisher>/<skillName>[@<version>]";
-var TIP_FLAG_SYNTAX = "--publisher <publisher> --name <skillName>";
-var FORBIDDEN_TIP_FLAGS = [
-  "version",
-  "payment-instrument-id",
-  "instruction-id",
-  "purchase-instruction-id",
-  "mandate-id",
-  "merchant-id",
-  "session-id",
-  "payment-method-type",
-  "shipping-address",
-  "products",
-  "force"
-];
-function parseSkillPackageSpec(value) {
-  const slashIndex = value.indexOf("/");
-  if (slashIndex === -1 || slashIndex !== value.lastIndexOf("/")) {
-    throw invalidPackageSpec();
-  }
-  const publisher = value.slice(0, slashIndex);
-  const skillAndVersion = value.slice(slashIndex + 1);
-  const versionSeparatorIndex = skillAndVersion.lastIndexOf("@");
-  const skillName = versionSeparatorIndex === -1 ? skillAndVersion : skillAndVersion.slice(0, versionSeparatorIndex);
-  const requestedVersion = versionSeparatorIndex === -1 ? null : skillAndVersion.slice(versionSeparatorIndex + 1);
-  if (!isValidSkillIdentitySegment(publisher) || !isValidSkillName(skillName) || requestedVersion !== null && (requestedVersion.toLowerCase() === "latest" || !isValidSegment(requestedVersion, VERSION_PATTERN))) {
-    throw invalidPackageSpec();
-  }
-  return { publisher, skillName, requestedVersion };
-}
-function parseSkillInstallArgs(operands, flags) {
-  if (operands.length === 0) {
-    throw validationError(`skills install requires a package: ${PACKAGE_SPEC_SYNTAX}`);
-  }
-  if (operands.length !== 1) {
-    throw validationError(`skills install accepts exactly one package: ${PACKAGE_SPEC_SYNTAX}`);
-  }
-  if (flags.version !== void 0) {
-    throw validationError("--version is not supported by skills install; use publisher/skillName@version");
-  }
-  return {
-    ...parseSkillPackageSpec(operands[0]),
-    force: getBooleanFlag(flags, "force")
-  };
-}
-function parseSkillTipArgs(operands, flags) {
-  if (operands.length !== 0) {
-    throw validationError("skills tip does not accept positional arguments; use --publisher with --name");
-  }
-  for (const name of FORBIDDEN_TIP_FLAGS) {
-    if (flags[name] !== void 0) {
-      throw validationError(name === "payment-instrument-id" ? "skills tip always uses the refreshed default payment method" : `--${name} is not supported by skills tip`);
-    }
-  }
-  const publisher = getStringFlag(flags, "publisher");
-  const skillName = getStringFlag(flags, "name");
-  const hasPublisher = flags.publisher !== void 0;
-  const hasSkillName = flags.name !== void 0;
-  if (!hasPublisher && !hasSkillName) {
-    throw validationError("skills tip requires --publisher with --name");
-  }
-  if (hasPublisher !== hasSkillName) {
-    throw validationError("skills tip requires both --publisher and --name");
-  }
-  if (publisher === void 0 || skillName === void 0 || !isValidSkillTipIdentitySegment(publisher) || !isValidSkillTipIdentitySegment(skillName)) {
-    throw invalidTipIdentity();
-  }
-  const target = {
-    publisher,
-    skillName
-  };
-  const currency = getStringFlag(flags, "currency");
-  if (currency !== void 0 && currency.toUpperCase() !== "USD") {
-    throw validationError("skills tip only supports USD");
-  }
-  const amount = parseAmount(requireStringFlag(flags, "missing --amount", "amount"));
-  if (amount < 1 || amount > 100) {
-    throw validationError("skills tip amount must be between 1 and 100 USD");
-  }
-  return {
-    target,
-    amount,
-    currency: "USD"
-  };
-}
-function isValidSkillIdentitySegment(value) {
-  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
-}
-function isValidSkillName(value) {
-  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
-}
-function isValidSkillTipIdentitySegment(value) {
-  return isValidSegment(value, HUMAN_READABLE_SEGMENT_PATTERN);
-}
-function isValidSegment(value, pattern) {
-  return value.length > 0 && value.length <= MAX_SEGMENT_LENGTH && value !== "." && value !== ".." && pattern.test(value);
-}
-function invalidPackageSpec() {
-  return validationError(`invalid skill package; expected ${PACKAGE_SPEC_SYNTAX}`);
-}
-function invalidTipIdentity() {
-  return validationError(`invalid skill identity; expected ${TIP_FLAG_SYNTAX}`);
-}
-
-// dist/skills/archive.js
-var DEFAULT_ARCHIVE_LIMITS = Object.freeze({
-  maxEntries: 4096,
-  maxTotalBytes: 200 * 1024 * 1024,
-  maxFileBytes: 50 * 1024 * 1024,
-  maxDepth: 20,
-  maxCompressionRatio: 100
-});
-var INSTALL_ERROR_MESSAGE = "failed to extract skill archive";
-var INSTALL_MARKER_NAME = ".clink-install.json";
-var ZIP_SIGNATURES = /* @__PURE__ */ new Set([67324752, 101010256, 134695760]);
-var UNIX_PLATFORM = 3;
-var UNIX_FILE_TYPE_MASK = 61440;
-var UNIX_REGULAR_FILE = 32768;
-var UNIX_DIRECTORY = 16384;
-function normalizeArchiveEntryPath(raw, maxDepth) {
-  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0) {
-    throw new Error("invalid archive depth limit");
-  }
-  if (raw.length === 0 || raw.includes("\0")) {
-    throw new Error("invalid archive entry path");
-  }
-  const withZipSeparators = raw.replace(/\\/g, "/");
-  if (withZipSeparators.startsWith("/") || /^[A-Za-z]:/.test(withZipSeparators)) {
-    throw new Error("invalid archive entry path");
-  }
-  const withoutDirectorySlash = withZipSeparators.endsWith("/") ? withZipSeparators.slice(0, -1) : withZipSeparators;
-  const segments = withoutDirectorySlash.split("/");
-  if (withoutDirectorySlash.length === 0 || segments.some((segment) => segment.length === 0 || segment === "." || segment === "..") || segments.length > maxDepth) {
-    throw new Error("invalid archive entry path");
-  }
-  return segments.join("/");
-}
-async function extractSkillPackage(packagePath, destination, overrides = {}) {
-  const destinationRoot = resolve2(destination);
-  try {
-    const limits = resolveArchiveLimits(overrides);
-    const classified = await classifySkillPackage(packagePath, limits);
-    if (classified.kind === "zip") {
-      return await extractSkillArchive(packagePath, destinationRoot, overrides);
-    }
-    return await materializeRawSkill(classified.bytes, destinationRoot);
-  } catch {
-    try {
-      await rm3(destinationRoot, { recursive: true, force: true });
-    } catch {
-    }
-    throw installError(INSTALL_ERROR_MESSAGE);
-  }
-}
-async function classifySkillPackage(packagePath, limits) {
-  const handle = await open3(packagePath, "r");
-  try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile() || !Number.isSafeInteger(metadata.size) || metadata.size < 0) {
-      throw new Error("skill package is not a regular file");
-    }
-    const header = Buffer.alloc(4);
-    const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
-    if (bytesRead === 4 && ZIP_SIGNATURES.has(header.readUInt32LE(0))) {
-      return { kind: "zip" };
-    }
-    if (metadata.size > limits.maxFileBytes || metadata.size > limits.maxTotalBytes) {
-      throw new Error("raw skill size limit exceeded");
-    }
-    const bytes = await handle.readFile();
-    if (bytes.byteLength !== metadata.size) {
-      throw new Error("raw skill size changed while reading");
-    }
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return { kind: "raw", bytes };
-  } finally {
-    await handle.close();
-  }
-}
-async function materializeRawSkill(bytes, destinationRoot) {
-  await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-  await chmod2(destinationRoot, 493);
-  const rawRoot = resolve2(destinationRoot, "raw");
-  assertPathContained(destinationRoot, rawRoot);
-  await mkdir3(rawRoot, { mode: 493 });
-  await chmod2(rawRoot, 493);
-  const skillPath = resolve2(rawRoot, "SKILL.md");
-  assertPathContained(rawRoot, skillPath);
-  await writeFile2(skillPath, bytes, { flag: "wx", mode: 420 });
-  await chmod2(skillPath, 420);
-  return {
-    layout: "single",
-    skillRoot: rawRoot,
-    entryCount: 1,
-    uncompressedBytes: bytes.byteLength
-  };
-}
-async function extractSkillArchive(zipPath, destination, overrides = {}) {
-  let zipFile;
-  const destinationRoot = resolve2(destination);
-  try {
-    const limits = resolveArchiveLimits(overrides);
-    zipFile = await (0, import_yauzl.openPromise)(zipPath, {
-      autoClose: true,
-      decodeStrings: true,
-      strictFileNames: false,
-      validateEntrySizes: true
-    });
-    assertSafeSize(zipFile.entryCount);
-    if (zipFile.entryCount > limits.maxEntries) {
-      throw new Error("archive entry limit exceeded");
-    }
-    await mkdir3(destinationRoot, { recursive: true, mode: 493 });
-    await chmod2(destinationRoot, 493);
-    const rawRoot = resolve2(destinationRoot, "raw");
-    assertPathContained(destinationRoot, rawRoot);
-    await mkdir3(rawRoot, { mode: 493 });
-    await chmod2(rawRoot, 493);
-    const registeredPaths = new ArchivePathRegistry();
-    const knownDirectories = /* @__PURE__ */ new Set([destinationRoot, rawRoot]);
-    const byteCount = { total: 0 };
-    let declaredTotalBytes = 0;
-    let entryCount = 0;
-    for await (const entry of zipFile.eachEntry()) {
-      entryCount += 1;
-      if (entryCount > limits.maxEntries) {
-        throw new Error("archive entry limit exceeded");
-      }
-      const normalizedPath = normalizeArchiveEntryPath(entry.fileName, limits.maxDepth);
-      rejectInstallMarker(normalizedPath);
-      const classified = classifyEntry(entry);
-      registeredPaths.register(normalizedPath, classified.kind);
-      const outputPath = resolve2(rawRoot, normalizedPath);
-      assertPathContained(rawRoot, outputPath);
-      validateDeclaredEntry(entry, limits);
-      declaredTotalBytes = addBoundedSize(declaredTotalBytes, entry.uncompressedSize, limits.maxTotalBytes);
-      if (classified.kind === "directory") {
-        if (entry.uncompressedSize !== 0) {
-          throw new Error("archive directory contains data");
-        }
-        await ensureDirectoryTree(rawRoot, outputPath, knownDirectories);
-        continue;
-      }
-      await ensureDirectoryTree(rawRoot, dirname2(outputPath), knownDirectories);
-      const source = await zipFile.openReadStreamPromise(entry);
-      const meter = new ArchiveByteCounter(limits, byteCount);
-      const mode = classified.executable ? 493 : 420;
-      await pipeline(source, meter, createWriteStream(outputPath, { flags: "wx", mode }));
-      if (meter.fileBytes !== entry.uncompressedSize) {
-        throw new Error("archive entry size mismatch");
-      }
-      await chmod2(outputPath, mode);
-    }
-    if (entryCount !== zipFile.entryCount || byteCount.total !== declaredTotalBytes) {
-      throw new Error("archive size metadata mismatch");
-    }
-    closeZip(zipFile);
-    const layout = await selectSkillLayout(rawRoot);
-    return {
-      ...layout,
-      entryCount,
-      uncompressedBytes: byteCount.total
-    };
-  } catch {
-    closeZip(zipFile);
-    try {
-      await rm3(destinationRoot, { recursive: true, force: true });
-    } catch {
-    }
-    throw installError(INSTALL_ERROR_MESSAGE);
-  }
-}
-var ArchivePathRegistry = class {
-  #paths = /* @__PURE__ */ new Map();
-  register(path4, kind) {
-    const segments = path4.split("/");
-    for (let index = 1; index < segments.length; index += 1) {
-      this.#registerDirectory(segments.slice(0, index).join("/"), false);
-    }
-    if (kind === "directory") {
-      this.#registerDirectory(path4, true);
-      return;
-    }
-    const key = canonicalArchivePath(path4);
-    const existing = this.#paths.get(key);
-    if (existing !== void 0) {
-      throw new Error("archive path collision");
-    }
-    this.#paths.set(key, { kind: "file", path: path4, explicit: true });
-  }
-  #registerDirectory(path4, explicit) {
-    const key = canonicalArchivePath(path4);
-    const existing = this.#paths.get(key);
-    if (existing === void 0) {
-      this.#paths.set(key, { kind: "directory", path: path4, explicit });
-      return;
-    }
-    if (existing.kind !== "directory" || existing.path !== path4) {
-      throw new Error("archive path collision");
-    }
-    if (explicit && existing.explicit) {
-      throw new Error("archive path collision");
-    }
-    if (explicit) {
-      existing.explicit = true;
-    }
-  }
-};
-var ArchiveByteCounter = class extends Transform {
-  fileBytes = 0;
-  #limits;
-  #state;
-  constructor(limits, state) {
-    super();
-    this.#limits = limits;
-    this.#state = state;
-  }
-  _transform(chunk, _encoding, callback) {
-    this.fileBytes += chunk.byteLength;
-    this.#state.total += chunk.byteLength;
-    if (this.fileBytes > this.#limits.maxFileBytes || this.#state.total > this.#limits.maxTotalBytes) {
-      callback(new Error("archive byte limit exceeded"));
-      return;
-    }
-    callback(null, chunk);
-  }
-};
-function resolveArchiveLimits(overrides) {
-  const limits = { ...DEFAULT_ARCHIVE_LIMITS, ...overrides };
-  for (const value of [
-    limits.maxEntries,
-    limits.maxTotalBytes,
-    limits.maxFileBytes,
-    limits.maxDepth
-  ]) {
-    if (!Number.isSafeInteger(value) || value < 0) {
-      throw new Error("invalid archive limit");
-    }
-  }
-  if (!Number.isFinite(limits.maxCompressionRatio) || limits.maxCompressionRatio < 0) {
-    throw new Error("invalid archive limit");
-  }
-  return limits;
-}
-function classifyEntry(entry) {
-  if (entry.isEncrypted() || !entry.canDecodeFileData()) {
-    throw new Error("unsupported archive entry encoding");
-  }
-  const hasDirectorySlash = entry.fileName.endsWith("/");
-  if (entry.versionMadeBy >>> 8 !== UNIX_PLATFORM) {
-    return {
-      kind: hasDirectorySlash ? "directory" : "file",
-      executable: false
-    };
-  }
-  const unixMode = entry.externalFileAttributes >>> 16 & 65535;
-  const unixType = unixMode & UNIX_FILE_TYPE_MASK;
-  if (unixType !== 0 && unixType !== UNIX_REGULAR_FILE && unixType !== UNIX_DIRECTORY) {
-    throw new Error("unsupported Unix archive entry type");
-  }
-  if (unixType === UNIX_DIRECTORY && !hasDirectorySlash) {
-    throw new Error("Unix directory entry lacks a directory path");
-  }
-  if (unixType === UNIX_REGULAR_FILE && hasDirectorySlash) {
-    throw new Error("Unix regular file uses a directory path");
-  }
-  const kind = hasDirectorySlash ? "directory" : "file";
-  return {
-    kind,
-    executable: kind === "file" && (unixMode & 73) !== 0
-  };
-}
-function validateDeclaredEntry(entry, limits) {
-  assertSafeSize(entry.compressedSize);
-  assertSafeSize(entry.uncompressedSize);
-  if (entry.uncompressedSize > limits.maxFileBytes) {
-    throw new Error("archive file limit exceeded");
-  }
-  if (entry.uncompressedSize === 0) {
-    return;
-  }
-  if (entry.compressedSize === 0 || entry.uncompressedSize / entry.compressedSize > limits.maxCompressionRatio) {
-    throw new Error("archive compression ratio exceeded");
-  }
-}
-function assertSafeSize(value) {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error("invalid archive size metadata");
-  }
-}
-function addBoundedSize(current, addition, maximum) {
-  const total = current + addition;
-  if (!Number.isSafeInteger(total) || total > maximum) {
-    throw new Error("archive total size limit exceeded");
-  }
-  return total;
-}
-function rejectInstallMarker(path4) {
-  if (path4.split("/").some((segment) => segment.normalize("NFC").toLowerCase() === INSTALL_MARKER_NAME)) {
-    throw new Error("archive contains a reserved install marker");
-  }
-}
-function canonicalArchivePath(path4) {
-  return path4.normalize("NFC").toLowerCase();
-}
-function assertPathContained(root, candidate) {
-  const relativePath = relative2(root, candidate);
-  if (relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute2(relativePath)) {
-    throw new Error("archive path escapes extraction root");
-  }
-}
-async function ensureDirectoryTree(root, target, knownDirectories) {
-  assertPathContained(root, target);
-  const relativePath = relative2(root, target);
-  if (relativePath.length === 0) {
-    return;
-  }
-  let current = root;
-  for (const segment of relativePath.split(sep)) {
-    current = resolve2(current, segment);
-    assertPathContained(root, current);
-    if (!knownDirectories.has(current)) {
-      try {
-        await mkdir3(current, { mode: 493 });
-      } catch (error) {
-        if (error.code !== "EEXIST") {
-          throw error;
-        }
-        const existing = await lstat2(current);
-        if (!existing.isDirectory()) {
-          throw new Error("archive directory conflicts with a file");
-        }
-      }
-      knownDirectories.add(current);
-    }
-    await chmod2(current, 493);
-  }
-}
-async function selectSkillLayout(rawRoot) {
-  const topLevelNames = (await readdir2(rawRoot)).sort((left, right) => left.localeCompare(right, "en"));
-  if (topLevelNames.includes("SKILL.md")) {
-    const rootSkill = await lstat2(resolve2(rawRoot, "SKILL.md"));
-    if (rootSkill.isFile()) {
-      return { layout: "single", skillRoot: rawRoot };
-    }
-  }
-  const skillRoots = [];
-  const topLevelDirectories = [];
-  for (const name of topLevelNames) {
-    const candidateRoot = resolve2(rawRoot, name);
-    assertPathContained(rawRoot, candidateRoot);
-    const candidate = await lstat2(candidateRoot);
-    if (!candidate.isDirectory()) {
-      continue;
-    }
-    topLevelDirectories.push({ name, root: candidateRoot });
-    const candidateNames = await readdir2(candidateRoot);
-    if (!candidateNames.includes("SKILL.md")) {
-      continue;
-    }
-    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
-    if (!skillFile.isFile()) {
-      throw new Error("archive skill SKILL.md is not a regular file");
-    }
-    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
-  }
-  if (skillRoots.length === 1) {
-    return { layout: "single", skillRoot: skillRoots[0].skillRoot };
-  }
-  if (skillRoots.length >= 2) {
-    assertValidMultiSkillRoots(skillRoots);
-    return { layout: "multi", skillRoots };
-  }
-  if (skillRoots.length === 0 && topLevelDirectories.length === 1) {
-    const wrappedSkillRoots = await findDirectSkillRoots(topLevelDirectories[0].root);
-    if (wrappedSkillRoots.length === 1) {
-      return { layout: "single", skillRoot: wrappedSkillRoots[0].skillRoot };
-    }
-    if (wrappedSkillRoots.length >= 2) {
-      assertValidMultiSkillRoots(wrappedSkillRoots);
-      return { layout: "multi", skillRoots: wrappedSkillRoots };
-    }
-  }
-  throw new Error("archive must contain one skill root or multiple one-level skill roots");
-}
-async function findDirectSkillRoots(parentRoot) {
-  const names = (await readdir2(parentRoot)).sort((left, right) => left.localeCompare(right, "en"));
-  const skillRoots = [];
-  for (const name of names) {
-    const candidateRoot = resolve2(parentRoot, name);
-    assertPathContained(parentRoot, candidateRoot);
-    const candidate = await lstat2(candidateRoot);
-    if (!candidate.isDirectory()) {
-      continue;
-    }
-    const candidateNames = await readdir2(candidateRoot);
-    if (!candidateNames.includes("SKILL.md")) {
-      continue;
-    }
-    const skillFile = await lstat2(resolve2(candidateRoot, "SKILL.md"));
-    if (!skillFile.isFile()) {
-      throw new Error("archive skill SKILL.md is not a regular file");
-    }
-    skillRoots.push({ skillName: name, skillRoot: candidateRoot });
-  }
-  return skillRoots;
-}
-function assertValidMultiSkillRoots(skillRoots) {
-  for (const skill of skillRoots) {
-    if (!isValidSkillName(skill.skillName) || skill.skillName.normalize("NFC").toLowerCase() === ".clink") {
-      throw new Error("archive contains an invalid multi-skill name");
-    }
-  }
-}
-function closeZip(zipFile) {
-  if (zipFile?.isOpen === true) {
-    try {
-      zipFile.close();
-    } catch {
-    }
-  }
-}
-
-// dist/skills/content-tree.js
-import { createHash as createHash3 } from "node:crypto";
-import { constants as constants2 } from "node:fs";
-import { lstat as lstat3, open as open4, readdir as readdir3, rm as rm4 } from "node:fs/promises";
-import { join as join2, relative as relative3, sep as sep2 } from "node:path";
-var CONTENT_TREE_DOMAIN = "clink-skill-tree-v1\0";
-var PROVENANCE_FILE_NAME = ".clink-provenance.json";
-var INSTALL_MARKER_FILE_NAME = ".clink-install.json";
-var CONTENT_ERROR = "invalid agentic payment skill content";
-var PRUNED_DIRECTORIES = ["docs", "tests"];
-async function pruneAgenticPaymentSkillRoot(skillRoot) {
-  try {
-    for (const name of PRUNED_DIRECTORIES) {
-      const target = join2(skillRoot, name);
-      let stats;
-      try {
-        stats = await lstat3(target);
-      } catch (error) {
-        if (isErrorCode2(error, "ENOENT")) {
-          continue;
-        }
-        throw error;
-      }
-      if (!stats.isDirectory() || stats.isSymbolicLink()) {
-        throw new Error(`${name} is not a real directory`);
-      }
-      await rm4(target, { recursive: true, force: false });
-    }
-  } catch {
-    throw installError(CONTENT_ERROR);
-  }
-}
-async function validateAgenticPaymentSkillRoot(skillRoot) {
-  try {
-    await assertRegularFile(join2(skillRoot, "SKILL.md"));
-    await assertRegularFile(join2(skillRoot, "package.json"));
-    await assertExecutableFile(join2(skillRoot, "bin", "clink"));
-    await assertRealDirectory(join2(skillRoot, "lib"));
-    await assertRealDirectory(join2(skillRoot, "references"));
-    await assertRealDirectory(join2(skillRoot, "scripts"));
-    await assertRegularFile(join2(skillRoot, "scripts", "network-preflight.mjs"));
-    await assertRealDirectory(join2(skillRoot, "vendor", "clink-cli"));
-    await assertExecutableFile(join2(skillRoot, "vendor", "clink-cli", "clink-cli.bundle.mjs"));
-    for (const name of PRUNED_DIRECTORIES) {
-      await assertAbsent(join2(skillRoot, name));
-    }
-    await assertAbsent(join2(skillRoot, INSTALL_MARKER_FILE_NAME));
-    await assertAbsent(join2(skillRoot, PROVENANCE_FILE_NAME));
-    const packageBytes = await readRegularFile(join2(skillRoot, "package.json"));
-    if (packageBytes.byteLength > 64 * 1024) {
-      throw new Error("package metadata is too large");
-    }
-    const packageJson = JSON.parse(packageBytes.toString("utf8"));
-    if (!isRecord5(packageJson)) {
-      throw new Error("package metadata is invalid");
-    }
-    if (packageJson.name !== "clink-payment-skill") {
-      throw new Error("package name is invalid");
-    }
-    if (typeof packageJson.version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
-      throw new Error("package version is invalid");
-    }
-    const skillBytes = await readRegularFile(join2(skillRoot, "SKILL.md"));
-    if (skillBytes.byteLength > 2 * 1024 * 1024) {
-      throw new Error("skill metadata is too large");
-    }
-    const skillText = new TextDecoder("utf-8", { fatal: true }).decode(skillBytes);
-    const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(skillText)?.[1];
-    if (frontmatter === void 0 || !/^name:\s*["']?clink-payment-skill["']?\s*$/m.test(frontmatter)) {
-      throw new Error("skill name is invalid");
-    }
-    const declaredVersion = /^\s*version:\s*["']?([^"'\s]+)["']?\s*$/m.exec(frontmatter)?.[1];
-    if (declaredVersion !== void 0 && declaredVersion !== packageJson.version) {
-      throw new Error("skill version metadata conflicts");
-    }
-    return { skillVersion: packageJson.version };
-  } catch {
-    throw installError(CONTENT_ERROR);
-  }
-}
-async function hashAgenticPaymentSkillTree(skillRoot) {
-  try {
-    const files = await collectContentFiles(skillRoot, skillRoot);
-    files.sort((left, right) => Buffer.compare(Buffer.from(left.relativePath), Buffer.from(right.relativePath)));
-    const hash = createHash3("sha256");
-    hash.update(CONTENT_TREE_DOMAIN);
-    for (const file of files) {
-      const bytes = await readRegularFile(file.absolutePath, file.sizeBytes);
-      hash.update(file.relativePath);
-      hash.update("\0");
-      hash.update(file.executable ? "1" : "0");
-      hash.update("\0");
-      hash.update(String(file.sizeBytes));
-      hash.update("\0");
-      hash.update(bytes);
-      hash.update("\0");
-    }
-    return hash.digest("hex");
-  } catch (error) {
-    if (error instanceof Error && error.name === "CliError") {
-      throw error;
-    }
-    throw installError(CONTENT_ERROR);
-  }
-}
-async function collectContentFiles(root, directory) {
-  const directoryStats = await lstat3(directory);
-  if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
-    throw new Error("content tree contains a non-directory boundary");
-  }
-  const names = await readdir3(directory);
-  const files = [];
-  for (const name of names) {
-    if (name.includes("\0")) {
-      throw new Error("content tree contains an invalid path");
-    }
-    const absolutePath = join2(directory, name);
-    const stats = await lstat3(absolutePath);
-    const relativePath = relative3(root, absolutePath).split(sep2).join("/");
-    if (relativePath === INSTALL_MARKER_FILE_NAME || relativePath === PROVENANCE_FILE_NAME) {
-      continue;
-    }
-    if (stats.isDirectory() && !stats.isSymbolicLink()) {
-      files.push(...await collectContentFiles(root, absolutePath));
-      continue;
-    }
-    if (!stats.isFile() || stats.isSymbolicLink() || !Number.isSafeInteger(stats.size)) {
-      throw new Error("content tree contains an unsupported entry");
-    }
-    files.push({
-      absolutePath,
-      relativePath,
-      executable: (stats.mode & 73) !== 0,
-      sizeBytes: stats.size
-    });
-  }
-  return files;
-}
-async function assertAbsent(path4) {
-  try {
-    await lstat3(path4);
-  } catch (error) {
-    if (isErrorCode2(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  throw new Error("reserved or pruned content is still present");
-}
-async function assertRegularFile(path4) {
-  const stats = await lstat3(path4);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    throw new Error("required file is missing");
-  }
-}
-async function assertExecutableFile(path4) {
-  const stats = await lstat3(path4);
-  if (!stats.isFile() || stats.isSymbolicLink() || (stats.mode & 73) === 0) {
-    throw new Error("required executable is missing");
-  }
-}
-async function assertRealDirectory(path4) {
-  const stats = await lstat3(path4);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw new Error("required directory is missing");
-  }
-}
-async function readRegularFile(path4, expectedSize) {
-  const handle = await open4(path4, constants2.O_RDONLY | constants2.O_NOFOLLOW);
-  try {
-    const before = await handle.stat();
-    if (!before.isFile() || !Number.isSafeInteger(before.size)) {
-      throw new Error("content file is not regular");
-    }
-    if (expectedSize !== void 0 && before.size !== expectedSize) {
-      throw new Error("content file changed before reading");
-    }
-    const bytes = await handle.readFile();
-    const after = await handle.stat();
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || bytes.byteLength !== after.size) {
-      throw new Error("content file changed while reading");
-    }
-    return bytes;
-  } finally {
-    await handle.close();
-  }
-}
-function isRecord5(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isErrorCode2(error, code) {
-  return error.code === code;
-}
-
-// dist/skills/install-lock.js
-import { randomBytes as randomBytes2 } from "node:crypto";
-import { constants as constants3 } from "node:fs";
-import { lstat as lstat4, mkdir as mkdir4, open as open5, unlink } from "node:fs/promises";
-import { join as join3 } from "node:path";
-import { TextDecoder as TextDecoder2 } from "node:util";
-var LOCKED_MESSAGE = "agentic payment skill synchronization is already running";
-var LOCK_FAILURE_MESSAGE = "failed to manage agentic payment skill synchronization lock";
-var LOCK_SCHEMA_VERSION = 2;
-var LOCK_TOKEN_BYTES = 32;
-var MAX_LOCK_METADATA_BYTES = 1024;
-var MAX_ACQUIRE_ATTEMPTS = 4;
-var MAX_PID = 2147483647;
-var UTF8_DECODER = new TextDecoder2("utf-8", { fatal: true });
-var LockChangedError = class extends Error {
-  constructor() {
-    super("lock changed while it was being inspected");
-    this.name = "LockChangedError";
-  }
-};
-async function acquireAgenticPaymentInstallLock(input) {
-  const lockRoot = join3(input.homeDir, ".agents", "skills", ".clink", "locks");
-  const lockPath = join3(lockRoot, "agentic-payment-skills.lock");
-  try {
-    await mkdir4(lockRoot, { recursive: true, mode: 448 });
-    const rootStats = await lstat4(lockRoot);
-    if (!isRegularDirectory(rootStats)) {
-      throw new Error("lock root is not a real directory");
-    }
-    for (let attempt = 0; attempt < MAX_ACQUIRE_ATTEMPTS; attempt += 1) {
-      let handle;
-      try {
-        handle = await open5(lockPath, constants3.O_WRONLY | constants3.O_CREAT | constants3.O_EXCL | constants3.O_NOFOLLOW, 384);
-      } catch (error) {
-        if (!isErrorCode3(error, "EEXIST")) {
-          throw error;
-        }
-        const existing = await inspectExistingLock(lockPath);
-        if (existing === "locked") {
-          throw installError(LOCKED_MESSAGE);
-        }
-        continue;
-      }
-      let owned;
-      try {
-        const stats = await handle.stat();
-        if (!stats.isFile()) {
-          throw new Error("new lock is not a regular file");
-        }
-        owned = fileIdentity(stats);
-        const token = randomBytes2(LOCK_TOKEN_BYTES).toString("hex");
-        const metadata = {
-          schemaVersion: LOCK_SCHEMA_VERSION,
-          pid: process.pid,
-          acquiredAt: input.now.toISOString(),
-          token
-        };
-        const encoded = Buffer.from(JSON.stringify(metadata), "utf8");
-        if (encoded.byteLength === 0 || encoded.byteLength > MAX_LOCK_METADATA_BYTES) {
-          throw new Error("generated lock metadata has an invalid size");
-        }
-        await writeAll(handle, encoded);
-        await handle.sync();
-        await assertPathIdentity(lockPath, owned);
-        return createInstallLock(lockPath, handle, { ...owned, metadata });
-      } catch (error) {
-        await closeQuietly(handle);
-        if (owned !== void 0) {
-          await removeIfOwned(lockPath, owned);
-        }
-        throw error;
-      }
-    }
-    throw installError(LOCKED_MESSAGE);
-  } catch (error) {
-    if (error instanceof Error && error.name === "CliError") {
-      throw error;
-    }
-    throw installError(LOCK_FAILURE_MESSAGE);
-  }
-}
-function createInstallLock(lockPath, initialHandle, owned) {
-  let handle = initialHandle;
-  let state = "active";
-  return {
-    path: lockPath,
-    async release() {
-      if (state === "released") {
-        return;
-      }
-      try {
-        if (handle !== void 0) {
-          await handle.close();
-          handle = void 0;
-        }
-        const current = await readLockSnapshot(lockPath);
-        if (!sameSnapshot2(current, owned)) {
-          throw new Error("lock ownership changed");
-        }
-        await assertPathIdentity(lockPath, owned);
-        await unlink(lockPath);
-        state = "released";
-      } catch {
-        throw installError(LOCK_FAILURE_MESSAGE);
-      }
-    }
-  };
-}
-async function inspectExistingLock(lockPath) {
-  let observed;
-  try {
-    observed = await readLockSnapshot(lockPath);
-  } catch (error) {
-    if (error instanceof LockChangedError) {
-      return "retry";
-    }
-    throw error;
-  }
-  if (isProcessAlive(observed.metadata.pid)) {
-    return "locked";
-  }
-  let confirmed;
-  try {
-    confirmed = await readLockSnapshot(lockPath);
-  } catch (error) {
-    if (error instanceof LockChangedError) {
-      return "retry";
-    }
-    throw error;
-  }
-  if (!sameSnapshot2(observed, confirmed)) {
-    return "retry";
-  }
-  try {
-    await assertPathIdentity(lockPath, observed);
-    await unlink(lockPath);
-  } catch (error) {
-    if (isErrorCode3(error, "ENOENT") || error instanceof LockChangedError) {
-      return "retry";
-    }
-    throw error;
-  }
-  return "retry";
-}
-async function readLockSnapshot(lockPath) {
-  const before = await lstatOrChanged(lockPath);
-  assertReadableLockStats(before);
-  let handle;
-  try {
-    handle = await open5(lockPath, constants3.O_RDONLY | constants3.O_NOFOLLOW);
-  } catch (error) {
-    if (isErrorCode3(error, "ENOENT")) {
-      throw new LockChangedError();
-    }
-    throw error;
-  }
-  try {
-    const opened = await handle.stat();
-    assertReadableLockStats(opened);
-    if (!sameFileIdentity(before, opened)) {
-      throw new LockChangedError();
-    }
-    const bytes = await readBounded(handle);
-    const afterRead = await handle.stat();
-    if (!sameFileIdentity(opened, afterRead) || afterRead.size !== bytes.byteLength) {
-      throw new LockChangedError();
-    }
-    const afterPath = await lstatOrChanged(lockPath);
-    assertReadableLockStats(afterPath);
-    if (!sameFileIdentity(opened, afterPath)) {
-      throw new LockChangedError();
-    }
-    return {
-      ...fileIdentity(opened),
-      metadata: parseLockMetadata(bytes)
-    };
-  } finally {
-    await handle.close();
-  }
-}
-async function readBounded(handle) {
-  const result = Buffer.alloc(MAX_LOCK_METADATA_BYTES + 1);
-  let offset = 0;
-  while (offset < result.byteLength) {
-    const { bytesRead } = await handle.read(result, offset, result.byteLength - offset, offset);
-    if (bytesRead === 0) {
-      break;
-    }
-    offset += bytesRead;
-  }
-  if (offset === 0 || offset > MAX_LOCK_METADATA_BYTES) {
-    throw new Error("lock metadata has an invalid size");
-  }
-  return result.subarray(0, offset);
-}
-function parseLockMetadata(bytes) {
-  let parsed;
-  try {
-    parsed = JSON.parse(UTF8_DECODER.decode(bytes));
-  } catch {
-    throw new Error("lock metadata is not valid UTF-8 JSON");
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("lock metadata is not an object");
-  }
-  const record2 = parsed;
-  const keys = Object.keys(record2).sort();
-  const isLegacy = keys.length === 3 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && record2.schemaVersion === 1;
-  const isCurrent = keys.length === 4 && keys[0] === "acquiredAt" && keys[1] === "pid" && keys[2] === "schemaVersion" && keys[3] === "token" && record2.schemaVersion === LOCK_SCHEMA_VERSION;
-  if (!isLegacy && !isCurrent) {
-    throw new Error("lock metadata fields are invalid");
-  }
-  if (typeof record2.pid !== "number" || !Number.isSafeInteger(record2.pid) || record2.pid < 1 || record2.pid > MAX_PID) {
-    throw new Error("lock metadata pid is invalid");
-  }
-  if (isCurrent && (typeof record2.token !== "string" || !/^[a-f0-9]{64}$/.test(record2.token))) {
-    throw new Error("lock metadata token is invalid");
-  }
-  if (typeof record2.acquiredAt !== "string" || !isCanonicalTimestamp(record2.acquiredAt)) {
-    throw new Error("lock metadata timestamp is invalid");
-  }
-  if (isCurrent) {
-    return {
-      schemaVersion: LOCK_SCHEMA_VERSION,
-      pid: record2.pid,
-      acquiredAt: record2.acquiredAt,
-      token: record2.token
-    };
-  }
-  return {
-    schemaVersion: 1,
-    pid: record2.pid,
-    acquiredAt: record2.acquiredAt
-  };
-}
-function isCanonicalTimestamp(value) {
-  try {
-    return new Date(value).toISOString() === value;
-  } catch {
-    return false;
-  }
-}
-function isProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (isErrorCode3(error, "ESRCH")) {
-      return false;
-    }
-    if (isErrorCode3(error, "EPERM")) {
-      return true;
-    }
-    throw error;
-  }
-}
-async function writeAll(handle, bytes) {
-  let offset = 0;
-  while (offset < bytes.byteLength) {
-    const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
-    if (bytesWritten <= 0) {
-      throw new Error("lock metadata write made no progress");
-    }
-    offset += bytesWritten;
-  }
-}
-async function assertPathIdentity(lockPath, expected) {
-  const current = await lstatOrChanged(lockPath);
-  if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(current, expected)) {
-    throw new LockChangedError();
-  }
-}
-async function lstatOrChanged(lockPath) {
-  try {
-    return await lstat4(lockPath);
-  } catch (error) {
-    if (isErrorCode3(error, "ENOENT")) {
-      throw new LockChangedError();
-    }
-    throw error;
-  }
-}
-function assertReadableLockStats(stats) {
-  if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0 || stats.size > MAX_LOCK_METADATA_BYTES) {
-    throw new Error("lock file type or size is invalid");
-  }
-}
-function isRegularDirectory(stats) {
-  return stats.isDirectory() && !stats.isSymbolicLink();
-}
-function fileIdentity(stats) {
-  return { dev: stats.dev, ino: stats.ino };
-}
-function sameFileIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-function sameSnapshot2(left, right) {
-  if (!sameFileIdentity(left, right) || left.metadata.schemaVersion !== right.metadata.schemaVersion || left.metadata.pid !== right.metadata.pid || left.metadata.acquiredAt !== right.metadata.acquiredAt) {
-    return false;
-  }
-  return left.metadata.schemaVersion === 1 || right.metadata.schemaVersion === 2 && left.metadata.token === right.metadata.token;
-}
-async function closeQuietly(handle) {
-  try {
-    await handle.close();
-  } catch {
-  }
-}
-async function removeIfOwned(lockPath, expected) {
-  try {
-    const current = await lstat4(lockPath);
-    if (current.isFile() && !current.isSymbolicLink() && sameFileIdentity(current, expected)) {
-      await unlink(lockPath);
-    }
-  } catch {
-  }
-}
-function isErrorCode3(error, code) {
-  return error.code === code;
-}
-
-// dist/skills/source-download.js
-import { createHash as createHash4 } from "node:crypto";
-import { constants as constants4 } from "node:fs";
-import { open as open6, rm as rm5 } from "node:fs/promises";
-var AGENTIC_PAYMENT_REPOSITORY = "https://github.com/clinkbillcom/agentic-payment-skills";
-var AGENTIC_PAYMENT_FALLBACK_ARCHIVE = "https://www.clinkbill.com/public/skills/agentic-payment-skill.zip";
-var AGENTIC_PAYMENT_FALLBACK_MANIFEST = "https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json";
-var GITHUB_COMMIT_API = "https://api.github.com/repos/clinkbillcom/agentic-payment-skills/commits/main";
-var MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
-var MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS = 3e5;
-var MAX_JSON_BYTES = 64 * 1024;
-var MAX_REDIRECTS = 3;
-var SHA256_PATTERN = /^[a-f0-9]{64}$/;
-var COMMIT_PATTERN = /^[a-f0-9]{40}$/;
-var SOURCE_ERROR = "invalid official agentic payment skill source";
-var FALLBACK_NETWORK_ERROR = "failed to download fallback agentic payment skill";
-var SourceUnavailableError = class extends Error {
-  constructor(message = "primary agentic payment skill source is unavailable") {
-    super(message);
-    this.name = "SourceUnavailableError";
-  }
-};
-var ResponseBodyUnavailableError = class extends Error {
-  constructor() {
-    super("official source response body became unavailable");
-    this.name = "ResponseBodyUnavailableError";
-  }
-};
-async function downloadGithubAgenticPaymentSkill(input) {
-  const sourceCommit = await resolveGithubMainCommit(input.timeoutMs, input.dependencies);
-  const sourceUrl = `https://codeload.github.com/clinkbillcom/agentic-payment-skills/zip/${sourceCommit}`;
-  const downloaded = await downloadArchive({
-    url: new URL(sourceUrl),
-    destinationPath: input.destinationPath,
-    timeoutMs: input.timeoutMs,
-    allowedOrigins: /* @__PURE__ */ new Set(["https://codeload.github.com"]),
-    sourceKind: "github-primary",
-    dependencies: input.dependencies
-  });
-  return { downloaded, sourceCommit, sourceUrl };
-}
-async function fetchAgenticPaymentFallbackManifest(input) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
-  try {
-    let response;
-    try {
-      response = await fetchWithRedirects({
-        url: new URL(AGENTIC_PAYMENT_FALLBACK_MANIFEST),
-        allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "Cache-Control": "no-cache"
-        },
-        dependencies: input.dependencies
-      });
-    } catch (error) {
-      if (error instanceof CliError) {
-        throw error;
-      }
-      throw networkError(FALLBACK_NETWORK_ERROR);
-    }
-    if (response.status < 200 || response.status >= 300) {
-      await cancelBody(response);
-      throw installError(SOURCE_ERROR);
-    }
-    try {
-      const value = await readLimitedJson(response, MAX_JSON_BYTES);
-      return parseFallbackManifest(value);
-    } catch (error) {
-      if (error instanceof ResponseBodyUnavailableError) {
-        throw networkError(FALLBACK_NETWORK_ERROR);
-      }
-      throw error;
-    }
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-async function downloadFallbackAgenticPaymentSkill(input) {
-  try {
-    return await downloadArchive({
-      url: new URL(AGENTIC_PAYMENT_FALLBACK_ARCHIVE),
-      destinationPath: input.destinationPath,
-      timeoutMs: input.timeoutMs,
-      allowedOrigins: /* @__PURE__ */ new Set(["https://www.clinkbill.com"]),
-      expectedSha256: input.manifest.archiveSha256,
-      expectedSizeBytes: input.manifest.archiveSizeBytes,
-      sourceKind: "verified-fallback",
-      dependencies: input.dependencies
-    });
-  } catch (error) {
-    if (error instanceof SourceUnavailableError) {
-      throw networkError(FALLBACK_NETWORK_ERROR);
-    }
-    throw error;
-  }
-}
-async function resolveGithubMainCommit(timeoutMs, dependencies) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    let response;
-    try {
-      response = await fetchWithRedirects({
-        url: new URL(GITHUB_COMMIT_API),
-        allowedOrigins: /* @__PURE__ */ new Set(["https://api.github.com"]),
-        signal: controller.signal,
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": "clink-cli-agentic-payment-skill-sync",
-          "X-GitHub-Api-Version": "2022-11-28"
-        },
-        dependencies
-      });
-    } catch (error) {
-      if (error instanceof CliError) {
-        throw error;
-      }
-      throw new SourceUnavailableError();
-    }
-    if (isGithubFallbackResponse(response)) {
-      await cancelBody(response);
-      throw new SourceUnavailableError();
-    }
-    if (response.status < 200 || response.status >= 300) {
-      await cancelBody(response);
-      throw installError(SOURCE_ERROR);
-    }
-    let value;
-    try {
-      value = await readLimitedJson(response, MAX_JSON_BYTES);
-    } catch (error) {
-      if (error instanceof ResponseBodyUnavailableError) {
-        throw new SourceUnavailableError();
-      }
-      throw error;
-    }
-    if (!isRecord6(value) || typeof value.sha !== "string" || !COMMIT_PATTERN.test(value.sha)) {
-      throw installError(SOURCE_ERROR);
-    }
-    return value.sha;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-async function downloadArchive(input) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(input.timeoutMs, MIN_ARCHIVE_DOWNLOAD_TIMEOUT_MS));
-  let created = false;
-  try {
-    let response;
-    try {
-      response = await fetchWithRedirects({
-        url: input.url,
-        allowedOrigins: input.allowedOrigins,
-        signal: controller.signal,
-        headers: {
-          Accept: "application/zip, application/octet-stream",
-          ...input.url.origin === "https://www.clinkbill.com" ? { "Cache-Control": "no-cache" } : {}
-        },
-        dependencies: input.dependencies
-      });
-    } catch (error) {
-      if (error instanceof CliError) {
-        throw error;
-      }
-      throw new SourceUnavailableError();
-    }
-    if (input.sourceKind === "github-primary" && isGithubFallbackResponse(response)) {
-      await cancelBody(response);
-      throw new SourceUnavailableError();
-    }
-    if (input.sourceKind === "verified-fallback" && isFallbackArchiveUnavailableStatus(response.status)) {
-      await cancelBody(response);
-      throw networkError(FALLBACK_NETWORK_ERROR);
-    }
-    if (response.status < 200 || response.status >= 300) {
-      await cancelBody(response);
-      throw installError(SOURCE_ERROR);
-    }
-    if (response.body === null) {
-      if (input.sourceKind === "github-primary") {
-        throw new SourceUnavailableError();
-      }
-      throw networkError(FALLBACK_NETWORK_ERROR);
-    }
-    const contentEncoding = response.headers.get("content-encoding")?.trim().toLowerCase();
-    const declaredLengthHeader = contentEncoding === void 0 || contentEncoding === "identity" ? response.headers.get("content-length") : null;
-    let declaredLength = null;
-    if (declaredLengthHeader !== null) {
-      const parsedLength = Number(declaredLengthHeader);
-      if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > MAX_ARCHIVE_BYTES || input.expectedSizeBytes !== void 0 && parsedLength !== input.expectedSizeBytes) {
-        await cancelBody(response);
-        throw installError(SOURCE_ERROR);
-      }
-      declaredLength = parsedLength;
-    }
-    let handle;
-    try {
-      handle = await open6(input.destinationPath, constants4.O_WRONLY | constants4.O_CREAT | constants4.O_EXCL | constants4.O_NOFOLLOW, 384);
-    } catch {
-      throw installError("failed to stage official agentic payment skill");
-    }
-    created = true;
-    const hash = createHash4("sha256");
-    let sizeBytes = 0;
-    try {
-      const reader = response.body.getReader();
-      try {
-        for (; ; ) {
-          let item;
-          try {
-            item = await reader.read();
-          } catch {
-            if (input.sourceKind === "github-primary") {
-              throw new SourceUnavailableError();
-            }
-            throw networkError(FALLBACK_NETWORK_ERROR);
-          }
-          const { done, value } = item;
-          if (done) {
-            break;
-          }
-          sizeBytes += value.byteLength;
-          if (!Number.isSafeInteger(sizeBytes) || sizeBytes > MAX_ARCHIVE_BYTES) {
-            try {
-              await reader.cancel();
-            } catch {
-            }
-            throw installError(SOURCE_ERROR);
-          }
-          hash.update(value);
-          try {
-            await handle.writeFile(value);
-          } catch {
-            throw installError("failed to stage official agentic payment skill");
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      try {
-        await handle.sync();
-      } catch {
-        throw installError("failed to stage official agentic payment skill");
-      }
-    } finally {
-      await handle.close();
-    }
-    const sha256 = hash.digest("hex");
-    if (declaredLength !== null && sizeBytes !== declaredLength) {
-      if (input.expectedSizeBytes !== void 0) {
-        throw installError(SOURCE_ERROR);
-      }
-      if (input.sourceKind === "github-primary") {
-        throw new SourceUnavailableError();
-      }
-      throw networkError(FALLBACK_NETWORK_ERROR);
-    }
-    if (input.expectedSizeBytes !== void 0 && sizeBytes !== input.expectedSizeBytes || input.expectedSha256 !== void 0 && sha256 !== input.expectedSha256) {
-      throw installError(SOURCE_ERROR);
-    }
-    return { path: input.destinationPath, sizeBytes, sha256 };
-  } catch (error) {
-    if (created) {
-      try {
-        await rm5(input.destinationPath, { force: true });
-      } catch {
-      }
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-async function fetchWithRedirects(input) {
-  let current = validateSourceUrl(input.url, input.allowedOrigins);
-  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-    const response = await input.dependencies.fetch(current, {
-      method: "GET",
-      redirect: "manual",
-      headers: input.headers,
-      signal: input.signal
-    });
-    if (![301, 302, 303, 307, 308].includes(response.status)) {
-      return response;
-    }
-    const location = response.headers.get("location");
-    await cancelBody(response);
-    if (location === null || redirects === MAX_REDIRECTS) {
-      throw installError(SOURCE_ERROR);
-    }
-    current = validateSourceUrl(new URL(location, current), input.allowedOrigins);
-  }
-  throw installError(SOURCE_ERROR);
-}
-function validateSourceUrl(url, allowedOrigins) {
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || !allowedOrigins.has(url.origin)) {
-    throw installError(SOURCE_ERROR);
-  }
-  return url;
-}
-async function readLimitedJson(response, maxBytes) {
-  if (response.body === null) {
-    throw new ResponseBodyUnavailableError();
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  try {
-    for (; ; ) {
-      let item;
-      try {
-        item = await reader.read();
-      } catch {
-        throw new ResponseBodyUnavailableError();
-      }
-      const { done, value } = item;
-      if (done) {
-        break;
-      }
-      size += value.byteLength;
-      if (size > maxBytes) {
-        try {
-          await reader.cancel();
-        } catch {
-        }
-        throw installError(SOURCE_ERROR);
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch {
-    throw installError(SOURCE_ERROR);
-  }
-}
-function parseFallbackManifest(value) {
-  if (!isRecord6(value)) {
-    throw installError(SOURCE_ERROR);
-  }
-  const expectedKeys = [
-    "archiveFile",
-    "archiveSha256",
-    "archiveSizeBytes",
-    "contentSha256",
-    "generatedAt",
-    "name",
-    "prunedDirectories",
-    "schemaVersion",
-    "skillVersion",
-    "sourceCommit",
-    "sourceRepository"
-  ];
-  const keys = Object.keys(value).sort();
-  const pruned = value.prunedDirectories;
-  if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index]) || value.schemaVersion !== 1 || value.name !== "agentic-payment-skills" || typeof value.skillVersion !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.skillVersion) || value.sourceRepository !== AGENTIC_PAYMENT_REPOSITORY || typeof value.sourceCommit !== "string" || !COMMIT_PATTERN.test(value.sourceCommit) || value.archiveFile !== "agentic-payment-skill.zip" || typeof value.archiveSha256 !== "string" || !SHA256_PATTERN.test(value.archiveSha256) || typeof value.archiveSizeBytes !== "number" || !Number.isSafeInteger(value.archiveSizeBytes) || value.archiveSizeBytes <= 0 || value.archiveSizeBytes > MAX_ARCHIVE_BYTES || typeof value.contentSha256 !== "string" || !SHA256_PATTERN.test(value.contentSha256) || typeof value.generatedAt !== "string" || !isIsoDate(value.generatedAt) || !Array.isArray(pruned) || pruned.length !== 2 || !pruned.every((entry) => typeof entry === "string") || [...pruned].sort().join(",") !== "docs,tests") {
-    throw installError(SOURCE_ERROR);
-  }
-  return value;
-}
-function isGithubFallbackResponse(response) {
-  return response.status === 404 || response.status === 408 || response.status === 429 || response.status >= 500 || response.status === 403 && hasExplicitRateLimitHeader(response.headers);
-}
-function hasExplicitRateLimitHeader(headers) {
-  return headers.get("x-ratelimit-remaining")?.trim() === "0" || headers.has("retry-after");
-}
-function isFallbackArchiveUnavailableStatus(status) {
-  return status === 401 || status === 403 || status === 404 || status === 408 || status === 429 || status >= 500;
-}
-function isIsoDate(value) {
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
-}
-function isRecord6(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-async function cancelBody(response) {
-  try {
-    await response.body?.cancel();
-  } catch {
-  }
-}
-
-// dist/skills/store.js
-import { join as join5 } from "node:path";
-
-// dist/skills/store-publication.js
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { constants as constants5 } from "node:fs";
-import { chmod as chmod3, cp as cp2, copyFile as copyFile2, link, lstat as lstat5, mkdir as mkdir5, open as open7, readdir as readdir4, readlink as readlink2, realpath as realpath2, rename as rename3, rm as rm6, symlink as symlink2, utimes } from "node:fs/promises";
-import { basename, dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative as relative4, resolve as resolve3, sep as sep3 } from "node:path";
-var PUBLISH_CONFLICT_MESSAGE = "skill install conflicts with existing content";
-var PUBLISH_FAILURE_MESSAGE = "failed to publish skill release";
-var PUBLISH_ROLLBACK_MESSAGE = "failed to roll back skill release";
-var PUBLISH_FINALIZE_MESSAGE = "failed to finalize skill release";
-var INSTALL_MARKER_NAME2 = ".clink-install.json";
-var SHA256_PATTERN2 = /^[a-f0-9]{64}$/;
-var MovedBackupError = class extends Error {
-  backup;
-  constructor(backup) {
-    super("current changed while being backed up");
-    this.backup = backup;
-  }
-};
-async function publishSkillRelease(input) {
-  const paths = input.paths;
-  validatePublicationInput(paths, input.extractedRoot, input.marker, input.uuid);
-  let current;
-  let existingRelease;
-  try {
-    current = await inspectCurrent(paths);
-    if (current !== null && (current.managed === null || current.managed.marker.publisher !== input.marker.publisher || current.managed.marker.skillName !== input.marker.skillName)) {
-      if (!input.force) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-    }
-    if (current?.managed !== null && current?.managed !== void 0 && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName && current.managed.marker.sha256 === input.marker.sha256) {
-      const expectedRelease = await canonicalExistingReleasePath(paths.releasePath, paths.releasesRoot);
-      if (expectedRelease !== current.managed.canonicalReleasePath) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-      const confirmedCurrent = await inspectCurrent(paths);
-      if (confirmedCurrent?.managed === null || confirmedCurrent?.managed === void 0 || !samePathFingerprint(confirmedCurrent.fingerprint, current.fingerprint) || confirmedCurrent.managed.canonicalReleasePath !== expectedRelease || confirmedCurrent.managed.marker.publisher !== input.marker.publisher || confirmedCurrent.managed.marker.skillName !== input.marker.skillName || confirmedCurrent.managed.marker.sha256 !== input.marker.sha256) {
-        throw installError(PUBLISH_CONFLICT_MESSAGE);
-      }
-      return createUnchangedPublication(paths);
-    }
-    existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
-  } catch (error) {
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  const transaction = {
-    paths,
-    marker: input.marker,
-    uuid: input.uuid,
-    oldCurrent: current,
-    backup: null,
-    newCurrent: null,
-    createdRelease: null
-  };
-  try {
-    if (existingRelease === null) {
-      transaction.createdRelease = await createImmutableRelease(paths, input.extractedRoot, input.marker);
-    }
-    const selectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
-    if (selectedRelease === null) {
-      existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, input.marker);
-    }
-    const expectedRelease = transaction.createdRelease?.fingerprint ?? existingRelease;
-    if (expectedRelease === null) {
-      throw new Error("published release is missing");
-    }
-    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    if (current !== null) {
-      const compatibleManaged = current.managed !== null && current.managed.marker.publisher === input.marker.publisher && current.managed.marker.skillName === input.marker.skillName;
-      const backupName = compatibleManaged ? `.${input.uuid}-transient` : input.uuid;
-      try {
-        await paths.publicationMutationHook?.({ phase: "before-current-backup" });
-        transaction.backup = await moveCurrentToBackup(paths, current.fingerprint, backupName, !compatibleManaged);
-      } catch (error) {
-        if (error instanceof MovedBackupError) {
-          transaction.backup = error.backup;
-        }
-        throw error;
-      }
-      await paths.publicationMutationHook?.({ phase: "after-backup" });
-      await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    }
-    const target = relative4(dirname3(paths.currentPath), paths.releasePath);
-    await symlink2(target, paths.currentPath, "dir");
-    const newCurrent = await fingerprintPath2(paths.currentPath);
-    if (newCurrent.kind !== "symlink" || newCurrent.linkTarget !== target) {
-      throw new Error("current link changed during creation");
-    }
-    transaction.newCurrent = newCurrent;
-    await assertReleaseAuthenticated(paths, input.marker, expectedRelease);
-    await paths.publicationMutationHook?.({ phase: "after-current-switch" });
-    return createPublishedTransaction(transaction, current === null ? "installed" : "updated");
-  } catch (error) {
-    try {
-      await rollbackPublicationTransaction(transaction);
-    } catch {
-    }
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-}
-function createUnchangedPublication(paths) {
-  let state = "active";
-  return {
-    action: "unchanged",
-    releasePath: paths.releasePath,
-    currentPath: paths.currentPath,
-    backupPath: null,
-    async rollback() {
-      if (state === "active") {
-        state = "rolled-back";
-      }
-    },
-    async finalize() {
-      if (state === "active") {
-        state = "committed";
-      }
-    }
-  };
-}
-function createPublishedTransaction(transaction, action) {
-  let state = "active";
-  return {
-    action,
-    releasePath: transaction.paths.releasePath,
-    currentPath: transaction.paths.currentPath,
-    backupPath: transaction.backup?.retained === true ? transaction.backup.containerPath : null,
-    async rollback() {
-      if (state !== "active") {
-        return;
-      }
-      try {
-        await rollbackPublicationTransaction(transaction);
-        state = "rolled-back";
-      } catch {
-        throw installError(PUBLISH_ROLLBACK_MESSAGE);
-      }
-    },
-    async finalize() {
-      if (state !== "active") {
-        return;
-      }
-      try {
-        if (transaction.backup !== null && !transaction.backup.retained) {
-          await removeAuthenticatedBackup(transaction.backup);
-          transaction.backup = null;
-        }
-        state = "committed";
-      } catch {
-        throw installError(PUBLISH_FINALIZE_MESSAGE);
-      }
-    }
-  };
-}
-function validatePublicationInput(paths, extractedRoot, marker, uuid) {
-  if (!isInstallMarker(marker) || !SHA256_PATTERN2.test(marker.sha256)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  if (!isSafePathSegment(marker.publisher) || !isSafePathSegment(marker.skillName)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  if (!isSafePathSegment(uuid)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-  const expectedRelease = resolve3(paths.releasesRoot, marker.publisher, marker.skillName, marker.sha256);
-  if (resolve3(paths.releasePath) !== expectedRelease || basename(paths.currentPath) !== marker.skillName || resolve3(extractedRoot) === resolve3(paths.releasePath)) {
-    throw installError(PUBLISH_FAILURE_MESSAGE);
-  }
-}
-function isSafePathSegment(value) {
-  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\") && !value.includes("\0");
-}
-async function inspectCurrent(paths) {
-  let fingerprint;
-  try {
-    fingerprint = await fingerprintPath2(paths.currentPath);
-  } catch (error) {
-    if (isErrorCode4(error, "ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-  if (fingerprint.kind !== "symlink" || fingerprint.linkTarget === null) {
-    return { fingerprint, managed: null };
-  }
-  const managed = await inspectManagedCurrent(paths, fingerprint);
-  return { fingerprint, managed };
-}
-async function inspectManagedCurrent(paths, fingerprint) {
-  try {
-    const canonicalRoot = await realpath2(paths.releasesRoot);
-    const rootStat = await lstat5(paths.releasesRoot);
-    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-      return null;
-    }
-    const canonicalReleasePath = await realpath2(paths.currentPath);
-    const releaseStat = await lstat5(canonicalReleasePath);
-    if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink()) {
-      return null;
-    }
-    const releaseParts = pathPartsBelow(canonicalRoot, canonicalReleasePath);
-    if (releaseParts === null || releaseParts.length !== 3) {
-      return null;
-    }
-    const [publisher, skillName, sha256] = releaseParts;
-    if (!SHA256_PATTERN2.test(sha256)) {
-      return null;
-    }
-    const marker = await readNoFollowInstallMarker(join4(canonicalReleasePath, INSTALL_MARKER_NAME2));
-    if (marker === null || marker.publisher !== publisher || marker.skillName !== skillName || marker.sha256 !== sha256) {
-      return null;
-    }
-    const confirmed = await fingerprintPath2(paths.currentPath);
-    if (!samePathFingerprint(fingerprint, confirmed)) {
-      return null;
-    }
-    return {
-      fingerprint,
-      linkTarget: fingerprint.linkTarget,
-      canonicalReleasePath,
-      marker
-    };
-  } catch {
-    return null;
-  }
-}
-async function canonicalExistingReleasePath(releasePath, releasesRoot) {
-  const releaseStat = await lstat5(releasePath);
-  const rootStat = await lstat5(releasesRoot);
-  if (!releaseStat.isDirectory() || releaseStat.isSymbolicLink() || !rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  const canonicalRoot = await realpath2(releasesRoot);
-  const canonicalRelease = await realpath2(releasePath);
-  const parts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  if (parts === null || parts.length !== 3) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  return canonicalRelease;
-}
-async function inspectExistingRelease(releasePath, releasesRoot, marker) {
-  let fingerprint;
-  try {
-    fingerprint = await fingerprintPath2(releasePath);
-  } catch (error) {
-    if (isErrorCode4(error, "ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-  if (fingerprint.kind !== "directory") {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  const canonicalRelease = await canonicalExistingReleasePath(releasePath, releasesRoot);
-  const canonicalRoot = await realpath2(releasesRoot);
-  const expectedParts = [marker.publisher, marker.skillName, marker.sha256];
-  const actualParts = pathPartsBelow(canonicalRoot, canonicalRelease);
-  const existingMarker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
-  if (actualParts === null || actualParts.length !== expectedParts.length || actualParts.some((part, index) => part !== expectedParts[index]) || existingMarker === null || !sameInstallMarker(existingMarker, marker)) {
-    throw installError(PUBLISH_CONFLICT_MESSAGE);
-  }
-  return fingerprint;
-}
-async function assertReleaseAuthenticated(paths, marker, expected) {
-  const current = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
-  if (current === null || !samePathFingerprint(current, expected)) {
-    throw new Error("selected release changed during publication");
-  }
-}
-function pathPartsBelow(rootPath, candidatePath) {
-  const childPath = relative4(rootPath, candidatePath);
-  if (childPath.length === 0 || childPath === ".." || childPath.startsWith(`..${sep3}`) || isAbsolute3(childPath)) {
-    return null;
-  }
-  return childPath.split(sep3);
-}
-async function createImmutableRelease(paths, extractedRoot, marker) {
-  const extracted = await fingerprintPath2(extractedRoot);
-  if (extracted.kind !== "directory") {
-    throw new Error("extracted skill root is not a real directory");
-  }
-  await ensureReleaseParent(paths, marker);
-  await writeInstallMarker(extractedRoot, marker);
-  await paths.publicationMutationHook?.({ phase: "before-release-rename" });
-  const existingRelease = await inspectExistingRelease(paths.releasePath, paths.releasesRoot, marker);
-  if (existingRelease !== null) {
-    return null;
-  }
-  await rename3(extractedRoot, paths.releasePath);
-  const releaseFingerprint = await fingerprintPath2(paths.releasePath);
-  if (releaseFingerprint.kind !== "directory" || releaseFingerprint.dev !== extracted.dev || releaseFingerprint.ino !== extracted.ino) {
-    throw new Error("release changed during publication");
-  }
-  const installedMarker = await readNoFollowInstallMarker(join4(paths.releasePath, INSTALL_MARKER_NAME2));
-  if (installedMarker === null || !sameInstallMarker(installedMarker, marker)) {
-    throw new Error("release marker changed during publication");
-  }
-  return { fingerprint: releaseFingerprint, marker };
-}
-async function ensureReleaseParent(paths, marker) {
-  await ensureRealDirectory(paths.releasesRoot);
-  const publisherPath = join4(paths.releasesRoot, marker.publisher);
-  await ensureRealDirectory(publisherPath);
-  await ensureRealDirectory(join4(publisherPath, marker.skillName));
-}
-async function ensureRealDirectory(path4) {
-  await mkdir5(path4, { recursive: true, mode: 448 });
-  const pathStat = await lstat5(path4);
-  if (!pathStat.isDirectory() || pathStat.isSymbolicLink()) {
-    throw new Error("store path is not a real directory");
-  }
-}
-async function writeInstallMarker(rootPath, marker) {
-  const markerPath = join4(rootPath, INSTALL_MARKER_NAME2);
-  const handle = await open7(markerPath, constants5.O_WRONLY | constants5.O_CREAT | constants5.O_EXCL | constants5.O_NOFOLLOW, 420);
-  try {
-    await handle.writeFile(JSON.stringify(marker), "utf8");
-    await handle.chmod(420);
-  } finally {
-    await handle.close();
-  }
-}
-async function readNoFollowInstallMarker(path4) {
-  const parsed = await readNoFollowJson(path4);
-  return isInstallMarker(parsed) ? parsed : null;
-}
-async function readNoFollowJson(path4) {
-  let handle;
-  try {
-    handle = await open7(path4, constants5.O_RDONLY | constants5.O_NOFOLLOW);
-    const before = await handle.stat();
-    if (!before.isFile()) {
-      return null;
-    }
-    const raw = await handle.readFile("utf8");
-    const after = await handle.stat();
-    if (before.dev !== after.dev || before.ino !== after.ino || !after.isFile()) {
-      return null;
-    }
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  } finally {
-    await handle?.close();
-  }
-}
-function isInstallMarker(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const marker = value;
-  const keys = Object.keys(marker).sort();
-  const expectedKeys = [
-    "installedAt",
-    "publisher",
-    "requestedVersion",
-    "schemaVersion",
-    "sha256",
-    "sizeBytes",
-    "skillName"
-  ];
-  return keys.length === expectedKeys.length && keys.every((key, index) => key === expectedKeys[index]) && marker.schemaVersion === 1 && typeof marker.publisher === "string" && typeof marker.skillName === "string" && (marker.requestedVersion === null || typeof marker.requestedVersion === "string") && typeof marker.sha256 === "string" && SHA256_PATTERN2.test(marker.sha256) && typeof marker.sizeBytes === "number" && Number.isSafeInteger(marker.sizeBytes) && marker.sizeBytes >= 0 && typeof marker.installedAt === "string" && marker.installedAt.length > 0;
-}
-function sameInstallMarker(first, second) {
-  return first.schemaVersion === second.schemaVersion && first.publisher === second.publisher && first.skillName === second.skillName && first.requestedVersion === second.requestedVersion && first.sha256 === second.sha256 && first.sizeBytes === second.sizeBytes && first.installedAt === second.installedAt;
-}
-async function moveCurrentToBackup(paths, expectedCurrent, backupName, retained) {
-  await assertPathFingerprint(paths.currentPath, expectedCurrent);
-  await ensureRealDirectory(paths.backupsRoot);
-  const containerPath = join4(paths.backupsRoot, backupName);
-  await mkdir5(containerPath, { mode: 448 });
-  const containerFingerprint = await fingerprintPath2(containerPath);
-  if (containerFingerprint.kind !== "directory") {
-    throw new Error("backup container is not a directory");
-  }
-  const entryPath = join4(containerPath, basename(paths.currentPath));
-  try {
-    await assertPathFingerprint(paths.currentPath, expectedCurrent);
-    await rename3(paths.currentPath, entryPath);
-  } catch (error) {
-    await removeEmptyOwnedContainer(containerPath, containerFingerprint);
-    throw error;
-  }
-  const entryFingerprint2 = await fingerprintPath2(entryPath);
-  const backup = {
-    containerPath,
-    entryPath,
-    containerFingerprint,
-    entryFingerprint: entryFingerprint2,
-    retained
-  };
-  if (!samePathFingerprint(entryFingerprint2, expectedCurrent)) {
-    throw new MovedBackupError(backup);
-  }
-  try {
-    await lstat5(paths.currentPath);
-    throw new MovedBackupError(backup);
-  } catch (error) {
-    if (isErrorCode4(error, "ENOENT")) {
-      return backup;
-    }
-    throw error;
-  }
-}
-async function removeEmptyOwnedContainer(containerPath, expected) {
-  try {
-    const current = await fingerprintPath2(containerPath);
-    if (samePathFingerprint(current, expected) && current.kind === "directory" && (await readdir4(containerPath)).length === 0) {
-      await rm6(containerPath, { recursive: true });
-    }
-  } catch {
-  }
-}
-async function rollbackPublicationTransaction(transaction) {
-  let rollbackFailed = false;
-  let currentSafeForReleaseCleanup = true;
-  if (transaction.newCurrent !== null) {
-    try {
-      await removeExpectedCurrent(transaction.paths.currentPath, transaction.newCurrent, transaction.paths.backupsRoot, `.${transaction.uuid}-new-current`);
-      transaction.newCurrent = null;
-    } catch {
-      rollbackFailed = true;
-      currentSafeForReleaseCleanup = false;
-    }
-  } else {
-    try {
-      const current = await fingerprintPath2(transaction.paths.currentPath);
-      if (transaction.oldCurrent === null || !samePathFingerprint(current, transaction.oldCurrent.fingerprint)) {
-        currentSafeForReleaseCleanup = false;
-      }
-    } catch (error) {
-      if (!isErrorCode4(error, "ENOENT")) {
-        rollbackFailed = true;
-        currentSafeForReleaseCleanup = false;
-      }
-    }
-  }
-  if (transaction.backup !== null) {
-    try {
-      await restoreBackup(transaction.paths.currentPath, transaction.backup);
-      if (!transaction.backup.retained) {
-        await removeAuthenticatedBackup(transaction.backup);
-      }
-      transaction.backup = transaction.backup.retained ? transaction.backup : null;
-    } catch {
-      rollbackFailed = true;
-      currentSafeForReleaseCleanup = false;
-    }
-  }
-  if (transaction.createdRelease !== null && currentSafeForReleaseCleanup) {
-    try {
-      await removeCreatedRelease(transaction.paths.releasePath, transaction.paths.releasesRoot, transaction.createdRelease, transaction.uuid);
-      transaction.createdRelease = null;
-    } catch {
-      rollbackFailed = true;
-    }
-  }
-  if (rollbackFailed) {
-    throw new Error("publication rollback was incomplete");
-  }
-}
-async function removeExpectedCurrent(currentPath, expected, backupsRoot, cleanupName) {
-  let current;
-  try {
-    current = await fingerprintPath2(currentPath);
-  } catch (error) {
-    if (isErrorCode4(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-  if (!samePathFingerprint(current, expected)) {
-    throw new Error("current was replaced before rollback");
-  }
-  await ensureRealDirectory(backupsRoot);
-  const containerPath = join4(backupsRoot, cleanupName);
-  await mkdir5(containerPath, { mode: 448 });
-  const containerFingerprint = await fingerprintPath2(containerPath);
-  const entryPath = join4(containerPath, basename(currentPath));
-  await rename3(currentPath, entryPath);
-  const moved = await fingerprintPath2(entryPath);
-  if (!samePathFingerprint(moved, expected)) {
-    await restoreBackup(currentPath, {
-      containerPath,
-      entryPath,
-      containerFingerprint,
-      entryFingerprint: moved,
-      retained: true
-    });
-    throw new Error("current changed while rollback moved it");
-  }
-  await removeAuthenticatedBackup({
-    containerPath,
-    entryPath,
-    containerFingerprint,
-    entryFingerprint: expected,
-    retained: false
-  });
-}
-async function restoreBackup(currentPath, backup) {
-  await assertBackupAuthenticated(backup);
-  try {
-    await lstat5(currentPath);
-    throw new Error("current path is occupied during restoration");
-  } catch (error) {
-    if (!isErrorCode4(error, "ENOENT")) {
-      throw error;
-    }
-  }
-  switch (backup.entryFingerprint.kind) {
-    case "symlink": {
-      if (backup.entryFingerprint.linkTarget === null) {
-        throw new Error("backup link target is unavailable");
-      }
-      await symlink2(backup.entryFingerprint.linkTarget, currentPath, "dir");
-      break;
-    }
-    case "file":
-      if (backup.retained) {
-        await copyFile2(backup.entryPath, currentPath, constants5.COPYFILE_EXCL);
-        await chmod3(currentPath, backup.entryFingerprint.mode & 4095);
-        await assertBackupAuthenticated(backup);
-        const atime = backup.entryFingerprint.atimeMs / 1e3;
-        const mtime = backup.entryFingerprint.mtimeMs / 1e3;
-        await utimes(currentPath, atime, mtime);
-        await utimes(backup.entryPath, atime, mtime);
-      } else {
-        await link(backup.entryPath, currentPath);
-      }
-      break;
-    case "directory":
-      await restoreDirectory(backup.entryPath, currentPath, backup.entryFingerprint.mode);
-      break;
-    default:
-      throw new Error("backup type cannot be restored safely");
-  }
-  const restored = await fingerprintPath2(currentPath);
-  if (backup.entryFingerprint.kind === "symlink") {
-    if (restored.kind !== "symlink" || restored.linkTarget !== backup.entryFingerprint.linkTarget) {
-      throw new Error("restored link does not match its backup");
-    }
-  } else if (backup.entryFingerprint.kind === "file" && (restored.kind !== "file" || (backup.retained ? restored.dev !== backup.entryFingerprint.dev || restored.ino === backup.entryFingerprint.ino || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095) || Math.abs(restored.atimeMs - backup.entryFingerprint.atimeMs) > 1 || Math.abs(restored.mtimeMs - backup.entryFingerprint.mtimeMs) > 1 : restored.dev !== backup.entryFingerprint.dev || restored.ino !== backup.entryFingerprint.ino))) {
-    throw new Error("restored file does not match its backup");
-  } else if (backup.entryFingerprint.kind === "directory" && (restored.kind !== "directory" || (restored.mode & 4095) !== (backup.entryFingerprint.mode & 4095))) {
-    throw new Error("restored directory does not match its backup");
-  }
-}
-async function restoreDirectory(sourcePath, destinationPath, mode) {
-  await mkdir5(destinationPath, { mode: mode & 4095 });
-  for (const entry of await readdir4(sourcePath)) {
-    await cp2(join4(sourcePath, entry), join4(destinationPath, entry), {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      preserveTimestamps: true,
-      verbatimSymlinks: true
-    });
-  }
-  await chmod3(destinationPath, mode & 4095);
-}
-async function assertBackupAuthenticated(backup) {
-  const container = await fingerprintPath2(backup.containerPath);
-  const entry = await fingerprintPath2(backup.entryPath);
-  const entries = await readdir4(backup.containerPath);
-  if (!samePathFingerprint(container, backup.containerFingerprint) || container.kind !== "directory" || !samePathFingerprint(entry, backup.entryFingerprint) || entries.length !== 1 || entries[0] !== basename(backup.entryPath)) {
-    throw new Error("backup authentication failed");
-  }
-}
-async function removeAuthenticatedBackup(backup) {
-  await assertBackupAuthenticated(backup);
-  const cleanupPath = `${backup.containerPath}.remove-${randomUUID3()}`;
-  await rename3(backup.containerPath, cleanupPath);
-  const movedContainer = await fingerprintPath2(cleanupPath);
-  const movedEntry = await fingerprintPath2(join4(cleanupPath, basename(backup.entryPath)));
-  if (!samePathFingerprint(movedContainer, backup.containerFingerprint) || !samePathFingerprint(movedEntry, backup.entryFingerprint)) {
-    try {
-      await rename3(cleanupPath, backup.containerPath);
-    } catch {
-    }
-    throw new Error("backup changed during removal");
-  }
-  await rm6(cleanupPath, { recursive: true });
-}
-async function removeCreatedRelease(releasePath, releasesRoot, created, uuid) {
-  const current = await fingerprintPath2(releasePath);
-  const marker = await readNoFollowInstallMarker(join4(releasePath, INSTALL_MARKER_NAME2));
-  await canonicalExistingReleasePath(releasePath, releasesRoot);
-  if (!samePathFingerprint(current, created.fingerprint) || marker === null || !sameInstallMarker(marker, created.marker)) {
-    throw new Error("created release changed before rollback");
-  }
-  const cleanupPath = `${releasePath}.rollback-${uuid}`;
-  await rename3(releasePath, cleanupPath);
-  const moved = await fingerprintPath2(cleanupPath);
-  const movedMarker = await readNoFollowInstallMarker(join4(cleanupPath, INSTALL_MARKER_NAME2));
-  if (!samePathFingerprint(moved, created.fingerprint) || movedMarker === null || !sameInstallMarker(movedMarker, created.marker)) {
-    try {
-      await rename3(cleanupPath, releasePath);
-    } catch {
-    }
-    throw new Error("created release changed during rollback");
-  }
-  await rm6(cleanupPath, { recursive: true });
-}
-async function fingerprintPath2(path4) {
-  const before = await lstat5(path4);
-  const kind = pathKind(before);
-  const linkTarget = kind === "symlink" ? await readlink2(path4) : null;
-  const after = await lstat5(path4);
-  if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode || pathKind(after) !== kind) {
-    throw new Error("path changed during inspection");
-  }
-  return {
-    dev: after.dev,
-    ino: after.ino,
-    mode: after.mode,
-    atimeMs: after.atimeMs,
-    mtimeMs: after.mtimeMs,
-    kind,
-    linkTarget
-  };
-}
-function pathKind(pathStat) {
-  if (pathStat.isSymbolicLink()) {
-    return "symlink";
-  }
-  if (pathStat.isFile()) {
-    return "file";
-  }
-  if (pathStat.isDirectory()) {
-    return "directory";
-  }
-  return "other";
-}
-async function assertPathFingerprint(path4, expected) {
-  const current = await fingerprintPath2(path4);
-  if (!samePathFingerprint(current, expected)) {
-    throw new Error("path changed before mutation");
-  }
-}
-function samePathFingerprint(first, second) {
-  return first.dev === second.dev && first.ino === second.ino && first.mode === second.mode && first.kind === second.kind && first.linkTarget === second.linkTarget;
-}
-function isErrorCode4(error, code) {
-  return error?.code === code;
-}
-
-// dist/skills/store.js
-function resolveStorePaths(homeDir, spec, sha256, uuid) {
-  const skillsRoot = join5(homeDir, ".agents", "skills");
-  const clinkRoot = join5(skillsRoot, ".clink");
-  const releasesRoot = join5(clinkRoot, "releases");
-  return {
-    skillsRoot,
-    clinkRoot,
-    stagingPath: join5(clinkRoot, "staging", uuid),
-    releasesRoot,
-    releasePath: join5(releasesRoot, spec.publisher, spec.skillName, sha256),
-    backupsRoot: join5(clinkRoot, "backups"),
-    currentPath: join5(skillsRoot, spec.skillName)
-  };
-}
-
-// dist/skills/agentic-payment-sync.js
-var AGENTIC_PAYMENT_PUBLISHER = "clinkbillcom";
-var AGENTIC_PAYMENT_SKILL_NAME = "agentic-payment-skills";
-var PENDING_SHA_SENTINEL = "pending";
-var INSTALL_MARKER_FILE_NAME2 = ".clink-install.json";
-var SYNC_FAILURE = "failed to synchronize official agentic payment skill";
-var DOWNGRADE_FAILURE = "fallback agentic payment skill would downgrade the installed version";
-var DOWNGRADE_INSPECTION_FAILURE = "could not safely determine the installed agentic payment skill version";
-var AGENT_FINALIZE_WARNING = "an agent Skill target cleanup could not be finalized";
-var MAX_METADATA_BYTES = 64 * 1024;
-var SHA256_PATTERN3 = /^[a-f0-9]{64}$/;
-var DEFAULT_DEPENDENCIES = {
-  fetch: (...args) => globalThis.fetch(...args),
-  materializePackage: extractSkillPackage,
-  publishRelease: publishSkillRelease,
-  detectAgentRoots: detectAgents,
-  prepareAgents: prepareAgentPlans,
-  acquireLock: acquireAgenticPaymentInstallLock,
-  randomUUID: createRandomUUID,
-  now: () => /* @__PURE__ */ new Date(),
-  tempDirectory: tmpdir,
-  remove: async (path4) => rm7(path4, { recursive: true, force: true }),
-  log: (message) => process.stderr.write(`${message}
-`)
-};
-async function syncAgenticPaymentSkill(input, overrides = {}) {
-  const dependencies = {
-    ...DEFAULT_DEPENDENCIES,
-    ...overrides,
-    ...input.log === void 0 ? {} : { log: input.log }
-  };
-  const checkOnly = input.checkOnly === true;
-  const packageSpec = {
-    publisher: AGENTIC_PAYMENT_PUBLISHER,
-    skillName: AGENTIC_PAYMENT_SKILL_NAME,
-    requestedVersion: null
-  };
-  const skillsRoot = join6(input.homeDir, ".agents", "skills");
-  const installPath = join6(skillsRoot, AGENTIC_PAYMENT_SKILL_NAME);
-  const stagingUuid = dependencies.randomUUID();
-  const preliminaryPaths = resolveStorePaths(input.homeDir, packageSpec, PENDING_SHA_SENTINEL, stagingUuid);
-  let lock = null;
-  let stagingPath = null;
-  let primaryError;
-  let completedResult;
-  try {
-    if (checkOnly) {
-      stagingPath = await mkdtemp(join6(dependencies.tempDirectory(), "clink-agentic-payment-check-"));
-    } else {
-      lock = await dependencies.acquireLock({
-        homeDir: input.homeDir,
-        now: dependencies.now()
-      });
-      stagingPath = preliminaryPaths.stagingPath;
-      await mkdir6(stagingPath, { recursive: true, mode: 448 });
-    }
-    const candidate = await prepareCandidate(stagingPath, input.timeoutMs, dependencies);
-    const current = await readCurrentInstall(installPath);
-    assertNoFallbackDowngrade(candidate, current);
-    const updateAvailable = current.contentSha256 !== candidate.contentSha256;
-    if (checkOnly) {
-      completedResult = createResult({
-        candidate,
-        action: updateAvailable ? "planned" : "unchanged",
-        installPath,
-        updateAvailable,
-        checkOnly,
-        agents: []
-      });
-      return completedResult;
-    }
-    const installedAt = dependencies.now();
-    const provenance = createProvenance(candidate, installedAt);
-    await writeProvenance(candidate.skillRoot, provenance);
-    const paths = resolveStorePaths(input.homeDir, packageSpec, candidate.contentSha256, stagingUuid);
-    const marker = {
-      schemaVersion: 1,
-      publisher: AGENTIC_PAYMENT_PUBLISHER,
-      skillName: AGENTIC_PAYMENT_SKILL_NAME,
-      requestedVersion: null,
-      sha256: candidate.contentSha256,
-      sizeBytes: candidate.downloaded.sizeBytes,
-      installedAt: installedAt.toISOString()
-    };
-    const detected = await dependencies.detectAgentRoots({
-      homeDir: input.homeDir,
-      env: input.env,
-      skillsRoot,
-      skillName: AGENTIC_PAYMENT_SKILL_NAME
-    });
-    const plans = await dependencies.prepareAgents({
-      detected,
-      currentPath: paths.currentPath,
-      publisher: AGENTIC_PAYMENT_PUBLISHER,
-      skillName: AGENTIC_PAYMENT_SKILL_NAME,
-      force: input.force === true,
-      backupsRoot: paths.backupsRoot,
-      uuid: dependencies.randomUUID()
-    });
-    const transaction = await publishAndApply({
-      paths,
-      marker,
-      skillRoot: candidate.skillRoot,
-      force: input.force === true,
-      plans,
-      publicationUuid: dependencies.randomUUID(),
-      dependencies
-    });
-    completedResult = createResult({
-      candidate,
-      action: transaction.published.action,
-      installPath: transaction.published.currentPath,
-      updateAvailable: transaction.published.action !== "unchanged",
-      checkOnly,
-      agents: transaction.agentResults
-    });
-    completedResult.warnings.push(...transaction.warnings);
-    return completedResult;
-  } catch (error) {
-    primaryError = error;
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw installError(SYNC_FAILURE);
-  } finally {
-    const cleanupWarnings = [];
-    if (stagingPath !== null) {
-      try {
-        await dependencies.remove(stagingPath);
-      } catch {
-        cleanupWarnings.push("temporary Skill files could not be removed");
-      }
-    }
-    if (lock !== null) {
-      try {
-        await lock.release();
-      } catch {
-        cleanupWarnings.push("the Skill synchronization lock could not be released");
-      }
-    }
-    if (primaryError === void 0 && completedResult !== void 0) {
-      completedResult.warnings.push(...cleanupWarnings);
-      for (const warning of cleanupWarnings) {
-        try {
-          dependencies.log(`Warning: ${warning}`);
-        } catch {
-        }
-      }
-    }
-  }
-}
-async function prepareCandidate(stagingPath, timeoutMs, dependencies) {
-  const sourceDependencies = {
-    fetch: dependencies.fetch
-  };
-  let downloaded;
-  let source;
-  let sourceUrl;
-  let sourceCommit;
-  let integrity;
-  let manifest = null;
-  try {
-    dependencies.log("Resolving official agentic payment skill from GitHub");
-    const github = await downloadGithubAgenticPaymentSkill({
-      destinationPath: join6(stagingPath, "github-package.zip"),
-      timeoutMs,
-      dependencies: sourceDependencies
-    });
-    downloaded = github.downloaded;
-    source = "github";
-    sourceUrl = github.sourceUrl;
-    sourceCommit = github.sourceCommit;
-    integrity = "github-commit";
-  } catch (error) {
-    if (!(error instanceof SourceUnavailableError)) {
-      throw error;
-    }
-    dependencies.log("GitHub source unavailable; using Clink fallback archive");
-    manifest = await fetchAgenticPaymentFallbackManifest({
-      timeoutMs,
-      dependencies: sourceDependencies
-    });
-    downloaded = await downloadFallbackAgenticPaymentSkill({
-      destinationPath: join6(stagingPath, "fallback-package.zip"),
-      timeoutMs,
-      manifest,
-      dependencies: sourceDependencies
-    });
-    source = "fallback";
-    sourceUrl = AGENTIC_PAYMENT_FALLBACK_ARCHIVE;
-    sourceCommit = manifest.sourceCommit;
-    integrity = "manifest";
-  }
-  dependencies.log("Validating official agentic payment skill content");
-  const extracted = await dependencies.materializePackage(downloaded.path, join6(stagingPath, "extract"));
-  if (extracted.layout !== "single") {
-    throw installError("official agentic payment skill must contain one skill root");
-  }
-  await pruneAgenticPaymentSkillRoot(extracted.skillRoot);
-  const validated = await validateAgenticPaymentSkillRoot(extracted.skillRoot);
-  if (parseSemanticVersion(validated.skillVersion) === null) {
-    throw installError("official agentic payment skill version is not valid SemVer");
-  }
-  const contentSha256 = await hashAgenticPaymentSkillTree(extracted.skillRoot);
-  if (manifest !== null) {
-    if (manifest.contentSha256 !== contentSha256 || manifest.skillVersion !== validated.skillVersion) {
-      throw installError("fallback agentic payment skill manifest does not match content");
-    }
-  }
-  return {
-    downloaded,
-    skillRoot: extracted.skillRoot,
-    skillVersion: validated.skillVersion,
-    contentSha256,
-    source,
-    sourceUrl,
-    sourceCommit,
-    integrity,
-    manifest
-  };
-}
-async function publishAndApply(input) {
-  let published = null;
-  const applied = [];
-  const agentResults = [];
-  const warnings = [];
-  let publicationCommitted = false;
-  try {
-    input.dependencies.log("Publishing official agentic payment skill release");
-    published = await input.dependencies.publishRelease({
-      paths: input.paths,
-      extractedRoot: input.skillRoot,
-      marker: input.marker,
-      force: input.force,
-      uuid: input.publicationUuid
-    });
-    input.dependencies.log("Updating detected agent skill roots");
-    for (const plan of input.plans) {
-      const result = await plan.apply({
-        releasePath: published.releasePath,
-        marker: input.marker
-      });
-      applied.push(plan);
-      agentResults.push(result);
-    }
-    await published.finalize();
-    publicationCommitted = true;
-    for (const plan of applied) {
-      try {
-        await plan.finalize();
-      } catch {
-        warnings.push(AGENT_FINALIZE_WARNING);
-        try {
-          input.dependencies.log(`Warning: ${AGENT_FINALIZE_WARNING}`);
-        } catch {
-        }
-      }
-    }
-    return { published, agentResults, warnings };
-  } catch (error) {
-    if (!publicationCommitted) {
-      for (const plan of [...applied].reverse()) {
-        try {
-          await plan.rollback();
-        } catch {
-        }
-      }
-      if (published !== null) {
-        try {
-          await published.rollback();
-        } catch {
-        }
-      }
-    }
-    throw error;
-  }
-}
-function createProvenance(candidate, installedAt) {
-  return {
-    schemaVersion: 1,
-    name: AGENTIC_PAYMENT_SKILL_NAME,
-    skillVersion: candidate.skillVersion,
-    sourceRepository: AGENTIC_PAYMENT_REPOSITORY,
-    sourceCommit: candidate.sourceCommit,
-    source: candidate.source,
-    sourceUrl: candidate.sourceUrl,
-    integrity: candidate.integrity,
-    archiveSha256: candidate.downloaded.sha256,
-    archiveSizeBytes: candidate.downloaded.sizeBytes,
-    contentSha256: candidate.contentSha256,
-    installedAt: installedAt.toISOString(),
-    manifestUrl: candidate.manifest === null ? null : AGENTIC_PAYMENT_FALLBACK_MANIFEST,
-    prunedDirectories: ["docs", "tests"]
-  };
-}
-async function writeProvenance(skillRoot, provenance) {
-  const path4 = join6(skillRoot, PROVENANCE_FILE_NAME);
-  const handle = await open8(path4, constants6.O_WRONLY | constants6.O_CREAT | constants6.O_EXCL | constants6.O_NOFOLLOW, 420);
-  try {
-    await handle.writeFile(JSON.stringify(provenance), "utf8");
-    await handle.sync();
-    await handle.chmod(420);
-  } finally {
-    await handle.close();
-  }
-}
-async function readCurrentInstall(installPath) {
-  let installStats;
-  try {
-    installStats = await lstat6(installPath);
-  } catch (error) {
-    if (isErrorCode5(error, "ENOENT")) {
-      return {
-        exists: false,
-        managed: false,
-        contentSha256: null,
-        skillVersion: null,
-        provenance: null
-      };
-    }
-    throw error;
-  }
-  if (!installStats.isSymbolicLink()) {
-    return unmanagedCurrentInstall();
-  }
-  let snapshot;
-  try {
-    const inspected = await inspectManagedReleaseSnapshot(installPath, installStats);
-    if (inspected === null) {
-      return unmanagedCurrentInstall();
-    }
-    snapshot = inspected;
-  } catch {
-    return unmanagedCurrentInstall();
-  }
-  let markerRead;
-  try {
-    markerRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, INSTALL_MARKER_FILE_NAME2), MAX_METADATA_BYTES);
-  } catch {
-    return unmanagedCurrentInstall();
-  }
-  const marker = markerRead.value;
-  if (!isRecord7(marker) || marker.schemaVersion !== 1 || marker.publisher !== AGENTIC_PAYMENT_PUBLISHER || marker.skillName !== AGENTIC_PAYMENT_SKILL_NAME || typeof marker.sha256 !== "string" || marker.sha256 !== snapshot.contentSha256 || !SHA256_PATTERN3.test(marker.sha256)) {
-    return unmanagedCurrentInstall();
-  }
-  let packageRead = null;
-  let skillVersion = null;
-  try {
-    packageRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, "package.json"), MAX_METADATA_BYTES);
-    const packageJson = packageRead.value;
-    if (isRecord7(packageJson) && packageJson.name === "clink-payment-skill" && typeof packageJson.version === "string" && parseSemanticVersion(packageJson.version) !== null) {
-      skillVersion = packageJson.version;
-    }
-  } catch {
-  }
-  let provenanceRead = null;
-  let provenance = null;
-  try {
-    provenanceRead = await readBoundedNoFollowJson(join6(snapshot.releasePath, PROVENANCE_FILE_NAME), MAX_METADATA_BYTES);
-    const value = provenanceRead.value;
-    if (isAgenticPaymentProvenance(value, marker.sha256)) {
-      provenance = value;
-    }
-  } catch {
-  }
-  if (!await managedReleaseSnapshotIsUnchanged(snapshot) || !await namedFileIsUnchanged(markerRead) || packageRead !== null && !await namedFileIsUnchanged(packageRead) || provenanceRead !== null && !await namedFileIsUnchanged(provenanceRead)) {
-    throw installError("installed agentic payment skill changed during inspection");
-  }
-  return {
-    exists: true,
-    managed: true,
-    contentSha256: marker.sha256,
-    skillVersion,
-    provenance
-  };
-}
-function unmanagedCurrentInstall() {
-  return {
-    exists: true,
-    managed: false,
-    contentSha256: null,
-    skillVersion: null,
-    provenance: null
-  };
-}
-async function inspectManagedReleaseSnapshot(installPath, installStats) {
-  const installFingerprint = entryFingerprint(installStats);
-  const linkText = await readlink3(installPath);
-  const confirmedInstallStats = await lstat6(installPath);
-  if (!confirmedInstallStats.isSymbolicLink() || !sameEntryFingerprint(installFingerprint, entryFingerprint(confirmedInstallStats))) {
-    return null;
-  }
-  const skillsRoot = dirname4(installPath);
-  const clinkRoot = resolve4(skillsRoot, ".clink");
-  const releasesRoot = resolve4(clinkRoot, "releases");
-  const releasePath = resolve4(skillsRoot, linkText);
-  const relativeRelease = relative5(releasesRoot, releasePath);
-  const releaseParts = relativeRelease.split(sep4);
-  if (relativeRelease.length === 0 || relativeRelease.startsWith(`..${sep4}`) || releaseParts.length !== 3 || releaseParts[0] !== AGENTIC_PAYMENT_PUBLISHER || releaseParts[1] !== AGENTIC_PAYMENT_SKILL_NAME || !SHA256_PATTERN3.test(releaseParts[2] ?? "")) {
-    return null;
-  }
-  const directories = [];
-  for (const path4 of [
-    clinkRoot,
-    releasesRoot,
-    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER),
-    join6(releasesRoot, AGENTIC_PAYMENT_PUBLISHER, AGENTIC_PAYMENT_SKILL_NAME),
-    releasePath
-  ]) {
-    const stats = await lstat6(path4);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) {
-      return null;
-    }
-    directories.push({ path: path4, fingerprint: entryFingerprint(stats) });
-  }
-  return {
-    installPath,
-    installFingerprint,
-    linkText,
-    releasePath,
-    contentSha256: releaseParts[2],
-    directories
-  };
-}
-async function managedReleaseSnapshotIsUnchanged(snapshot) {
-  try {
-    const installStats = await lstat6(snapshot.installPath);
-    if (!installStats.isSymbolicLink() || !sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(installStats)) || await readlink3(snapshot.installPath) !== snapshot.linkText) {
-      return false;
-    }
-    const confirmedInstallStats = await lstat6(snapshot.installPath);
-    if (!sameEntryFingerprint(snapshot.installFingerprint, entryFingerprint(confirmedInstallStats))) {
-      return false;
-    }
-    for (const directory of snapshot.directories) {
-      const stats = await lstat6(directory.path);
-      if (!stats.isDirectory() || stats.isSymbolicLink() || !sameEntryFingerprint(directory.fingerprint, entryFingerprint(stats))) {
-        return false;
-      }
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function readBoundedNoFollowJson(path4, maximumBytes) {
-  const handle = await open8(path4, constants6.O_RDONLY | constants6.O_NOFOLLOW | constants6.O_NONBLOCK);
-  try {
-    const before = await handle.stat();
-    if (!before.isFile() || !Number.isSafeInteger(before.size) || before.size < 0 || before.size > maximumBytes) {
-      throw new Error("metadata is not a bounded regular file");
-    }
-    const bytes = Buffer.alloc(before.size);
-    let offset = 0;
-    while (offset < bytes.byteLength) {
-      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-      if (bytesRead === 0) {
-        throw new Error("metadata was truncated while reading");
-      }
-      offset += bytesRead;
-    }
-    const trailing = Buffer.alloc(1);
-    if ((await handle.read(trailing, 0, 1, offset)).bytesRead !== 0) {
-      throw new Error("metadata grew while reading");
-    }
-    const after = await handle.stat();
-    const beforeFingerprint = entryFingerprint(before);
-    if (!sameEntryFingerprint(beforeFingerprint, entryFingerprint(after)) || after.size !== bytes.byteLength) {
-      throw new Error("metadata changed while reading");
-    }
-    const namedStats = await lstat6(path4);
-    if (!namedStats.isFile() || namedStats.isSymbolicLink() || !sameEntryFingerprint(beforeFingerprint, entryFingerprint(namedStats))) {
-      throw new Error("metadata path changed while reading");
-    }
-    const text2 = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return {
-      path: path4,
-      fingerprint: beforeFingerprint,
-      value: JSON.parse(text2)
-    };
-  } finally {
-    await handle.close();
-  }
-}
-async function namedFileIsUnchanged(read) {
-  try {
-    const stats = await lstat6(read.path);
-    return stats.isFile() && !stats.isSymbolicLink() && sameEntryFingerprint(read.fingerprint, entryFingerprint(stats));
-  } catch {
-    return false;
-  }
-}
-function entryFingerprint(stats) {
-  return {
-    dev: stats.dev,
-    ino: stats.ino,
-    mode: stats.mode,
-    size: stats.size,
-    mtimeMs: stats.mtimeMs,
-    ctimeMs: stats.ctimeMs
-  };
-}
-function sameEntryFingerprint(left, right) {
-  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
-}
-function isAgenticPaymentProvenance(value, contentSha256) {
-  if (!isRecord7(value)) {
-    return false;
-  }
-  return value.schemaVersion === 1 && value.name === AGENTIC_PAYMENT_SKILL_NAME && typeof value.skillVersion === "string" && value.sourceRepository === AGENTIC_PAYMENT_REPOSITORY && (value.sourceCommit === null || typeof value.sourceCommit === "string") && (value.source === "github" || value.source === "fallback") && typeof value.sourceUrl === "string" && (value.integrity === "github-commit" || value.integrity === "manifest" || value.integrity === "unverified") && typeof value.archiveSha256 === "string" && typeof value.archiveSizeBytes === "number" && value.contentSha256 === contentSha256 && typeof value.installedAt === "string";
-}
-function assertNoFallbackDowngrade(candidate, current) {
-  if (candidate.source !== "fallback" || !current.managed) {
-    return;
-  }
-  if (current.skillVersion === null) {
-    throw installError(DOWNGRADE_INSPECTION_FAILURE);
-  }
-  if (compareVersions(candidate.skillVersion, current.skillVersion) < 0) {
-    throw installError(DOWNGRADE_FAILURE);
-  }
-}
-function compareVersions(left, right) {
-  const parsedLeft = parseSemanticVersion(left);
-  const parsedRight = parseSemanticVersion(right);
-  if (parsedLeft === null || parsedRight === null) {
-    throw installError(DOWNGRADE_INSPECTION_FAILURE);
-  }
-  for (const key of ["major", "minor", "patch"]) {
-    if (parsedLeft[key] < parsedRight[key]) {
-      return -1;
-    }
-    if (parsedLeft[key] > parsedRight[key]) {
-      return 1;
-    }
-  }
-  if (parsedLeft.prerelease.length === 0 || parsedRight.prerelease.length === 0) {
-    if (parsedLeft.prerelease.length === parsedRight.prerelease.length) {
-      return 0;
-    }
-    return parsedLeft.prerelease.length === 0 ? 1 : -1;
-  }
-  const identifierCount = Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
-  for (let index = 0; index < identifierCount; index += 1) {
-    const leftIdentifier = parsedLeft.prerelease[index];
-    const rightIdentifier = parsedRight.prerelease[index];
-    if (leftIdentifier === void 0 || rightIdentifier === void 0) {
-      return leftIdentifier === void 0 ? -1 : 1;
-    }
-    if (typeof leftIdentifier === "bigint" && typeof rightIdentifier === "bigint") {
-      if (leftIdentifier !== rightIdentifier) {
-        return leftIdentifier < rightIdentifier ? -1 : 1;
-      }
-      continue;
-    }
-    if (typeof leftIdentifier !== typeof rightIdentifier) {
-      return typeof leftIdentifier === "bigint" ? -1 : 1;
-    }
-    if (leftIdentifier !== rightIdentifier) {
-      return leftIdentifier < rightIdentifier ? -1 : 1;
-    }
-  }
-  return 0;
-}
-function parseSemanticVersion(value) {
-  if (value.length === 0 || value.length > 256) {
-    return null;
-  }
-  const plusIndex = value.indexOf("+");
-  if (plusIndex !== -1 && plusIndex !== value.lastIndexOf("+")) {
-    return null;
-  }
-  const versionWithoutBuild = plusIndex === -1 ? value : value.slice(0, plusIndex);
-  if (plusIndex !== -1) {
-    const build = value.slice(plusIndex + 1);
-    if (!isDotSeparatedIdentifiers(build, false)) {
-      return null;
-    }
-  }
-  const dashIndex = versionWithoutBuild.indexOf("-");
-  const core = dashIndex === -1 ? versionWithoutBuild : versionWithoutBuild.slice(0, dashIndex);
-  const prereleaseText = dashIndex === -1 ? null : versionWithoutBuild.slice(dashIndex + 1);
-  const coreParts = core.split(".");
-  if (coreParts.length !== 3 || coreParts.some((part) => !/^(?:0|[1-9][0-9]*)$/.test(part))) {
-    return null;
-  }
-  const prerelease = [];
-  if (prereleaseText !== null) {
-    if (!isDotSeparatedIdentifiers(prereleaseText, true)) {
-      return null;
-    }
-    for (const identifier of prereleaseText.split(".")) {
-      prerelease.push(/^[0-9]+$/.test(identifier) ? BigInt(identifier) : identifier);
-    }
-  }
-  return {
-    major: BigInt(coreParts[0]),
-    minor: BigInt(coreParts[1]),
-    patch: BigInt(coreParts[2]),
-    prerelease
-  };
-}
-function isDotSeparatedIdentifiers(value, prerelease) {
-  if (value.length === 0) {
-    return false;
-  }
-  return value.split(".").every((identifier) => {
-    if (!/^[0-9A-Za-z-]+$/.test(identifier)) {
-      return false;
-    }
-    return !(prerelease && /^[0-9]+$/.test(identifier) && identifier.length > 1 && identifier.startsWith("0"));
-  });
-}
-function createResult(input) {
-  return {
-    publisher: AGENTIC_PAYMENT_PUBLISHER,
-    skillName: AGENTIC_PAYMENT_SKILL_NAME,
-    skillVersion: input.candidate.skillVersion,
-    action: input.action,
-    installPath: input.installPath,
-    updateAvailable: input.updateAvailable,
-    checkOnly: input.checkOnly,
-    source: input.candidate.source,
-    integrity: input.candidate.integrity,
-    sourceCommit: input.candidate.sourceCommit,
-    archiveSha256: input.candidate.downloaded.sha256,
-    archiveSizeBytes: input.candidate.downloaded.sizeBytes,
-    contentSha256: input.candidate.contentSha256,
-    agents: input.agents,
-    warnings: []
-  };
-}
-function isRecord7(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isErrorCode5(error, code) {
-  return error.code === code;
-}
-
-// dist/self-update.js
-var CLI_PACKAGE_NAME = "@clink-ai/clink-cli";
-var SELF_UPDATE_GUARD = "CLINK_CLI_SELF_UPDATE_ACTIVE";
-var NPM_INSTALL_MIN_TIMEOUT_MS = 3e5;
-var MAX_NPM_OUTPUT_BYTES = 1024 * 1024;
-async function installCliAndSkill(options2, dependencies = {}) {
-  assertMutationAllowed(options2);
-  await assertNpmSelfUpdateSupported(dependencies);
-  const latestVersion = await readLatestCliVersion(options2, dependencies);
-  const cli = await installLatestCli("installed", options2, dependencies, latestVersion);
-  const skill = await syncAfterCliMutation(cli, options2, dependencies);
-  return {
-    action: cli.action,
-    checkOnly: false,
-    cli,
-    skill
-  };
-}
-async function updateCliAndSkill(options2, dependencies = {}) {
-  if (!options2.checkOnly) {
-    assertMutationAllowed(options2);
-  }
-  await assertNpmSelfUpdateSupported(dependencies);
-  const latestVersion = await readLatestCliVersion(options2, dependencies);
-  const comparison = compareSemver(CLI_VERSION, latestVersion);
-  const updateAvailable = comparison < 0;
-  const currentIsNewer = comparison > 0;
-  if (options2.checkOnly) {
-    const cli2 = {
-      packageName: CLI_PACKAGE_NAME,
-      action: "checked",
-      currentVersion: CLI_VERSION,
-      latestVersion,
-      updateAvailable,
-      currentIsNewer,
-      requestedVersion: "latest"
-    };
-    const skill2 = await synchronizeSkill(options2, dependencies);
-    return {
-      action: "checked",
-      checkOnly: true,
-      cli: cli2,
-      skill: skill2
-    };
-  }
-  let cli;
-  if (updateAvailable || options2.force) {
-    cli = await installLatestCli(updateAvailable ? "updated" : "reinstalled", options2, dependencies, latestVersion);
-  } else {
-    cli = {
-      packageName: CLI_PACKAGE_NAME,
-      action: "unchanged",
-      currentVersion: CLI_VERSION,
-      latestVersion,
-      updateAvailable: false,
-      currentIsNewer,
-      requestedVersion: "latest"
-    };
-  }
-  const skill = cli.action === "updated" || cli.action === "reinstalled" ? await syncAfterCliMutation(cli, options2, dependencies) : await synchronizeSkill(options2, dependencies);
-  return {
-    action: cli.action,
-    checkOnly: false,
-    cli,
-    skill
-  };
-}
-async function syncOfficialSkill(options2, dependencies = {}) {
-  return synchronizeSkill(options2, dependencies);
-}
-async function defaultExecFileRunner(request) {
-  return new Promise((resolveResult) => {
-    execFile2(request.file, request.args, {
-      encoding: "utf8",
-      env: request.env,
-      maxBuffer: MAX_NPM_OUTPUT_BYTES,
-      shell: false,
-      timeout: request.timeoutMs,
-      windowsHide: true
-    }, (error, stdout, stderr) => {
-      const errorCode = error && typeof error.code === "string" ? error.code : void 0;
-      resolveResult({
-        exitCode: error ? typeof error.code === "number" ? error.code : null : EXIT_CODES.OK,
-        stdout,
-        stderr,
-        ...errorCode ? { errorCode } : {},
-        timedOut: Boolean(error && (error.killed || error.signal))
-      });
-    });
-  });
-}
-async function isCurrentNpmDistribution(moduleUrl = import.meta.url) {
-  let current = dirname5(fileURLToPath(moduleUrl));
-  const filesystemRoot = parse(current).root;
-  while (true) {
-    try {
-      const manifest = JSON.parse(await readFile4(resolve5(current, "package.json"), "utf8"));
-      if (manifest.name === CLI_PACKAGE_NAME) {
-        return isInstalledPackageRoot(current);
-      }
-    } catch (error) {
-      if (!isNonMatchingPackageManifestError(error)) {
-        throw error;
-      }
-    }
-    if (current === filesystemRoot) {
-      return false;
-    }
-    current = dirname5(current);
-  }
-}
-function compareSemver(left, right) {
-  const leftVersion = parseSemver(left);
-  const rightVersion = parseSemver(right);
-  for (const key of ["major", "minor", "patch"]) {
-    if (leftVersion[key] !== rightVersion[key]) {
-      return leftVersion[key] < rightVersion[key] ? -1 : 1;
-    }
-  }
-  return comparePrerelease(leftVersion.prerelease, rightVersion.prerelease);
-}
-async function assertNpmSelfUpdateSupported(dependencies) {
-  const isNpmDistribution = dependencies.isNpmDistribution ?? (() => isCurrentNpmDistribution());
-  if (await isNpmDistribution()) {
-    return;
-  }
-  throw new CliError("install_error", `CLI self-update is available only for the npm distribution. Install it with \`npm install --global ${CLI_PACKAGE_NAME}\`, then run \`clink update\`.`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "distribution_check", packageName: CLI_PACKAGE_NAME });
-}
-function assertMutationAllowed(options2) {
-  if (options2.checkOnly) {
-    throw validationError("install does not support --check");
-  }
-  if (options2.env[SELF_UPDATE_GUARD] === "1") {
-    throw new CliError("install_error", "Refusing recursive CLI self-update.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "recursion_guard", packageName: CLI_PACKAGE_NAME });
-  }
-}
-async function installLatestCli(action, options2, dependencies, latestVersion) {
-  const result = await runNpm([
-    "install",
-    "--global",
-    `${CLI_PACKAGE_NAME}@${latestVersion ?? "latest"}`,
-    "--no-audit",
-    "--no-fund",
-    "--loglevel=error"
-  ], {
-    ...options2,
-    timeoutMs: Math.max(options2.timeoutMs, NPM_INSTALL_MIN_TIMEOUT_MS)
-  }, dependencies);
-  if (result.exitCode !== EXIT_CODES.OK) {
-    throw npmCommandError("install the latest CLI", "cli_install", result);
-  }
-  options2.log(`${CLI_PACKAGE_NAME} npm installation completed.`);
-  return {
-    packageName: CLI_PACKAGE_NAME,
-    action,
-    currentVersion: CLI_VERSION,
-    ...latestVersion ? { latestVersion } : {},
-    ...latestVersion ? { updateAvailable: action === "updated" } : {},
-    requestedVersion: "latest"
-  };
-}
-async function readLatestCliVersion(options2, dependencies) {
-  const createCache = dependencies.createNpmCacheDirectory ?? (() => mkdtemp2(join7(tmpdir2(), "clink-npm-check-")));
-  const removeCache = dependencies.removeNpmCacheDirectory ?? ((path4) => rm8(path4, { recursive: true, force: true }));
-  let cachePath;
-  try {
-    cachePath = await createCache();
-  } catch {
-    throw new CliError("install_error", "Unable to create an isolated npm cache for the CLI version check.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check_cache", packageName: CLI_PACKAGE_NAME });
-  }
-  let primaryError;
-  try {
-    const result = await runNpm([
-      "view",
-      `${CLI_PACKAGE_NAME}@latest`,
-      "version",
-      "--json",
-      "--loglevel=error",
-      "--prefer-online",
-      "--cache",
-      cachePath
-    ], options2, dependencies);
-    if (result.exitCode !== EXIT_CODES.OK) {
-      throw npmCommandError("check the latest CLI version", "cli_check", result);
-    }
-    const parsed = JSON.parse(result.stdout.trim());
-    if (typeof parsed !== "string") {
-      throw new Error("npm returned a non-string version");
-    }
-    parseSemver(parsed);
-    return parsed;
-  } catch (error) {
-    primaryError = error;
-    if (error instanceof CliError) {
-      throw error;
-    }
-    throw new CliError("install_error", "npm returned an invalid latest CLI version.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "cli_check", packageName: CLI_PACKAGE_NAME });
-  } finally {
-    try {
-      await removeCache(cachePath);
-    } catch {
-      if (primaryError === void 0) {
-        options2.log("Warning: unable to remove the isolated npm cache after the CLI version check.");
-      }
-    }
-  }
-}
-async function runNpm(args, options2, dependencies) {
-  const invocation = resolveNpmInvocation(options2.env, dependencies.platform ?? process.platform, dependencies.execPath ?? process.execPath);
-  const runner = dependencies.execFileRunner ?? defaultExecFileRunner;
-  return runner({
-    file: invocation.file,
-    args: [...invocation.prefixArgs, ...args],
-    env: {
-      ...options2.env,
-      [SELF_UPDATE_GUARD]: "1"
-    },
-    timeoutMs: options2.timeoutMs
-  });
-}
-function resolveNpmInvocation(env, platform, execPath) {
-  const npmExecPath = env.npm_execpath;
-  if (npmExecPath && isAbsolute4(npmExecPath) && isNpmCliFilename(npmExecPath) && existsSync(npmExecPath)) {
-    return { file: execPath, prefixArgs: [npmExecPath] };
-  }
-  if (platform !== "win32") {
-    return { file: "npm", prefixArgs: [] };
-  }
-  const candidates = [
-    resolve5(dirname5(execPath), "node_modules/npm/bin/npm-cli.js"),
-    resolve5(dirname5(execPath), "../node_modules/npm/bin/npm-cli.js"),
-    resolve5(dirname5(execPath), "../lib/node_modules/npm/bin/npm-cli.js")
-  ];
-  const npmCliPath = candidates.find((candidate) => existsSync(candidate));
-  if (npmCliPath) {
-    return { file: execPath, prefixArgs: [npmCliPath] };
-  }
-  throw new CliError("install_error", "Unable to locate npm without using a command shell. Run the update from an npm-installed CLI.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, { phase: "npm_resolution", packageName: CLI_PACKAGE_NAME });
-}
-async function synchronizeSkill(options2, dependencies) {
-  const syncSkill = dependencies.syncSkill ?? ((input) => syncAgenticPaymentSkill({
-    homeDir: input.homeDir,
-    env: input.env,
-    timeoutMs: input.timeoutMs,
-    force: input.force,
-    checkOnly: input.checkOnly,
-    log: input.log
-  }));
-  const result = await syncSkill(options2);
-  if (options2.checkOnly && isRecord8(result) && result.action !== "checked") {
-    return {
-      ...result,
-      action: "checked",
-      plannedAction: result.action
-    };
-  }
-  return result;
-}
-async function syncAfterCliMutation(cli, options2, dependencies) {
-  try {
-    return await synchronizeSkill(options2, dependencies);
-  } catch (error) {
-    throw new CliError("install_error", "CLI installation completed, but the official payment Skill could not be synchronized. Run `clink skills sync` to retry the Skill-only step.", EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
-      partial: true,
-      phase: "skill_sync",
-      cli,
-      skill: {
-        syncCompleted: false,
-        recoveryCommand: "clink skills sync",
-        errorType: error instanceof CliError ? error.type : "install_error"
-      }
-    });
-  }
-}
-function npmCommandError(operation, phase, result) {
-  const reason = result.timedOut ? "The npm command timed out." : result.errorCode === "ENOENT" ? "npm was not found on PATH." : "The npm command failed.";
-  return new CliError("install_error", `Unable to ${operation}. ${reason}`, EXIT_CODES.INSTALL, EXIT_CODES.INSTALL, {
-    phase,
-    packageName: CLI_PACKAGE_NAME,
-    exitCode: result.exitCode,
-    timedOut: result.timedOut
-  });
-}
-function isNpmCliFilename(value) {
-  return /(?:^|[\\/])npm(?:-cli)?\.(?:c?js)$/iu.test(value);
-}
-function isInstalledPackageRoot(value) {
-  const installedSuffix = join7("node_modules", "@clink-ai", "clink-cli");
-  return value === installedSuffix || value.endsWith(`${sep5}${installedSuffix}`);
-}
-function isNonMatchingPackageManifestError(error) {
-  if (error instanceof SyntaxError) {
-    return true;
-  }
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return false;
-  }
-  return typeof error.code === "string" && ["ENOENT", "ENOTDIR", "EISDIR", "EACCES", "EPERM"].includes(error.code);
-}
-function isRecord8(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function parseSemver(value) {
-  const match = /^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(value);
-  if (!match) {
-    throw new Error("invalid semantic version");
-  }
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-    prerelease: match[4]?.split(".") ?? []
-  };
-}
-function comparePrerelease(left, right) {
-  if (left.length === 0 || right.length === 0) {
-    if (left.length === right.length) {
-      return 0;
-    }
-    return left.length === 0 ? 1 : -1;
-  }
-  const length = Math.max(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    const leftPart = left[index];
-    const rightPart = right[index];
-    if (leftPart === void 0 || rightPart === void 0) {
-      return leftPart === void 0 ? -1 : 1;
-    }
-    if (leftPart === rightPart) {
-      continue;
-    }
-    const leftNumber = /^\d+$/u.test(leftPart) ? Number(leftPart) : null;
-    const rightNumber = /^\d+$/u.test(rightPart) ? Number(rightPart) : null;
-    if (leftNumber !== null && rightNumber !== null) {
-      return leftNumber < rightNumber ? -1 : 1;
-    }
-    if (leftNumber !== null || rightNumber !== null) {
-      return leftNumber !== null ? -1 : 1;
-    }
-    return leftPart < rightPart ? -1 : 1;
-  }
-  return 0;
-}
-
-// dist/payment/authorization-api.js
-var INSTRUCTION_PATH = "/agent/cwallet/instructions";
-function createTipAuthorizationApi(input, overrides = {}) {
-  const dependencies = {
-    requestJson: overrides.requestJson ?? requestJson,
-    updateStoredConfig: overrides.updateStoredConfig ?? updateStoredConfig,
-    collectWebhookEvents: overrides.collectWebhookEvents ?? collectWebhookEvents,
-    ackWebhookEvents: overrides.ackWebhookEvents ?? ackWebhookEvents
-  };
-  const getRuntimeConfig = input.getRuntimeConfig ?? (() => input.runtimeConfig);
-  const resolveStoredRuntimeConfig = input.resolveStoredRuntimeConfig ?? storedRuntimeConfig;
-  const requestRuntime = {
-    getRuntimeConfig,
-    ...input.getRuntimeConfig ? { reloadRuntimeConfig: input.getRuntimeConfig } : {},
-    ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {}
-  };
-  const refreshPaymentMethods = async () => {
-    let requestedIdentity = { type: "none" };
-    const binding = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => {
-      requestedIdentity = runtimeAuthorizationIdentity(runtimeConfig);
-      return {
-        baseUrl: runtimeConfig.baseUrl,
-        method: "POST",
-        path: "/agent/cwallet/card/bindingLink",
-        headers: buildCustomerHeaders(runtimeConfig),
-        body: {
-          customerId: runtimeConfig.customerId,
-          hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
-        },
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      };
-    }, dependencies.requestJson);
-    const data = unwrapResponse(binding, "invalid card binding response");
-    const paymentMethods = normalizePaymentMethods(data.paymentMethodsVoList);
-    const storedPaymentMethods = paymentMethods.map((method) => ({ ...method }));
-    const nextConfig = await dependencies.updateStoredConfig((current) => {
-      const currentIdentity = runtimeAuthorizationIdentity(resolveStoredRuntimeConfig(current));
-      if (requestedIdentity.type === "none" || !storedConfigCanCacheForIdentity(current, requestedIdentity) || !authorizationIdentityCanContinue(requestedIdentity, currentIdentity)) {
-        throw authError("Authentication changed while payment methods were refreshing; retry the command.");
-      }
-      current.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
-      return current;
-    });
-    input.storedConfig.paymentMethods = storedPaymentMethods.map((method) => ({ ...method }));
-    input.setStoredConfig?.(nextConfig);
-    return paymentMethods;
-  };
-  return {
-    refreshPaymentMethods,
-    refreshDefaultPaymentMethod: async () => pickDefaultPaymentMethod(await refreshPaymentMethods()),
-    listInstructions: async (paymentInstrumentId) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
-        baseUrl: runtimeConfig.baseUrl,
-        method: "GET",
-        path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(runtimeConfig),
-        query: { status: "ACTIVE", paymentInstrumentId },
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      return unwrapResponse(result, "invalid instruction list response");
-    },
-    createInstruction: async (draft) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig2) => ({
-        baseUrl: runtimeConfig2.baseUrl,
-        method: "POST",
-        path: INSTRUCTION_PATH,
-        headers: buildInstructionHeaders(runtimeConfig2),
-        body: draft,
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      const data = unwrapResponse(result, "invalid instruction create response");
-      const instructionId2 = optionalString2(data.instructionId) ?? optionalString2(data.purchaseInstructionId);
-      if (!instructionId2) {
-        throw apiError("missing instructionId in instruction create response", 502);
-      }
-      const runtimeConfig = await getRuntimeConfig();
-      return {
-        instructionId: instructionId2,
-        passkeyUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(runtimeConfig.baseUrl), draft.paymentInstrumentId, instructionId2, runtimeConfig.email)
-      };
-    },
-    waitForActivation: async (instructionId2) => {
-      const collected = await dependencies.collectWebhookEvents({
-        runtimeConfig: await getRuntimeConfig(),
-        getRuntimeConfig,
-        resolveStoredRuntimeConfig,
-        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
-        timeoutMs: input.timeoutMs,
-        type: "purchase_instruction.activated",
-        ack: false
-      });
-      const matches = collected.events.filter((event) => eventMatchesInstruction(event, instructionId2));
-      if (matches.length === 0) {
-        return { activated: false };
-      }
-      const eventIds = matches.map((event) => event.eventId).filter(Boolean);
-      const ackRuntimeConfig = await getRuntimeConfig();
-      await dependencies.ackWebhookEvents({
-        runtimeConfig: ackRuntimeConfig,
-        getRuntimeConfig,
-        expectedIdentity: runtimeAuthorizationIdentity(ackRuntimeConfig),
-        ...input.refreshRuntimeConfig ? { refreshRuntimeConfig: input.refreshRuntimeConfig } : {},
-        timeoutMs: input.timeoutMs
-      }, eventIds);
-      return { activated: true };
-    },
-    getInstruction: async (instructionId2) => {
-      const result = await requestJsonWithOAuthRetry(requestRuntime, (runtimeConfig) => ({
-        baseUrl: runtimeConfig.baseUrl,
-        method: "GET",
-        path: `${INSTRUCTION_PATH}/${encodeURIComponent(instructionId2)}`,
-        headers: buildInstructionHeaders(runtimeConfig),
-        timeoutMs: input.timeoutMs,
-        dryRun: false
-      }), dependencies.requestJson);
-      return unwrapResponse(result, "invalid instruction response");
-    },
-    now: input.now,
-    watch: input.watch,
-    onPasskeyUrl: input.onPasskeyUrl
-  };
-}
-function unwrapResponse(result, invalidMessage) {
-  if ("dryRun" in result) {
-    throw apiError(invalidMessage, 502);
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  if (!isRecord9(data)) {
-    throw apiError(invalidMessage, 502);
-  }
-  return data;
-}
-function normalizePaymentMethods(value) {
-  if (!Array.isArray(value)) {
-    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
-  }
-  if (!value.every((item) => isRecord9(item) && typeof item.paymentInstrumentId === "string" && item.paymentInstrumentId.trim().length > 0)) {
-    throw apiError("invalid card binding response: missing or invalid paymentMethodsVoList", 502);
-  }
-  return value.map((item) => ({ ...item }));
-}
-function optionalString2(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function isRecord9(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// dist/payment/post-payment-refresh.js
-var PAYMENT_METHODS_REFRESH_WARNING_PREFIX = "Failed to refresh Credit balance and payment methods after payment";
-async function executePaymentRequestWithRefresh(input) {
-  if (input.dryRun) {
-    return { result: await input.request() };
-  }
-  let result;
-  try {
-    result = await input.request();
-  } catch (error) {
-    await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
-    throw error;
-  }
-  const paymentMethodsRefreshWarning = await refreshPaymentMethodsBestEffort(input.refreshPaymentMethods);
-  return {
-    result,
-    ...paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning } : {}
-  };
-}
-function addPaymentMethodsRefreshWarning(data, paymentMethodsRefreshWarning) {
-  return paymentMethodsRefreshWarning ? { ...data, paymentMethodsRefreshWarning } : data;
-}
-async function refreshPaymentMethodsBestEffort(refreshPaymentMethods) {
-  try {
-    await refreshPaymentMethods();
-    return void 0;
-  } catch (error) {
-    return `${PAYMENT_METHODS_REFRESH_WARNING_PREFIX}: ${errorMessage(error)}`;
-  }
-}
-function errorMessage(error) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-  return String(error);
-}
-
-// dist/payment/charge.js
-function buildChargeBody(input) {
-  const authorization = input.authorization;
-  const aiAgentInstructionBo = compact({
-    instructionId: authorization?.instructionId,
-    mandateId: authorization?.mandateId,
-    shippingAddressJson: input.shippingAddress === void 0 ? void 0 : JSON.stringify(input.shippingAddress),
-    merchantInfo: { merchantCategoryCode: "5999" },
-    products: input.products
-  });
-  const shared = compact({
-    paymentInstrumentId: input.paymentInstrumentId,
-    paymentMethodType: input.paymentMethodType,
-    instruction_id: authorization?.instructionId,
-    mandate_id: authorization?.mandateId,
-    shippingaddress: input.shippingAddress,
-    aiAgentInstructionBo,
-    purchaseInstructionId: authorization?.legacyInstructionId
-  });
-  return input.mode === "session" ? { ...shared, sessionId: input.sessionId } : {
-    ...shared,
-    merchantId: input.merchantId,
-    ...input.customerPointsAmount === void 0 ? {} : { customerPointsAmount: input.customerPointsAmount },
-    customAmount: input.amount,
-    paymentCurrency: input.currency
-  };
-}
-function classifyChargeData(data) {
-  const channel = isRecord10(data.channelPaymentResponse) ? data.channelPaymentResponse : {};
-  const action = isRecord10(channel.action) ? channel.action : {};
-  const walletAction = isRecord10(action.walletHandleRedirectOrDisplayQrCode) ? action.walletHandleRedirectOrDisplayQrCode : {};
-  const redirectUrl = typeof action.redirectUrl === "string" && action.redirectUrl.length > 0 ? action.redirectUrl : void 0;
-  const status = finiteNumber2(channel.status);
-  const imageUrlPng = typeof walletAction.imageUrlPng === "string" && walletAction.imageUrlPng.length > 0 ? walletAction.imageUrlPng : void 0;
-  const qrCodeContent = typeof walletAction.qrCodeContent === "string" && walletAction.qrCodeContent.trim().length > 0 ? walletAction.qrCodeContent : void 0;
-  const qrCode = status === 5 && imageUrlPng ? {
-    dataUrl: imageUrlPng,
-    ...qrCodeContent ? { content: qrCodeContent } : {},
-    orderId: nonEmptyString2(data.orderId),
-    paymentExecutionDetailId: nonEmptyString2(channel.paymentExecutionDetailId) ?? nonEmptyString2(isRecord10(channel.processingDetail) ? channel.processingDetail.paymentExecutionDetailId : void 0),
-    expiresAt: nonNegativeInteger(walletAction.expiresAt),
-    expiresSecond: nonNegativeInteger(walletAction.expiresSecond)
-  } : void 0;
-  return {
-    status,
-    requires3ds: Number(channel.flag3DS ?? 0) === 1 && redirectUrl !== void 0,
-    ...redirectUrl ? { redirectUrl } : {},
-    ...qrCode ? { qrCode } : {}
-  };
-}
-async function executeCharge(input, runtime) {
-  const refreshed = await executePaymentRequestWithRefresh({
-    request: () => requestJsonWithOAuthRetry({
-      getRuntimeConfig: runtime.getRuntimeConfig ?? (() => runtime.runtimeConfig),
-      ...runtime.getRuntimeConfig ? { reloadRuntimeConfig: runtime.getRuntimeConfig } : {},
-      ...runtime.refreshRuntimeConfig ? { refreshRuntimeConfig: runtime.refreshRuntimeConfig } : {}
-    }, (runtimeConfig) => ({
-      baseUrl: runtimeConfig.baseUrl,
-      method: "POST",
-      path: "/agent/order/charge",
-      headers: buildCustomerHeaders(runtimeConfig),
-      body: buildChargeBody(input),
-      timeoutMs: runtime.timeoutMs,
-      dryRun: runtime.dryRun
-    })),
-    refreshPaymentMethods: runtime.refreshPaymentMethods,
-    dryRun: runtime.dryRun
-  });
-  const result = refreshed.result;
-  if ("dryRun" in result) {
-    return { dryRun: true, request: result };
-  }
-  assertApiSuccess(result.status, result.body);
-  const data = unwrapApiData(result.body);
-  return {
-    dryRun: false,
-    data,
-    ...classifyChargeData(data),
-    ...refreshed.paymentMethodsRefreshWarning ? { paymentMethodsRefreshWarning: refreshed.paymentMethodsRefreshWarning } : {}
-  };
-}
-function isRecord10(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function finiteNumber2(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : void 0;
-  }
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return void 0;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : void 0;
-}
-function nonNegativeInteger(value) {
-  const parsed = finiteNumber2(value);
-  return parsed !== void 0 && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-function nonEmptyString2(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim();
-  return normalized || null;
-}
-function compact(value) {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
-}
-
-// dist/pending-instruction.js
-var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
-  "CANCELLED",
-  "CANCELED",
-  "EXPIRED",
-  "DECLINED",
-  "FAILED"
-]);
-async function preparePendingInstruction(instructionContext, maxWaitSeconds, dependencies) {
-  const created = await dependencies.createPendingInstruction(instructionContext);
-  const initialStatus = normalizedStatus(created.status);
-  if (initialStatus === "UNKNOWN") {
-    throw apiError("missing status in pending instruction response", 502);
-  }
-  const cardReady = initialStatus === "CARD_READY" || initialStatus === "VIC_READY";
-  if (cardReady && !created.instructionId) {
-    return {
-      instructionStatus: initialStatus,
-      state: "CARD_READY",
-      createdDetail: created.detail,
-      timedOut: false,
-      eventTypes: [],
-      watchReady: false,
-      bindingLinkPresented: false
-    };
-  }
-  const instructionId2 = requiredText(created.instructionId, "missing instructionId in pending instruction response");
-  if (dependencies.deferBrowserActions && initialStatus === "PENDING") {
-    const instruction = await dependencies.getInstruction(instructionId2);
-    if (instruction) {
-      assertExactInstruction(instruction, instructionId2);
-    }
-    return {
-      instructionId: instructionId2,
-      instructionStatus: normalizedStatus(instruction?.status ?? instruction?.state) || initialStatus,
-      state: "PENDING",
-      ...instruction ? { instruction } : {},
-      createdDetail: created.detail,
-      timedOut: false,
-      eventTypes: [],
-      watchReady: false,
-      bindingLinkPresented: false,
-      resumeCommand: dependencies.resumeCommand(instructionId2)
-    };
-  }
-  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && initialStatus !== "CREATED" && !cardReady && !isTerminalInstructionStatus(initialStatus)) {
-    throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
-  }
-  if (initialStatus === "ACTIVE" || initialStatus === "CREATED" || cardReady || isTerminalInstructionStatus(initialStatus) || dependencies.portalManaged && created.detail.activationExpected === false) {
-    return finalizePendingInstruction({
-      instructionId: instructionId2,
-      initialStatus,
-      createdDetail: created.detail,
-      timedOut: false,
-      eventTypes: [],
-      watchReady: false,
-      bindingLinkPresented: false,
-      ...initialStatus === "PENDING" ? {
-        waitError: "The existing Portal authorization is not associated with this Instruction; continue in Portal with this exact purchase context"
-      } : {}
-    }, dependencies);
-  }
-  let bindingUrl;
-  let bindingLinkError;
-  if (!dependencies.portalManaged) {
-    try {
-      bindingUrl = await dependencies.resolveBindingUrl();
-    } catch (error) {
-      rethrowAuthError(error);
-      bindingLinkError = errorMessage2(error);
-    }
-  }
-  let timedOut = false;
-  let eventTypes = [];
-  let waitError;
-  let watchReady = false;
-  try {
-    const wait = await dependencies.waitForInstructionActivation(instructionId2, maxWaitSeconds, dependencies.onWatchReady ? () => {
-      watchReady = true;
-      dependencies.onWatchReady?.({
-        instructionId: instructionId2,
-        instructionStatus: initialStatus,
-        ...bindingUrl ? { bindingUrl } : {},
-        ...bindingLinkError ? { bindingLinkError } : {}
-      });
-    } : void 0);
-    timedOut = wait.timedOut;
-    eventTypes = wait.eventTypes;
-  } catch (error) {
-    rethrowAuthError(error);
-    waitError = errorMessage2(error);
-  }
-  return finalizePendingInstruction({
-    instructionId: instructionId2,
-    initialStatus,
-    createdDetail: created.detail,
-    timedOut,
-    eventTypes,
-    watchReady,
-    bindingLinkPresented: watchReady && bindingUrl !== void 0,
-    ...bindingLinkError ? { bindingLinkError } : {},
-    ...waitError ? { waitError } : {}
-  }, dependencies);
-}
-async function finalizePendingInstruction(input, dependencies) {
-  let instruction;
-  let exactGetError;
-  try {
-    instruction = await dependencies.getInstruction(input.instructionId);
-  } catch (error) {
-    rethrowAuthError(error);
-    exactGetError = errorMessage2(error);
-  }
-  if (instruction) {
-    assertExactInstruction(instruction, input.instructionId);
-  }
-  const instructionStatus3 = instruction ? normalizedStatus(instruction.status ?? instruction.state) : input.initialStatus;
-  let state = instructionStatus3 === "ACTIVE" ? "ACTIVE" : instructionStatus3 === "CREATED" ? "CREATED" : instructionStatus3 === "PENDING" ? "PENDING" : "TERMINAL";
-  if (input.initialStatus === "CREATED" || instructionStatus3 === "CREATED") {
-    const pi = instruction && optionalText2(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
-    const createdPi = optionalText2(input.createdDetail.paymentInstrumentId ?? input.createdDetail.payment_instrument_id);
-    if (!instruction || !pi || createdPi && createdPi !== pi || !["CREATED", "ACTIVE"].includes(instructionStatus3)) {
-      state = "TERMINAL";
-      exactGetError ??= "CREATED requires the exact Instruction and unchanged backend-bound paymentInstrumentId";
-    }
-  }
-  return {
-    instructionId: input.instructionId,
-    instructionStatus: instructionStatus3,
-    state,
-    ...instruction ? { instruction } : {},
-    createdDetail: input.createdDetail,
-    timedOut: input.timedOut,
-    eventTypes: input.eventTypes,
-    watchReady: input.watchReady,
-    bindingLinkPresented: input.bindingLinkPresented,
-    resumeCommand: dependencies.resumeCommand(input.instructionId),
-    ...input.bindingLinkError ? { bindingLinkError: input.bindingLinkError } : {},
-    ...input.waitError ? { waitError: input.waitError } : {},
-    ...exactGetError ? { exactGetError } : {}
-  };
-}
-function pendingInstructionId(instruction) {
-  return optionalText2(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
-}
-function isTerminalInstructionStatus(status) {
-  return TERMINAL_INSTRUCTION_STATUSES.has(normalizedStatus(status));
-}
-function assertExactInstruction(instruction, expectedInstructionId) {
-  if (pendingInstructionId(instruction) !== expectedInstructionId) {
-    throw apiError("pending Instruction identity mismatch during exact GET", 502);
-  }
-}
-function requiredText(value, message) {
-  const text2 = optionalText2(value);
-  if (!text2) {
-    throw apiError(message, 502);
-  }
-  return text2;
-}
-function optionalText2(value) {
-  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
-}
-function normalizedStatus(value) {
-  return optionalText2(value)?.toUpperCase() ?? "UNKNOWN";
-}
-function errorMessage2(error) {
-  return error instanceof Error && error.message.trim() ? error.message.trim() : String(error);
-}
-function rethrowAuthError(error) {
-  if (error instanceof CliError && error.type === "auth_error") {
-    throw error;
-  }
-}
-
-// dist/payment/method-selection.js
-var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
-var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
-function requiresTypeMatchedPaymentInstrument(paymentMethodType) {
-  return !LEGACY_DEFAULT_PAYMENT_METHOD_TYPES.has(normalizePaymentMethodType(paymentMethodType));
-}
-function allowsMissingPaymentInstrument(paymentMethodType) {
-  return OPTIONAL_PAYMENT_INSTRUMENT_TYPES.has(normalizePaymentMethodType(paymentMethodType));
-}
-function selectPaymentInstrumentByType(paymentMethods, paymentMethodType) {
-  const normalizedType = normalizePaymentMethodType(paymentMethodType);
-  const candidates = /* @__PURE__ */ new Map();
-  if (Array.isArray(paymentMethods)) {
-    for (const item of paymentMethods) {
-      if (!isRecord11(item) || paymentMethodTypeOf(item) !== normalizedType) {
-        continue;
-      }
-      const paymentInstrumentId = nonEmptyString3(item.paymentInstrumentId);
-      if (!paymentInstrumentId) {
-        continue;
-      }
-      const existing = candidates.get(paymentInstrumentId);
-      candidates.set(paymentInstrumentId, {
-        paymentInstrumentId,
-        isDefault: Boolean(existing?.isDefault || isDefaultPaymentMethod(item))
-      });
-    }
-  }
-  const matches = [...candidates.values()];
-  if (matches.length === 0) {
-    throw validationError(`no ${normalizedType} payment method is available; bind one and refresh payment methods`);
-  }
-  if (matches.length === 1) {
-    return matches[0].paymentInstrumentId;
-  }
-  const defaultMatches = matches.filter((candidate) => candidate.isDefault);
-  if (defaultMatches.length === 1) {
-    return defaultMatches[0].paymentInstrumentId;
-  }
-  throw validationError(`multiple ${normalizedType} payment methods are available without one unique default; pass --payment-instrument-id explicitly`);
-}
-function validatePaymentInstrumentType(paymentMethods, paymentInstrumentId, paymentMethodType) {
-  const normalizedId = nonEmptyString3(paymentInstrumentId);
-  const normalizedType = normalizePaymentMethodType(paymentMethodType);
-  if (!normalizedId) {
-    throw validationError("--payment-instrument-id must not be blank");
-  }
-  const matchingIdRecords = Array.isArray(paymentMethods) ? paymentMethods.filter((item) => isRecord11(item) && nonEmptyString3(item.paymentInstrumentId) === normalizedId) : [];
-  if (matchingIdRecords.length === 0) {
-    throw validationError(`payment instrument ${normalizedId} was not found after refreshing payment methods`);
-  }
-  if (matchingIdRecords.some((item) => paymentMethodTypeOf(item) === normalizedType)) {
-    return normalizedId;
-  }
-  const actualTypes = [...new Set(matchingIdRecords.map((item) => paymentMethodTypeOf(item) ?? "UNKNOWN"))].join(", ");
-  throw validationError(`payment instrument ${normalizedId} has type ${actualTypes}, not ${normalizedType}`);
-}
-function normalizePaymentMethodType(value) {
-  const normalized = value.trim().toUpperCase();
-  if (!normalized) {
-    throw validationError("--payment-method-type must not be blank");
-  }
-  return normalized;
-}
-function normalizeOptionalType(value) {
-  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : void 0;
-}
-function paymentMethodTypeOf(item) {
-  return normalizeOptionalType(item.paymentMethodType) ?? normalizeOptionalType(item.paymentInstrumentType);
-}
-function isDefaultPaymentMethod(item) {
-  return item.isDefault === true || item.default === true || item.defaultPaymentMethod === true;
-}
-function nonEmptyString3(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function isRecord11(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 // dist/payment/qr-code.js
-var import_qrcode = __toESM(require_lib(), 1);
 import { chmod as chmod4, mkdtemp as mkdtemp3, rm as rm9, writeFile as writeFile3 } from "node:fs/promises";
 import { tmpdir as tmpdir3 } from "node:os";
 import { join as join8 } from "node:path";
-var PNG_DATA_URL_PREFIX = "data:image/png;base64,";
-var MAX_QR_PNG_BYTES = 1024 * 1024;
-var MAX_QR_PNG_DATA_URL_LENGTH = PNG_DATA_URL_PREFIX.length + Math.ceil(MAX_QR_PNG_BYTES / 3) * 4;
-var PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-var REDACTED_PNG_DATA_URL = "[redacted:png-data-url]";
-var REDACTED_QR_CODE_CONTENT = "[redacted:qr-code-content]";
-var TERMINAL_QR_WARNING = "Warning: terminal QR could not be displayed; use customerAction.imagePath instead.\n";
 async function materializeQrCodeCustomerAction(qrCode, options2 = {}) {
   const png = decodePngDataUrl(qrCode.dataUrl);
   let directoryPath;
@@ -20341,11 +20545,21 @@ function invalidQrCode() {
 function isRecord12(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-// dist/skills/install.js
-import { randomUUID as createRandomUUID2 } from "node:crypto";
-import { mkdir as mkdir7, rm as rm11 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+var import_qrcode, PNG_DATA_URL_PREFIX, MAX_QR_PNG_BYTES, MAX_QR_PNG_DATA_URL_LENGTH, PNG_SIGNATURE, REDACTED_PNG_DATA_URL, REDACTED_QR_CODE_CONTENT, TERMINAL_QR_WARNING;
+var init_qr_code = __esm({
+  "dist/payment/qr-code.js"() {
+    "use strict";
+    import_qrcode = __toESM(require_lib(), 1);
+    init_errors();
+    PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+    MAX_QR_PNG_BYTES = 1024 * 1024;
+    MAX_QR_PNG_DATA_URL_LENGTH = PNG_DATA_URL_PREFIX.length + Math.ceil(MAX_QR_PNG_BYTES / 3) * 4;
+    PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    REDACTED_PNG_DATA_URL = "[redacted:png-data-url]";
+    REDACTED_QR_CODE_CONTENT = "[redacted:qr-code-content]";
+    TERMINAL_QR_WARNING = "Warning: terminal QR could not be displayed; use customerAction.imagePath instead.\n";
+  }
+});
 
 // dist/skills/download.js
 import { createHash as createHash5 } from "node:crypto";
@@ -20353,27 +20567,6 @@ import { createWriteStream as createFileWriteStream } from "node:fs";
 import { lstat as lstat7, rm as rm10 } from "node:fs/promises";
 import { Readable, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
-var DEFAULT_DEPENDENCIES2 = {
-  fetch: (...args) => globalThis.fetch(...args),
-  sleep: async (ms) => new Promise((resolve6) => setTimeout(resolve6, ms)),
-  createWriteStream: (destinationPath) => createFileWriteStream(destinationPath, { flags: "wx", mode: 384 })
-};
-var RETRYABLE = [408, 429, 500, 502, 503, 504];
-var REDIRECTS = [301, 302, 303, 307, 308];
-var MAX_ATTEMPTS = 2;
-var MAX_REDIRECTS2 = 3;
-var RETRY_DELAY_MS = 100;
-var NETWORK_ERROR_MESSAGE = "failed to download skill package";
-var REJECTED_TICKET_MESSAGE = "temporary skill download link was rejected";
-var INSTALL_ERROR_MESSAGE2 = "failed to write skill package";
-var RetryableDownloadError = class extends Error {
-};
-var NonRetryableDownloadError = class extends Error {
-};
-var RefreshTicketError = class extends Error {
-};
-var InstallDownloadError = class extends Error {
-};
 async function downloadSkillPackage(input, overrides) {
   try {
     await assertDestinationAbsent(input.destinationPath);
@@ -20605,11 +20798,36 @@ async function cancelResponseBody(response) {
   } catch {
   }
 }
+var DEFAULT_DEPENDENCIES2, RETRYABLE, REDIRECTS, MAX_ATTEMPTS, MAX_REDIRECTS2, RETRY_DELAY_MS, NETWORK_ERROR_MESSAGE, REJECTED_TICKET_MESSAGE, INSTALL_ERROR_MESSAGE2, RetryableDownloadError, NonRetryableDownloadError, RefreshTicketError, InstallDownloadError;
+var init_download = __esm({
+  "dist/skills/download.js"() {
+    "use strict";
+    init_errors();
+    DEFAULT_DEPENDENCIES2 = {
+      fetch: (...args) => globalThis.fetch(...args),
+      sleep: async (ms) => new Promise((resolve6) => setTimeout(resolve6, ms)),
+      createWriteStream: (destinationPath) => createFileWriteStream(destinationPath, { flags: "wx", mode: 384 })
+    };
+    RETRYABLE = [408, 429, 500, 502, 503, 504];
+    REDIRECTS = [301, 302, 303, 307, 308];
+    MAX_ATTEMPTS = 2;
+    MAX_REDIRECTS2 = 3;
+    RETRY_DELAY_MS = 100;
+    NETWORK_ERROR_MESSAGE = "failed to download skill package";
+    REJECTED_TICKET_MESSAGE = "temporary skill download link was rejected";
+    INSTALL_ERROR_MESSAGE2 = "failed to write skill package";
+    RetryableDownloadError = class extends Error {
+    };
+    NonRetryableDownloadError = class extends Error {
+    };
+    RefreshTicketError = class extends Error {
+    };
+    InstallDownloadError = class extends Error {
+    };
+  }
+});
 
 // dist/skills/metrics.js
-var PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
-var TIP_METRIC_SOURCE = "CLINK_PAYMENT";
-var PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
 async function reportSkillPublicDownload(input, overrides = {}) {
   await reportSkillMetric(input, "public-download", { source: PUBLIC_DOWNLOAD_METRIC_SOURCE }, overrides);
 }
@@ -20653,18 +20871,18 @@ async function reportSkillMetric(input, metric, body, overrides) {
 function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
-
-// dist/skills/registry.js
-import path3 from "node:path";
+var PUBLIC_DOWNLOAD_METRIC_SOURCE, TIP_METRIC_SOURCE, PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX;
+var init_metrics = __esm({
+  "dist/skills/metrics.js"() {
+    "use strict";
+    init_version();
+    PUBLIC_DOWNLOAD_METRIC_SOURCE = "AGENT_CLI";
+    TIP_METRIC_SOURCE = "CLINK_PAYMENT";
+    PUBLIC_DOWNLOAD_METRIC_PATH_PREFIX = "/prod-api/skill-marketplace/internal/skills";
+  }
+});
 
 // dist/skills/public-api.js
-var CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
-var DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
-var MAX_ATTEMPTS2 = 3;
-var RETRYABLE_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
-var INVALID_RESPONSE_MESSAGE = "invalid public skills response";
-var NETWORK_ERROR_MESSAGE2 = "failed to request public skills API";
-var INVALID_BASE_URL_MESSAGE = "invalid skill registry base URL";
 async function requestPublicSkillsJson(input, overrides = {}) {
   const dependencies = {
     fetch: overrides.fetch ?? globalThis.fetch,
@@ -20783,10 +21001,24 @@ async function sleepBeforeRetry(dependencies, attempt) {
   const delay2 = Math.min(1e3, 100 * 2 ** attempt) + Math.floor(dependencies.random() * 50);
   await dependencies.sleep(delay2);
 }
+var CLINK_PUBLIC_CLIENT_ID, DEFAULT_MAX_RESPONSE_BODY_BYTES, MAX_ATTEMPTS2, RETRYABLE_STATUSES, INVALID_RESPONSE_MESSAGE, NETWORK_ERROR_MESSAGE2, INVALID_BASE_URL_MESSAGE;
+var init_public_api = __esm({
+  "dist/skills/public-api.js"() {
+    "use strict";
+    init_errors();
+    init_utils();
+    init_version();
+    CLINK_PUBLIC_CLIENT_ID = "e5cd7e4891bf95d1d19206ce24a7b32e";
+    DEFAULT_MAX_RESPONSE_BODY_BYTES = 64 * 1024;
+    MAX_ATTEMPTS2 = 3;
+    RETRYABLE_STATUSES = /* @__PURE__ */ new Set([408, 429, 500, 502, 503, 504]);
+    INVALID_RESPONSE_MESSAGE = "invalid public skills response";
+    NETWORK_ERROR_MESSAGE2 = "failed to request public skills API";
+    INVALID_BASE_URL_MESSAGE = "invalid skill registry base URL";
+  }
+});
 
 // dist/skills/marketplace.js
-var PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
-var LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
 async function listAllPublicSkills(input, request = requestPublicSkillsJson) {
   const body = await request({
     baseUrl: input.dashboardBaseUrl,
@@ -20850,13 +21082,20 @@ function selectPublicSkillPayload(body) {
 function isRecord13(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var PUBLIC_SKILLS_MARKETPLACE_PATH, LIST_ALL_MAX_RESPONSE_BODY_BYTES;
+var init_marketplace = __esm({
+  "dist/skills/marketplace.js"() {
+    "use strict";
+    init_errors();
+    init_utils();
+    init_public_api();
+    PUBLIC_SKILLS_MARKETPLACE_PATH = "/prod-api/skill-marketplace/public/skills";
+    LIST_ALL_MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
+  }
+});
 
 // dist/skills/registry.js
-var MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
-var INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
-var NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
-var SKILL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
-var MAX_SKILL_ID_LENGTH = 128;
+import path3 from "node:path";
 async function getSkillDownloadTicket(input, overrides) {
   const body = await requestPublicSkillsJson({
     baseUrl: input.baseUrl,
@@ -20921,26 +21160,27 @@ function isPositiveSafeInteger(value) {
 function isSafeFileName(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 255 && value !== "." && value !== ".." && path3.posix.basename(value) === value && path3.win32.basename(value) === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
+var MAX_DOWNLOAD_SIZE_BYTES, INVALID_RESPONSE_MESSAGE2, NETWORK_ERROR_MESSAGE3, SKILL_ID_PATTERN, MAX_SKILL_ID_LENGTH;
+var init_registry = __esm({
+  "dist/skills/registry.js"() {
+    "use strict";
+    init_errors();
+    init_utils();
+    init_marketplace();
+    init_public_api();
+    init_public_api();
+    MAX_DOWNLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+    INVALID_RESPONSE_MESSAGE2 = "invalid skill download ticket response";
+    NETWORK_ERROR_MESSAGE3 = "failed to resolve skill download ticket";
+    SKILL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+    MAX_SKILL_ID_LENGTH = 128;
+  }
+});
 
 // dist/skills/install.js
-var PENDING_SHA_SENTINEL2 = "pending";
-var MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
-var DEFAULT_DEPENDENCIES3 = {
-  getTicket: getSkillDownloadTicket,
-  downloadPackage: downloadSkillPackage,
-  materializePackage: extractSkillPackage,
-  reportPublicDownload: reportSkillPublicDownload,
-  publishRelease: publishSkillRelease,
-  detectAgentRoots: detectAgents,
-  prepareAgents: prepareAgentPlans,
-  randomUUID: createRandomUUID2,
-  now: () => /* @__PURE__ */ new Date(),
-  remove: async (path4) => rm11(path4, { recursive: true, force: true }),
-  log: (message) => {
-    process.stderr.write(`${message}
-`);
-  }
-};
+import { randomUUID as createRandomUUID2 } from "node:crypto";
+import { mkdir as mkdir7, rm as rm11 } from "node:fs/promises";
+import { join as join9 } from "node:path";
 async function installSkill(input, overrides = {}) {
   const dependencies = {
     ...DEFAULT_DEPENDENCIES3,
@@ -21219,9 +21459,38 @@ async function cleanupStaging(stagingPath, dependencies, primaryError) {
     throw retainedError;
   }
 }
+var PENDING_SHA_SENTINEL2, MIN_SKILL_DOWNLOAD_TIMEOUT_MS, DEFAULT_DEPENDENCIES3;
+var init_install = __esm({
+  "dist/skills/install.js"() {
+    "use strict";
+    init_agents();
+    init_archive();
+    init_download();
+    init_metrics();
+    init_registry();
+    init_store();
+    PENDING_SHA_SENTINEL2 = "pending";
+    MIN_SKILL_DOWNLOAD_TIMEOUT_MS = 5 * 6e4;
+    DEFAULT_DEPENDENCIES3 = {
+      getTicket: getSkillDownloadTicket,
+      downloadPackage: downloadSkillPackage,
+      materializePackage: extractSkillPackage,
+      reportPublicDownload: reportSkillPublicDownload,
+      publishRelease: publishSkillRelease,
+      detectAgentRoots: detectAgents,
+      prepareAgents: prepareAgentPlans,
+      randomUUID: createRandomUUID2,
+      now: () => /* @__PURE__ */ new Date(),
+      remove: async (path4) => rm11(path4, { recursive: true, force: true }),
+      log: (message) => {
+        process.stderr.write(`${message}
+`);
+      }
+    };
+  }
+});
 
 // dist/skills/tip.js
-var TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
 async function resolveSkillTipRecipient(input, request = requestPublicSkillsJson) {
   const { publisher, skillName, requestedVersion } = input.target;
   const body = await request({
@@ -21392,23 +21661,22 @@ function isRecord14(value) {
 function equalIdentity(value, expected) {
   return typeof value === "string" && value.trim().toLowerCase() === expected.trim().toLowerCase();
 }
+var TERMINAL_PAYMENT_FAILURE_STATUSES;
+var init_tip = __esm({
+  "dist/skills/tip.js"() {
+    "use strict";
+    init_errors();
+    init_marketplace();
+    init_public_api();
+    init_spec();
+    TERMINAL_PAYMENT_FAILURE_STATUSES = /* @__PURE__ */ new Set([3, 4, 6]);
+  }
+});
 
 // dist/tool.js
 import { execFile as execFile3 } from "node:child_process";
 import { resolveCname as nodeResolveCname } from "node:dns/promises";
 import { promisify } from "node:util";
-var execFileAsync = promisify(execFile3);
-var DEFAULT_SITE_TIMEOUT_MS = 1e4;
-var DEFAULT_RESOURCE_TIMEOUT_MS = 3e4;
-var BROWSER_LAUNCH_TIMEOUT_MS = 3e4;
-var BROWSER_CHANNELS = ["chrome", "msedge"];
-var CHECKOUT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-var CnameLookupTimeoutError = class extends Error {
-  constructor(timeoutMs) {
-    super(`request timed out after ${timeoutMs}ms`);
-    this.name = "CnameLookupTimeoutError";
-  }
-};
 async function resolveSiteTypeFromUrl(rawUrl, options2 = {}) {
   return (await resolveSiteTypeDetailsFromUrl(rawUrl, options2)).result;
 }
@@ -21474,16 +21742,6 @@ async function resolveCheckoutTotalFromUrl(rawUrl, options2 = {}) {
     source: total.source
   };
 }
-var EATS365_MANUAL_ITEM_FIELDS = [
-  "itemId",
-  "title",
-  "unitPrice",
-  "quantity",
-  "currency",
-  "merchantUrl",
-  "merchantName",
-  "merchantCategoryCode"
-];
 async function resolveParseItemFromUrl(rawUrl, options2 = {}) {
   const siteType = await resolveSiteTypeDetailsFromUrl(rawUrl, options2);
   if (siteType.result.site_type === "eats365") {
@@ -22559,20 +22817,37 @@ function resolveUcpProviderFromHostname(hostname) {
 function normalizeHostname(value) {
   return value.trim().toLowerCase().replace(/\.$/, "");
 }
+var execFileAsync, DEFAULT_SITE_TIMEOUT_MS, DEFAULT_RESOURCE_TIMEOUT_MS, BROWSER_LAUNCH_TIMEOUT_MS, BROWSER_CHANNELS, CHECKOUT_USER_AGENT, CnameLookupTimeoutError, EATS365_MANUAL_ITEM_FIELDS;
+var init_tool = __esm({
+  "dist/tool.js"() {
+    "use strict";
+    init_errors();
+    execFileAsync = promisify(execFile3);
+    DEFAULT_SITE_TIMEOUT_MS = 1e4;
+    DEFAULT_RESOURCE_TIMEOUT_MS = 3e4;
+    BROWSER_LAUNCH_TIMEOUT_MS = 3e4;
+    BROWSER_CHANNELS = ["chrome", "msedge"];
+    CHECKOUT_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+    CnameLookupTimeoutError = class extends Error {
+      constructor(timeoutMs) {
+        super(`request timed out after ${timeoutMs}ms`);
+        this.name = "CnameLookupTimeoutError";
+      }
+    };
+    EATS365_MANUAL_ITEM_FIELDS = [
+      "itemId",
+      "title",
+      "unitPrice",
+      "quantity",
+      "currency",
+      "merchantUrl",
+      "merchantName",
+      "merchantCategoryCode"
+    ];
+  }
+});
 
 // dist/ucp-checkout-wait.js
-var DEFAULT_POLL_INTERVAL_MS2 = 3e3;
-var MAX_POLL_INTERVAL_MS = 3e4;
-var TERMINAL_STATUSES = /* @__PURE__ */ new Set([
-  "completed",
-  "cancelled",
-  "canceled",
-  "expired",
-  "failed",
-  "rejected",
-  "requires_escalation"
-]);
-var realSleep2 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function waitForUcpCheckoutTerminal(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? realSleep2;
@@ -22645,12 +22920,27 @@ function normalizedText(value) {
 function isRecord16(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var DEFAULT_POLL_INTERVAL_MS2, MAX_POLL_INTERVAL_MS, TERMINAL_STATUSES, realSleep2;
+var init_ucp_checkout_wait = __esm({
+  "dist/ucp-checkout-wait.js"() {
+    "use strict";
+    init_errors();
+    DEFAULT_POLL_INTERVAL_MS2 = 3e3;
+    MAX_POLL_INTERVAL_MS = 3e4;
+    TERMINAL_STATUSES = /* @__PURE__ */ new Set([
+      "completed",
+      "cancelled",
+      "canceled",
+      "expired",
+      "failed",
+      "rejected",
+      "requires_escalation"
+    ]);
+    realSleep2 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
+  }
+});
 
 // dist/ucp-order.js
-var DEFAULT_POLL_INTERVAL_MS3 = 3e3;
-var MAX_POLL_INTERVAL_MS2 = 3e4;
-var PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
-var realSleep3 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function waitForUcpDigitalDelivery(options2) {
   const now = options2.now ?? Date.now;
   const sleep3 = options2.sleep ?? realSleep3;
@@ -22748,56 +23038,22 @@ function resolvePollDelayMs2(nextRetryAt, now) {
 function isRecord17(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var DEFAULT_POLL_INTERVAL_MS3, MAX_POLL_INTERVAL_MS2, PENDING_DELIVERY_STATUSES, realSleep3;
+var init_ucp_order = __esm({
+  "dist/ucp-order.js"() {
+    "use strict";
+    init_errors();
+    DEFAULT_POLL_INTERVAL_MS3 = 3e3;
+    MAX_POLL_INTERVAL_MS2 = 3e4;
+    PENDING_DELIVERY_STATUSES = /* @__PURE__ */ new Set(["pending", "syncing", "retryable"]);
+    realSleep3 = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
+  }
+});
 
 // dist/cli.js
-var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
-var PENDING_INSTRUCTION_PATH = `${INSTRUCTION_PATH2}/pending`;
-var CARD_SETUP_PATH = "/payment-method-setup";
-var CARD_MANAGEMENT_PATH = "/payment-method-modify";
-var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
-  "CREATED",
-  "ACTIVE",
-  "PENDING",
-  "INPROGRESS",
-  "COMPLETED",
-  "CANCELLED",
-  "EXPIRED",
-  "DECLINED"
-]);
-var UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
-var EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
-var EXTRA_CATALOG_PRODUCT_PATH = "/agent/ucp/extra/catalog/product";
-var UCP_ORDER_PATH = "/agent/ucp/orders";
-var UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
-  "draft",
-  "pending",
-  "paid",
-  "cancelled",
-  "partially_refunded",
-  "refunded"
-]);
-var DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
-var DEFAULT_UCP_AGENT = "clink-cli";
-var OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
-var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
-  "install",
-  "update",
-  "wallet",
-  "card",
-  "risk",
-  "skills",
-  "pay",
-  "refund",
-  "ucp-checkout",
-  "ucp-catalog",
-  "catalog",
-  "ucp-order",
-  "instruction",
-  "pending-instruction",
-  "events",
-  "tool",
-  "config"
-]);
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { homedir } from "node:os";
+import { performance } from "node:perf_hooks";
 function printContextHelp(context, command, subcommand, nestedCommand) {
   printHelp(command, subcommand, nestedCommand, context.executableName);
 }
@@ -23624,8 +23880,6 @@ async function fetchUcpOrderAfterPaymentEvent(context, checkoutId, frozenUcpOrde
     };
   }
 }
-var UCP_ORDER_PROJECTION_RETRY_DELAYS_MS = [0, 1e3, 2e3, 4e3, 8e3];
-var sleepForUcpProjection = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 async function resolveUcpOrderProjection(options2) {
   const retryDelaysMs = options2.retryDelaysMs ?? UCP_ORDER_PROJECTION_RETRY_DELAYS_MS;
   const sleep3 = options2.sleep ?? sleepForUcpProjection;
@@ -23982,7 +24236,7 @@ ${verificationUrl}
       visaRegistrationStatus: token.visaRegistrationStatus ?? null,
       pendingInstructionId: token.pendingInstructionId ?? null,
       ...paymentMethodsCache.error ? { paymentMethodsCacheError: paymentMethodsCache.error } : {},
-      configPath: "~/.clink-cli/config.json"
+      configPath: configPathDisplay()
     }, context.globalOptions.format);
   });
   if (!printed) {
@@ -24120,7 +24374,7 @@ async function walletLogout(context) {
     authorizationRemoved: Boolean(authorization),
     customerApiKeyRemoved: hadCustomerApiKey,
     customerIdRemoved: hadCustomerId,
-    configPath: "~/.clink-cli/config.json"
+    configPath: configPathDisplay()
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -24143,7 +24397,7 @@ async function walletStatus(context) {
     hasCustomerApiKey: hasEffectiveCustomerApiKey,
     oauthRequired: Boolean(context.storedConfig.oauthRequired || storedAuthorization),
     defaultOpenLinks: context.runtimeConfig.defaultOpenLinks,
-    configPath: "~/.clink-cli/config.json"
+    configPath: configPathDisplay()
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -24921,8 +25175,6 @@ function parseUcpOrderStatusFlag(flags) {
   }
   return [...new Set(statuses)];
 }
-var UCP_ORDER_TIME_ZONE_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
-var UCP_ORDER_TIME_COMPONENT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
 function parseUcpOrderTimeFlag(flags, name) {
   if (!(name in flags)) {
     return void 0;
@@ -25776,8 +26028,6 @@ function parseAbsoluteHttpUrl(value, flagName) {
   }
   return parsed;
 }
-var EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
-var CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
 function normalizeUcpCheckoutCreateLineItems(lineItems, currency, requireMajorUnitMoneyStrings = false) {
   return lineItems.map((lineItem, index) => normalizeUcpCheckoutMoneyFields(lineItem, currency, `--line-items[${index}]`, false, requireMajorUnitMoneyStrings));
 }
@@ -26563,7 +26813,7 @@ function buildConfigView(config) {
     hasCustomerApiKey: Boolean(config.customerApiKey),
     oauthRequired: Boolean(config.oauthRequired || authorization),
     defaultOpenLinks: config.defaultOpenLinks,
-    configPath: "~/.clink-cli/config.json"
+    configPath: configPathDisplay()
   };
 }
 async function cachePaymentMethods(context, value) {
@@ -26773,24 +27023,104 @@ function extractMandateId(mandate) {
   }
   return void 0;
 }
+var INSTRUCTION_PATH2, PENDING_INSTRUCTION_PATH, CARD_SETUP_PATH, CARD_MANAGEMENT_PATH, INSTRUCTION_STATUSES, UCP_EXTERNAL_CHECKOUT_PATH, EXTRA_CATALOG_SEARCH_PATH, EXTRA_CATALOG_PRODUCT_PATH, UCP_ORDER_PATH, UCP_ORDER_STATUSES, DEFAULT_UCP_DELIVERY_WAIT_SECONDS, DEFAULT_UCP_AGENT, OAUTH_OPERATION_VALIDITY_BUFFER_MS, BASE_COMMAND_NAMES, UCP_ORDER_PROJECTION_RETRY_DELAYS_MS, sleepForUcpProjection, UCP_ORDER_TIME_ZONE_SUFFIX, UCP_ORDER_TIME_COMPONENT, EXTERNAL_CHECKOUT_MONEY_FIELDS, CURRENCY_FRACTION_DIGIT_CACHE;
+var init_cli = __esm({
+  "dist/cli.js"() {
+    "use strict";
+    init_args();
+    init_portal_order_link();
+    init_card_vic_readiness();
+    init_browser_handoff();
+    init_command_branding();
+    init_auth_identity();
+    init_config();
+    init_domains();
+    init_device_identity();
+    init_errors();
+    init_events();
+    init_help();
+    init_http();
+    init_internal_ucp();
+    init_instruction_context();
+    init_oauth();
+    init_oauth_request();
+    init_output();
+    init_self_update();
+    init_amount();
+    init_authorization_api();
+    init_charge();
+    init_post_payment_refresh();
+    init_pending_instruction();
+    init_method_selection();
+    init_qr_code();
+    init_install();
+    init_marketplace();
+    init_metrics();
+    init_spec();
+    init_tip();
+    init_tool();
+    init_ucp_checkout_wait();
+    init_ucp_order();
+    init_url();
+    init_utils();
+    INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
+    PENDING_INSTRUCTION_PATH = `${INSTRUCTION_PATH2}/pending`;
+    CARD_SETUP_PATH = "/payment-method-setup";
+    CARD_MANAGEMENT_PATH = "/payment-method-modify";
+    INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+      "CREATED",
+      "ACTIVE",
+      "PENDING",
+      "INPROGRESS",
+      "COMPLETED",
+      "CANCELLED",
+      "EXPIRED",
+      "DECLINED"
+    ]);
+    UCP_EXTERNAL_CHECKOUT_PATH = "/agent/ucp/external/checkout-sessions";
+    EXTRA_CATALOG_SEARCH_PATH = "/agent/ucp/extra/catalog/search";
+    EXTRA_CATALOG_PRODUCT_PATH = "/agent/ucp/extra/catalog/product";
+    UCP_ORDER_PATH = "/agent/ucp/orders";
+    UCP_ORDER_STATUSES = /* @__PURE__ */ new Set([
+      "draft",
+      "pending",
+      "paid",
+      "cancelled",
+      "partially_refunded",
+      "refunded"
+    ]);
+    DEFAULT_UCP_DELIVERY_WAIT_SECONDS = 900;
+    DEFAULT_UCP_AGENT = "clink-cli";
+    OAUTH_OPERATION_VALIDITY_BUFFER_MS = 3e4;
+    BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
+      "install",
+      "update",
+      "wallet",
+      "card",
+      "risk",
+      "skills",
+      "pay",
+      "refund",
+      "ucp-checkout",
+      "ucp-catalog",
+      "catalog",
+      "ucp-order",
+      "instruction",
+      "pending-instruction",
+      "events",
+      "tool",
+      "config"
+    ]);
+    UCP_ORDER_PROJECTION_RETRY_DELAYS_MS = [0, 1e3, 2e3, 4e3, 8e3];
+    sleepForUcpProjection = (milliseconds) => new Promise((resolve6) => setTimeout(resolve6, milliseconds));
+    UCP_ORDER_TIME_ZONE_SUFFIX = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+    UCP_ORDER_TIME_COMPONENT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+    EXTERNAL_CHECKOUT_MONEY_FIELDS = /* @__PURE__ */ new Set(["amount", "price"]);
+    CURRENCY_FRACTION_DIGIT_CACHE = /* @__PURE__ */ new Map();
+  }
+});
 
 // dist/visa/client.js
-var BENEFIT_AUTHORIZATION_PATH = "/agent/cwallet/oauth/benefit/authorization";
-var BENEFIT_TOKEN_PATH = "/agent/cwallet/oauth/benefit/token";
-var VSRA_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
-var FALLBACK_BENEFIT_EXPIRES_IN_SECONDS = 600;
-var DEFAULT_BENEFIT_POLL_INTERVAL = 2;
-var DEFAULT_VSRA_EXPIRES_IN = 600;
-var DEFAULT_VSRA_POLL_INTERVAL = 5;
-var VISA_FILTER_AXES = [
-  "region",
-  "category",
-  "purpose",
-  "reward_type",
-  "attribute",
-  "card_level",
-  "card_issuer"
-];
 async function createBenefitAuthorization(options2) {
   const result = await requestJson({
     baseUrl: options2.baseUrl,
@@ -27229,26 +27559,34 @@ function isRecord19(value) {
 function isDryRun4(value) {
   return "dryRun" in value;
 }
+var BENEFIT_AUTHORIZATION_PATH, BENEFIT_TOKEN_PATH, VSRA_DEVICE_GRANT_TYPE, FALLBACK_BENEFIT_EXPIRES_IN_SECONDS, DEFAULT_BENEFIT_POLL_INTERVAL, DEFAULT_VSRA_EXPIRES_IN, DEFAULT_VSRA_POLL_INTERVAL, VISA_FILTER_AXES;
+var init_client = __esm({
+  "dist/visa/client.js"() {
+    "use strict";
+    init_errors();
+    init_http();
+    init_oauth();
+    init_utils();
+    BENEFIT_AUTHORIZATION_PATH = "/agent/cwallet/oauth/benefit/authorization";
+    BENEFIT_TOKEN_PATH = "/agent/cwallet/oauth/benefit/token";
+    VSRA_DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+    FALLBACK_BENEFIT_EXPIRES_IN_SECONDS = 600;
+    DEFAULT_BENEFIT_POLL_INTERVAL = 2;
+    DEFAULT_VSRA_EXPIRES_IN = 600;
+    DEFAULT_VSRA_POLL_INTERVAL = 5;
+    VISA_FILTER_AXES = [
+      "region",
+      "category",
+      "purpose",
+      "reward_type",
+      "attribute",
+      "card_level",
+      "card_issuer"
+    ];
+  }
+});
 
 // dist/visa/benefit-catalog-provider.js
-var VISA_BENEFIT_CATALOG_REGISTRY_VERSION = "2026-08-27.1";
-var VISA_BENEFIT_CATALOG_PROVIDERS = Object.freeze([
-  Object.freeze({
-    providerKey: "visa_benefit_catalog",
-    environments: Object.freeze({
-      sandbox: Object.freeze({
-        merchantId: "mcht_ftmse61a6az0",
-        merchantUrl: "https://vtravel.link2shops.com/yiyuan/",
-        merchantName: "vtravel.link2shops.com"
-      }),
-      test: Object.freeze({
-        merchantId: "mcht_f5xuyduv1a0j",
-        merchantUrl: "https://testa.link2shops.com/",
-        merchantName: "testa.link2shops.com"
-      })
-    })
-  })
-]);
 function resolveVisaBenefitCatalogProvider(input) {
   if (input.mode !== "catalog_purchase") {
     return void 0;
@@ -27319,6 +27657,31 @@ function providerEndpoint(baseUrl, merchantId) {
   }
   return endpoint.toString();
 }
+var VISA_BENEFIT_CATALOG_REGISTRY_VERSION, VISA_BENEFIT_CATALOG_PROVIDERS;
+var init_benefit_catalog_provider = __esm({
+  "dist/visa/benefit-catalog-provider.js"() {
+    "use strict";
+    init_errors();
+    VISA_BENEFIT_CATALOG_REGISTRY_VERSION = "2026-08-27.1";
+    VISA_BENEFIT_CATALOG_PROVIDERS = Object.freeze([
+      Object.freeze({
+        providerKey: "visa_benefit_catalog",
+        environments: Object.freeze({
+          sandbox: Object.freeze({
+            merchantId: "mcht_ftmse61a6az0",
+            merchantUrl: "https://vtravel.link2shops.com/yiyuan/",
+            merchantName: "vtravel.link2shops.com"
+          }),
+          test: Object.freeze({
+            merchantId: "mcht_f5xuyduv1a0j",
+            merchantUrl: "https://testa.link2shops.com/",
+            merchantName: "testa.link2shops.com"
+          })
+        })
+      })
+    ]);
+  }
+});
 
 // dist/visa/context-input.js
 async function readVisaContextInput(flags, commandLabel) {
@@ -27328,13 +27691,16 @@ async function readVisaContextInput(flags, commandLabel) {
   }
   return parseJsonFlag(inline, "--context");
 }
+var init_context_input = __esm({
+  "dist/visa/context-input.js"() {
+    "use strict";
+    init_args();
+    init_errors();
+    init_utils();
+  }
+});
 
 // dist/visa/instruction-context.js
-var AMOUNT_LIMIT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
-var CURRENCY_FORMAT = /^[A-Z]{3}$/u;
-var MCC_FORMAT = /^\d{4}$/u;
-var UTC_DATETIME_FORMAT2 = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
-var MAX_CONTEXT_BYTES = 16 * 1024;
 function normalizeVisaInstructionContext(raw, options2 = {}) {
   if (!isRecord20(raw)) {
     throw validationError("instructionContext must be a JSON object");
@@ -27490,6 +27856,19 @@ function assignOptional(target, field, value) {
 function isRecord20(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var AMOUNT_LIMIT_FORMAT, CURRENCY_FORMAT, MCC_FORMAT, UTC_DATETIME_FORMAT2, MAX_CONTEXT_BYTES;
+var init_instruction_context2 = __esm({
+  "dist/visa/instruction-context.js"() {
+    "use strict";
+    init_errors();
+    init_instruction_context();
+    AMOUNT_LIMIT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
+    CURRENCY_FORMAT = /^[A-Z]{3}$/u;
+    MCC_FORMAT = /^\d{4}$/u;
+    UTC_DATETIME_FORMAT2 = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u;
+    MAX_CONTEXT_BYTES = 16 * 1024;
+  }
+});
 
 // dist/visa/selected-product-context.js
 function expandSelectedProductContext(value) {
@@ -27584,107 +27963,14 @@ function text(value, field) {
   }
   return value.trim();
 }
+var init_selected_product_context = __esm({
+  "dist/visa/selected-product-context.js"() {
+    "use strict";
+    init_errors();
+  }
+});
 
 // dist/visa/commerce-context.js
-var MAJOR_AMOUNT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
-var CURRENCY_FORMAT2 = /^[A-Z]{3}$/u;
-var MAX_CONTEXT_BYTES2 = 64 * 1024;
-var PURCHASE_FIELDS = /* @__PURE__ */ new Set([
-  "mode",
-  "environment",
-  "requestText",
-  "program",
-  "selection",
-  "expected",
-  "instructionContext",
-  "digitalDeliveryExpected",
-  "fulfillmentType",
-  "assertedCategory",
-  "shippingAddress",
-  "buyer",
-  "metadata"
-]);
-var BUYER_FIELDS = /* @__PURE__ */ new Set([
-  "first_name",
-  "last_name",
-  "email",
-  "phone_number"
-]);
-var PURCHASE_SELECTION_FIELDS = /* @__PURE__ */ new Set([
-  "merchantUrl",
-  "productId",
-  "quantity",
-  "productQuery",
-  "merchantId",
-  "endpoint"
-]);
-var CATALOG_SELECTION_FIELDS = /* @__PURE__ */ new Set([
-  ...PURCHASE_SELECTION_FIELDS,
-  "channelType",
-  "storeId",
-  "catalogQuery",
-  "catalogEnvironment",
-  "catalogLanguage"
-]);
-var CATALOG_EXPECTED_FIELDS = /* @__PURE__ */ new Set([
-  "merchantName",
-  "itemTitle",
-  "amount",
-  "currency",
-  "availability"
-]);
-var CATALOG_INSTRUCTION_FIELDS = /* @__PURE__ */ new Set([
-  "title",
-  "description",
-  "mandates",
-  "isRecurring",
-  "effectiveUntilTime",
-  "shippingAddress"
-]);
-var CATALOG_MANDATE_FIELDS = /* @__PURE__ */ new Set([
-  "title",
-  "description",
-  "amountLimit",
-  "currencyCode",
-  "merchantCategoryCode",
-  "preferredMerchantName",
-  "merchantCategory",
-  "recurringFrequency",
-  "effectiveUntilTime"
-]);
-var RESERVED_PURCHASE_METADATA_FIELDS = /* @__PURE__ */ new Set([
-  "programcode",
-  "merchantid",
-  "endpoint",
-  "merchanturl",
-  "merchantname",
-  "productid",
-  "productquery",
-  "channeltype",
-  "storeid",
-  "catalogquery",
-  "catalogenvironment",
-  "cataloglanguage",
-  "title",
-  "quantity",
-  "price",
-  "totalprice",
-  "currency",
-  "merchantcategorycode",
-  "authorizedavailability",
-  "fulfillmenttype",
-  "digitaldeliveryexpected",
-  "originalrequest",
-  "assertedcategory",
-  "shippingaddress",
-  "buyer",
-  "paymentinstrumentid",
-  "instructionid",
-  "purchaseinstructionid",
-  "checkoutid",
-  "checkoutattemptid",
-  "orderid"
-]);
 async function readVisaCommerceContext(flags) {
   return normalizeVisaCommerceContext(await readVisaContextInput(flags, "visa commerce-run"));
 }
@@ -28196,9 +28482,119 @@ function deepFreeze(value) {
   }
   return Object.freeze(value);
 }
+var MAJOR_AMOUNT_FORMAT, CURRENCY_FORMAT2, MAX_CONTEXT_BYTES2, PURCHASE_FIELDS, BUYER_FIELDS, PURCHASE_SELECTION_FIELDS, CATALOG_SELECTION_FIELDS, CATALOG_EXPECTED_FIELDS, CATALOG_INSTRUCTION_FIELDS, CATALOG_MANDATE_FIELDS, RESERVED_PURCHASE_METADATA_FIELDS;
+var init_commerce_context = __esm({
+  "dist/visa/commerce-context.js"() {
+    "use strict";
+    init_domains();
+    init_errors();
+    init_config();
+    init_context_input();
+    init_instruction_context2();
+    init_selected_product_context();
+    MAJOR_AMOUNT_FORMAT = /^\d{1,18}(?:\.\d{1,2})?$/u;
+    CURRENCY_FORMAT2 = /^[A-Z]{3}$/u;
+    MAX_CONTEXT_BYTES2 = 64 * 1024;
+    PURCHASE_FIELDS = /* @__PURE__ */ new Set([
+      "mode",
+      "environment",
+      "requestText",
+      "program",
+      "selection",
+      "expected",
+      "instructionContext",
+      "digitalDeliveryExpected",
+      "fulfillmentType",
+      "assertedCategory",
+      "shippingAddress",
+      "buyer",
+      "metadata"
+    ]);
+    BUYER_FIELDS = /* @__PURE__ */ new Set([
+      "first_name",
+      "last_name",
+      "email",
+      "phone_number"
+    ]);
+    PURCHASE_SELECTION_FIELDS = /* @__PURE__ */ new Set([
+      "merchantUrl",
+      "productId",
+      "quantity",
+      "productQuery",
+      "merchantId",
+      "endpoint"
+    ]);
+    CATALOG_SELECTION_FIELDS = /* @__PURE__ */ new Set([
+      ...PURCHASE_SELECTION_FIELDS,
+      "channelType",
+      "storeId",
+      "catalogQuery",
+      "catalogEnvironment",
+      "catalogLanguage"
+    ]);
+    CATALOG_EXPECTED_FIELDS = /* @__PURE__ */ new Set([
+      "merchantName",
+      "itemTitle",
+      "amount",
+      "currency",
+      "availability"
+    ]);
+    CATALOG_INSTRUCTION_FIELDS = /* @__PURE__ */ new Set([
+      "title",
+      "description",
+      "mandates",
+      "isRecurring",
+      "effectiveUntilTime",
+      "shippingAddress"
+    ]);
+    CATALOG_MANDATE_FIELDS = /* @__PURE__ */ new Set([
+      "title",
+      "description",
+      "amountLimit",
+      "currencyCode",
+      "merchantCategoryCode",
+      "preferredMerchantName",
+      "merchantCategory",
+      "recurringFrequency",
+      "effectiveUntilTime"
+    ]);
+    RESERVED_PURCHASE_METADATA_FIELDS = /* @__PURE__ */ new Set([
+      "programcode",
+      "merchantid",
+      "endpoint",
+      "merchanturl",
+      "merchantname",
+      "productid",
+      "productquery",
+      "channeltype",
+      "storeid",
+      "catalogquery",
+      "catalogenvironment",
+      "cataloglanguage",
+      "title",
+      "quantity",
+      "price",
+      "totalprice",
+      "currency",
+      "merchantcategorycode",
+      "authorizedavailability",
+      "fulfillmenttype",
+      "digitaldeliveryexpected",
+      "originalrequest",
+      "assertedcategory",
+      "shippingaddress",
+      "buyer",
+      "paymentinstrumentid",
+      "instructionid",
+      "purchaseinstructionid",
+      "checkoutid",
+      "checkoutattemptid",
+      "orderid"
+    ]);
+  }
+});
 
 // dist/visa/product-search.js
-var INTERNAL_LIST_MISS = "NOT_IN_INTERNAL_UCP_LIST";
 async function runVisaProductSearch(rawInput, dependencies) {
   const input = normalizeInput(rawInput);
   let internal;
@@ -28678,17 +29074,18 @@ function requireRecord(value, message) {
 function isRecord22(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var INTERNAL_LIST_MISS;
+var init_product_search = __esm({
+  "dist/visa/product-search.js"() {
+    "use strict";
+    init_errors();
+    init_internal_ucp();
+    init_commerce_context();
+    INTERNAL_LIST_MISS = "NOT_IN_INTERNAL_UCP_LIST";
+  }
+});
 
 // dist/visa/benefit-catalog-discovery.js
-var PROVIDER_PAGE_LIMIT = 100;
-var PROVIDER_MAX_PAGES = 100;
-var CURRENCY_PATTERN = /^[A-Z]{3}$/u;
-var ORDERABLE_AVAILABILITY = /* @__PURE__ */ new Set([
-  "IN_STOCK",
-  "AVAILABLE",
-  "ACTIVE",
-  "ORDERABLE"
-]);
 async function discoverVisaBenefitCatalogProducts(rawInput, dependencies) {
   const input = normalizeInput2(rawInput);
   const registry = visaBenefitCatalogRegistrySnapshot(input.environment, input.baseUrl);
@@ -28983,281 +29380,27 @@ function safeErrorMessage(error) {
   const message = error instanceof Error ? error.message : "provider Catalog search failed";
   return message.normalize("NFKC").replace(/[\u0000-\u001f\u007f]+/gu, " ").trim().slice(0, 300) || "provider Catalog search failed";
 }
+var PROVIDER_PAGE_LIMIT, PROVIDER_MAX_PAGES, CURRENCY_PATTERN, ORDERABLE_AVAILABILITY;
+var init_benefit_catalog_discovery = __esm({
+  "dist/visa/benefit-catalog-discovery.js"() {
+    "use strict";
+    init_errors();
+    init_benefit_catalog_provider();
+    init_commerce_context();
+    init_product_search();
+    PROVIDER_PAGE_LIMIT = 100;
+    PROVIDER_MAX_PAGES = 100;
+    CURRENCY_PATTERN = /^[A-Z]{3}$/u;
+    ORDERABLE_AVAILABILITY = /* @__PURE__ */ new Set([
+      "IN_STOCK",
+      "AVAILABLE",
+      "ACTIVE",
+      "ORDERABLE"
+    ]);
+  }
+});
 
 // dist/visa/commerce-restriction.js
-var RESTRICTED_CATEGORIES = [
-  {
-    category: "ADULT_CONTENT",
-    label: "Adult content and services",
-    labelZh: "\u6210\u4EBA\u5185\u5BB9\u4E0E\u670D\u52A1",
-    merchantCategoryCodes: [],
-    keywords: [
-      "porn",
-      "pornography",
-      "pornhub",
-      "onlyfans",
-      "adult content",
-      "adult video",
-      "adult website",
-      "adult live",
-      "adult subscription",
-      "\u6210\u4EBA\u5185\u5BB9",
-      "\u6210\u4EBA\u7F51\u7AD9",
-      "\u6210\u4EBA\u89C6\u9891",
-      "\u6210\u4EBA\u76F4\u64AD",
-      "\u6210\u4EBA\u670D\u52A1",
-      "\u8272\u60C5",
-      "\u60C5\u8272",
-      "\u88F8\u804A"
-    ]
-  },
-  {
-    category: "DATING_COMPANIONSHIP",
-    label: "Dating and companionship services",
-    labelZh: "\u4EA4\u53CB\u53CA\u966A\u4F34\u670D\u52A1",
-    merchantCategoryCodes: ["7273"],
-    keywords: [
-      "dating site",
-      "dating website",
-      "dating app",
-      "dating service",
-      "dating subscription",
-      "escort",
-      "sugar dating",
-      "\u4EA4\u53CB\u7F51\u7AD9",
-      "\u4EA4\u53CB\u8F6F\u4EF6",
-      "\u4EA4\u53CB\u670D\u52A1",
-      "\u76F8\u4EB2",
-      "\u966A\u4F8D",
-      "\u4F34\u6E38",
-      "\u63F4\u4EA4",
-      "\u966A\u4F34\u670D\u52A1"
-    ]
-  },
-  {
-    category: "GAMBLING",
-    label: "Gambling and betting",
-    labelZh: "\u8D4C\u535A/\u535A\u5F69",
-    merchantCategoryCodes: ["7995"],
-    keywords: [
-      "gambling",
-      "casino",
-      "betting",
-      "sportsbook",
-      "wager",
-      "lottery",
-      "poker chips",
-      "slot machine",
-      "roulette",
-      "baccarat",
-      "blackjack",
-      "\u8D4C\u535A",
-      "\u535A\u5F69",
-      "\u8D4C\u573A",
-      "\u6295\u6CE8",
-      "\u4E0B\u6CE8",
-      "\u62BC\u6CE8",
-      "\u5F69\u7968",
-      "\u516D\u5408\u5F69",
-      "\u7B79\u7801",
-      "\u8D4C\u8D44"
-    ]
-  },
-  {
-    category: "PRESCRIPTION_DRUGS",
-    label: "Prescription drugs",
-    labelZh: "\u5904\u65B9\u836F",
-    merchantCategoryCodes: [],
-    keywords: [
-      "prescription drug",
-      "prescription medication",
-      "prescription medicine",
-      "prescription-only",
-      "rx only",
-      "viagra",
-      "cialis",
-      "sildenafil",
-      "ozempic",
-      "xanax",
-      "adderall",
-      "tramadol",
-      "\u5904\u65B9\u836F",
-      "\u51ED\u5904\u65B9",
-      "\u9700\u5904\u65B9",
-      "\u4F1F\u54E5"
-    ]
-  },
-  {
-    category: "CRYPTOCURRENCY",
-    label: "Cryptocurrency",
-    labelZh: "\u52A0\u5BC6\u8D27\u5E01",
-    merchantCategoryCodes: ["6051"],
-    keywords: [
-      "crypto",
-      "cryptocurrency",
-      "bitcoin",
-      "ethereum",
-      "stablecoin",
-      "usdt",
-      "usdc",
-      "btc",
-      "eth",
-      "initial coin offering",
-      "token sale",
-      "defi",
-      "binance",
-      "coinbase",
-      "\u52A0\u5BC6\u8D27\u5E01",
-      "\u865A\u62DF\u8D27\u5E01",
-      "\u6570\u5B57\u8D27\u5E01",
-      "\u6BD4\u7279\u5E01",
-      "\u4EE5\u592A\u574A",
-      "\u6CF0\u8FBE\u5E01",
-      "\u5145\u5E01",
-      "\u63D0\u5E01",
-      "\u7092\u5E01",
-      "\u5E01\u5708",
-      "\u4EE3\u5E01\u53D1\u884C",
-      "\u52A0\u5BC6\u94B1\u5305"
-    ]
-  },
-  {
-    category: "CYBERLOCKER_FILE_SHARING",
-    label: "Cyberlockers and public file sharing",
-    labelZh: "Cyberlocker / \u516C\u5171\u6587\u4EF6\u5206\u4EAB",
-    merchantCategoryCodes: [],
-    keywords: [
-      "cyberlocker",
-      "file locker",
-      "filelocker",
-      "rapidgator",
-      "pay per download",
-      "pay-per-download",
-      "upload rewards",
-      "\u516C\u5171\u6587\u4EF6\u5206\u4EAB",
-      "\u6309\u4E0B\u8F7D\u91CF\u5956\u52B1",
-      "\u4E0A\u4F20\u5956\u52B1",
-      "\u6587\u4EF6\u5206\u4EAB\u5956\u52B1"
-    ]
-  },
-  {
-    category: "SKILL_BASED_PRIZE_GAMES",
-    label: "Skill-based prize games",
-    labelZh: "\u6280\u5DE7\u578B\u6709\u5956\u6E38\u620F",
-    merchantCategoryCodes: [],
-    keywords: [
-      "daily fantasy",
-      "fantasy sports",
-      "draftkings",
-      "fanduel",
-      "skill gaming",
-      "skill-based prize",
-      "prize contest",
-      "cash tournament entry",
-      "paid tournament entry",
-      "\u6280\u5DE7\u578B\u6709\u5956",
-      "\u6709\u5956\u7ADE\u6280",
-      "\u4ED8\u8D39\u7ADE\u8D5B",
-      "\u68A6\u5E7B\u4F53\u80B2",
-      "\u5956\u91D1\u8D5B"
-    ]
-  },
-  {
-    category: "FINANCIAL_PRODUCTS_TRADING",
-    label: "Financial products and trading",
-    labelZh: "\u91D1\u878D\u4EA7\u54C1/\u91D1\u878D\u4EA4\u6613",
-    merchantCategoryCodes: ["6211"],
-    keywords: [
-      "stock trading",
-      "buy stocks",
-      "sell stocks",
-      "share trading",
-      "securities trading",
-      "securities brokerage",
-      "brokerage account",
-      "forex trading",
-      "foreign exchange trading",
-      "options trading",
-      "futures trading",
-      "margin trading",
-      "cfd trading",
-      "\u80A1\u7968\u4EA4\u6613",
-      "\u8D2D\u4E70\u80A1\u7968",
-      "\u4E70\u5165\u80A1\u7968",
-      "\u8BC1\u5238\u4EA4\u6613",
-      "\u8BC1\u5238\u5F00\u6237",
-      "\u80A1\u7968\u5F00\u6237",
-      "\u671F\u8D27\u4EA4\u6613",
-      "\u5916\u6C47\u4EA4\u6613",
-      "\u878D\u8D44\u878D\u5238",
-      "\u7ECF\u7EAA\u670D\u52A1",
-      "\u91D1\u878D\u884D\u751F\u54C1"
-    ]
-  },
-  {
-    category: "TELEMARKETING",
-    label: "Telemarketing",
-    labelZh: "\u7535\u8BDD\u8425\u9500",
-    merchantCategoryCodes: ["5966", "5967"],
-    keywords: [
-      "telemarketing",
-      "robocall",
-      "cold calling",
-      "outbound calling",
-      "\u7535\u8BDD\u8425\u9500",
-      "\u7535\u8BDD\u63A8\u9500",
-      "\u7535\u9500",
-      "\u5916\u547C\u8425\u9500"
-    ]
-  },
-  {
-    category: "TOBACCO",
-    label: "Tobacco products",
-    labelZh: "\u70DF\u8349\u4EA7\u54C1",
-    merchantCategoryCodes: ["5993"],
-    keywords: [
-      "tobacco",
-      "cigarette",
-      "cigarettes",
-      "cigar",
-      "cigars",
-      "e-cigarette",
-      "e-cig",
-      "vape",
-      "vaping",
-      "shisha",
-      "snus",
-      "\u70DF\u8349",
-      "\u9999\u70DF",
-      "\u5377\u70DF",
-      "\u7535\u5B50\u70DF",
-      "\u96EA\u8304",
-      "\u70DF\u4E1D",
-      "\u6C34\u70DF"
-    ]
-  },
-  {
-    category: "OTHER_REGULATED_GOODS",
-    label: "Other regulated goods",
-    labelZh: "\u5176\u4ED6\u53D7\u76D1\u7BA1\u5546\u54C1",
-    merchantCategoryCodes: [],
-    keywords: [
-      "firearm",
-      "firearms",
-      "ammunition",
-      "handgun",
-      "handguns",
-      "explosives",
-      "\u519B\u706B",
-      "\u67AA\u652F",
-      "\u5F39\u836F",
-      "\u7206\u70B8\u7269",
-      "\u7BA1\u5236\u5200\u5177"
-    ]
-  }
-];
-var CATEGORY_BY_NAME = new Map(RESTRICTED_CATEGORIES.map((entry) => [entry.category, entry]));
-var CATEGORY_BY_MCC = new Map(RESTRICTED_CATEGORIES.flatMap((entry) => entry.merchantCategoryCodes.map((code) => [code, entry])));
 function classifyVisaCommerceRestriction(context) {
   const purchase = context.purchaseContext;
   if (purchase.assertedCategory) {
@@ -29325,10 +29468,287 @@ function blocked(entry, matchedBy, matchedValue) {
     matchedValue
   };
 }
+var RESTRICTED_CATEGORIES, CATEGORY_BY_NAME, CATEGORY_BY_MCC;
+var init_commerce_restriction = __esm({
+  "dist/visa/commerce-restriction.js"() {
+    "use strict";
+    RESTRICTED_CATEGORIES = [
+      {
+        category: "ADULT_CONTENT",
+        label: "Adult content and services",
+        labelZh: "\u6210\u4EBA\u5185\u5BB9\u4E0E\u670D\u52A1",
+        merchantCategoryCodes: [],
+        keywords: [
+          "porn",
+          "pornography",
+          "pornhub",
+          "onlyfans",
+          "adult content",
+          "adult video",
+          "adult website",
+          "adult live",
+          "adult subscription",
+          "\u6210\u4EBA\u5185\u5BB9",
+          "\u6210\u4EBA\u7F51\u7AD9",
+          "\u6210\u4EBA\u89C6\u9891",
+          "\u6210\u4EBA\u76F4\u64AD",
+          "\u6210\u4EBA\u670D\u52A1",
+          "\u8272\u60C5",
+          "\u60C5\u8272",
+          "\u88F8\u804A"
+        ]
+      },
+      {
+        category: "DATING_COMPANIONSHIP",
+        label: "Dating and companionship services",
+        labelZh: "\u4EA4\u53CB\u53CA\u966A\u4F34\u670D\u52A1",
+        merchantCategoryCodes: ["7273"],
+        keywords: [
+          "dating site",
+          "dating website",
+          "dating app",
+          "dating service",
+          "dating subscription",
+          "escort",
+          "sugar dating",
+          "\u4EA4\u53CB\u7F51\u7AD9",
+          "\u4EA4\u53CB\u8F6F\u4EF6",
+          "\u4EA4\u53CB\u670D\u52A1",
+          "\u76F8\u4EB2",
+          "\u966A\u4F8D",
+          "\u4F34\u6E38",
+          "\u63F4\u4EA4",
+          "\u966A\u4F34\u670D\u52A1"
+        ]
+      },
+      {
+        category: "GAMBLING",
+        label: "Gambling and betting",
+        labelZh: "\u8D4C\u535A/\u535A\u5F69",
+        merchantCategoryCodes: ["7995"],
+        keywords: [
+          "gambling",
+          "casino",
+          "betting",
+          "sportsbook",
+          "wager",
+          "lottery",
+          "poker chips",
+          "slot machine",
+          "roulette",
+          "baccarat",
+          "blackjack",
+          "\u8D4C\u535A",
+          "\u535A\u5F69",
+          "\u8D4C\u573A",
+          "\u6295\u6CE8",
+          "\u4E0B\u6CE8",
+          "\u62BC\u6CE8",
+          "\u5F69\u7968",
+          "\u516D\u5408\u5F69",
+          "\u7B79\u7801",
+          "\u8D4C\u8D44"
+        ]
+      },
+      {
+        category: "PRESCRIPTION_DRUGS",
+        label: "Prescription drugs",
+        labelZh: "\u5904\u65B9\u836F",
+        merchantCategoryCodes: [],
+        keywords: [
+          "prescription drug",
+          "prescription medication",
+          "prescription medicine",
+          "prescription-only",
+          "rx only",
+          "viagra",
+          "cialis",
+          "sildenafil",
+          "ozempic",
+          "xanax",
+          "adderall",
+          "tramadol",
+          "\u5904\u65B9\u836F",
+          "\u51ED\u5904\u65B9",
+          "\u9700\u5904\u65B9",
+          "\u4F1F\u54E5"
+        ]
+      },
+      {
+        category: "CRYPTOCURRENCY",
+        label: "Cryptocurrency",
+        labelZh: "\u52A0\u5BC6\u8D27\u5E01",
+        merchantCategoryCodes: ["6051"],
+        keywords: [
+          "crypto",
+          "cryptocurrency",
+          "bitcoin",
+          "ethereum",
+          "stablecoin",
+          "usdt",
+          "usdc",
+          "btc",
+          "eth",
+          "initial coin offering",
+          "token sale",
+          "defi",
+          "binance",
+          "coinbase",
+          "\u52A0\u5BC6\u8D27\u5E01",
+          "\u865A\u62DF\u8D27\u5E01",
+          "\u6570\u5B57\u8D27\u5E01",
+          "\u6BD4\u7279\u5E01",
+          "\u4EE5\u592A\u574A",
+          "\u6CF0\u8FBE\u5E01",
+          "\u5145\u5E01",
+          "\u63D0\u5E01",
+          "\u7092\u5E01",
+          "\u5E01\u5708",
+          "\u4EE3\u5E01\u53D1\u884C",
+          "\u52A0\u5BC6\u94B1\u5305"
+        ]
+      },
+      {
+        category: "CYBERLOCKER_FILE_SHARING",
+        label: "Cyberlockers and public file sharing",
+        labelZh: "Cyberlocker / \u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+        merchantCategoryCodes: [],
+        keywords: [
+          "cyberlocker",
+          "file locker",
+          "filelocker",
+          "rapidgator",
+          "pay per download",
+          "pay-per-download",
+          "upload rewards",
+          "\u516C\u5171\u6587\u4EF6\u5206\u4EAB",
+          "\u6309\u4E0B\u8F7D\u91CF\u5956\u52B1",
+          "\u4E0A\u4F20\u5956\u52B1",
+          "\u6587\u4EF6\u5206\u4EAB\u5956\u52B1"
+        ]
+      },
+      {
+        category: "SKILL_BASED_PRIZE_GAMES",
+        label: "Skill-based prize games",
+        labelZh: "\u6280\u5DE7\u578B\u6709\u5956\u6E38\u620F",
+        merchantCategoryCodes: [],
+        keywords: [
+          "daily fantasy",
+          "fantasy sports",
+          "draftkings",
+          "fanduel",
+          "skill gaming",
+          "skill-based prize",
+          "prize contest",
+          "cash tournament entry",
+          "paid tournament entry",
+          "\u6280\u5DE7\u578B\u6709\u5956",
+          "\u6709\u5956\u7ADE\u6280",
+          "\u4ED8\u8D39\u7ADE\u8D5B",
+          "\u68A6\u5E7B\u4F53\u80B2",
+          "\u5956\u91D1\u8D5B"
+        ]
+      },
+      {
+        category: "FINANCIAL_PRODUCTS_TRADING",
+        label: "Financial products and trading",
+        labelZh: "\u91D1\u878D\u4EA7\u54C1/\u91D1\u878D\u4EA4\u6613",
+        merchantCategoryCodes: ["6211"],
+        keywords: [
+          "stock trading",
+          "buy stocks",
+          "sell stocks",
+          "share trading",
+          "securities trading",
+          "securities brokerage",
+          "brokerage account",
+          "forex trading",
+          "foreign exchange trading",
+          "options trading",
+          "futures trading",
+          "margin trading",
+          "cfd trading",
+          "\u80A1\u7968\u4EA4\u6613",
+          "\u8D2D\u4E70\u80A1\u7968",
+          "\u4E70\u5165\u80A1\u7968",
+          "\u8BC1\u5238\u4EA4\u6613",
+          "\u8BC1\u5238\u5F00\u6237",
+          "\u80A1\u7968\u5F00\u6237",
+          "\u671F\u8D27\u4EA4\u6613",
+          "\u5916\u6C47\u4EA4\u6613",
+          "\u878D\u8D44\u878D\u5238",
+          "\u7ECF\u7EAA\u670D\u52A1",
+          "\u91D1\u878D\u884D\u751F\u54C1"
+        ]
+      },
+      {
+        category: "TELEMARKETING",
+        label: "Telemarketing",
+        labelZh: "\u7535\u8BDD\u8425\u9500",
+        merchantCategoryCodes: ["5966", "5967"],
+        keywords: [
+          "telemarketing",
+          "robocall",
+          "cold calling",
+          "outbound calling",
+          "\u7535\u8BDD\u8425\u9500",
+          "\u7535\u8BDD\u63A8\u9500",
+          "\u7535\u9500",
+          "\u5916\u547C\u8425\u9500"
+        ]
+      },
+      {
+        category: "TOBACCO",
+        label: "Tobacco products",
+        labelZh: "\u70DF\u8349\u4EA7\u54C1",
+        merchantCategoryCodes: ["5993"],
+        keywords: [
+          "tobacco",
+          "cigarette",
+          "cigarettes",
+          "cigar",
+          "cigars",
+          "e-cigarette",
+          "e-cig",
+          "vape",
+          "vaping",
+          "shisha",
+          "snus",
+          "\u70DF\u8349",
+          "\u9999\u70DF",
+          "\u5377\u70DF",
+          "\u7535\u5B50\u70DF",
+          "\u96EA\u8304",
+          "\u70DF\u4E1D",
+          "\u6C34\u70DF"
+        ]
+      },
+      {
+        category: "OTHER_REGULATED_GOODS",
+        label: "Other regulated goods",
+        labelZh: "\u5176\u4ED6\u53D7\u76D1\u7BA1\u5546\u54C1",
+        merchantCategoryCodes: [],
+        keywords: [
+          "firearm",
+          "firearms",
+          "ammunition",
+          "handgun",
+          "handguns",
+          "explosives",
+          "\u519B\u706B",
+          "\u67AA\u652F",
+          "\u5F39\u836F",
+          "\u7206\u70B8\u7269",
+          "\u7BA1\u5236\u5200\u5177"
+        ]
+      }
+    ];
+    CATEGORY_BY_NAME = new Map(RESTRICTED_CATEGORIES.map((entry) => [entry.category, entry]));
+    CATEGORY_BY_MCC = new Map(RESTRICTED_CATEGORIES.flatMap((entry) => entry.merchantCategoryCodes.map((code) => [code, entry])));
+  }
+});
 
 // dist/visa/pending-recovery.js
-var PORTAL_INSTRUCTION_LIST_PATH = "/agent-authorization";
-var ACTIVATABLE_STATUSES = /* @__PURE__ */ new Set(["PENDING", "CREATED"]);
 function portalInstructionListUrl(portalBaseUrl) {
   return new URL(PORTAL_INSTRUCTION_LIST_PATH, portalBaseUrl).toString();
 }
@@ -29539,19 +29959,19 @@ function optionalText6(value) {
 function isRecord23(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var PORTAL_INSTRUCTION_LIST_PATH, ACTIVATABLE_STATUSES;
+var init_pending_recovery = __esm({
+  "dist/visa/pending-recovery.js"() {
+    "use strict";
+    init_errors();
+    init_commerce_run();
+    init_commerce_run();
+    PORTAL_INSTRUCTION_LIST_PATH = "/agent-authorization";
+    ACTIVATABLE_STATUSES = /* @__PURE__ */ new Set(["PENDING", "CREATED"]);
+  }
+});
 
 // dist/visa/commerce-run.js
-var DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
-var USER_AUTHORIZATION_WAIT_SECONDS = 600;
-var RECOVERY_STAGES = /* @__PURE__ */ new Set([
-  "card",
-  "vic",
-  "card_selection",
-  "card_verification",
-  "instruction_verification",
-  "instruction_activation",
-  "instruction_authorization"
-]);
 async function runVisaCommerce(context, options2, dependencies) {
   if (context.mode === "prepare") {
     if (options2.confirmedPurchase) {
@@ -30739,18 +31159,6 @@ function pendingInstructionMatchesContext(instruction, paymentInstrumentId, cont
   const sortedObserved = observedFingerprints.sort();
   return sortedExpected.every((value, index) => value === sortedObserved[index]);
 }
-var PENDING_MANDATE_CONTEXT_FIELDS = /* @__PURE__ */ new Set([
-  "title",
-  "description",
-  "amountLimit",
-  "currencyCode",
-  "merchantCategory",
-  "merchantCategoryCode",
-  "preferredMerchantName",
-  "effectiveUntilTime",
-  "recurringFrequency",
-  "extra"
-]);
 function pendingExpectedMandateFingerprint(mandate, isRecurring) {
   if (Object.keys(mandate).some((field) => !PENDING_MANDATE_CONTEXT_FIELDS.has(field))) {
     return void 0;
@@ -31070,6 +31478,41 @@ function stableJson(value) {
 function isRecord24(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var DEFAULT_WORKFLOW_WAIT_SECONDS, USER_AUTHORIZATION_WAIT_SECONDS, RECOVERY_STAGES, PENDING_MANDATE_CONTEXT_FIELDS;
+var init_commerce_run = __esm({
+  "dist/visa/commerce-run.js"() {
+    "use strict";
+    init_command_branding();
+    init_commerce_context();
+    init_errors();
+    init_commerce_restriction();
+    init_pending_recovery();
+    init_card_vic_readiness();
+    DEFAULT_WORKFLOW_WAIT_SECONDS = 900;
+    USER_AUTHORIZATION_WAIT_SECONDS = 600;
+    RECOVERY_STAGES = /* @__PURE__ */ new Set([
+      "card",
+      "vic",
+      "card_selection",
+      "card_verification",
+      "instruction_verification",
+      "instruction_activation",
+      "instruction_authorization"
+    ]);
+    PENDING_MANDATE_CONTEXT_FIELDS = /* @__PURE__ */ new Set([
+      "title",
+      "description",
+      "amountLimit",
+      "currencyCode",
+      "merchantCategory",
+      "merchantCategoryCode",
+      "preferredMerchantName",
+      "effectiveUntilTime",
+      "recurringFrequency",
+      "extra"
+    ]);
+  }
+});
 
 // dist/visa/commerce-continuation.js
 import { createHash as createHash6 } from "node:crypto";
@@ -31096,100 +31539,14 @@ function canonical(value) {
   }
   return value;
 }
+var init_commerce_continuation = __esm({
+  "dist/visa/commerce-continuation.js"() {
+    "use strict";
+    init_errors();
+  }
+});
 
 // dist/visa/state.js
-var VISA_FSM_STATES = /* @__PURE__ */ new Set([
-  "IDLE",
-  "VSRA_LOGIN_REQUIRED",
-  "VSRA_LOGIN_PENDING",
-  "VSRA_READY",
-  "CLINK_LOGIN_CREATING",
-  "CLINK_LOGIN_PENDING",
-  "CLINK_LOGIN_EXCHANGING",
-  "CLINK_READY",
-  "FAILED",
-  "EXPIRED"
-]);
-var LEGAL_TRANSITIONS = {
-  IDLE: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_READY",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  VSRA_LOGIN_REQUIRED: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_PENDING",
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  VSRA_LOGIN_PENDING: /* @__PURE__ */ new Set([
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  VSRA_READY: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_READY",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  CLINK_LOGIN_CREATING: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "CLINK_LOGIN_PENDING",
-    "CLINK_READY",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  CLINK_LOGIN_PENDING: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_LOGIN_EXCHANGING",
-    "CLINK_READY",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  CLINK_LOGIN_EXCHANGING: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_LOGIN_PENDING",
-    "CLINK_READY",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  CLINK_READY: /* @__PURE__ */ new Set([
-    "VSRA_LOGIN_REQUIRED",
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "FAILED",
-    "EXPIRED"
-  ]),
-  FAILED: /* @__PURE__ */ new Set([
-    "IDLE",
-    "VSRA_LOGIN_REQUIRED",
-    "VSRA_LOGIN_PENDING",
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_LOGIN_PENDING",
-    "CLINK_READY",
-    "EXPIRED"
-  ]),
-  EXPIRED: /* @__PURE__ */ new Set([
-    "IDLE",
-    "VSRA_LOGIN_REQUIRED",
-    "VSRA_LOGIN_PENDING",
-    "VSRA_READY",
-    "CLINK_LOGIN_CREATING",
-    "CLINK_LOGIN_PENDING",
-    "CLINK_READY",
-    "FAILED"
-  ])
-};
 function defaultVisaState() {
   return {
     fsmState: "IDLE",
@@ -31473,158 +31830,107 @@ function positiveNumber3(value) {
 function isRecord25(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-// dist/visa/service.js
-import { createHash as createHash7, randomUUID as randomUUID5 } from "node:crypto";
+var VISA_FSM_STATES, LEGAL_TRANSITIONS;
+var init_state = __esm({
+  "dist/visa/state.js"() {
+    "use strict";
+    init_errors();
+    VISA_FSM_STATES = /* @__PURE__ */ new Set([
+      "IDLE",
+      "VSRA_LOGIN_REQUIRED",
+      "VSRA_LOGIN_PENDING",
+      "VSRA_READY",
+      "CLINK_LOGIN_CREATING",
+      "CLINK_LOGIN_PENDING",
+      "CLINK_LOGIN_EXCHANGING",
+      "CLINK_READY",
+      "FAILED",
+      "EXPIRED"
+    ]);
+    LEGAL_TRANSITIONS = {
+      IDLE: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_READY",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      VSRA_LOGIN_REQUIRED: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_PENDING",
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      VSRA_LOGIN_PENDING: /* @__PURE__ */ new Set([
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      VSRA_READY: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_READY",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      CLINK_LOGIN_CREATING: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "CLINK_LOGIN_PENDING",
+        "CLINK_READY",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      CLINK_LOGIN_PENDING: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_LOGIN_EXCHANGING",
+        "CLINK_READY",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      CLINK_LOGIN_EXCHANGING: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_LOGIN_PENDING",
+        "CLINK_READY",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      CLINK_READY: /* @__PURE__ */ new Set([
+        "VSRA_LOGIN_REQUIRED",
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "FAILED",
+        "EXPIRED"
+      ]),
+      FAILED: /* @__PURE__ */ new Set([
+        "IDLE",
+        "VSRA_LOGIN_REQUIRED",
+        "VSRA_LOGIN_PENDING",
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_LOGIN_PENDING",
+        "CLINK_READY",
+        "EXPIRED"
+      ]),
+      EXPIRED: /* @__PURE__ */ new Set([
+        "IDLE",
+        "VSRA_LOGIN_REQUIRED",
+        "VSRA_LOGIN_PENDING",
+        "VSRA_READY",
+        "CLINK_LOGIN_CREATING",
+        "CLINK_LOGIN_PENDING",
+        "CLINK_READY",
+        "FAILED"
+      ])
+    };
+  }
+});
 
 // dist/visa/taxonomy.js
-var ALIAS_OVERRIDES = {
-  purpose: {
-    outbound: ["\u51FA\u56FD\u65C5\u884C", "\u6D77\u5916\u65C5\u884C", "travel abroad"],
-    study: ["\u7559\u5B66", "\u6D77\u5916\u5B66\u4E60", "international student"],
-    local: ["\u672C\u5730\u4F18\u60E0", "local offers"],
-    inbound: ["\u6765\u534E\u65C5\u884C", "inbound tourism"],
-    haitao: ["\u8DE8\u5883\u8D2D\u7269", "overseas online shopping"]
-  },
-  region: {
-    hmt: ["\u6E2F\u6FB3\u53F0\u5730\u533A"],
-    kj: ["\u65E5\u672C\u97E9\u56FD", "japan korea"],
-    sea: ["\u4E1C\u5357\u4E9A\u5730\u533A"],
-    anz: ["\u6FB3\u5927\u5229\u4E9A\u65B0\u897F\u5170", "australia new zealand"],
-    global: ["\u5168\u4E16\u754C", "worldwide"],
-    hk: ["\u9999\u6E2F"],
-    mo: ["\u6FB3\u95E8", "macao"],
-    tw: ["\u53F0\u6E7E"],
-    kr: ["\u5357\u97E9", "korea"],
-    id: ["\u5370\u5C3C"],
-    au: ["\u6FB3\u6D32"],
-    gb: ["\u82F1\u683C\u5170", "uk", "britain"],
-    us: ["usa"],
-    ae: ["uae"],
-    sa: ["\u6C99\u7279"]
-  },
-  category: {
-    dining: ["\u5403\u996D", "\u7F8E\u98DF", "food"],
-    dining_restaurant: ["\u9910\u5385", "\u6B63\u9910"],
-    dining_cafe_bakery: ["\u5496\u5561", "\u70D8\u7119", "bakery"],
-    dining_bar: ["\u9152\u5427", "\u9152\u9986", "pub"],
-    dining_fast_casual: ["\u5FEB\u9910", "\u7B80\u9910", "fast food"],
-    dining_delivery_food: [
-      "\u5916\u5356",
-      "\u5916\u5356\u5238",
-      "food delivery",
-      "get food delivered",
-      "delivery offer"
-    ],
-    shopping: ["\u8D2D\u7269", "\u96F6\u552E", "retail"],
-    shopping_department_mall: ["\u767E\u8D27", "\u5546\u573A", "mall"],
-    shopping_supermarket: ["\u8D85\u5E02", "\u4FBF\u5229\u5E97"],
-    shopping_fashion: ["\u670D\u88C5", "\u978B\u5305", "fashion"],
-    shopping_luxury: ["\u5962\u534E\u8D2D\u7269", "luxury"],
-    shopping_beauty: ["\u7F8E\u5986", "\u62A4\u80A4", "beauty"],
-    shopping_jewelry_watches: ["\u73E0\u5B9D", "\u624B\u8868", "watches"],
-    shopping_electronics: ["\u6570\u7801", "\u7535\u5B50\u4EA7\u54C1"],
-    shopping_duty_free: ["\u514D\u7A0E", "duty-free"],
-    lodging: ["\u4F4F\u5BBF", "accommodation"],
-    lodging_hotel: ["\u996D\u5E97"],
-    lodging_apartment: ["\u6C11\u5BBF", "\u516C\u5BD3", "homestay"],
-    airfare: ["\u822A\u7A7A", "\u822A\u73ED", "flight"],
-    airfare_ticket: ["\u98DE\u673A\u7968"],
-    airfare_upgrade: ["\u5347\u8231"],
-    airfare_lounge: ["\u8D35\u5BBE\u5385", "\u673A\u573A\u4F11\u606F\u5BA4", "lounge"],
-    airfare_baggage: ["\u6258\u8FD0\u884C\u674E"],
-    ground_transport: ["\u4EA4\u901A\u51FA\u884C"],
-    transport_car_rental: ["car hire"],
-    transport_ride_taxi: ["\u6253\u8F66", "\u51FA\u79DF\u8F66", "\u7F51\u7EA6\u8F66", "taxi"],
-    transport_airport_transfer: ["\u63A5\u673A", "\u9001\u673A"],
-    transport_transit_rail: ["\u5730\u94C1", "\u706B\u8F66", "\u94C1\u8DEF", "rail"],
-    transport_fuel_parking: ["\u52A0\u6CB9", "\u5145\u7535", "\u505C\u8F66"],
-    travel_service: ["\u65C5\u6E38\u670D\u52A1"],
-    travel_visa: ["\u7B7E\u8BC1\u529E\u7406"],
-    travel_medical: ["\u65C5\u884C\u533B\u7597"],
-    travel_tour_activity: ["\u5F53\u5730\u6D3B\u52A8", "tour"],
-    travel_tax_refund: ["\u9000\u7A0E"],
-    travel_concierge: ["\u793C\u5BBE", "concierge"],
-    entertainment: ["\u5A31\u4E50"],
-    ent_attraction: ["\u666F\u70B9", "\u4E50\u56ED", "attraction"],
-    ent_cinema_show: ["\u7535\u5F71", "\u6F14\u51FA", "cinema"],
-    ent_culture: ["\u827A\u672F", "\u535A\u7269\u9986"],
-    ent_sports: ["\u8FD0\u52A8", "sports"],
-    ent_nightlife_gaming: ["\u591C\u751F\u6D3B", "gaming"],
-    wellness: ["\u517B\u751F", "health"],
-    wellness_spa_massage: ["spa", "\u6309\u6469"],
-    wellness_beauty_salon: ["\u7F8E\u53D1", "\u7F8E\u5BB9\u9662"],
-    wellness_fitness: ["gym"],
-    wellness_medical: ["\u4F53\u68C0"],
-    wellness_onsen: ["\u6CE1\u6C64"],
-    telecom: ["\u901A\u4FE1", "\u6F2B\u6E38"],
-    telecom_sim_esim: ["sim card", "esim"],
-    telecom_wifi: ["wifi"],
-    telecom_mobile: ["\u624B\u673A\u5957\u9910"],
-    financial_service: ["\u91D1\u878D"],
-    fin_fx: ["\u6362\u6C47", "\u6C47\u6B3E", "foreign exchange"],
-    fin_installment: ["\u5206\u671F"],
-    fin_insurance: ["\u7406\u8D22"],
-    education: ["\u6559\u80B2"],
-    edu_study_abroad: ["\u7559\u5B66\u4E2D\u4ECB"],
-    edu_course: ["\u57F9\u8BAD", "\u8BFE\u7A0B"],
-    edu_tuition: ["\u4EA4\u5B66\u8D39", "tuition"],
-    edu_student_living: ["\u5B66\u751F\u4F18\u60E0"]
-  },
-  reward_type: {
-    discount: ["\u6253\u6298"],
-    cashback: ["\u73B0\u91D1\u56DE\u9988", "cash back"],
-    coupon: ["\u5238", "\u4EE3\u91D1\u5238", "\u5151\u6362\u5238", "voucher"],
-    points: ["reward points"],
-    privilege: ["\u7279\u6743"],
-    gift: ["\u8D60\u54C1", "\u793C\u54C1"]
-  },
-  attribute: {
-    new_customer: ["\u65B0\u7528\u6237"],
-    online_only: ["\u4EC5\u7EBF\u4E0A"],
-    instore_only: ["\u4EC5\u5230\u5E97"],
-    app_exclusive: ["\u5E94\u7528\u4E13\u4EAB"],
-    reservation_required: ["\u9700\u8981\u9884\u7EA6"],
-    family_friendly: ["\u4EB2\u5B50"],
-    couple: ["\u60C5\u4FA3"],
-    group: ["\u56E2\u4F53"],
-    senior_friendly: ["\u8001\u4EBA\u53CB\u597D"],
-    exclusive: ["\u4F1A\u5458\u4E13\u5C5E"]
-  },
-  card_level: {
-    signature: ["\u5FA1\u73BA"],
-    infinite: ["\u65E0\u9650"],
-    all: ["\u4E0D\u9650\u5361\u7B49\u7EA7"]
-  },
-  card_issuer: {
-    BOC: ["\u4E2D\u56FD\u94F6\u884C", "\u4E2D\u884C", "Bank of China"],
-    BOCOM: ["\u4EA4\u901A\u94F6\u884C", "\u4EA4\u884C", "Bank of Communications"],
-    CCB: ["\u5EFA\u8BBE\u94F6\u884C", "\u5EFA\u884C", "China Construction Bank"],
-    ICBC: ["\u5DE5\u5546\u94F6\u884C", "\u5DE5\u884C", "Industrial and Commercial Bank of China"],
-    ABC: ["\u519C\u4E1A\u94F6\u884C", "\u519C\u884C", "Agricultural Bank of China"],
-    CITIC: ["\u4E2D\u4FE1\u94F6\u884C", "\u4E2D\u4FE1"],
-    CGB: ["\u5E7F\u53D1\u94F6\u884C", "\u5E7F\u53D1"],
-    CMB: ["\u62DB\u5546\u94F6\u884C", "\u62DB\u884C", "China Merchants Bank"],
-    PAB: ["\u5E73\u5B89\u94F6\u884C"],
-    SPDB: ["\u6D66\u53D1\u94F6\u884C", "\u6D66\u53D1"],
-    CIB: ["\u5174\u4E1A\u94F6\u884C"],
-    HXB: ["\u534E\u590F\u94F6\u884C"],
-    CMBC: ["\u6C11\u751F\u94F6\u884C", "\u6C11\u751F"],
-    CEB: ["\u5149\u5927\u94F6\u884C", "\u5149\u5927"],
-    CITI: ["\u82B1\u65D7\u94F6\u884C", "\u82B1\u65D7", "Citibank"],
-    SCB: ["\u6E23\u6253\u94F6\u884C", "\u6E23\u6253", "Standard Chartered"],
-    PSBC: ["\u90AE\u50A8\u94F6\u884C", "\u4E2D\u56FD\u90AE\u653F\u50A8\u84C4\u94F6\u884C"]
-  }
-};
-var ANCESTOR_OVERRIDES = {
-  category: {
-    dining_delivery_food: ["dining"]
-  }
-};
-var PROGRAM_INTENT_PATTERN = /(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?|rewards?|perks?|promotions?)/iu;
-var EXPLICIT_ALL_PATTERN = /(?:全部|所有|全量|\b(?:all|every)\b)/iu;
-var BROAD_CHINESE_PATTERN = /(?:visa\s*(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?)?\s*(?:都)?(?:有哪些|有那些|有什么|有什麼|有咩)|(?:有哪些|有那些|有什么|有什麼|有咩)\s*(?:visa\s*)?(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?))/iu;
-var BROAD_ENGLISH_PATTERN = /(?:\b(?:what|which)\b.{0,40}\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b|\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b.{0,40}\b(?:available|offered|exist)\b)/iu;
 function buildVisaTaxonomyIndex(payload) {
   const root = unwrapRecord2(payload);
   const index = Object.fromEntries(VISA_FILTER_AXES.map((axis) => [axis, []]));
@@ -31914,15 +32220,164 @@ function unwrapRecord2(value) {
 function isRecord26(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var ALIAS_OVERRIDES, ANCESTOR_OVERRIDES, PROGRAM_INTENT_PATTERN, EXPLICIT_ALL_PATTERN, BROAD_CHINESE_PATTERN, BROAD_ENGLISH_PATTERN;
+var init_taxonomy = __esm({
+  "dist/visa/taxonomy.js"() {
+    "use strict";
+    init_errors();
+    init_client();
+    ALIAS_OVERRIDES = {
+      purpose: {
+        outbound: ["\u51FA\u56FD\u65C5\u884C", "\u6D77\u5916\u65C5\u884C", "travel abroad"],
+        study: ["\u7559\u5B66", "\u6D77\u5916\u5B66\u4E60", "international student"],
+        local: ["\u672C\u5730\u4F18\u60E0", "local offers"],
+        inbound: ["\u6765\u534E\u65C5\u884C", "inbound tourism"],
+        haitao: ["\u8DE8\u5883\u8D2D\u7269", "overseas online shopping"]
+      },
+      region: {
+        hmt: ["\u6E2F\u6FB3\u53F0\u5730\u533A"],
+        kj: ["\u65E5\u672C\u97E9\u56FD", "japan korea"],
+        sea: ["\u4E1C\u5357\u4E9A\u5730\u533A"],
+        anz: ["\u6FB3\u5927\u5229\u4E9A\u65B0\u897F\u5170", "australia new zealand"],
+        global: ["\u5168\u4E16\u754C", "worldwide"],
+        hk: ["\u9999\u6E2F"],
+        mo: ["\u6FB3\u95E8", "macao"],
+        tw: ["\u53F0\u6E7E"],
+        kr: ["\u5357\u97E9", "korea"],
+        id: ["\u5370\u5C3C"],
+        au: ["\u6FB3\u6D32"],
+        gb: ["\u82F1\u683C\u5170", "uk", "britain"],
+        us: ["usa"],
+        ae: ["uae"],
+        sa: ["\u6C99\u7279"]
+      },
+      category: {
+        dining: ["\u5403\u996D", "\u7F8E\u98DF", "food"],
+        dining_restaurant: ["\u9910\u5385", "\u6B63\u9910"],
+        dining_cafe_bakery: ["\u5496\u5561", "\u70D8\u7119", "bakery"],
+        dining_bar: ["\u9152\u5427", "\u9152\u9986", "pub"],
+        dining_fast_casual: ["\u5FEB\u9910", "\u7B80\u9910", "fast food"],
+        dining_delivery_food: [
+          "\u5916\u5356",
+          "\u5916\u5356\u5238",
+          "food delivery",
+          "get food delivered",
+          "delivery offer"
+        ],
+        shopping: ["\u8D2D\u7269", "\u96F6\u552E", "retail"],
+        shopping_department_mall: ["\u767E\u8D27", "\u5546\u573A", "mall"],
+        shopping_supermarket: ["\u8D85\u5E02", "\u4FBF\u5229\u5E97"],
+        shopping_fashion: ["\u670D\u88C5", "\u978B\u5305", "fashion"],
+        shopping_luxury: ["\u5962\u534E\u8D2D\u7269", "luxury"],
+        shopping_beauty: ["\u7F8E\u5986", "\u62A4\u80A4", "beauty"],
+        shopping_jewelry_watches: ["\u73E0\u5B9D", "\u624B\u8868", "watches"],
+        shopping_electronics: ["\u6570\u7801", "\u7535\u5B50\u4EA7\u54C1"],
+        shopping_duty_free: ["\u514D\u7A0E", "duty-free"],
+        lodging: ["\u4F4F\u5BBF", "accommodation"],
+        lodging_hotel: ["\u996D\u5E97"],
+        lodging_apartment: ["\u6C11\u5BBF", "\u516C\u5BD3", "homestay"],
+        airfare: ["\u822A\u7A7A", "\u822A\u73ED", "flight"],
+        airfare_ticket: ["\u98DE\u673A\u7968"],
+        airfare_upgrade: ["\u5347\u8231"],
+        airfare_lounge: ["\u8D35\u5BBE\u5385", "\u673A\u573A\u4F11\u606F\u5BA4", "lounge"],
+        airfare_baggage: ["\u6258\u8FD0\u884C\u674E"],
+        ground_transport: ["\u4EA4\u901A\u51FA\u884C"],
+        transport_car_rental: ["car hire"],
+        transport_ride_taxi: ["\u6253\u8F66", "\u51FA\u79DF\u8F66", "\u7F51\u7EA6\u8F66", "taxi"],
+        transport_airport_transfer: ["\u63A5\u673A", "\u9001\u673A"],
+        transport_transit_rail: ["\u5730\u94C1", "\u706B\u8F66", "\u94C1\u8DEF", "rail"],
+        transport_fuel_parking: ["\u52A0\u6CB9", "\u5145\u7535", "\u505C\u8F66"],
+        travel_service: ["\u65C5\u6E38\u670D\u52A1"],
+        travel_visa: ["\u7B7E\u8BC1\u529E\u7406"],
+        travel_medical: ["\u65C5\u884C\u533B\u7597"],
+        travel_tour_activity: ["\u5F53\u5730\u6D3B\u52A8", "tour"],
+        travel_tax_refund: ["\u9000\u7A0E"],
+        travel_concierge: ["\u793C\u5BBE", "concierge"],
+        entertainment: ["\u5A31\u4E50"],
+        ent_attraction: ["\u666F\u70B9", "\u4E50\u56ED", "attraction"],
+        ent_cinema_show: ["\u7535\u5F71", "\u6F14\u51FA", "cinema"],
+        ent_culture: ["\u827A\u672F", "\u535A\u7269\u9986"],
+        ent_sports: ["\u8FD0\u52A8", "sports"],
+        ent_nightlife_gaming: ["\u591C\u751F\u6D3B", "gaming"],
+        wellness: ["\u517B\u751F", "health"],
+        wellness_spa_massage: ["spa", "\u6309\u6469"],
+        wellness_beauty_salon: ["\u7F8E\u53D1", "\u7F8E\u5BB9\u9662"],
+        wellness_fitness: ["gym"],
+        wellness_medical: ["\u4F53\u68C0"],
+        wellness_onsen: ["\u6CE1\u6C64"],
+        telecom: ["\u901A\u4FE1", "\u6F2B\u6E38"],
+        telecom_sim_esim: ["sim card", "esim"],
+        telecom_wifi: ["wifi"],
+        telecom_mobile: ["\u624B\u673A\u5957\u9910"],
+        financial_service: ["\u91D1\u878D"],
+        fin_fx: ["\u6362\u6C47", "\u6C47\u6B3E", "foreign exchange"],
+        fin_installment: ["\u5206\u671F"],
+        fin_insurance: ["\u7406\u8D22"],
+        education: ["\u6559\u80B2"],
+        edu_study_abroad: ["\u7559\u5B66\u4E2D\u4ECB"],
+        edu_course: ["\u57F9\u8BAD", "\u8BFE\u7A0B"],
+        edu_tuition: ["\u4EA4\u5B66\u8D39", "tuition"],
+        edu_student_living: ["\u5B66\u751F\u4F18\u60E0"]
+      },
+      reward_type: {
+        discount: ["\u6253\u6298"],
+        cashback: ["\u73B0\u91D1\u56DE\u9988", "cash back"],
+        coupon: ["\u5238", "\u4EE3\u91D1\u5238", "\u5151\u6362\u5238", "voucher"],
+        points: ["reward points"],
+        privilege: ["\u7279\u6743"],
+        gift: ["\u8D60\u54C1", "\u793C\u54C1"]
+      },
+      attribute: {
+        new_customer: ["\u65B0\u7528\u6237"],
+        online_only: ["\u4EC5\u7EBF\u4E0A"],
+        instore_only: ["\u4EC5\u5230\u5E97"],
+        app_exclusive: ["\u5E94\u7528\u4E13\u4EAB"],
+        reservation_required: ["\u9700\u8981\u9884\u7EA6"],
+        family_friendly: ["\u4EB2\u5B50"],
+        couple: ["\u60C5\u4FA3"],
+        group: ["\u56E2\u4F53"],
+        senior_friendly: ["\u8001\u4EBA\u53CB\u597D"],
+        exclusive: ["\u4F1A\u5458\u4E13\u5C5E"]
+      },
+      card_level: {
+        signature: ["\u5FA1\u73BA"],
+        infinite: ["\u65E0\u9650"],
+        all: ["\u4E0D\u9650\u5361\u7B49\u7EA7"]
+      },
+      card_issuer: {
+        BOC: ["\u4E2D\u56FD\u94F6\u884C", "\u4E2D\u884C", "Bank of China"],
+        BOCOM: ["\u4EA4\u901A\u94F6\u884C", "\u4EA4\u884C", "Bank of Communications"],
+        CCB: ["\u5EFA\u8BBE\u94F6\u884C", "\u5EFA\u884C", "China Construction Bank"],
+        ICBC: ["\u5DE5\u5546\u94F6\u884C", "\u5DE5\u884C", "Industrial and Commercial Bank of China"],
+        ABC: ["\u519C\u4E1A\u94F6\u884C", "\u519C\u884C", "Agricultural Bank of China"],
+        CITIC: ["\u4E2D\u4FE1\u94F6\u884C", "\u4E2D\u4FE1"],
+        CGB: ["\u5E7F\u53D1\u94F6\u884C", "\u5E7F\u53D1"],
+        CMB: ["\u62DB\u5546\u94F6\u884C", "\u62DB\u884C", "China Merchants Bank"],
+        PAB: ["\u5E73\u5B89\u94F6\u884C"],
+        SPDB: ["\u6D66\u53D1\u94F6\u884C", "\u6D66\u53D1"],
+        CIB: ["\u5174\u4E1A\u94F6\u884C"],
+        HXB: ["\u534E\u590F\u94F6\u884C"],
+        CMBC: ["\u6C11\u751F\u94F6\u884C", "\u6C11\u751F"],
+        CEB: ["\u5149\u5927\u94F6\u884C", "\u5149\u5927"],
+        CITI: ["\u82B1\u65D7\u94F6\u884C", "\u82B1\u65D7", "Citibank"],
+        SCB: ["\u6E23\u6253\u94F6\u884C", "\u6E23\u6253", "Standard Chartered"],
+        PSBC: ["\u90AE\u50A8\u94F6\u884C", "\u4E2D\u56FD\u90AE\u653F\u50A8\u84C4\u94F6\u884C"]
+      }
+    };
+    ANCESTOR_OVERRIDES = {
+      category: {
+        dining_delivery_food: ["dining"]
+      }
+    };
+    PROGRAM_INTENT_PATTERN = /(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?|rewards?|perks?|promotions?)/iu;
+    EXPLICIT_ALL_PATTERN = /(?:全部|所有|全量|\b(?:all|every)\b)/iu;
+    BROAD_CHINESE_PATTERN = /(?:visa\s*(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?)?\s*(?:都)?(?:有哪些|有那些|有什么|有什麼|有咩)|(?:有哪些|有那些|有什么|有什麼|有咩)\s*(?:visa\s*)?(?:权益|權益|优惠|優惠|礼遇|禮遇|活动|活動|offers?|benefits?))/iu;
+    BROAD_ENGLISH_PATTERN = /(?:\b(?:what|which)\b.{0,40}\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b|\bvisa\b.{0,40}\b(?:offers?|benefits?|rewards?|perks?|promotions?)\b.{0,40}\b(?:available|offered|exist)\b)/iu;
+  }
+});
 
 // dist/visa/service.js
-var BENEFIT_REQUIRED_SCOPE = "benefit:read";
-var BENEFIT_DEFAULT_POLL_SECONDS = 2;
-var POLL_SLOW_DOWN_SECONDS = 5;
-var VSRA_DEFAULT_POLL_SECONDS = 5;
-var ALL_OFFERS_PAGE_SIZE = 50;
-var ALL_OFFERS_MAX_PAGES = 100;
-var MERCHANT_CATEGORY_CODE_PATTERN = /^\d{4}$/u;
+import { createHash as createHash7, randomUUID as randomUUID5 } from "node:crypto";
 async function startVisaLogin(options2) {
   if (options2.dryRun) {
     throw validationError("--start cannot be combined with --dry-run");
@@ -32366,7 +32821,7 @@ async function getVisaStatus(options2) {
         vsraExpiresAt: visa.pendingVsraLogin?.expiresAt ?? null,
         benefitExpiresAt: visa.pendingBenefitLogin?.expiresAt ?? null
       },
-      configPath: "~/.clink-cli/config.json"
+      configPath: configPathDisplay()
     },
     storedConfig
   };
@@ -32773,7 +33228,7 @@ async function persistBenefitAuthorization(options2) {
       authorizationType: "oauth",
       replacedAuthorization: Boolean(replacedAuthorization),
       previousAuthorizationRevoked,
-      configPath: "~/.clink-cli/config.json"
+      configPath: configPathDisplay()
     },
     storedConfig: updated
   };
@@ -33163,6 +33618,28 @@ function isDryRun5(value) {
 function delay(milliseconds) {
   return new Promise((resolve6) => setTimeout(resolve6, milliseconds));
 }
+var BENEFIT_REQUIRED_SCOPE, BENEFIT_DEFAULT_POLL_SECONDS, POLL_SLOW_DOWN_SECONDS, VSRA_DEFAULT_POLL_SECONDS, ALL_OFFERS_PAGE_SIZE, ALL_OFFERS_MAX_PAGES, MERCHANT_CATEGORY_CODE_PATTERN;
+var init_service = __esm({
+  "dist/visa/service.js"() {
+    "use strict";
+    init_commerce_continuation();
+    init_config();
+    init_device_identity();
+    init_errors();
+    init_oauth();
+    init_url();
+    init_client();
+    init_state();
+    init_taxonomy();
+    BENEFIT_REQUIRED_SCOPE = "benefit:read";
+    BENEFIT_DEFAULT_POLL_SECONDS = 2;
+    POLL_SLOW_DOWN_SECONDS = 5;
+    VSRA_DEFAULT_POLL_SECONDS = 5;
+    ALL_OFFERS_PAGE_SIZE = 50;
+    ALL_OFFERS_MAX_PAGES = 100;
+    MERCHANT_CATEGORY_CODE_PATTERN = /^\d{4}$/u;
+  }
+});
 
 // dist/visa/commerce-cli.js
 function createVisaCommerceCliDependencies(context, commerceContext) {
@@ -34084,11 +34561,28 @@ function optionalBoolean2(value) {
 function isRecord28(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+var init_commerce_cli = __esm({
+  "dist/visa/commerce-cli.js"() {
+    "use strict";
+    init_cli();
+    init_auth_identity();
+    init_config();
+    init_errors();
+    init_utils();
+    init_commerce_context();
+    init_commerce_run();
+    init_commerce_continuation();
+    init_state();
+    init_service();
+    init_errors();
+    init_internal_ucp();
+    init_tool();
+    init_url();
+    init_benefit_catalog_provider();
+  }
+});
 
 // dist/visa/commerce-login-context.js
-var MAX_CONTEXT_BYTES3 = 64 * 1024;
-var MAJOR_AMOUNT_FORMAT2 = /^\d{1,18}(?:\.\d{1,2})?$/u;
-var CURRENCY_FORMAT3 = /^[A-Z]{3}$/u;
 async function readVisaCommerceLoginContext(flags) {
   return normalizeVisaCommerceLoginContext(await readVisaContextInput(flags, "visa commerce-login"));
 }
@@ -34181,6 +34675,20 @@ function deepFreeze2(value) {
   }
   return Object.freeze(value);
 }
+var MAX_CONTEXT_BYTES3, MAJOR_AMOUNT_FORMAT2, CURRENCY_FORMAT3;
+var init_commerce_login_context = __esm({
+  "dist/visa/commerce-login-context.js"() {
+    "use strict";
+    init_errors();
+    init_context_input();
+    init_commerce_context();
+    init_instruction_context2();
+    init_commerce_restriction();
+    MAX_CONTEXT_BYTES3 = 64 * 1024;
+    MAJOR_AMOUNT_FORMAT2 = /^\d{1,18}(?:\.\d{1,2})?$/u;
+    CURRENCY_FORMAT3 = /^[A-Z]{3}$/u;
+  }
+});
 
 // dist/visa/commerce-login.js
 async function runVisaCommerceLogin(context, options2, dependencies) {
@@ -34341,11 +34849,80 @@ function instructionStatus2(instruction) {
 function optionalText9(value) {
   return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
 }
+var init_commerce_login = __esm({
+  "dist/visa/commerce-login.js"() {
+    "use strict";
+    init_errors();
+    init_commerce_run();
+  }
+});
 
 // dist/visa/help.js
-var OUTPUT_OPTIONS2 = `  --format <json|pretty>        Output format, defaults to json
+function getVisaEditionHelpText(command, subcommand, nestedCommand) {
+  if (!command) {
+    return renderVisaHelp(addVisaRootHelp(getHelpText()).replace("Clink customer wallet CLI.", "Visa wallet CLI."));
+  }
+  if (command !== "visa") {
+    return getHelpText(command, subcommand, nestedCommand, VISA_EXECUTABLE_NAME);
+  }
+  let help;
+  switch (subcommand) {
+    case "init":
+      help = VISA_INIT_HELP;
+      break;
+    case "vsra-init":
+      help = VISA_VSRA_INIT_HELP;
+      break;
+    case "status":
+      help = VISA_STATUS_HELP;
+      break;
+    case "region":
+      help = VISA_REGION_HELP;
+      break;
+    case "recommend":
+      help = VISA_RECOMMEND_HELP;
+      break;
+    case "recommend-products":
+      help = VISA_RECOMMEND_PRODUCTS_HELP;
+      break;
+    case "detail":
+      help = VISA_DETAIL_HELP;
+      break;
+    case "taxonomy":
+      help = VISA_TAXONOMY_HELP;
+      break;
+    case "commerce-login":
+      help = VISA_COMMERCE_LOGIN_HELP;
+      break;
+    case "product-search":
+      help = VISA_PRODUCT_SEARCH_HELP;
+      break;
+    case "commerce-run":
+      help = VISA_COMMERCE_RUN_HELP;
+      break;
+    case "pending-instructions":
+      help = VISA_PENDING_INSTRUCTIONS_HELP;
+      break;
+    default:
+      help = VISA_HELP;
+  }
+  return renderVisaHelp(help);
+}
+function renderVisaHelp(help) {
+  return renderCliCommandText(help, VISA_EXECUTABLE_NAME);
+}
+function addVisaRootHelp(rootHelp) {
+  return rootHelp.replace("  wallet            Initialize wallet and inspect local wallet status\n", "  wallet            Initialize wallet and inspect local wallet status\n  visa              Sign in with Visa and discover Visa offers\n").replace("  clink wallet status --format pretty\n", '  clink wallet status --format pretty\n  clink visa init --sandbox --open\n  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty\n').replace("  clink wallet --help\n", "  clink wallet --help\n  clink visa --help\n").replace("Select an official environment with wallet init:", "Select an official environment with wallet init or visa init:");
+}
+var OUTPUT_OPTIONS2, VISA_HELP, VISA_PENDING_INSTRUCTIONS_HELP, VISA_PRODUCT_SEARCH_HELP, VISA_COMMERCE_LOGIN_HELP, VISA_COMMERCE_RUN_HELP, VISA_INIT_HELP, VISA_VSRA_INIT_HELP, VISA_STATUS_HELP, VISA_REGION_HELP, VISA_RECOMMEND_HELP, VISA_RECOMMEND_PRODUCTS_HELP, VISA_DETAIL_HELP, VISA_TAXONOMY_HELP;
+var init_help2 = __esm({
+  "dist/visa/help.js"() {
+    "use strict";
+    init_help();
+    init_command_branding();
+    OUTPUT_OPTIONS2 = `  --format <json|pretty>        Output format, defaults to json
   --help, -h                    Show this help`;
-var VISA_HELP = `clink visa
+    VISA_HELP = `clink visa
 
 Usage:
   clink visa init [options]
@@ -34395,7 +34972,7 @@ Examples:
   clink visa pending-instructions --open
   clink visa pending-instructions --instruction-id ins_xxx --payment-instrument-id pi_xxx --open
 `;
-var VISA_PENDING_INSTRUCTIONS_HELP = `clink visa pending-instructions
+    VISA_PENDING_INSTRUCTIONS_HELP = `clink visa pending-instructions
 
 Usage:
   clink visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>] [options]
@@ -34444,7 +35021,7 @@ Examples:
   clink visa pending-instructions --open
   clink visa pending-instructions --instruction-id ins_xxx --payment-instrument-id pi_xxx --open
 `;
-var VISA_PRODUCT_SEARCH_HELP = `clink visa product-search
+    VISA_PRODUCT_SEARCH_HELP = `clink visa product-search
 
 Usage:
   clink visa product-search --merchant-url <url> --query <text> [options]
@@ -34495,7 +35072,7 @@ Examples:
     --merchant-url https://merchant.example/store \\
     --query "meal voucher" --language en --selected-product-id sku_1 --format json
 `;
-var VISA_COMMERCE_LOGIN_HELP = `clink visa commerce-login
+    VISA_COMMERCE_LOGIN_HELP = `clink visa commerce-login
 
 Usage:
   clink visa commerce-login --context <json> [options]
@@ -34558,7 +35135,7 @@ Examples:
   clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --dry-run --format pretty
   clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --confirm-purchase --format json
 `;
-var VISA_COMMERCE_RUN_HELP = `clink visa commerce-run
+    VISA_COMMERCE_RUN_HELP = `clink visa commerce-run
 
 Usage:
   clink visa commerce-run --context <json> [options]
@@ -34712,7 +35289,7 @@ Examples:
   clink visa commerce-run --context '{"mode":"purchase",...}' --dry-run --format pretty
   clink visa commerce-run --context '{"mode":"purchase",...}' --confirm-purchase --format json
 `;
-var VISA_INIT_HELP = `clink visa init
+    VISA_INIT_HELP = `clink visa init
 
 Usage:
   clink visa init [options]
@@ -34750,11 +35327,11 @@ Behavior:
   so the server receives the frozen purchase intent. Successful completion reports
   pendingInstructionId when supplied by CWallet, without persisting it as long-lived authorization.
   Clink Access and Refresh Tokens plus agentClientId and visaRegistrationStatus are stored only in
-  ~/.clink-cli/config.json authorization. Only SUCCEEDED means Visa registration completed.
+  ~/.visa-cli/config.json authorization. Only SUCCEEDED means Visa registration completed.
   A login for the same customer replaces the previous authorization and best-effort revokes its
   Refresh Token family. A different customer is rejected instead of silently switching accounts.
 `;
-var VISA_VSRA_INIT_HELP = `clink visa vsra-init
+    VISA_VSRA_INIT_HELP = `clink visa vsra-init
 
 Usage:
   clink visa vsra-init [options]
@@ -34772,7 +35349,7 @@ Behavior:
   apiToken and recoverable Device Flow state are stored under the Visa section of the same CLI
   config file. VSRP provider Tokens are never exposed to or stored by the CLI.
 `;
-var VISA_STATUS_HELP = `clink visa status
+    VISA_STATUS_HELP = `clink visa status
 
 Usage:
   clink visa status [options]
@@ -34787,7 +35364,7 @@ Notes:
   Probes the selected VSRA token when present and reports Clink authorization metadata without
   printing Access Tokens, Refresh Tokens, deviceCode, OAuth state, email, or provider credentials.
 `;
-var VISA_REGION_HELP = `clink visa region
+    VISA_REGION_HELP = `clink visa region
 
 Usage:
   clink visa region get
@@ -34798,13 +35375,13 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
-  Stores the default Visa Benefit source region in ~/.clink-cli/config.json as
+  Stores the default Visa Benefit source region in ~/.visa-cli/config.json as
   visa.activeMarket. HK and CN use different VSRA endpoints. Missing config initializes to hk.
   This command is the only explicit market switch: a recommendation never changes the saved
   source. The source region is distinct from visa recommend --region, which filters where a
   Benefit is usable. The command never logs in or makes a Visa API request.
 `;
-var VISA_RECOMMEND_HELP = `clink visa recommend
+    VISA_RECOMMEND_HELP = `clink visa recommend
 
 Usage:
   clink visa recommend [natural language] [options]
@@ -34901,7 +35478,7 @@ Behavior:
   invalid; callers may separately infer one high-confidence four-digit MCC from authoritative
   metadata of that same selected Program.
 `;
-var VISA_RECOMMEND_PRODUCTS_HELP = `clink visa recommend-products
+    VISA_RECOMMEND_PRODUCTS_HELP = `clink visa recommend-products
 
 Usage:
   clink visa recommend-products <query> [filters]
@@ -34957,7 +35534,7 @@ Behavior:
   no-match with strictMatchFailure while successful broad products are still returned. A failed
   broad request reports partial coverage without hiding successful queries.
 `;
-var VISA_DETAIL_HELP = `clink visa detail
+    VISA_DETAIL_HELP = `clink visa detail
 
 Usage:
   clink visa detail <program-code> [options]
@@ -34969,7 +35546,7 @@ Options:
   --dry-run                    Print the Program request without executing it
 ${OUTPUT_OPTIONS2}
 `;
-var VISA_TAXONOMY_HELP = `clink visa taxonomy
+    VISA_TAXONOMY_HELP = `clink visa taxonomy
 
 Usage:
   clink visa taxonomy [options]
@@ -34981,62 +35558,8 @@ Options:
   --dry-run                    Print the taxonomy request without executing it
 ${OUTPUT_OPTIONS2}
 `;
-function getVisaEditionHelpText(command, subcommand, nestedCommand) {
-  if (!command) {
-    return renderVisaHelp(addVisaRootHelp(getHelpText()).replace("Clink customer wallet CLI.", "Visa wallet CLI."));
   }
-  if (command !== "visa") {
-    return getHelpText(command, subcommand, nestedCommand, VISA_EXECUTABLE_NAME);
-  }
-  let help;
-  switch (subcommand) {
-    case "init":
-      help = VISA_INIT_HELP;
-      break;
-    case "vsra-init":
-      help = VISA_VSRA_INIT_HELP;
-      break;
-    case "status":
-      help = VISA_STATUS_HELP;
-      break;
-    case "region":
-      help = VISA_REGION_HELP;
-      break;
-    case "recommend":
-      help = VISA_RECOMMEND_HELP;
-      break;
-    case "recommend-products":
-      help = VISA_RECOMMEND_PRODUCTS_HELP;
-      break;
-    case "detail":
-      help = VISA_DETAIL_HELP;
-      break;
-    case "taxonomy":
-      help = VISA_TAXONOMY_HELP;
-      break;
-    case "commerce-login":
-      help = VISA_COMMERCE_LOGIN_HELP;
-      break;
-    case "product-search":
-      help = VISA_PRODUCT_SEARCH_HELP;
-      break;
-    case "commerce-run":
-      help = VISA_COMMERCE_RUN_HELP;
-      break;
-    case "pending-instructions":
-      help = VISA_PENDING_INSTRUCTIONS_HELP;
-      break;
-    default:
-      help = VISA_HELP;
-  }
-  return renderVisaHelp(help);
-}
-function renderVisaHelp(help) {
-  return renderCliCommandText(help, VISA_EXECUTABLE_NAME);
-}
-function addVisaRootHelp(rootHelp) {
-  return rootHelp.replace("  wallet            Initialize wallet and inspect local wallet status\n", "  wallet            Initialize wallet and inspect local wallet status\n  visa              Sign in with Visa and discover Visa offers\n").replace("  clink wallet status --format pretty\n", '  clink wallet status --format pretty\n  clink visa init --sandbox --open\n  clink visa recommend "Visa\u6743\u76CA\u6709\u54EA\u4E9B" --format pretty\n').replace("  clink wallet --help\n", "  clink wallet --help\n  clink visa --help\n").replace("Select an official environment with wallet init:", "Select an official environment with wallet init or visa init:");
-}
+});
 
 // dist/visa/program-merchant.js
 function resolveVisaProgramMerchantRoute(input) {
@@ -35075,112 +35598,23 @@ function visaProgramId(ext) {
   const value = ext.visa_program_id;
   return typeof value === "string" && value.trim() ? value.trim() : void 0;
 }
+var init_program_merchant = __esm({
+  "dist/visa/program-merchant.js"() {
+    "use strict";
+    init_errors();
+  }
+});
 
 // dist/visa/edition.js
-var VISA_OPTION_DEFINITIONS = [
-  { name: "keyword", flags: "--keyword <text>" },
-  { name: "market", flags: "--market <market>" },
-  { name: "lang", flags: "--lang <locale>" },
-  { name: "personalized", flags: "--personalized" },
-  { name: "anonymous", flags: "--anonymous" },
-  {
-    name: "include-provider-products",
-    flags: "--include-provider-products"
-  },
-  {
-    name: "filter-sets",
-    flags: "--filter-sets <json>"
-  },
-  {
-    name: "include-broad-catalog",
-    flags: "--include-broad-catalog"
-  },
-  {
-    name: "broad-queries",
-    flags: "--broad-queries <json>"
-  },
-  { name: "start", flags: "--start" },
-  { name: "resume", flags: "--resume <resume-id>" },
-  { name: "browser-opened", flags: "--browser-opened" },
-  { name: "manual-completed", flags: "--manual-completed" },
-  { name: "selected-product-id", flags: "--selected-product-id <id>" }
-];
-var VISA_MULTI_VALUE_OPTIONS = /* @__PURE__ */ new Map([
-  ["--region", "region"],
-  ["--category", "category"],
-  ["--purpose", "purpose"],
-  ["--reward-type", "reward-type"],
-  ["--reward_type", "reward-type"],
-  ["--attribute", "attribute"],
-  ["--card-level", "card-level"],
-  ["--card_level", "card-level"],
-  ["--card-issuer", "card-issuer"],
-  ["--card_issuer", "card-issuer"]
-]);
-var VISA_FLAG_NAMES = [
-  "market",
-  "lang",
-  "personalized",
-  "anonymous",
-  "include-provider-products",
-  "filter-sets",
-  "include-broad-catalog",
-  "broad-queries",
-  "start",
-  "resume",
-  "browser-opened",
-  "manual-completed",
-  "region",
-  "category",
-  "purpose",
-  "reward-type",
-  "attribute",
-  "card-level",
-  "card-issuer",
-  "keyword",
-  "selected-product-id"
-];
-var VISA_RECOMMEND_FILTER_FLAG_NAMES = [
-  "region",
-  "category",
-  "purpose",
-  "reward-type",
-  "attribute",
-  "card-level",
-  "card-issuer",
-  "type",
-  "keyword",
-  "limit",
-  "page"
-];
-var VISA_OAUTH_SCOPE = [
-  ...OAUTH_DEFAULT_SCOPE.split(/\s+/u).filter((scope) => scope !== "offline_access"),
-  "benefit:read",
-  "offline_access"
-].join(" ");
-var VISA_EDITION = {
-  executableName: VISA_EXECUTABLE_NAME,
-  commandNames: ["visa"],
-  environmentSelectingInitCommands: ["visa"],
-  environmentSelectingCommands: [
-    { command: "visa", subcommand: "product-search" },
-    { command: "visa", subcommand: "recommend-products" }
-  ],
-  getHelpText: getVisaEditionHelpText,
-  oauthScope: VISA_OAUTH_SCOPE,
-  parseArgsOptions: {
-    optionDefinitions: VISA_OPTION_DEFINITIONS,
-    multiValueOptions: VISA_MULTI_VALUE_OPTIONS
-  },
-  validateArgs: validateVisaFlagScope,
-  prepareCommand: prepareVisaEditionCommand,
-  handleCommand: handleVisaEditionCommand,
-  configLifecycle: {
-    afterWalletLogin: recoverAfterWalletLogin,
-    afterWalletLogout: recoverAfterWalletLogout,
-    afterBaseUrlChange: recoverAfterBaseUrlChange
-  }
-};
+var edition_exports = {};
+__export(edition_exports, {
+  VISA_EDITION: () => VISA_EDITION,
+  VISA_MULTI_VALUE_OPTIONS: () => VISA_MULTI_VALUE_OPTIONS,
+  VISA_OAUTH_SCOPE: () => VISA_OAUTH_SCOPE,
+  VISA_OPTION_DEFINITIONS: () => VISA_OPTION_DEFINITIONS,
+  runVisaCli: () => runVisaCli
+});
+import { performance as performance2 } from "node:perf_hooks";
 function runVisaCli(argv, startedAt = performance2.timeOrigin + performance2.now()) {
   return runCli(argv, startedAt, VISA_EDITION);
 }
@@ -35516,7 +35950,7 @@ async function visaVsraInit(context) {
     provider: "vsra",
     market,
     source: result.source,
-    configPath: "~/.clink-cli/config.json"
+    configPath: configPathDisplay()
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -35553,7 +35987,7 @@ async function visaRegion(context) {
       market: region2,
       sourceEndpoint: sourceEndpoint2,
       supportedRegions: ["hk", "cn"],
-      configPath: "~/.clink-cli/config.json"
+      configPath: configPathDisplay()
     }, context.globalOptions.format);
     return EXIT_CODES.OK;
   }
@@ -35575,7 +36009,7 @@ async function visaRegion(context) {
     market: region,
     sourceEndpoint,
     supportedRegions: ["hk", "cn"],
-    configPath: "~/.clink-cli/config.json"
+    configPath: configPathDisplay()
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -36692,6 +37126,220 @@ function recoverAfterBaseUrlChange(previousBaseUrl, config) {
   config.visa = recoverVisaState(visa, void 0, Date.now());
   return config;
 }
+var VISA_OPTION_DEFINITIONS, VISA_MULTI_VALUE_OPTIONS, VISA_FLAG_NAMES, VISA_RECOMMEND_FILTER_FLAG_NAMES, VISA_OAUTH_SCOPE, VISA_EDITION;
+var init_edition = __esm({
+  "dist/visa/edition.js"() {
+    "use strict";
+    init_args();
+    init_command_branding();
+    init_cli();
+    init_domains();
+    init_config();
+    init_auth_identity();
+    init_errors();
+    init_instruction_context();
+    init_oauth();
+    init_output();
+    init_url();
+    init_utils();
+    init_client();
+    init_benefit_catalog_discovery();
+    init_commerce_cli();
+    init_pending_recovery();
+    init_benefit_catalog_provider();
+    init_commerce_login_context();
+    init_commerce_login();
+    init_commerce_context();
+    init_commerce_run();
+    init_selected_product_context();
+    init_help2();
+    init_service();
+    init_internal_ucp();
+    init_tool();
+    init_product_search();
+    init_program_merchant();
+    init_state();
+    VISA_OPTION_DEFINITIONS = [
+      { name: "keyword", flags: "--keyword <text>" },
+      { name: "market", flags: "--market <market>" },
+      { name: "lang", flags: "--lang <locale>" },
+      { name: "personalized", flags: "--personalized" },
+      { name: "anonymous", flags: "--anonymous" },
+      {
+        name: "include-provider-products",
+        flags: "--include-provider-products"
+      },
+      {
+        name: "filter-sets",
+        flags: "--filter-sets <json>"
+      },
+      {
+        name: "include-broad-catalog",
+        flags: "--include-broad-catalog"
+      },
+      {
+        name: "broad-queries",
+        flags: "--broad-queries <json>"
+      },
+      { name: "start", flags: "--start" },
+      { name: "resume", flags: "--resume <resume-id>" },
+      { name: "browser-opened", flags: "--browser-opened" },
+      { name: "manual-completed", flags: "--manual-completed" },
+      { name: "selected-product-id", flags: "--selected-product-id <id>" }
+    ];
+    VISA_MULTI_VALUE_OPTIONS = /* @__PURE__ */ new Map([
+      ["--region", "region"],
+      ["--category", "category"],
+      ["--purpose", "purpose"],
+      ["--reward-type", "reward-type"],
+      ["--reward_type", "reward-type"],
+      ["--attribute", "attribute"],
+      ["--card-level", "card-level"],
+      ["--card_level", "card-level"],
+      ["--card-issuer", "card-issuer"],
+      ["--card_issuer", "card-issuer"]
+    ]);
+    VISA_FLAG_NAMES = [
+      "market",
+      "lang",
+      "personalized",
+      "anonymous",
+      "include-provider-products",
+      "filter-sets",
+      "include-broad-catalog",
+      "broad-queries",
+      "start",
+      "resume",
+      "browser-opened",
+      "manual-completed",
+      "region",
+      "category",
+      "purpose",
+      "reward-type",
+      "attribute",
+      "card-level",
+      "card-issuer",
+      "keyword",
+      "selected-product-id"
+    ];
+    VISA_RECOMMEND_FILTER_FLAG_NAMES = [
+      "region",
+      "category",
+      "purpose",
+      "reward-type",
+      "attribute",
+      "card-level",
+      "card-issuer",
+      "type",
+      "keyword",
+      "limit",
+      "page"
+    ];
+    VISA_OAUTH_SCOPE = [
+      ...OAUTH_DEFAULT_SCOPE.split(/\s+/u).filter((scope) => scope !== "offline_access"),
+      "benefit:read",
+      "offline_access"
+    ].join(" ");
+    VISA_EDITION = {
+      executableName: VISA_EXECUTABLE_NAME,
+      commandNames: ["visa"],
+      environmentSelectingInitCommands: ["visa"],
+      environmentSelectingCommands: [
+        { command: "visa", subcommand: "product-search" },
+        { command: "visa", subcommand: "recommend-products" }
+      ],
+      getHelpText: getVisaEditionHelpText,
+      oauthScope: VISA_OAUTH_SCOPE,
+      parseArgsOptions: {
+        optionDefinitions: VISA_OPTION_DEFINITIONS,
+        multiValueOptions: VISA_MULTI_VALUE_OPTIONS
+      },
+      validateArgs: validateVisaFlagScope,
+      prepareCommand: prepareVisaEditionCommand,
+      handleCommand: handleVisaEditionCommand,
+      configLifecycle: {
+        afterWalletLogin: recoverAfterWalletLogin,
+        afterWalletLogout: recoverAfterWalletLogout,
+        afterBaseUrlChange: recoverAfterBaseUrlChange
+      }
+    };
+  }
+});
+
+// dist/entrypoint.js
+init_output();
+init_command_branding();
+var MAIN_HELP_COMMANDS = [
+  "install",
+  "update",
+  "wallet",
+  "card",
+  "risk",
+  "skills",
+  "pay",
+  "refund",
+  "ucp-checkout",
+  "ucp-catalog",
+  "catalog",
+  "ucp-order",
+  "instruction",
+  "events",
+  "tool",
+  "config"
+];
+async function runEntrypoint(runner, argv, helpCommands, executableName = MAIN_EXECUTABLE_NAME) {
+  try {
+    const exitCode = await runner(argv);
+    process.exitCode = exitCode;
+  } catch (error) {
+    process.exitCode = printError(error, detectErrorPresentation(argv, helpCommands, executableName));
+  }
+}
+function detectErrorPresentation(argv, helpCommands, executableName) {
+  const format = detectFormat(argv);
+  const explicitFormat = hasExplicitFormat(argv);
+  const helpHint = detectHelpHint(argv, helpCommands, executableName);
+  return {
+    format,
+    explicitFormat,
+    executableName,
+    ...!explicitFormat && helpHint ? { helpHint } : {}
+  };
+}
+function detectFormat(argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === "--format" && argv[index + 1] === "json") {
+      return "json";
+    }
+    if (token === "--format" && argv[index + 1] === "pretty") {
+      return "pretty";
+    }
+    if (token === "--format=json") {
+      return "json";
+    }
+    if (token === "--format=pretty") {
+      return "pretty";
+    }
+  }
+  return "json";
+}
+function hasExplicitFormat(argv) {
+  return argv.some((token) => token === "--format" || token.startsWith("--format="));
+}
+function detectHelpHint(argv, helpCommands, executableName) {
+  const command = argv.find((token) => !token.startsWith("-"));
+  if (!command) {
+    return `Run \`${executableName} --help\`.`;
+  }
+  if (helpCommands.includes(command)) {
+    return `Run \`${executableName} ${command} --help\`.`;
+  }
+  return `Run \`${executableName} --help\`.`;
+}
 
 // dist/visa-index.js
-void runEntrypoint(runVisaCli, process.argv.slice(2), [...MAIN_HELP_COMMANDS, "visa"], VISA_EXECUTABLE_NAME);
+init_command_branding();
+process.env.CLINK_CLI_CONFIG_DIRECTORY_NAME = "visa-cli";
+var { runVisaCli: runVisaCli2 } = await Promise.resolve().then(() => (init_edition(), edition_exports));
+void runEntrypoint(runVisaCli2, process.argv.slice(2), [...MAIN_HELP_COMMANDS, "visa"], VISA_EXECUTABLE_NAME);

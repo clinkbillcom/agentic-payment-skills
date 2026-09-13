@@ -130,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.71');
+  assert.equal(vendorPackage.version, '0.2.72');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c8eb9a711a12c88711ece53880fae515f3c2bfc6',
+    'eb67422ba3d2fdd1658cd61bc848b321f3ea1c2a',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -165,7 +165,7 @@ test('manual login exits with its link in stdout and an identical command resume
     assert.equal(result.resumeMode, 'same_command');
     assert.equal(result.checkoutStarted, false);
     assert.doesNotMatch(first.stderr, /manual-state/);
-    const configFile = join(home, '.clink-cli', 'config.json');
+    const configFile = join(home, '.visa-cli', 'config.json');
     const pending = JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin;
     assert.equal(pending.deviceCode, 'manual-device');
     const repeat = runWithMock(args, 'manual-login-resume', { home, timeout: 5000 });
@@ -289,7 +289,7 @@ test('Visa region switches the source only on an explicit set', async () => {
     assert.equal(selectedData.sourceEndpoint, 'https://vsra.offerpluscn.com');
 
     const config = JSON.parse(
-      await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
+      await readFile(join(home, '.visa-cli', 'config.json'), 'utf8'),
     );
     assert.equal(config.visa.activeMarket, 'cn');
 
@@ -344,7 +344,7 @@ test('Visa region switches the source only on an explicit set', async () => {
     assert.equal(hkSearchData.sourceRegion, 'cn');
     assert.equal(hkSearchData.sourceRegionReason, 'saved_or_default');
     const updatedConfig = JSON.parse(
-      await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
+      await readFile(join(home, '.visa-cli', 'config.json'), 'utf8'),
     );
     assert.equal(updatedConfig.visa.activeMarket, 'cn');
 
@@ -1055,7 +1055,7 @@ function eats365ProgramPurchaseContext() {
 
 async function createReadyVisaHome() {
   const home = await mkdtemp(join(tmpdir(), 'visa-skill-smoke-home-'));
-  const configDirectory = join(home, '.clink-cli');
+  const configDirectory = join(home, '.visa-cli');
   await mkdir(configDirectory, { recursive: true });
   const now = Date.now();
   const customerId = 'customer-smoke';
