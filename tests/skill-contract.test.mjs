@@ -10,6 +10,10 @@ const skill = await readFile(skillPath, 'utf8');
 const readme = await readFile(join(root, 'README.md'), 'utf8');
 const readmeZh = await readFile(join(root, 'README.zh.md'), 'utf8');
 const agent = await readFile(join(root, 'agents', 'openai.yaml'), 'utf8');
+const pendingReference = await readFile(
+  join(root, 'references', 'visa-pending-instructions.md'),
+  'utf8',
+);
 const combined = [skill, readme, readmeZh, agent].join('\n');
 const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const vendorPackage = JSON.parse(
@@ -35,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.90');
+  assert.equal(packageJson.version, '0.1.92');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -226,6 +230,33 @@ test('Quick Instruction keeps only current principles', () => {
   assert.match(section, /changed default PI stops/u);
   assert.match(section, /10 minutes/u);
   assert.match(section, /--browser-opened[\s\S]*--manual-completed/u);
+});
+
+test('activatable contract separates backend continuation from user-selected activation', () => {
+  assert.match(
+    skill,
+    /only binds a card and completes VIC[\s\S]*newest PENDING row by descending `createTime`/u,
+  );
+  assert.match(
+    skill,
+    /user actively chooses a PENDING Instruction[\s\S]*`bind-pi -> ordinary activation`/u,
+  );
+  assert.match(
+    skill,
+    /activatable` is a read-only recovery\/list\s+contract[\s\S]*does not itself select, bind, or activate/u,
+  );
+  assert.match(
+    pendingReference,
+    /backend continuation[\s\S]*descending `createTime`[\s\S]*bind-pi -> ordinary activation/u,
+  );
+});
+
+test('non-idempotent pending creation stays outside normal purchase matching', () => {
+  assert.match(skill, /non-idempotent Pending creator/u);
+  assert.match(skill, /always creates one new PENDING Instruction/u);
+  assert.match(skill, /pending-instruction create[\s\S]*explicit atomic\/test command only/u);
+  assert.match(skill, /unknown result[\s\S]*activatable[\s\S]*Retry at most once/u);
+  assert.match(agent, /pending-instruction create command is non-idempotent/u);
 });
 
 test('Skill keeps purchase, browser, payment, and delivery safety boundaries', () => {

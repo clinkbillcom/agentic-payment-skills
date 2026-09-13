@@ -14,6 +14,21 @@ GET /agent/cwallet/instructions/activatable
   -> return/open the exact Passkey activation URL or Portal list
 ```
 
+## Activation Path Boundary
+
+These are separate contracts:
+
+1. If the user only binds a card and completes VIC without selecting an
+   Instruction, backend continuation may activate the newest PENDING
+   Instruction by descending `createTime`. The Agent does not choose that row;
+   it exact-GETs the resulting ID and verifies `ACTIVE`.
+2. If the user actively selects a PENDING Instruction, preserve that exact ID
+   and use `bind-pi -> ordinary activation`. Never substitute the newest row or
+   create a replacement.
+
+`activatable` is a read-only list/recovery endpoint. It reports candidates and
+state; it does not imply that the Agent may select or activate a row.
+
 ## Status Mapping
 
 | Status | Meaning | Next action |
@@ -21,7 +36,7 @@ GET /agent/cwallet/instructions/activatable
 | `activation_ready` | Exact Instruction and VIC-ready card are known | Use the returned `activationUrl`; if the user completed it, rerun the original purchase flow |
 | `card_selection_required` | Several eligible cards and no explicit choice | Show masked card suffixes and ask the user; rerun with `--payment-instrument-id` |
 | `portal_binding_required` | No usable bound/VIC-ready card | Give `portalUrl`; the user binds/updates/selects a card |
-| `instruction_not_activatable` | Requested ID is not in the current pending list | Do not replace it; show the returned list/Portal URL |
+| `instruction_not_activatable` | Requested ID is not in the current pending list | Do not replace it or fall back to latest-by-`createTime`; show the returned list/Portal URL |
 | `select_in_portal` | Exact context is missing or ambiguous | Return `pendingInstructions[]` and let the user choose in Portal |
 | `none_pending` | Nothing remains activatable | Do not create or retry from this command alone |
 

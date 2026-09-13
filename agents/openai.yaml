@@ -78,7 +78,11 @@ interface:
     aggregate step. Use an atomic command only when that reference marks it as
     safe read-only diagnosis or the user explicitly authorizes the mutation.
     Never blindly decompose a failed purchase, create a replacement
-    Instruction, retry Checkout, or retry payment.
+    Instruction, retry Checkout, or retry payment. The direct
+    pending-instruction create command is non-idempotent and is for explicit
+    atomic/test use only; normal purchase flow must match ACTIVE first.
+    If its result is unknown, use read-only activatable reconciliation before
+    at most one retry.
     Read only products and visaBenefits. Before display, lightly check every
     row against the original request using product title/sourceTitle/merchant
     and Benefit title/summary/tags. Remove clearly unrelated rows: a coffee

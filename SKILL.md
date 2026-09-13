@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.90. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.92. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.90"
+  version: "0.1.92"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -257,6 +257,13 @@ For every authorized purchase:
   and requires reconfirmation. Checkout is created and completed at most once;
   never repeat either operation.
 
+The direct `POST /agent/cwallet/instructions/pending` capability is a
+non-idempotent Pending creator. It always creates one new PENDING Instruction;
+it does not match or reuse ACTIVE/PENDING/CREATED, select a card, or turn a
+VIC-ready card into CREATED. Normal purchase orchestration must check the
+selected PI's matching ACTIVE Instructions first and use the aggregate's
+ordinary or Pending branch instead of blindly calling this creator.
+
 These principles are the complete Skill-facing Quick contract. Detailed state
 combinations and regression cases belong in the development Skill, not here.
 
@@ -284,6 +291,21 @@ which Instruction is waiting, which card the CLI opened, which cards to choose
 from, or that the list page is where they pick and activate. Never construct
 the Passkey or Portal URL, never present the Portal home page as the
 activation link, and never fall back to creating or selecting another
+Instruction.
+
+There are two distinct activation paths:
+
+- If the user only binds a card and completes VIC without choosing an
+  Instruction, backend continuation may activate exactly one PENDING
+  Instruction: the newest PENDING row by descending `createTime`. This is not
+  Agent selection; exact-GET the resulting ID and verify `ACTIVE` before
+  Checkout.
+- If the user actively chooses a PENDING Instruction, preserve that exact ID
+  and use the normal `bind-pi -> ordinary activation` flow. Do not reinterpret
+  this as automatic latest-PENDING activation or replace the Instruction.
+
+`GET /agent/cwallet/instructions/activatable` is a read-only recovery/list
+contract for both cases. It does not itself select, bind, or activate an
 Instruction.
 
 ## Intent Routing
@@ -709,6 +731,13 @@ general workflow engine.
 - Recurring or scheduled use requires explicit cadence, per-run cap, currency,
   validity horizon, and pinned Instruction plus Mandate IDs. Missing scope
   stops; unattended execution never substitutes another authorization.
+- `pending-instruction create` is an explicit atomic/test command only. It
+  always creates a new PENDING Instruction and returns its exact ID; it is not
+  a normal-purchase fallback and must not be retried blindly.
+- If that non-idempotent create returns an unknown result, reconcile with the
+  read-only `activatable` query first. Retry at most once only when the
+  expected new Instruction is not found; otherwise stop and preserve the
+  identified Instruction.
 
 ### CAP-REFUND: Refund
 

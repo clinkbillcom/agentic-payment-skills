@@ -10845,7 +10845,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.69";
+var CLI_VERSION = "0.2.70";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -12531,6 +12531,7 @@ Commands:
   catalog           Search catalogs across merchants without naming one
   ucp-order         Query UCP orders and wait for digital delivery
   instruction       Manage purchase instruction mandates (agentic authorization)
+  pending-instruction Create a new non-idempotent PENDING instruction
   events            Poll the webhook-event queue for state-change events
   tool              Utility tools for UCP and checkout workflows
   config            Read and update local config
@@ -14103,6 +14104,40 @@ Examples:
   clink config unset customer-api-key
   clink config unset base-url
 `;
+var PENDING_INSTRUCTION_HELP = `clink pending-instruction
+
+Usage:
+  clink pending-instruction create [options]
+
+Action:
+  create    Always create one new PENDING Instruction through the Agent API
+
+Behavior:
+  This is a direct atomic command. It does not match or reuse ACTIVE, PENDING,
+  CREATED, or historical Instructions, does not select a card, and does not
+  open a browser or wait for activation. The endpoint is intentionally
+  non-idempotent: an unknown response must not be blindly retried. Use the
+  activatable Instruction query for read-only reconciliation before any retry.
+
+Options:
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array
+  --mandates-file <path>       UTF-8 JSON array file
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+  --is-recurring               Mark the instruction as recurring
+  --shipping-address <json>    Shipping address JSON object
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions/pending
+
+Examples:
+  clink pending-instruction create \\
+    --title "Test pending instruction" \\
+    --mandates '[{"title":"Test","description":"Test authorization","amountLimit":10.00,"currencyCode":"USD","merchantCategoryCode":"5411"}]' \\
+    --format json
+`;
 var INSTRUCTION_HELP = `clink instruction
 
 Usage:
@@ -14538,6 +14573,8 @@ function getRawHelpText(command, subcommand, nestedCommand) {
         default:
           return INSTRUCTION_HELP;
       }
+    case "pending-instruction":
+      return PENDING_INSTRUCTION_HELP;
     case "events":
       switch (subcommand) {
         case "poll":
@@ -22738,6 +22775,7 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "catalog",
   "ucp-order",
   "instruction",
+  "pending-instruction",
   "events",
   "tool",
   "config"
@@ -22815,6 +22853,8 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
       return handleUcpOrderCommand(subcommand, context);
     case "instruction":
       return handleInstructionCommand(subcommand, context);
+    case "pending-instruction":
+      return handlePendingInstructionCommand(subcommand, context);
     case "events":
       return handleEventsCommand(subcommand, context);
     case "tool":
@@ -23100,6 +23140,7 @@ function commandUsesCustomerAuthorization(command, subcommand) {
     case "ucp-checkout":
     case "ucp-order":
     case "instruction":
+    case "pending-instruction":
     case "events":
       return subcommand !== void 0;
     default:
@@ -25839,6 +25880,44 @@ async function handleInstructionCommand(subcommand, context) {
     default:
       throw validationError("unsupported instruction command");
   }
+}
+async function handlePendingInstructionCommand(subcommand, context) {
+  if (!subcommand) {
+    printContextHelp(context, "pending-instruction");
+    return EXIT_CODES.OK;
+  }
+  if (subcommand !== "create") {
+    throw validationError("unsupported pending-instruction command");
+  }
+  if (context.args.positionals.length > 2) {
+    throw validationError("pending-instruction create does not accept positional arguments");
+  }
+  const instructionContext = await buildQuickInstructionContext(context.args.flags, "pending-instruction create");
+  if (!instructionContext) {
+    throw validationError("pending-instruction create requires --title and --mandates or --mandates-file");
+  }
+  const result = await requestCommandPendingInstruction(context, instructionContext, context.globalOptions.dryRun);
+  if ("dryRun" in result) {
+    printSuccess(result, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const instructionId2 = asOptionalString(result.instructionId ?? result.purchaseInstructionId);
+  const status = asOptionalString(result.status ?? result.state);
+  if (!instructionId2 || status?.toUpperCase() !== "PENDING") {
+    throw apiError("pending-instruction create must return a new PENDING Instruction", 502);
+  }
+  printSuccess({
+    command: "pending-instruction create",
+    stage: "pending_instruction_create",
+    status: "created",
+    instructionId: instructionId2,
+    instructionStatus: "PENDING",
+    instruction: result,
+    createsInstruction: true,
+    idempotent: false,
+    retryAllowed: false
+  }, context.globalOptions.format);
+  return EXIT_CODES.OK;
 }
 async function instructionBody(context) {
   const flags = context.args.flags;

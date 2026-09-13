@@ -48,6 +48,12 @@ The aggregate error envelope is expected to expose `stage`, `status`, and
   atomic path creates one ordinary PI-bound Instruction.
 - If VIC/card setup is required, keep the one returned PENDING Instruction ID
   through the browser operation and final status check.
+- If the user only binds a card and completes VIC without selecting an
+  Instruction, backend continuation may activate the newest PENDING row by
+  descending `createTime`; exact-GET that resulting ID and verify `ACTIVE`.
+- If the user actively selects a PENDING Instruction, keep that ID and use the
+  normal `bind-pi -> ordinary activation` flow. These paths must not be
+  conflated.
 - If the default PI changed after freeze, stop and ask for reconfirmation.
 
 ## Browser And Timeout Recovery

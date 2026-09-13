@@ -74,8 +74,8 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.90` 已刷新 vendor，来源提交
-`9fb99b78de076530a2bf1e07fb794d6c498ac9dc` 的 Visa CLI `0.2.69`。本
+Skill `0.1.92` 已刷新 vendor，来源提交
+`9fb99b78de076530a2bf1e07fb794d6c498ac9dc` 的 Visa CLI `0.2.70`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；
@@ -100,6 +100,15 @@ product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商
 - 必须 exact-GET 验证 Instruction 为 ACTIVE 后才能 Checkout，Checkout 最多创建
   和完成各一次。
 
+绑卡并完成 VIC 但用户没有选择 Instruction 时，后端可顺带激活按
+`createTime` 倒序筛选的最新 PENDING；Agent 只校验后端返回的 exact ID 和
+ACTIVE 状态。用户主动选择 Pending 时，必须保留该 ID，走
+`bind-pi -> 普通激活`，不能改成最新 Pending 自动选择。
+
+`pending-instruction create` 是显式测试/原子命令，每次只创建新的
+PENDING Instruction，不匹配或复用已有 Instruction。创建结果未知时先用
+`activatable` 做只读确认，最多重试一次。
+
 ## 环境要求
 
 - Node.js 20 或更高版本
@@ -114,7 +123,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.90`
+Skill 版本：`0.1.92`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。
