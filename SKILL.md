@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.92. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.93. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.92"
+  version: "0.1.93"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -256,6 +256,12 @@ For every authorized purchase:
   selected PI/default rule. A changed default PI stops a default-based purchase
   and requires reconfirmation. Checkout is created and completed at most once;
   never repeat either operation.
+
+- Card/VIC readiness uses `GET /agent/cwallet/card/info`.
+  `cardSchemeRegistrationEnabled` means that a Visa card supports VIC;
+  `visaRegistrationSucceeded` or card-level `strongAuthRegistered` means VIC
+  is complete. These facts are separate. Capability false, unknown, or a
+  failed card-info read must not enter VIC or Checkout.
 
 The direct `POST /agent/cwallet/instructions/pending` capability is a
 non-idempotent Pending creator. It always creates one new PENDING Instruction;

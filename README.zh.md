@@ -74,7 +74,7 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.92` 已刷新 vendor，来源提交
+Skill `0.1.93` 已刷新 vendor，来源提交
 `9fb99b78de076530a2bf1e07fb794d6c498ac9dc` 的 Visa CLI `0.2.70`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
@@ -109,6 +109,12 @@ ACTIVE 状态。用户主动选择 Pending 时，必须保留该 ID，走
 PENDING Instruction，不匹配或复用已有 Instruction。创建结果未知时先用
 `activatable` 做只读确认，最多重试一次。
 
+卡是否支持 VIC 使用 `GET /agent/cwallet/card/info` 的
+`cardSchemeRegistrationEnabled`，是否完成 VIC 使用
+`visaRegistrationSucceeded` 或卡级 `strongAuthRegistered`。支持能力和完成
+状态必须分开判断；能力为 false、字段未知或接口读取失败时，不进入 VIC 或
+Checkout。
+
 ## 环境要求
 
 - Node.js 20 或更高版本
@@ -123,7 +129,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.92`
+Skill 版本：`0.1.93`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

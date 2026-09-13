@@ -9834,21 +9834,38 @@ function cardSchemeText(card) {
 function cardSchemeIsVisa(card) {
   return cardSchemeText(card) === "VISA";
 }
+function resolveVisaVicCapability(card) {
+  if (!cardSchemeIsVisa(card)) {
+    return "unsupported";
+  }
+  if (typeof card.cardSchemeRegistrationEnabled === "boolean") {
+    return card.cardSchemeRegistrationEnabled ? "supported" : "unsupported";
+  }
+  return "unknown";
+}
+function resolveVisaRegistrationCompletion(card) {
+  if (typeof card.strongAuthRegistered === "boolean") {
+    if (!card.strongAuthRegistered) {
+      return false;
+    }
+    const authProtocol = optionalText(card.authProtocol)?.toUpperCase();
+    return !authProtocol || authProtocol === "VISA";
+  }
+  return typeof card.visaRegistrationSucceeded === "boolean" ? card.visaRegistrationSucceeded : void 0;
+}
 function resolveVisaVicReadiness(card) {
   if (!cardSchemeIsVisa(card)) {
     return "not_ready";
   }
-  if (typeof card.strongAuthRegistered === "boolean") {
-    if (!card.strongAuthRegistered) {
-      return "not_ready";
-    }
-    const authProtocol = optionalText(card.authProtocol)?.toUpperCase();
-    return !authProtocol || authProtocol === "VISA" ? "ready" : "not_ready";
+  const capability = resolveVisaVicCapability(card);
+  if (capability === "unsupported") {
+    return "not_ready";
   }
-  if (typeof card.visaRegistrationSucceeded === "boolean") {
-    return card.visaRegistrationSucceeded ? "ready" : "not_ready";
+  if (capability === "unknown") {
+    return "unknown";
   }
-  return "unknown";
+  const completion = resolveVisaRegistrationCompletion(card);
+  return completion === void 0 ? "unknown" : completion ? "ready" : "not_ready";
 }
 function visaVicReady(card) {
   return resolveVisaVicReadiness(card) === "ready";
@@ -9858,7 +9875,8 @@ function visaVicReadinessEvidence(card) {
     vicReadiness: resolveVisaVicReadiness(card),
     ...typeof card.strongAuthRegistered === "boolean" ? { strongAuthRegistered: card.strongAuthRegistered } : {},
     ...optionalText(card.authProtocol) ? { authProtocol: optionalText(card.authProtocol) } : {},
-    ...typeof card.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: card.visaRegistrationSucceeded } : {}
+    ...typeof card.visaRegistrationSucceeded === "boolean" ? { visaRegistrationSucceeded: card.visaRegistrationSucceeded } : {},
+    ...typeof card.cardSchemeRegistrationEnabled === "boolean" ? { cardSchemeRegistrationEnabled: card.cardSchemeRegistrationEnabled } : {}
   };
 }
 
@@ -10845,7 +10863,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.70";
+var CLI_VERSION = "0.2.71";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -24213,6 +24231,16 @@ async function resolveBindingLink(context, targetPath) {
   const url = buildAgentPortalUrl(bindingUrl, resolveAgentBaseUrl(context.runtimeConfig.baseUrl), targetPath, context.runtimeConfig.email);
   return { dryRun: false, data, url };
 }
+async function resolveCardInfo(context) {
+  const result = await callCardInfo(context);
+  if (isDryRun3(result)) {
+    return { dryRun: true, result };
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  await cachePaymentMethods(context, data.paymentMethodsVoList);
+  return { dryRun: false, data };
+}
 async function callBindingLink(context) {
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
@@ -24223,6 +24251,20 @@ async function callBindingLink(context) {
       customerId: runtimeConfig.customerId,
       hasCustomerApiKey: !runtimeConfig.authorization && Boolean(runtimeConfig.customerApiKey)
     },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: context.globalOptions.dryRun
+  }));
+  if (!isDryRun3(result)) {
+    assertApiSuccess(result.status, result.body);
+  }
+  return result;
+}
+async function callCardInfo(context) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: "/agent/cwallet/card/info",
+    headers: buildCustomerHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: context.globalOptions.dryRun
   }));
@@ -25660,10 +25702,10 @@ function toUcpCheckoutCardContext(method) {
     return {};
   }
   const brand = typeof method.cardScheme === "string" ? method.cardScheme : method.cardBrand;
-  const hasRegistrationSignal = typeof method.strongAuthRegistered === "boolean" || typeof method.visaRegistrationSucceeded === "boolean";
+  const registrationCompletion = resolveVisaRegistrationCompletion(method);
   return {
     ...typeof brand === "string" && brand.trim() ? { cardScheme: brand.trim() } : {},
-    ...hasRegistrationSignal ? { visaRegistrationSucceeded: visaVicReady(method) } : {}
+    ...registrationCompletion !== void 0 ? { visaRegistrationSucceeded: registrationCompletion } : {}
   };
 }
 function buildUcpCheckoutCompleteBody(customerId, paymentInstrumentId, card) {
@@ -29393,6 +29435,17 @@ function resolvePendingRecovery(input) {
       reason: "multiple_vic_ready_visa_cards_without_one_default"
     };
   }
+  if (selection.action === "unavailable") {
+    return {
+      status: "portal_binding_required",
+      context: "exact",
+      instructionId: instructionId2,
+      instructionStatus: status,
+      portalUrl,
+      reason: selection.reason === "visa_vic_capability_unknown" ? "card_vic_capability_unknown" : "no_vic_capable_visa_card",
+      cards: (selection.cards ?? enabledVisa).map(safeCard)
+    };
+  }
   return {
     status: "portal_binding_required",
     context: "exact",
@@ -29848,7 +29901,8 @@ async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds
       stage: "card_selection",
       status: "unavailable",
       terminal: true,
-      reason: selection.reason
+      reason: selection.reason,
+      ...selection.cards ? { cards: selection.cards.map(safeCard) } : {}
     };
   }
   return { ready: true, card: selection.card };
@@ -29895,7 +29949,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
       stage: "card_verification",
       status: "failed",
       terminal: true,
-      reason: "pending_endpoint_reported_card_ready_but_refresh_found_no_vic_ready_visa",
+      reason: selection.action === "unavailable" ? selection.reason : "pending_endpoint_reported_card_ready_but_refresh_found_no_vic_ready_visa",
       pendingStatus: pending.instructionStatus,
       createsAnotherInstruction: false,
       paymentRetryAllowed: false
@@ -30233,32 +30287,54 @@ function selectVisaCard(cards, requestedPaymentInstrumentId) {
     if (!selected) {
       return { action: "unavailable", reason: "requested_payment_instrument_not_found" };
     }
-    return cardIsVisa(selected) && cardVicReady(selected) ? { action: "use", card: selected } : {
+    if (!cardIsVisa(selected)) {
+      return { action: "unavailable", reason: "requested_payment_instrument_not_visa" };
+    }
+    if (cardVicReady(selected)) {
+      return { action: "use", card: selected };
+    }
+    const capability = resolveVisaVicCapability(selected);
+    return capability === "supported" ? {
       action: "unavailable",
-      reason: cardIsVisa(selected) ? "requested_payment_instrument_not_vic_ready" : "requested_payment_instrument_not_visa"
+      reason: resolveVisaVicReadiness(selected) === "unknown" ? "requested_payment_instrument_vic_readiness_unknown" : "requested_payment_instrument_not_vic_ready"
+    } : {
+      action: "unavailable",
+      reason: capability === "unknown" ? "requested_payment_instrument_vic_capability_unknown" : "requested_payment_instrument_vic_unsupported"
     };
   }
   const visaCards = enabled.filter(cardIsVisa);
+  const unknownCards = visaCards.filter((card) => resolveVisaVicCapability(card) === "unknown");
+  if (unknownCards.length > 0) {
+    return {
+      action: "unavailable",
+      reason: "visa_vic_capability_unknown",
+      cards: visaCards
+    };
+  }
   const readyCards = visaCards.filter(cardVicReady);
   if (readyCards.length === 0) {
-    return { action: "add" };
+    if (visaCards.length === 0) {
+      return { action: "add" };
+    }
+    return visaCards.some((card) => resolveVisaVicCapability(card) === "supported") ? { action: "add" } : {
+      action: "unavailable",
+      reason: "no_vic_capable_visa_card",
+      cards: visaCards
+    };
   }
   const defaultCards = readyCards.filter(cardDefault);
   if (defaultCards.length === 1) {
     return { action: "use", card: defaultCards[0] };
   }
-  if (readyCards.length === 1) {
-    return { action: "use", card: readyCards[0] };
-  }
   return { action: "select", cards: readyCards };
 }
 function selectExistingVisaCardForVic(cards) {
   const visaCards = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card));
-  if (visaCards.some(cardVicReady)) {
+  if (visaCards.some((card) => resolveVisaVicCapability(card) !== "supported" || cardVicReady(card))) {
     return void 0;
   }
   const defaults = visaCards.filter(cardDefault);
-  const selected = visaCards.length === 1 ? visaCards[0] : defaults.length === 1 ? defaults[0] : void 0;
+  const selected = defaults.length === 1 ? defaults[0] : void 0;
   return selected && resolveVisaVicReadiness(selected) === "not_ready" ? selected : void 0;
 }
 async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, browserAction) {
@@ -33089,13 +33165,10 @@ function delay(milliseconds) {
 }
 
 // dist/visa/commerce-cli.js
-var CARD_SETUP_PATH2 = "/payment-method-setup";
 function createVisaCommerceCliDependencies(context, commerceContext) {
   const loginBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
   assertCommerceEnvironment(context, commerceContext.environment, loginBaseUrl);
   const loginDependencies = createVisaBenefitLoginCliDependencies(context, commerceContext.environment);
-  let preparedCardSetup;
-  let bindingResolution;
   const fingerprint = commerceFingerprint({
     context: commerceContext,
     identity: runtimeAuthorizationIdentity(context.runtimeConfig),
@@ -33159,21 +33232,11 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
       };
     },
     refreshCards: async () => {
-      try {
-        const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
-        if (prepared.dryRun) {
-          throw apiError("card refresh unexpectedly produced a dry-run response");
-        }
-        bindingResolution = { status: "ready", url: prepared.url };
-        preparedCardSetup = {
-          url: prepared.url,
-          cards: normalizeCards(prepared.data.paymentMethodsVoList)
-        };
-        return preparedCardSetup.cards;
-      } catch (error) {
-        bindingResolution = { status: "failed", error };
-        throw error;
+      const info = await resolveCardInfo(context);
+      if (info.dryRun) {
+        throw apiError("card refresh unexpectedly produced a dry-run response");
       }
+      return normalizeCards(info.data.paymentMethodsVoList);
     },
     preparePendingInstruction: ({ instructionContext, maxWaitSeconds }) => prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, {
       portalManaged: true,
@@ -33184,8 +33247,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
           if (id)
             await loginDependencies.saveQuickInstructionContinuation?.(instructionContext, id, optionalText8(detail.paymentInstrumentId ?? detail.payment_instrument_id));
         }
-      },
-      ...bindingResolution ? { bindingResolution } : {}
+      }
     }),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
     openUserAction: async (url) => {
@@ -33237,11 +33299,11 @@ function createVisaPendingRecoveryCliDependencies(context) {
   return {
     listPendingInstructions: () => listCommandPendingInstructions(context),
     refreshCards: async () => {
-      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH2);
-      if (prepared.dryRun) {
+      const info = await resolveCardInfo(context);
+      if (info.dryRun) {
         throw apiError("card refresh unexpectedly produced a dry-run response");
       }
-      return normalizeCards(prepared.data.paymentMethodsVoList);
+      return normalizeCards(info.data.paymentMethodsVoList);
     },
     knownInstructionIds: async () => {
       const continuations = (await readStoredConfig()).visa?.quickInstructionContinuations ?? {};
@@ -33256,7 +33318,7 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
   const baseUrl = visaCommerceApiBaseUrl(environment);
   assertCommerceEnvironment(context, environment, baseUrl);
   const refreshCards = async () => {
-    const cards = await resolveBindingLink(context, CARD_SETUP_PATH2);
+    const cards = await resolveCardInfo(context);
     if (cards.dryRun) {
       throw apiError("card readiness unexpectedly produced a dry-run response");
     }
