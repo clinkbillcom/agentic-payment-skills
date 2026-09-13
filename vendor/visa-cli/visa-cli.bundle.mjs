@@ -30716,6 +30716,23 @@ async function ensureVisaCardReady(dependencies, purchaseContext, maxWaitSeconds
       ...workflowFailure("card_refresh", error)
     };
   }
+  if (purchaseContext && !resumePaymentInstrumentId) {
+    const defaultCard = selectDefaultVisaCardForInstruction(cards);
+    if (defaultCard && defaultCard.strongAuthRegistered === true) {
+      const regular = await resolveRegularInstruction(purchaseContext, defaultCard.paymentInstrumentId, dependencies, maxWaitSeconds, browserAction, cardVicReady(defaultCard));
+      if (regular.instruction) {
+        return { ready: true, card: defaultCard, instruction: regular.instruction };
+      }
+      if (regular.result.reason !== "no_matching_active_instruction") {
+        return {
+          ready: false,
+          ...regular.result,
+          paymentInstrumentId: defaultCard.paymentInstrumentId,
+          card: safeCard(defaultCard)
+        };
+      }
+    }
+  }
   const selection = selectVisaCard(cards, resumePaymentInstrumentId);
   if (selection.action === "add") {
     if (!purchaseContext) {
@@ -31175,6 +31192,10 @@ function selectVisaCard(cards, requestedPaymentInstrumentId) {
   }
   return { action: "select", cards: readyCards };
 }
+function selectDefaultVisaCardForInstruction(cards) {
+  const defaults = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card) && cardDefault(card));
+  return defaults.length === 1 ? defaults[0] : void 0;
+}
 function selectExistingVisaCardForVic(cards) {
   const visaCards = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card));
   if (visaCards.some((card) => resolveVisaVicCapability(card) !== "supported" || cardVicReady(card))) {
@@ -31184,7 +31205,7 @@ function selectExistingVisaCardForVic(cards) {
   const selected = defaults.length === 1 ? defaults[0] : void 0;
   return selected && resolveVisaVicReadiness(selected) === "not_ready" ? selected : void 0;
 }
-async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, browserAction) {
+async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, browserAction, createIfMissing = true) {
   const continuation = await dependencies.getContinuation?.();
   if (continuation) {
     const exact = await dependencies.getInstruction(continuation.instructionId);
@@ -31315,6 +31336,16 @@ async function resolveRegularInstruction(context, paymentInstrumentId, dependenc
         amountLimit: active.amountLimit
       },
       result: {}
+    };
+  }
+  if (!createIfMissing) {
+    return {
+      result: {
+        stage: "instruction_selection",
+        status: "none",
+        terminal: false,
+        reason: "no_matching_active_instruction"
+      }
     };
   }
   let created;
