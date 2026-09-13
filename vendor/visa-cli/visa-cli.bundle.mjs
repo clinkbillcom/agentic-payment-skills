@@ -26556,6 +26556,26 @@ async function getCommandInstruction(context, instructionId2) {
   }
   return data;
 }
+async function bindCommandInstruction(context, instructionId2, paymentInstrumentId) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId2)}/bind-pi`,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body: { paymentInstrumentId },
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("instruction bind-pi unexpectedly produced a dry-run response");
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord18(data)) {
+    throw apiError("invalid instruction bind-pi response", 502);
+  }
+  return data;
+}
 async function instructionSignUrl(context) {
   const flags = context.args.flags;
   const paymentInstrumentId = requireStringFlag(flags, "missing --payment-instrument-id", "payment-instrument-id");
@@ -31084,6 +31104,23 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
         cards: enabledVisa.map(safeCard)
       };
     }
+    if (instructionStatus(instruction) === "PENDING") {
+      let bound;
+      try {
+        bound = await dependencies.bindPendingInstruction(quick.instructionId, card.paymentInstrumentId);
+      } catch (error) {
+        return failure("quick_instruction_bind_pi_failed", {
+          paymentInstrumentId: card.paymentInstrumentId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      if (instructionId(bound) !== quick.instructionId || instructionStatus(bound) !== "CREATED" || instructionPaymentInstrumentId(bound) !== card.paymentInstrumentId) {
+        return failure("quick_instruction_bind_pi_invalid_response", {
+          paymentInstrumentId: card.paymentInstrumentId
+        });
+      }
+      instruction = bound;
+    }
     const stage = cardVicReady(card) ? "instruction" : "vic";
     const url = dependencies.passkeyUrl(card.paymentInstrumentId, quick.instructionId);
     const manual = {
@@ -34268,6 +34305,7 @@ function createVisaCommerceCliDependencies(context, commerceContext, agentState)
       };
     },
     getInstruction: (instructionId2) => getCommandInstruction(context, instructionId2),
+    bindPendingInstruction: (instructionId2, paymentInstrumentId) => bindCommandInstruction(context, instructionId2, paymentInstrumentId),
     listInstructions: (paymentInstrumentId) => listCommandInstructions(context, paymentInstrumentId),
     listPendingInstructions: () => listCommandPendingInstructions(context),
     createInstruction: async ({ paymentInstrumentId, instructionContext }) => {

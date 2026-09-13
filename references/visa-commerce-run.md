@@ -62,6 +62,10 @@ read-only Checkout recovery only.
   atomic path creates one ordinary PI-bound Instruction.
 - If VIC/card setup is required, keep the one returned PENDING Instruction ID
   through the browser operation and final status check.
+- If the exact Quick PENDING Instruction has a selected/bound PI,
+  `commerce-run` calls `POST /agent/cwallet/instructions/{instructionId}/bind-pi`
+  first, verifies the same ID is `CREATED`, and only then returns the ordinary
+  Passkey authorization operation.
 - If the user only binds a card and completes VIC without selecting an
   Instruction, backend continuation may activate the newest PENDING row by
   descending `createTime`; exact-GET that resulting ID and verify `ACTIVE`.

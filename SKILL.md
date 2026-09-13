@@ -244,6 +244,10 @@ For every authorized purchase:
   Instruction for the exact selected PI and purchase operation.
 - Never reuse PENDING or CREATED as another purchase's match. The PENDING
   `instructionId` stays fixed through VIC, Passkey, and activation.
+- If a Quick PENDING Instruction has a selected/bound PI, `commerce-run`
+  first calls the Agent `/agent/cwallet/instructions/{instructionId}/bind-pi`
+  operation and requires the same Instruction to become `CREATED`; only then
+  does it present the Passkey authorization page.
 - If no default PI exists, do not choose a card implicitly. Create the pending
   purchase operation, return Agent Portal card management, and re-read the
   default after the user acts. An explicit alternate PI may be used without
