@@ -2,8 +2,8 @@
   "name": "visa-cli-vendored",
   "version": "0.2.76",
   "upstreamPackage": "@clink-ai/clink-cli",
-  "upstreamCommit": "db270edd39d283abf27291fbe664cc15a3f9f75c",
-  "bundleSha256": "ce4919f84cd0daf9e8ae6560bfb831b80f1f2dc508857e6917fe362005be7234",
+  "upstreamCommit": "94c77c40cc91bcea19b3adaab086c4bcab3dd199",
+  "bundleSha256": "8538958fc08b7461abc19684340e7f7fffa259518f837d8eb326cbca01526b7e",
   "private": true,
   "type": "module",
   "bin": {

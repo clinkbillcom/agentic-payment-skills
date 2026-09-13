@@ -41,10 +41,12 @@ The aggregate error envelope is expected to expose `stage`, `status`, and
 `recovery`. Preserve these fields when explaining the failure.
 
 When `--purchase-instruction-id <id>` is supplied, the aggregate uses only that
-exact Instruction. It must be ACTIVE, bound to the selected PI, unconsumed, and
-an exact usable match for the frozen purchase context. A non-ACTIVE or
-mismatched Instruction is a terminal error; do not create or activate a
-replacement.
+exact Instruction. The CLI exact-GETs it and requires the same ID, ACTIVE
+status, the selected PI, future expiry, sufficient amount limit, and an
+unused/unreserved mandate. It does not re-compare the old Instruction's
+merchant scope with merchant fields regenerated for this commerce-run;
+Checkout uses the current verified order context. A failed required check is
+terminal; do not create or activate a replacement.
 
 Continuation state is supplied by the Agent, not restored from CLI files:
 `--instruction-id <id> --phase <pending|authorization|checkout_started>` and,

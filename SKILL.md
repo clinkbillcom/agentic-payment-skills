@@ -802,8 +802,12 @@ after the watch completes, exact-read the same `instructionId` and require
   always creates a new PENDING Instruction and returns its exact ID; it is not
   a normal-purchase fallback and must not be retried blindly.
 - Use `visa commerce-run --purchase-instruction-id <id>` only after the user
-  has activated that exact Instruction. It must be ACTIVE and match the frozen
-  purchase context; a mismatch is terminal and does not create a replacement.
+  has activated that exact Instruction. The CLI exact-GETs that ID. It must be ACTIVE,
+  have the same ID, selected PI, future expiry, enough amount limit, and an
+  unused/unreserved mandate. It does not require the old
+  Instruction's merchant scope to be textually identical to regenerated
+  commerce-run fields; Checkout uses the current verified order context. A
+  failed required check is terminal and never creates a replacement.
 - Login for this Visa Skill uses `visa init`, not `wallet init`. Use
   `wallet init` only for the Main CLI.
 

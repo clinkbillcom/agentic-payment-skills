@@ -30470,7 +30470,7 @@ async function runVisaCommerce(context, options2, dependencies) {
   const paymentInstrumentId = card.paymentInstrumentId;
   let instruction = cardResult.instruction;
   if (explicitInstruction) {
-    const candidate = activeInstructionCandidate(explicitInstruction, paymentInstrumentId, context, Date.now());
+    const candidate = activeInstructionCandidate(explicitInstruction, paymentInstrumentId, context, Date.now(), false);
     if (!candidate) {
       return {
         command: "visa commerce-run",
@@ -31542,7 +31542,7 @@ function selectActiveInstruction(payload, paymentInstrumentId, context, nowMs) {
     candidate: latest[0]
   };
 }
-function activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs) {
+function activeInstructionCandidate(instruction, paymentInstrumentId, context, nowMs, requireMerchantScope = true) {
   if (instructionStatus(instruction) !== "ACTIVE") {
     return void 0;
   }
@@ -31559,7 +31559,7 @@ function activeInstructionCandidate(instruction, paymentInstrumentId, context, n
   const expectedAmount = majorAmountMinorUnits(context.purchaseContext.totalPrice, context.purchaseContext.currency);
   const eligibleMandates = mandateArray(instruction).flatMap((mandate) => {
     const amountMinorUnits = candidateAmountMinorUnits(mandate.amountLimit, context.purchaseContext.currency);
-    if (!optionalText7(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
+    if (!optionalText7(mandate.mandateId ?? mandate.mandateNo ?? mandate.mandate_id ?? mandate.id) || amountMinorUnits === void 0 || amountMinorUnits < expectedAmount || normalizedText3(mandate.currencyCode ?? mandate.currency) !== expectedCurrency || normalizedText3(mandate.merchantCategoryCode ?? mandate.merchant_category_code) !== normalizedText3(context.purchaseContext.merchantCategoryCode) || requireMerchantScope && !merchantScopeMatchesContext(mandate, context) || !mandateIsUnexpired(mandate, instruction, nowMs) || oneTimeInstruction(instruction) && !zeroLike(mandate.reserveStatus)) {
       return [];
     }
     return [{
