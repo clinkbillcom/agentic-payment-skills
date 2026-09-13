@@ -4996,7 +4996,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.72";
+    CLI_VERSION = "0.2.73";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -37101,15 +37101,7 @@ function recoverAfterWalletLogin(previous, next) {
   return next;
 }
 function recoverAfterWalletLogout(config) {
-  const visa = normalizeStoredVisaState(config.visa);
-  if (!visa) {
-    delete config.visa;
-    return config;
-  }
-  delete visa.pendingBenefitLogin;
-  visa.fsmState = "CLINK_READY";
-  config.visa = recoverVisaState(visa, void 0, Date.now());
-  return config;
+  return defaultConfig();
 }
 function recoverAfterBaseUrlChange(previousBaseUrl, config) {
   if (sameHttpOrigin(previousBaseUrl, config.baseUrl)) {
