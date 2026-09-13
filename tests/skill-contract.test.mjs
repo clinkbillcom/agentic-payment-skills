@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.97');
+  assert.equal(packageJson.version, '0.1.98');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -208,6 +208,13 @@ test('purchase documents major-unit amount and explicit Instruction reuse', () =
   assert.match(skill, /ordinary `instruction create`[\s\S]*explicitly marked default PI/u);
   assert.match(skill, /commerce-run --purchase-instruction-id <id>[\s\S]*must be ACTIVE/u);
   assert.match(agent, /--purchase-instruction-id <id>[\s\S]*must be ACTIVE/u);
+});
+
+test('instruction creation documents CREATED and explicit browser watching', () => {
+  assert.match(skill, /normal `instruction create` creates a `CREATED` draft/u);
+  assert.match(skill, /`--open --watch`[\s\S]*exact read show `ACTIVE`/u);
+  assert.match(skill, /Login for this Visa Skill uses `visa init`/u);
+  assert.match(skill, /must not be restored from CLI files/u);
 });
 
 test('browser operations are split from commerce aggregates', () => {

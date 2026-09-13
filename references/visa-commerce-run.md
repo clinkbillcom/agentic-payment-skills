@@ -46,6 +46,12 @@ an exact usable match for the frozen purchase context. A non-ACTIVE or
 mismatched Instruction is a terminal error; do not create or activate a
 replacement.
 
+Continuation state is supplied by the Agent, not restored from CLI files:
+`--instruction-id <id> --phase <pending|authorization|checkout_started>` and,
+when known, `--payment-instrument-id <pi>`. `pending` is card/VIC setup,
+`authorization` is Passkey/VIC authorization, and `checkout_started` requires
+read-only Checkout recovery only.
+
 ## Instruction And PI Rules
 
 - Match only the selected PI's exact usable `ACTIVE` Instructions.

@@ -130,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.75');
+  assert.equal(vendorPackage.version, '0.2.76');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '4bb6235d6a2f4a66a176293dcdb08019b417deb1',
+    '0fbaa2b99a3336f93193cfe9d832beab6fca01bc',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',

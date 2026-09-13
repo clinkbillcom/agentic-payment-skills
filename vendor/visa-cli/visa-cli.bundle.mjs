@@ -3781,6 +3781,7 @@ var init_args = __esm({
       { name: "amount-limit", flags: "--amount-limit <amount>" },
       { name: "currency", flags: "--currency <currency>" },
       { name: "instruction-id", flags: "--instruction-id <id>" },
+      { name: "phase", flags: "--phase <pending|authorization|checkout_started>" },
       { name: "mandate-id", flags: "--mandate-id <id>" },
       { name: "session-id", flags: "--session-id <id>" },
       { name: "payment-method-type", flags: "--payment-method-type <type>" },
@@ -4997,7 +4998,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.75";
+    CLI_VERSION = "0.2.76";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -26229,6 +26230,7 @@ async function handlePendingInstructionCommand(subcommand, context) {
     stage: "pending_instruction_create",
     status: "created",
     instructionId: instructionId2,
+    phase: "pending",
     instructionStatus: "PENDING",
     instruction: result,
     createsInstruction: true,
@@ -26415,6 +26417,7 @@ function pendingInstructionCommandOutput(result, context) {
       paymentInstrumentId: result.instruction.paymentInstrumentId ?? result.instruction.payment_instrument_id,
       manualOpenUrl: buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), asRequiredString(result.instruction.paymentInstrumentId ?? result.instruction.payment_instrument_id, "CREATED requires a backend-bound paymentInstrumentId"), result.instructionId, context.runtimeConfig.email)
     } : {},
+    ...result.state === "CREATED" ? { phase: "authorization" } : result.state === "PENDING" ? { phase: "pending" } : {},
     ...(result.state === "PENDING" || result.state === "CREATED") && result.resumeCommand ? {
       userActionRequired: true,
       resumeCommand: result.resumeCommand,
@@ -26471,6 +26474,7 @@ async function instructionCreate(context) {
     instructionId: instructionId2,
     paymentInstrumentId,
     ...mandateIds.length > 0 ? { mandateIds } : {},
+    phase: "authorization",
     requiresPasskey: true,
     passkeyUrl
   }, context.globalOptions.format);
@@ -30361,6 +30365,7 @@ async function runVisaCommerce(context, options2, dependencies) {
       paymentRetryAllowed: false,
       rerunAllowed: false,
       instructionId: quick?.instructionId ?? continuation?.instructionId,
+      phase: "checkout_started",
       reason: "This continuation already entered Checkout; inspect the existing order, do not run again."
     };
   }
@@ -30536,7 +30541,9 @@ async function runVisaCommerce(context, options2, dependencies) {
     stage: typeof checkout.stage === "string" ? checkout.stage : "checkout",
     status: typeof checkout.status === "string" ? checkout.status : "unknown",
     terminal: resumeCommand === void 0,
+    instructionId: instruction.instructionId,
     paymentInstrumentId,
+    phase: "checkout_started",
     card: safeCard(card),
     route: resolvedPurchase.route,
     product: resolvedPurchase.product,
@@ -30817,6 +30824,7 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
       stage: "instruction_activation",
       status: pending.state === "TERMINAL" ? pending.instructionStatus.toLowerCase() : pending.timedOut ? "timeout" : "pending",
       terminal: pending.state === "TERMINAL",
+      phase: pending.state === "PENDING" ? "pending" : "authorization",
       userActionRequired: pending.state === "PENDING" || pending.state === "CREATED",
       instructionId: pendingInstructionId2 ?? null,
       instructionStatus: pending.instructionStatus,
@@ -31113,6 +31121,7 @@ function quickInstructionFailure(quick, reason, detail) {
     terminal: true,
     reason,
     instructionId: quick.instructionId,
+    phase: quick.phase,
     ...detail ?? {},
     createsAnotherInstruction: false,
     paymentRetryAllowed: false
@@ -31447,6 +31456,7 @@ async function authorizeInstruction(dependencies, instructionIdValue, paymentIns
       userActionRequired: true,
       instructionId: instructionIdValue,
       paymentInstrumentId,
+      phase: "authorization",
       ...browserActionOutput(passkeyUrl, browserLaunch),
       resumeCommand: instructionGetResumeCommand(instructionIdValue)
     }
@@ -31460,6 +31470,7 @@ function manualInstructionResult(instructionId2, paymentInstrumentId, manualOpen
     userActionRequired: true,
     instructionId: instructionId2,
     paymentInstrumentId,
+    phase: "authorization",
     manualOpenUrl,
     rerunAllowed: true,
     resumeMode: "same_command",
@@ -31994,18 +32005,6 @@ var init_commerce_run = __esm({
 
 // dist/visa/commerce-continuation.js
 import { createHash as createHash6 } from "node:crypto";
-function quickInstructionFingerprint(value) {
-  if (value.identity.type === "none" || !value.identity.customerId) {
-    throw authError("Quick Instruction continuation requires an authenticated customer");
-  }
-  return commerceFingerprint({
-    stage: "quick_instruction",
-    environment: value.environment === "sandbox" ? "uat" : value.environment,
-    instructionContext: value.instructionContext,
-    customerId: value.identity.customerId,
-    baseUrl: new URL(value.baseUrl).origin
-  });
-}
 function commerceFingerprint(value) {
   return createHash6("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 }
@@ -32042,13 +32041,7 @@ function cloneVisaState(state) {
     ...state.lastError ? { lastError: { ...state.lastError } } : {},
     ...state.benefitConnection ? { benefitConnection: { ...state.benefitConnection } } : {},
     ...state.pendingVsraLogin ? { pendingVsraLogin: { ...state.pendingVsraLogin } } : {},
-    ...state.pendingBenefitLogin ? { pendingBenefitLogin: { ...state.pendingBenefitLogin } } : {},
-    ...state.commerceContinuations ? {
-      commerceContinuations: Object.fromEntries(Object.entries(state.commerceContinuations).map(([key, value]) => [key, { ...value }]))
-    } : {},
-    ...state.quickInstructionContinuations ? {
-      quickInstructionContinuations: Object.fromEntries(Object.entries(state.quickInstructionContinuations).map(([key, value]) => [key, { ...value }]))
-    } : {}
+    ...state.pendingBenefitLogin ? { pendingBenefitLogin: { ...state.pendingBenefitLogin } } : {}
   };
 }
 function normalizeStoredVisaState(raw) {
@@ -32088,33 +32081,6 @@ function normalizeStoredVisaState(raw) {
   const pendingBenefitLogin = normalizePendingBenefitLogin(raw.pendingBenefitLogin);
   if (pendingBenefitLogin) {
     state.pendingBenefitLogin = pendingBenefitLogin;
-  }
-  if (isRecord25(raw.commerceContinuations)) {
-    state.commerceContinuations = {};
-    for (const [key, continuation] of Object.entries(raw.commerceContinuations)) {
-      if (isRecord25(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId) && nonEmptyString4(continuation.paymentInstrumentId) && (continuation.phase === "authorization" || continuation.phase === "checkout_started")) {
-        state.commerceContinuations[key] = {
-          fingerprint: continuation.fingerprint,
-          instructionId: continuation.instructionId,
-          paymentInstrumentId: continuation.paymentInstrumentId,
-          phase: continuation.phase
-        };
-      }
-    }
-  }
-  if (isRecord25(raw.quickInstructionContinuations)) {
-    state.quickInstructionContinuations = {};
-    for (const [key, continuation] of Object.entries(raw.quickInstructionContinuations)) {
-      if (isRecord25(continuation) && key === continuation.fingerprint && nonEmptyString4(continuation.fingerprint) && nonEmptyString4(continuation.instructionId)) {
-        state.quickInstructionContinuations[key] = {
-          fingerprint: continuation.fingerprint,
-          instructionId: continuation.instructionId,
-          phase: continuation.phase === "checkout_started" ? "checkout_started" : continuation.phase === "authorization" ? "authorization" : "pending",
-          ...nonEmptyString4(continuation.paymentInstrumentId) ? { paymentInstrumentId: continuation.paymentInstrumentId } : {},
-          ...continuation.authorizationStage === "vic" || continuation.authorizationStage === "instruction" ? { authorizationStage: continuation.authorizationStage } : {}
-        };
-      }
-    }
   }
   return state;
 }
@@ -34120,64 +34086,53 @@ var init_service = __esm({
 });
 
 // dist/visa/commerce-cli.js
-function createVisaCommerceCliDependencies(context, commerceContext) {
+function createVisaCommerceCliDependencies(context, commerceContext, agentState) {
   const loginBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
   assertCommerceEnvironment(context, commerceContext.environment, loginBaseUrl);
-  const loginDependencies = createVisaBenefitLoginCliDependencies(context, commerceContext.environment);
-  const fingerprint = commerceFingerprint({
-    context: commerceContext,
-    identity: runtimeAuthorizationIdentity(context.runtimeConfig),
-    baseUrl: context.runtimeConfig.baseUrl
-  });
-  const quickFingerprint = () => commerceContext.mode === "prepare" ? void 0 : quickInstructionFingerprint({
-    environment: commerceContext.environment,
-    instructionContext: commerceContext.instructionContext,
-    identity: runtimeAuthorizationIdentity(context.runtimeConfig),
-    baseUrl: context.runtimeConfig.baseUrl
-  });
+  const loginDependencies = createVisaBenefitLoginCliDependencies(context, commerceContext.environment, agentState);
+  let currentAgentState = agentState;
+  let agentStateIsQuick = Boolean(agentState);
+  const getQuickState = () => {
+    if (!currentAgentState || !agentStateIsQuick) {
+      return void 0;
+    }
+    return {
+      fingerprint: "agent-provided",
+      instructionId: currentAgentState.instructionId,
+      phase: currentAgentState.phase
+    };
+  };
+  const getRegularState = () => {
+    if (!currentAgentState?.paymentInstrumentId) {
+      return void 0;
+    }
+    return {
+      fingerprint: "agent-provided",
+      instructionId: currentAgentState.instructionId,
+      paymentInstrumentId: currentAgentState.paymentInstrumentId,
+      phase: currentAgentState.phase === "pending" ? "authorization" : currentAgentState.phase
+    };
+  };
   return {
     deferBrowserActions: !context.globalOptions.open,
-    getContinuation: async () => {
-      return (await readStoredConfig()).visa?.commerceContinuations?.[fingerprint];
-    },
-    getQuickContinuation: async () => {
-      const key = quickFingerprint();
-      return key ? (await readStoredConfig()).visa?.quickInstructionContinuations?.[key] : void 0;
-    },
+    getContinuation: async () => getRegularState(),
+    getQuickContinuation: async () => getQuickState(),
     saveQuickContinuation: async (continuation) => {
-      const key = quickFingerprint();
-      if (!key)
-        throw validationError("Quick continuation requires a purchase context");
-      await updateStoredConfig((stored) => {
-        const saved = stored.visa?.quickInstructionContinuations?.[key];
-        if (!saved || saved.instructionId !== continuation.instructionId || saved.phase === "checkout_started") {
-          throw validationError("Quick Instruction changed or Checkout already started; use read-only recovery");
-        }
-        if (saved.paymentInstrumentId && saved.paymentInstrumentId !== continuation.paymentInstrumentId) {
-          throw validationError("Quick Instruction backend-bound card changed; use read-only recovery");
-        }
-        if (continuation.phase === "authorization" && saved.phase === "authorization" && saved.authorizationStage === continuation.authorizationStage) {
-          throw validationError("Quick Instruction authorization is already claimed; continue the existing browser flow");
-        }
-        stored.visa.quickInstructionContinuations[key] = { ...continuation, fingerprint: key };
-        return stored;
-      });
+      agentStateIsQuick = true;
+      currentAgentState = {
+        instructionId: continuation.instructionId,
+        phase: continuation.phase,
+        ...continuation.paymentInstrumentId ? { paymentInstrumentId: continuation.paymentInstrumentId } : {}
+      };
     },
     bindingPortalUrl: () => new URL("/agent-authorization", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
     saveContinuation: async (continuation) => {
-      await updateStoredConfig((stored) => {
-        const visa = stored.visa ?? defaultVisaState();
-        const saved = visa.commerceContinuations?.[fingerprint];
-        if (saved?.fingerprint === fingerprint && saved.phase === "checkout_started") {
-          throw validationError("Checkout already started for this continuation; use read-only recovery.");
-        }
-        visa.commerceContinuations = {
-          ...visa.commerceContinuations,
-          [fingerprint]: { ...continuation, fingerprint }
-        };
-        stored.visa = visa;
-        return stored;
-      });
+      agentStateIsQuick = false;
+      currentAgentState = {
+        instructionId: continuation.instructionId,
+        phase: continuation.phase,
+        paymentInstrumentId: continuation.paymentInstrumentId
+      };
     },
     inspectLogin: loginDependencies.inspectLogin,
     login: async (instructionContext) => {
@@ -34199,8 +34154,15 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
       onInstructionCreated: async (detail) => {
         if (optionalText8(detail.status ?? detail.state)?.toUpperCase() !== "PENDING") {
           const id = optionalText8(detail.instructionId ?? detail.purchaseInstructionId);
-          if (id)
-            await loginDependencies.saveQuickInstructionContinuation?.(instructionContext, id, optionalText8(detail.paymentInstrumentId ?? detail.payment_instrument_id));
+          const paymentInstrumentId = optionalText8(detail.paymentInstrumentId ?? detail.payment_instrument_id);
+          if (id) {
+            agentStateIsQuick = true;
+            currentAgentState = {
+              instructionId: id,
+              phase: "authorization",
+              ...paymentInstrumentId ? { paymentInstrumentId } : {}
+            };
+          }
         }
       }
     }),
@@ -34250,7 +34212,7 @@ function createVisaCommerceCliDependencies(context, commerceContext) {
     })
   };
 }
-function createVisaPendingRecoveryCliDependencies(context) {
+function createVisaPendingRecoveryCliDependencies(context, agentState) {
   return {
     listPendingInstructions: () => listCommandPendingInstructions(context),
     refreshCards: async () => {
@@ -34261,17 +34223,17 @@ function createVisaPendingRecoveryCliDependencies(context) {
       return normalizeCards(info.data.paymentMethodsVoList);
     },
     knownInstructionIds: async () => {
-      const continuations = (await readStoredConfig()).visa?.quickInstructionContinuations ?? {};
-      return Object.values(continuations).filter((continuation) => continuation.phase !== "checkout_started").map((continuation) => continuation.instructionId);
+      return agentState && agentState.phase !== "checkout_started" ? [agentState.instructionId] : [];
     },
     portalBaseUrl: () => resolveAgentBaseUrl(context.runtimeConfig.baseUrl),
     passkeyUrl: (paymentInstrumentId, instructionId2) => buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), paymentInstrumentId, instructionId2, context.runtimeConfig.email),
     openUserAction: (url) => openPortalWithBrowserHandoff(context, url, { reportOpenFailure: false })
   };
 }
-function createVisaBenefitLoginCliDependencies(context, environment) {
+function createVisaBenefitLoginCliDependencies(context, environment, agentState) {
   const baseUrl = visaCommerceApiBaseUrl(environment);
   assertCommerceEnvironment(context, environment, baseUrl);
+  let currentAgentState = agentState;
   const refreshCards = async () => {
     const cards = await resolveCardInfo(context);
     if (cards.dryRun) {
@@ -34279,71 +34241,34 @@ function createVisaBenefitLoginCliDependencies(context, environment) {
     }
     return normalizeCards(cards.data.paymentMethodsVoList);
   };
-  const vicFingerprint = (instructionContext) => commerceFingerprint({
-    stage: "login_vic",
-    instructionContext,
-    environment,
-    identity: runtimeAuthorizationIdentity(context.runtimeConfig)
-  });
-  const quickFingerprint = (instructionContext) => quickInstructionFingerprint({
-    environment,
-    instructionContext,
-    identity: runtimeAuthorizationIdentity(context.runtimeConfig),
-    baseUrl: context.runtimeConfig.baseUrl
-  });
   return {
     getQuickInstructionContinuation: async (instructionContext) => {
-      return (await readStoredConfig()).visa?.quickInstructionContinuations?.[quickFingerprint(instructionContext)];
+      if (!currentAgentState)
+        return void 0;
+      return {
+        fingerprint: "agent-provided",
+        instructionId: currentAgentState.instructionId,
+        phase: currentAgentState.phase
+      };
     },
     saveQuickInstructionContinuation: async (instructionContext, instructionId2, paymentInstrumentId) => {
-      const fingerprint = quickFingerprint(instructionContext);
-      await updateStoredConfig((stored) => {
-        const visa = stored.visa ?? defaultVisaState();
-        const saved = visa.quickInstructionContinuations?.[fingerprint];
-        if (saved) {
-          if (saved.instructionId !== instructionId2) {
-            throw validationError("A different Quick Instruction is already saved for this purchase");
-          }
-          if (paymentInstrumentId) {
-            if (saved.paymentInstrumentId && saved.paymentInstrumentId !== paymentInstrumentId) {
-              throw validationError("The backend-bound Quick card changed; use read-only recovery");
-            }
-            saved.paymentInstrumentId = paymentInstrumentId;
-          }
-          return stored;
-        }
-        visa.quickInstructionContinuations = {
-          ...visa.quickInstructionContinuations,
-          [fingerprint]: {
-            fingerprint,
-            instructionId: instructionId2,
-            phase: "pending",
-            ...paymentInstrumentId ? { paymentInstrumentId } : {}
-          }
-        };
-        stored.visa = visa;
-        return stored;
-      });
+      currentAgentState = {
+        instructionId: instructionId2,
+        phase: paymentInstrumentId ? "authorization" : "pending",
+        ...paymentInstrumentId ? { paymentInstrumentId } : {}
+      };
     },
     getCardVicContinuation: async (instructionContext) => {
-      const saved = (await readStoredConfig()).visa?.commerceContinuations?.[vicFingerprint(instructionContext)];
-      return saved ? {
-        instructionId: saved.instructionId,
-        paymentInstrumentId: saved.paymentInstrumentId,
-        url: buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), saved.paymentInstrumentId, void 0, context.runtimeConfig.email)
-      } : void 0;
+      if (!currentAgentState?.paymentInstrumentId)
+        return void 0;
+      return {
+        instructionId: currentAgentState.instructionId,
+        paymentInstrumentId: currentAgentState.paymentInstrumentId,
+        url: buildAgentPasskeyUrl(resolveAgentBaseUrl(context.runtimeConfig.baseUrl), currentAgentState.paymentInstrumentId, void 0, context.runtimeConfig.email)
+      };
     },
     saveCardVicContinuation: async (instructionContext, instructionId2, paymentInstrumentId) => {
-      const fingerprint = vicFingerprint(instructionContext);
-      await updateStoredConfig((stored) => {
-        const visa = stored.visa ?? defaultVisaState();
-        visa.commerceContinuations = {
-          ...visa.commerceContinuations,
-          [fingerprint]: { fingerprint, instructionId: instructionId2, paymentInstrumentId, phase: "authorization" }
-        };
-        stored.visa = visa;
-        return stored;
-      });
+      currentAgentState = { instructionId: instructionId2, paymentInstrumentId, phase: "authorization" };
     },
     refreshCards,
     openCardVic: async (paymentInstrumentId) => {
@@ -35049,8 +34974,6 @@ var init_commerce_cli = __esm({
     init_utils();
     init_commerce_context();
     init_commerce_run();
-    init_commerce_continuation();
-    init_state();
     init_service();
     init_errors();
     init_internal_ucp();
@@ -35214,6 +35137,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
           terminal: true,
           rerunAllowed: false,
           instructionId: quick.instructionId,
+          phase: "checkout_started",
           paymentRetryAllowed: false
         };
       }
@@ -35291,6 +35215,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     }
   }
   const ready = valid && (status === null || status === "CREATED" || status === "PENDING" || status === "ACTIVE");
+  const phase = status === "PENDING" ? "pending" : status === "CREATED" ? "authorization" : void 0;
   return {
     command: "visa commerce-login",
     operation: "visa-commerce-login",
@@ -35308,6 +35233,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     instructionStatus: status,
     paymentInstrumentId: paymentInstrumentId ?? null,
     instructionReady: ready && status === "ACTIVE",
+    ...phase ? { phase } : {},
     ...!ready ? { rerunAllowed: false, paymentRetryAllowed: false } : {},
     detail
   };
@@ -35570,6 +35496,11 @@ Options:
   --mandate-mcc <code>         One four-digit Instruction MCC
   --asserted-category <category>
                                Product category asserted by the caller
+  --instruction-id <id>       Agent-supplied continuation Instruction ID
+  --phase <pending|authorization|checkout_started>
+                               Agent-supplied continuation phase
+  --payment-instrument-id <id>
+                               Agent-supplied continuation PI when known
   --digital-delivery-expected <true|false>
                                Whether digital delivery is expected
   --context <json>             Legacy full-context compatibility input
@@ -35655,11 +35586,17 @@ Options:
                                Product category asserted by the caller
   --purchase-instruction-id <id>
                                Use this exact ACTIVE Instruction; it must match the purchase
+  --instruction-id <id>       Agent-supplied continuation Instruction ID
+  --phase <pending|authorization|checkout_started>
+                               Agent-supplied continuation phase
+  --payment-instrument-id <id>
+                               Agent-supplied continuation PI when known
   --digital-delivery-expected <true|false>
                                Whether digital delivery is expected
   --context <json>             Legacy full-context compatibility input
   --confirm-purchase           Required for live purchase modes; forbidden for mode=prepare
   --open                       Open the required Visa purchase authorization page
+  --watch                      Wait for the matching activation event
   --no-open                    Return the exact authorization link without opening
   --wait-delivery              Wait for digital delivery even when context does not require it
   --max-wait <seconds>         Checkout and delivery wait bound, defaults to 900; card/VIC/Passkey
@@ -36308,11 +36245,15 @@ async function visaCommerceLogin(context) {
     throw validationError("visa commerce-login context was not prepared");
   }
   const browserAction = resolveBrowserAction(context.args.flags);
+  const agentState = parseVisaAgentInstructionState(context.args.flags);
+  if (optionalNonBlankFlag(context.args.flags, "instruction-id") && !agentState) {
+    throw validationError("visa commerce-login requires --phase with --instruction-id");
+  }
   const result = await runVisaCommerceLogin(prepared.context, {
     dryRun: context.globalOptions.dryRun,
     ...browserAction ? { browserAction } : {},
     confirmedPurchase: getBooleanFlag(context.args.flags, "confirm-purchase")
-  }, createVisaBenefitLoginCliDependencies(context, prepared.context.environment));
+  }, createVisaBenefitLoginCliDependencies(context, prepared.context.environment, agentState));
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -36336,10 +36277,25 @@ async function visaCommerceRun(context) {
   const browserAction = resolveBrowserAction(context.args.flags);
   const instructionId2 = optionalNonBlankFlag(context.args.flags, "instruction-id");
   const purchaseInstructionId = optionalNonBlankFlag(context.args.flags, "purchase-instruction-id");
+  const phase = parseOptionalVisaInstructionPhase(context.args.flags);
   if (instructionId2 && purchaseInstructionId && instructionId2 !== purchaseInstructionId) {
     throw validationError("--instruction-id and --purchase-instruction-id must match when both are provided");
   }
-  const explicitPurchaseInstructionId = purchaseInstructionId ?? instructionId2;
+  if (phase && !instructionId2) {
+    throw validationError("--phase requires --instruction-id");
+  }
+  if (phase && purchaseInstructionId) {
+    throw validationError("--phase cannot be combined with --purchase-instruction-id");
+  }
+  const explicitPurchaseInstructionId = purchaseInstructionId ?? (!phase ? instructionId2 : void 0);
+  const statePaymentInstrumentId = optionalNonBlankFlag(context.args.flags, "payment-instrument-id");
+  let agentState;
+  if (phase && instructionId2) {
+    agentState = { instructionId: instructionId2, phase };
+    if (statePaymentInstrumentId) {
+      agentState.paymentInstrumentId = statePaymentInstrumentId;
+    }
+  }
   const result = await runVisaCommerce(commerceContext, {
     dryRun: context.globalOptions.dryRun,
     confirmedPurchase,
@@ -36349,7 +36305,7 @@ async function visaCommerceRun(context) {
       waitDelivery: getBooleanFlag(context.args.flags, "wait-delivery")
     } : {},
     ...maxWait !== void 0 ? { maxWaitSeconds: maxWait } : {}
-  }, createVisaCommerceCliDependencies(context, commerceContext));
+  }, createVisaCommerceCliDependencies(context, commerceContext, agentState));
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -36357,6 +36313,7 @@ async function visaPendingInstructions(context) {
   assertVisaPositionalCount(context, 2, `usage: ${context.executableName} visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>] [options]`);
   const instructionId2 = optionalNonBlankFlag(context.args.flags, "instruction-id");
   const paymentInstrumentId = optionalNonBlankFlag(context.args.flags, "payment-instrument-id");
+  const agentState = parseVisaAgentInstructionState(context.args.flags);
   if (context.globalOptions.dryRun) {
     printSuccess({
       command: "visa pending-instructions",
@@ -36378,7 +36335,7 @@ async function visaPendingInstructions(context) {
     open: context.globalOptions.open,
     ...instructionId2 ? { instructionId: instructionId2 } : {},
     ...paymentInstrumentId ? { paymentInstrumentId } : {}
-  }, createVisaPendingRecoveryCliDependencies(context));
+  }, createVisaPendingRecoveryCliDependencies(context, agentState));
   printSuccess(result, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
@@ -37206,7 +37163,7 @@ function validateVisaFlagScope(command, subcommand, flags) {
     if (!commerceContextCommand && (flags.context !== void 0 || [...FLAT_COMMERCE_SCOPE_FLAG_NAMES].some((name) => flags[name] !== void 0))) {
       throw validationError("purchase context arguments are only supported by visa commerce-run or visa commerce-login");
     }
-    if (subcommand !== "commerce-run" && subcommand !== "pending-instructions" && (flags["instruction-id"] !== void 0 || flags["purchase-instruction-id"] !== void 0)) {
+    if (subcommand !== "commerce-run" && subcommand !== "commerce-login" && subcommand !== "pending-instructions" && (flags["instruction-id"] !== void 0 || flags["purchase-instruction-id"] !== void 0 || flags.phase !== void 0)) {
       throw validationError("--instruction-id and --purchase-instruction-id are only supported by visa commerce-run or visa pending-instructions");
     }
     if (!productSearch && flags["selected-product-id"] !== void 0) {
@@ -37298,6 +37255,31 @@ function optionalNonBlankFlag(flags, name) {
     throw validationError(`--${name} must not be blank`);
   }
   return normalized;
+}
+function parseOptionalVisaInstructionPhase(flags) {
+  const phase = optionalNonBlankFlag(flags, "phase");
+  if (!phase)
+    return void 0;
+  if (phase !== "pending" && phase !== "authorization" && phase !== "checkout_started") {
+    throw validationError("--phase must be pending, authorization, or checkout_started");
+  }
+  return phase;
+}
+function parseVisaAgentInstructionState(flags) {
+  const instructionId2 = optionalNonBlankFlag(flags, "instruction-id");
+  const phase = parseOptionalVisaInstructionPhase(flags);
+  const paymentInstrumentId = optionalNonBlankFlag(flags, "payment-instrument-id");
+  if (!instructionId2 && phase) {
+    throw validationError("--phase requires --instruction-id");
+  }
+  if (!instructionId2 || !phase) {
+    return void 0;
+  }
+  return {
+    instructionId: instructionId2,
+    phase,
+    ...paymentInstrumentId ? { paymentInstrumentId } : {}
+  };
 }
 function createVisaAuthorizationReporter(context) {
   return (event) => {

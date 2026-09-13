@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.97. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.98. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.97"
+  version: "0.1.98"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -669,9 +669,9 @@ general workflow engine.
 - Use `wallet status --format json` only for an explicit wallet request or after
   an exact product selection when an authenticated operation is about to begin.
   Never use it to preflight anonymous discovery.
-- Use `wallet init --email <email> --open --format json` only for an explicit
-  setup, login, re-login, or authenticated operation that needs a wallet. Keep
-  that one process alive while OAuth completes.
+- Use `visa init --email <email> --open --format json` for Visa Skill login,
+  re-login, or authenticated Visa operations that need a wallet. Keep that one
+  process alive while OAuth completes. Do not use `wallet init` for Visa login.
 - Use `wallet logout --format json` exactly once for explicit logout.
 - Use `config get/set` only for requested local settings. Never print secrets
   or switch environment to recover from a network error.
@@ -758,6 +758,37 @@ general workflow engine.
   amount buffer.
 - Passkey and edit pages belong to the user. Only an authoritative `ACTIVE`
   result makes an Instruction usable.
+- A normal `instruction create` creates a `CREATED` draft: the Instruction
+  exists and is bound to a PI, but is not authorized and cannot be used for
+  Checkout. Always invoke it with `--open --watch`, complete the Passkey page
+  in the system browser, and continue only after the matching activation event
+  and an exact read show `ACTIVE`.
+
+Use the standalone command in this form:
+
+```text
+<Skill Path>/bin/visa-cli instruction create \
+  --title "<title>" \
+  --mandates '<mandates-json>' \
+  --open --watch --format json
+```
+
+When the command returns, `CREATED` means authorization is still required;
+after the watch completes, exact-read the same `instructionId` and require
+`ACTIVE`.
+- A normal `instruction create` creates a `CREATED` draft. `CREATED` means
+  the Instruction exists and is bound to a PI, but it is not authorized and
+  cannot be used for Checkout yet. Always invoke this command with
+  `--open --watch`, complete the Passkey page in the system browser, and
+  continue only after the matching event and an exact read show `ACTIVE`.
+- An ordinary `instruction create` creates a `CREATED` draft bound to the
+  selected/default PI. `CREATED` means the Instruction exists but is not yet
+  authorized and cannot be used for Checkout. Use the returned Passkey URL,
+  complete authorization in the system browser, and continue only after an
+  exact read confirms `ACTIVE`.
+- For this command, always pass `--open --watch`: `--open` attempts to open the
+  system-browser Passkey page and `--watch` waits for the matching activation
+  event. Do not leave the Agent waiting on an implicit default watch.
 - When the user asks to create an Instruction without explicitly saying
   `pending`, use ordinary `instruction create` and omit
   `--payment-instrument-id`; the CLI uses only the explicitly marked default PI.
@@ -773,6 +804,38 @@ general workflow engine.
 - Use `visa commerce-run --purchase-instruction-id <id>` only after the user
   has activated that exact Instruction. It must be ACTIVE and match the frozen
   purchase context; a mismatch is terminal and does not create a replacement.
+- Login for this Visa Skill uses `visa init`, not `wallet init`. Use
+  `wallet init` only for the Main CLI.
+
+Instruction continuation state belongs to the current Agent conversation and
+must not be restored from CLI files. When a command returns these fields, carry
+them explicitly to the next command:
+
+```text
+--instruction-id <id> --phase <pending|authorization|checkout_started>
+[--payment-instrument-id <pi>]
+```
+
+`pending` means the exact PENDING Instruction still needs card/VIC setup;
+`authorization` means the exact Instruction is waiting for Passkey/VIC
+authorization; `checkout_started` means Checkout may already exist and only
+read-only recovery is allowed. Do not write `instructionId`, `phase`, or
+`paymentInstrumentId` to a local file.
+
+Instruction continuation state is Agent-owned and must be passed explicitly;
+the CLI does not restore it from a previous conversation. Pass:
+
+```text
+--instruction-id <id> --phase <pending|authorization|checkout_started>
+[--payment-instrument-id <pi>]
+```
+
+`pending` means the exact PENDING Instruction still needs card/VIC setup;
+`authorization` means the exact Instruction is waiting for Passkey/VIC
+authorization; `checkout_started` means Checkout may already exist and the
+purchase command must stop and use only the returned read-only recovery.
+Carry the returned `instructionId`, `phase`, and `paymentInstrumentId`
+unchanged into the next command. Do not write them to a local file.
 - If that non-idempotent create returns an unknown result, reconcile with the
   read-only `activatable` query first. Retry at most once only when the
   expected new Instruction is not found; otherwise stop and preserve the
@@ -791,7 +854,7 @@ general workflow engine.
   the initiating operation. Do not use broad uncorrelated polling.
 - Acknowledge or consume according to the CLI result, then refresh the
   authoritative card, Instruction, refund, Checkout, or order state.
-- OAuth Device Authorization is handled by the original `wallet init` process,
+- OAuth Device Authorization is handled by the original `visa init` process,
   not `events poll`.
 
 ### CAP-SKILLS-LIST: Public Skill Discovery
