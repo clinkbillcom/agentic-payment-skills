@@ -59,7 +59,9 @@ state first and does not reopen the browser. A closed page or opener failure is
 not proof of business failure.
 
 Binding, VIC, Passkey, and PENDING activation share the ten-minute Agent wait
-boundary. After timeout, use `visa pending-instructions` with the exact ID when
+boundary. The recovery list comes from
+`GET /agent/cwallet/instructions/activatable`, which may return both PENDING and
+CREATED Instructions. After timeout, use `visa pending-instructions` with the exact ID when
 known. Without exact context, return its instruction list and Portal URL for
 user selection.
 

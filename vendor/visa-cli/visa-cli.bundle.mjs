@@ -10845,7 +10845,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.68";
+var CLI_VERSION = "0.2.69";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -26212,13 +26212,13 @@ async function listCommandPendingInstructions(context) {
   const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
     baseUrl: runtimeConfig.baseUrl,
     method: "GET",
-    path: `${INSTRUCTION_PATH2}/pending`,
+    path: `${INSTRUCTION_PATH2}/activatable`,
     headers: buildInstructionHeaders(runtimeConfig),
     timeoutMs: context.globalOptions.timeoutMs,
     dryRun: false
   }));
   if (isDryRun3(result)) {
-    throw apiError("pending instruction list unexpectedly produced a dry-run response");
+    throw apiError("activatable instruction list unexpectedly produced a dry-run response");
   }
   assertApiSuccess(result.status, result.body);
   return unwrapApiData(result.body);
@@ -34273,7 +34273,7 @@ Behavior:
   This is the single recovery exit for every Visa card/VIC/Passkey branch that did not finish:
   binding not completed, card without VIC, Passkey not completed, or a 600-second wait timeout.
   Failures are not observable; only the timeout is.
-  It reads GET /agent/cwallet/instructions/pending (PENDING and CREATED Instructions that can still
+  It reads GET /agent/cwallet/instructions/activatable (PENDING and CREATED Instructions that can still
   be activated) and the current cards. It never creates, cancels, or replaces an Instruction.
 
   Exact context: --instruction-id, or the one pending Instruction that matches a saved Quick

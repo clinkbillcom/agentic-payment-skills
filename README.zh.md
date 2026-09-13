@@ -74,8 +74,8 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.89` 已刷新 vendor，来源提交
-`55f41a6194a51aa22776af182d00f74b11df0cf4` 的 Visa CLI `0.2.68`。本
+Skill `0.1.90` 已刷新 vendor，来源提交
+`9fb99b78de076530a2bf1e07fb794d6c498ac9dc` 的 Visa CLI `0.2.69`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；
@@ -114,7 +114,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.89`
+Skill 版本：`0.1.90`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

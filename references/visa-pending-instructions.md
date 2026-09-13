@@ -6,7 +6,8 @@ status. Normal execution must not load command references.
 ## Aggregate Stages
 
 ```text
-list PENDING/CREATED Instructions
+GET /agent/cwallet/instructions/activatable
+  -> list current PENDING/CREATED Instructions
   -> refresh current cards
   -> resolve exact Instruction context
   -> resolve its bound or explicitly selected VIC-ready Visa card
