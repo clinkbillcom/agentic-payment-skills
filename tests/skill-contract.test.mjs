@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.96');
+  assert.equal(packageJson.version, '0.1.97');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -201,6 +201,12 @@ test('purchase uses one frozen context and direct flat CLI input', () => {
   assert.match(purchase, /never run or refresh `visa detail`/iu);
   assert.match(agent, /pass it directly with --context <json>/u);
   assert.match(agent, /Never create a context file/u);
+});
+
+test('purchase documents major-unit amount and explicit Instruction reuse', () => {
+  assert.match(skill, /`--amount` must equal[\s\S]*product\.totalAmountMajor[\s\S]*never pass[\s\S]*totalAmountMinor/iu);
+  assert.match(skill, /ordinary `instruction create`[\s\S]*explicitly marked default PI/u);
+  assert.match(skill, /commerce-run --purchase-instruction-id <id>[\s\S]*must be ACTIVE/u);
 });
 
 test('browser operations are split from commerce aggregates', () => {
