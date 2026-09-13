@@ -125,8 +125,9 @@ interface:
     order again for an already authorized selection.
     Only one product with quantity 1 is supported; never split orders or silently
     reduce a multi-item request. Keep the selected row's purchaseContext unchanged
-    in memory and pass it directly with --context <json> to commerce-login and
-    commerce-run. Never create a context file. Never build an
+    in memory and pass the same frozen facts as flat --xxx arguments to
+    commerce-login and commerce-run. The legacy --context <json> form is
+    compatibility-only. Never create a context file. Never build an
     Instruction context, infer MCC, or copy Program fields. If purchaseContext is
     missing, report purchaseContextUnavailable instead of inventing data.
     Once the user requests the unchanged purchase, run login and then commerce-run
@@ -145,6 +146,8 @@ interface:
     dedicated browser-open operation to attempt the system browser. A successful launch is not business
     success. For automatic launch, continue by checking the original operation
     state; for manual completion, first check the state and do not reopen.
+    If the page did not open successfully, tell the user: "If the page did not
+    open successfully, you can reopen it using this link: <manualOpenUrl>".
     Failed opening returns manualOpenUrl. Only the exact pre-Checkout
     continuation may resume the same operation; no replacement Instruction or
     payment retry is allowed.
@@ -183,6 +186,8 @@ interface:
     <operation-url> for the system-browser attempt. After automatic launch,
     rerun the original command with --browser-opened. After manual completion,
     rerun with --manual-completed; check status first and do not reopen.
+    If the page did not open successfully, tell the user: "If the page did not
+    open successfully, you can reopen it using this link: <operation-url>".
     Browser state is not business success or failure.
     Never rerun commerce-run after possible Checkout creation. Unknown payment
     or authorization results require read-only recovery, not a retry.

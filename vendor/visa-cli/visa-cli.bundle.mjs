@@ -4996,7 +4996,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.73";
+    CLI_VERSION = "0.2.74";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -27683,13 +27683,294 @@ var init_benefit_catalog_provider = __esm({
   }
 });
 
+// dist/visa/commerce-flag-input.js
+function hasFlatCommerceInput(flags) {
+  return FLAT_INPUT_FIELDS.some((name) => flags[name] !== void 0);
+}
+function buildFlatCommerceInput(flags, commandLabel) {
+  const mode = textFlag(flags, "mode") ?? "purchase";
+  const environment = requiredTextFlag(flags, "environment", commandLabel);
+  if (mode === "prepare") {
+    return compact4({
+      mode,
+      target: requiredTextFlag(flags, "target", commandLabel),
+      environment,
+      requestText: textFlag(flags, "request-text")
+    });
+  }
+  if (mode === "selected_product") {
+    const quantity = parsePositiveInteger(requiredTextFlag(flags, "quantity", commandLabel), "--quantity");
+    if (quantity !== 1) {
+      throw validationError(`${commandLabel} --quantity must be 1 for selected_product`);
+    }
+    const availability = requiredTextFlag(flags, "availability", commandLabel).toLowerCase();
+    if (availability !== "in_stock") {
+      throw validationError(`${commandLabel} --availability must be in_stock for selected_product`);
+    }
+    const title2 = requiredTextFlag(flags, "title", commandLabel);
+    const amount2 = requiredTextFlag(flags, "amount", commandLabel);
+    const currency2 = requiredTextFlag(flags, "currency", commandLabel);
+    const merchantUrl = requiredTextFlag(flags, "merchant-url", commandLabel);
+    const merchantId = requiredTextFlag(flags, "merchant-id", commandLabel);
+    const endpoint = requiredTextFlag(flags, "endpoint", commandLabel);
+    const merchantName = requiredTextFlag(flags, "merchant-name", commandLabel);
+    const digitalDeliveryExpected2 = parseBoolean(requiredTextFlag(flags, "digital-delivery-expected", commandLabel), "--digital-delivery-expected");
+    return {
+      mode: "selected_product",
+      environment,
+      requestText: requiredTextFlag(flags, "request-text", commandLabel),
+      selectedProduct: {
+        state: "PRODUCT_VERIFIED",
+        action: "CONTINUE_TO_COMMERCE_LOGIN",
+        productResolution: "internal-ucp-catalog",
+        merchantId,
+        endpoint,
+        product: {
+          itemId: requiredTextFlag(flags, "product-id", commandLabel),
+          title: title2,
+          sourceTitle: title2,
+          productUrl: merchantUrl,
+          merchantUrl,
+          currency: currency2,
+          unitPriceMajor: amount2,
+          totalAmountMajor: amount2,
+          quantity,
+          availability,
+          merchantName
+        },
+        ...textFlag(flags, "mandate-mcc") ? { merchantCategoryCode: textFlag(flags, "mandate-mcc") } : {},
+        digitalDeliveryExpected: digitalDeliveryExpected2
+      }
+    };
+  }
+  if (mode !== "purchase" && mode !== "catalog_purchase") {
+    throw validationError(`${commandLabel} --mode must be purchase, catalog_purchase, selected_product, or prepare`);
+  }
+  const title = requiredTextFlag(flags, "title", commandLabel);
+  const amount = requiredTextFlag(flags, "amount", commandLabel);
+  const currency = requiredTextFlag(flags, "currency", commandLabel);
+  const mandateMcc = textFlag(flags, "mandate-mcc") ?? textFlag(flags, "merchant-category-code");
+  const mandateTitle = textFlag(flags, "mandate-title") ?? title;
+  const mandateDescription = textFlag(flags, "mandate-description") ?? textFlag(flags, "instruction-description") ?? textFlag(flags, "description") ?? `Purchase ${title}`;
+  const instructionContext = compact4({
+    title,
+    description: textFlag(flags, "instruction-description") ?? textFlag(flags, "description"),
+    effectiveUntilTime: textFlag(flags, "effective-until-time"),
+    isRecurring: getBooleanFlag(flags, "is-recurring") || void 0,
+    mandates: [{
+      title: mandateTitle,
+      description: mandateDescription,
+      amountLimit: textFlag(flags, "mandate-amount") ?? amount,
+      currencyCode: textFlag(flags, "mandate-currency") ?? currency,
+      merchantCategoryCode: mandateMcc,
+      preferredMerchantName: textFlag(flags, "preferred-merchant-name"),
+      merchantCategory: textFlag(flags, "merchant-category"),
+      effectiveUntilTime: textFlag(flags, "effective-until-time"),
+      recurringFrequency: textFlag(flags, "recurring-frequency")
+    }]
+  });
+  const rawDigitalDelivery = textFlag(flags, "digital-delivery-expected");
+  if (rawDigitalDelivery === void 0) {
+    throw validationError(`${commandLabel} requires --digital-delivery-expected <true|false>`);
+  }
+  const digitalDeliveryExpected = parseBoolean(rawDigitalDelivery, "--digital-delivery-expected");
+  const selection = compact4({
+    merchantUrl: requiredTextFlag(flags, "merchant-url", commandLabel),
+    productId: requiredTextFlag(flags, "product-id", commandLabel),
+    productQuery: textFlag(flags, "product-query"),
+    quantity: parsePositiveInteger(requiredTextFlag(flags, "quantity", commandLabel), "--quantity"),
+    merchantId: textFlag(flags, "merchant-id"),
+    endpoint: textFlag(flags, "endpoint"),
+    channelType: textFlag(flags, "channel-type"),
+    storeId: textFlag(flags, "store-id"),
+    catalogQuery: textFlag(flags, "catalog-query"),
+    catalogEnvironment: textFlag(flags, "catalog-environment"),
+    catalogLanguage: textFlag(flags, "catalog-language")
+  });
+  const buyer = compact4({
+    first_name: textFlag(flags, "buyer-first-name"),
+    last_name: textFlag(flags, "buyer-last-name"),
+    email: textFlag(flags, "buyer-email"),
+    phone_number: textFlag(flags, "buyer-phone-number")
+  });
+  const deliveryContactDetails = compact4({
+    email: textFlag(flags, "shipping-email"),
+    phone: textFlag(flags, "shipping-phone")
+  });
+  const shippingAddress = compact4({
+    name: textFlag(flags, "shipping-name"),
+    line1: textFlag(flags, "shipping-line1"),
+    line2: textFlag(flags, "shipping-line2"),
+    city: textFlag(flags, "shipping-city"),
+    state: textFlag(flags, "shipping-state"),
+    zip: textFlag(flags, "shipping-zip"),
+    countryCode: textFlag(flags, "shipping-country-code"),
+    ...Object.keys(deliveryContactDetails).length > 0 ? { deliveryContactDetails } : {}
+  });
+  if (Object.keys(shippingAddress).length > 0) {
+    instructionContext.shippingAddress = shippingAddress;
+  }
+  return compact4({
+    mode,
+    environment,
+    requestText: requiredTextFlag(flags, "request-text", commandLabel),
+    program: textFlag(flags, "program-code") ? { code: textFlag(flags, "program-code") } : void 0,
+    selection,
+    expected: compact4({
+      merchantName: requiredTextFlag(flags, "merchant-name", commandLabel),
+      itemTitle: title,
+      amount,
+      currency,
+      availability: textFlag(flags, "availability")
+    }),
+    instructionContext,
+    digitalDeliveryExpected,
+    fulfillmentType: textFlag(flags, "fulfillment-type"),
+    assertedCategory: textFlag(flags, "asserted-category"),
+    buyer: Object.keys(buyer).length > 0 ? buyer : void 0,
+    shippingAddress: Object.keys(shippingAddress).length > 0 ? shippingAddress : void 0
+  });
+}
+function requiredTextFlag(flags, name, commandLabel) {
+  const value = textFlag(flags, name);
+  if (!value) {
+    throw validationError(`${commandLabel} requires --${name} <value>`);
+  }
+  return value;
+}
+function textFlag(flags, name) {
+  const value = getStringFlag(flags, name);
+  return value?.trim() || void 0;
+}
+function parseBoolean(value, flag) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true")
+    return true;
+  if (normalized === "false")
+    return false;
+  throw validationError(`${flag} must be true or false`);
+}
+function parsePositiveInteger(value, flag) {
+  if (!/^[1-9]\d*$/u.test(value)) {
+    throw validationError(`${flag} must be a positive integer`);
+  }
+  return Number(value);
+}
+function compact4(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
+}
+var FLAT_INPUT_FIELDS, FLAT_COMMERCE_FLAG_NAMES, FLAT_COMMERCE_SCOPE_FLAG_NAMES;
+var init_commerce_flag_input = __esm({
+  "dist/visa/commerce-flag-input.js"() {
+    "use strict";
+    init_args();
+    init_errors();
+    FLAT_INPUT_FIELDS = [
+      "mode",
+      "target",
+      "environment",
+      "request-text",
+      "program-code",
+      "merchant-id",
+      "endpoint",
+      "merchant-url",
+      "merchant-name",
+      "product-id",
+      "product-query",
+      "title",
+      "description",
+      "amount",
+      "currency",
+      "quantity",
+      "availability",
+      "merchant-category-code",
+      "instruction-description",
+      "mandate-title",
+      "mandate-description",
+      "mandate-amount",
+      "mandate-currency",
+      "mandate-mcc",
+      "preferred-merchant-name",
+      "merchant-category",
+      "effective-until-time",
+      "recurring-frequency",
+      "is-recurring",
+      "fulfillment-type",
+      "digital-delivery-expected",
+      "asserted-category",
+      "channel-type",
+      "store-id",
+      "catalog-query",
+      "catalog-environment",
+      "catalog-language",
+      "buyer-first-name",
+      "buyer-last-name",
+      "buyer-email",
+      "buyer-phone-number",
+      "shipping-name",
+      "shipping-line1",
+      "shipping-line2",
+      "shipping-city",
+      "shipping-state",
+      "shipping-zip",
+      "shipping-country-code",
+      "shipping-email",
+      "shipping-phone"
+    ];
+    FLAT_COMMERCE_FLAG_NAMES = new Set(FLAT_INPUT_FIELDS);
+    FLAT_COMMERCE_SCOPE_FLAG_NAMES = /* @__PURE__ */ new Set([
+      "mode",
+      "target",
+      "environment",
+      "request-text",
+      "program-code",
+      "product-query",
+      "quantity",
+      "availability",
+      "instruction-description",
+      "mandate-title",
+      "mandate-description",
+      "mandate-amount",
+      "mandate-currency",
+      "mandate-mcc",
+      "preferred-merchant-name",
+      "merchant-category",
+      "recurring-frequency",
+      "fulfillment-type",
+      "digital-delivery-expected",
+      "asserted-category",
+      "store-id",
+      "catalog-query",
+      "catalog-environment",
+      "catalog-language",
+      "buyer-first-name",
+      "buyer-last-name",
+      "buyer-email",
+      "buyer-phone-number",
+      "shipping-name",
+      "shipping-line1",
+      "shipping-line2",
+      "shipping-city",
+      "shipping-state",
+      "shipping-zip",
+      "shipping-country-code",
+      "shipping-email",
+      "shipping-phone"
+    ]);
+  }
+});
+
 // dist/visa/context-input.js
 async function readVisaContextInput(flags, commandLabel) {
   const inline = getStringFlag(flags, "context");
-  if (inline === void 0) {
-    throw validationError(`${commandLabel} requires --context <json>`);
+  const hasFlatInput = hasFlatCommerceInput(flags);
+  if (inline !== void 0 && hasFlatInput) {
+    throw validationError(`${commandLabel} cannot combine --context with flat purchase arguments`);
   }
-  return parseJsonFlag(inline, "--context");
+  if (inline === void 0 && !hasFlatInput) {
+    throw validationError(`${commandLabel} requires --context <json> or flat purchase arguments`);
+  }
+  return inline === void 0 ? buildFlatCommerceInput(flags, commandLabel) : parseJsonFlag(inline, "--context");
 }
 var init_context_input = __esm({
   "dist/visa/context-input.js"() {
@@ -27697,6 +27978,7 @@ var init_context_input = __esm({
     init_args();
     init_errors();
     init_utils();
+    init_commerce_flag_input();
   }
 });
 
@@ -34590,7 +34872,7 @@ function normalizeVisaCommerceLoginContext(raw) {
   if (!isRecord29(raw)) {
     throw validationError("commerce login context must be a JSON object");
   }
-  if (raw.mode === "selected_product") {
+  if (raw.mode === "selected_product" || raw.mode === "purchase" || raw.mode === "catalog_purchase") {
     const purchase = normalizeVisaCommerceContext(raw);
     if (purchase.mode === "prepare") {
       throw validationError("commerce-login requires a selected product purchase");
@@ -35075,10 +35357,26 @@ Examples:
     VISA_COMMERCE_LOGIN_HELP = `clink visa commerce-login
 
 Usage:
-  clink visa commerce-login --context <json> [options]
+  clink visa commerce-login [purchase parameters] [options]
 
 Options:
-  --context <json>             Login context with environment, expected, and instructionContext
+  --environment <environment>  sandbox, uat, test, or production
+  --request-text <text>        Original purchase request
+  --merchant-url <url>         Exact merchant route URL
+  --endpoint <url>             Exact merchant UCP endpoint
+  --merchant-id <id>           Exact merchant ID
+  --merchant-name <name>       Merchant name
+  --product-id <id>            Exact product ID
+  --title <text>               Product title
+  --amount <amount>            Total amount in major currency units
+  --currency <code>            Three-letter currency code
+  --quantity <n>               Product quantity
+  --mandate-mcc <code>         One four-digit Instruction MCC
+  --asserted-category <category>
+                               Product category asserted by the caller
+  --digital-delivery-expected <true|false>
+                               Whether digital delivery is expected
+  --context <json>             Legacy full-context compatibility input
   --confirm-purchase           Required before every live login check or initialization
   --browser-opened             A separate browser-open operation launched the page; wait for result
   --manual-completed           The user completed the page manually; check status without opening
@@ -35132,16 +35430,36 @@ Behavior:
   API, resolves a merchant, searches Catalog, opens Bind Card, creates a Checkout, or pays.
 
 Examples:
-  clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --dry-run --format pretty
-  clink visa commerce-login --context '{"environment":"uat","instructionContext":{...}}' --confirm-purchase --format json
+  clink visa commerce-login --environment uat --request-text "Buy this voucher" \\
+    --merchant-url https://merchant.example \\
+    --product-id sku_1 --merchant-name "Example Merchant" \\
+    --title "Voucher" --amount 1 --currency USD --quantity 1 \\
+    --mandate-mcc 5411 --digital-delivery-expected true \\
+    --confirm-purchase --format json
 `;
     VISA_COMMERCE_RUN_HELP = `clink visa commerce-run
 
 Usage:
-  clink visa commerce-run --context <json> [options]
+  clink visa commerce-run [purchase parameters] [options]
 
 Options:
-  --context <json>             Preparation or frozen purchase context JSON
+  --environment <environment>  sandbox, uat, test, or production
+  --request-text <text>        Original purchase request
+  --merchant-url <url>         Exact merchant route URL
+  --endpoint <url>             Exact merchant UCP endpoint
+  --merchant-id <id>           Exact merchant ID
+  --merchant-name <name>       Merchant name
+  --product-id <id>            Exact product ID
+  --title <text>               Product title
+  --amount <amount>            Total amount in major currency units
+  --currency <code>            Three-letter currency code
+  --quantity <n>               Product quantity
+  --mandate-mcc <code>         One four-digit Instruction MCC
+  --asserted-category <category>
+                               Product category asserted by the caller
+  --digital-delivery-expected <true|false>
+                               Whether digital delivery is expected
+  --context <json>             Legacy full-context compatibility input
   --confirm-purchase           Required for live purchase modes; forbidden for mode=prepare
   --open                       Open the required Visa purchase authorization page
   --no-open                    Return the exact authorization link without opening
@@ -36673,8 +36991,8 @@ function validateVisaFlagScope(command, subcommand, flags) {
         throw validationError(`--${name} is only supported by visa commerce-run`);
       }
     }
-    if (!commerceContextCommand && flags.context !== void 0) {
-      throw validationError("--context is only supported by visa commerce-run or visa commerce-login");
+    if (!commerceContextCommand && (flags.context !== void 0 || [...FLAT_COMMERCE_SCOPE_FLAG_NAMES].some((name) => flags[name] !== void 0))) {
+      throw validationError("purchase context arguments are only supported by visa commerce-run or visa commerce-login");
     }
     if (!productSearch && flags["selected-product-id"] !== void 0) {
       throw validationError("--selected-product-id is only supported by visa product-search");
@@ -37136,6 +37454,7 @@ var init_edition = __esm({
     init_utils();
     init_client();
     init_benefit_catalog_discovery();
+    init_commerce_flag_input();
     init_commerce_cli();
     init_pending_recovery();
     init_benefit_catalog_provider();
@@ -37152,6 +37471,43 @@ var init_edition = __esm({
     init_program_merchant();
     init_state();
     VISA_OPTION_DEFINITIONS = [
+      { name: "mode", flags: "--mode <purchase|catalog_purchase|prepare>" },
+      { name: "target", flags: "--target <login|visa_card_ready>" },
+      { name: "environment", flags: "--environment <environment>" },
+      { name: "request-text", flags: "--request-text <text>" },
+      { name: "program-code", flags: "--program-code <code>" },
+      { name: "product-query", flags: "--product-query <text>" },
+      { name: "quantity", flags: "--quantity <n>" },
+      { name: "availability", flags: "--availability <status>" },
+      { name: "instruction-description", flags: "--instruction-description <text>" },
+      { name: "mandate-title", flags: "--mandate-title <text>" },
+      { name: "mandate-description", flags: "--mandate-description <text>" },
+      { name: "mandate-amount", flags: "--mandate-amount <amount>" },
+      { name: "mandate-currency", flags: "--mandate-currency <currency>" },
+      { name: "mandate-mcc", flags: "--mandate-mcc <code>" },
+      { name: "preferred-merchant-name", flags: "--preferred-merchant-name <name>" },
+      { name: "merchant-category", flags: "--merchant-category <category>" },
+      { name: "recurring-frequency", flags: "--recurring-frequency <frequency>" },
+      { name: "fulfillment-type", flags: "--fulfillment-type <type>" },
+      { name: "digital-delivery-expected", flags: "--digital-delivery-expected <true|false>" },
+      { name: "asserted-category", flags: "--asserted-category <category>" },
+      { name: "store-id", flags: "--store-id <id>" },
+      { name: "catalog-query", flags: "--catalog-query <text>" },
+      { name: "catalog-environment", flags: "--catalog-environment <environment>" },
+      { name: "catalog-language", flags: "--catalog-language <language>" },
+      { name: "buyer-first-name", flags: "--buyer-first-name <name>" },
+      { name: "buyer-last-name", flags: "--buyer-last-name <name>" },
+      { name: "buyer-email", flags: "--buyer-email <email>" },
+      { name: "buyer-phone-number", flags: "--buyer-phone-number <phone>" },
+      { name: "shipping-name", flags: "--shipping-name <name>" },
+      { name: "shipping-line1", flags: "--shipping-line1 <text>" },
+      { name: "shipping-line2", flags: "--shipping-line2 <text>" },
+      { name: "shipping-city", flags: "--shipping-city <text>" },
+      { name: "shipping-state", flags: "--shipping-state <text>" },
+      { name: "shipping-zip", flags: "--shipping-zip <text>" },
+      { name: "shipping-country-code", flags: "--shipping-country-code <code>" },
+      { name: "shipping-email", flags: "--shipping-email <email>" },
+      { name: "shipping-phone", flags: "--shipping-phone <phone>" },
       { name: "keyword", flags: "--keyword <text>" },
       { name: "market", flags: "--market <market>" },
       { name: "lang", flags: "--lang <locale>" },
