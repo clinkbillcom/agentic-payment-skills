@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.94. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.95. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.94"
+  version: "0.1.95"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -306,6 +306,9 @@ There are two distinct activation paths:
   Instruction: the newest PENDING row by descending `createTime`. This is not
   Agent selection; exact-GET the resulting ID and verify `ACTIVE` before
   Checkout.
+
+- `visa-cli wallet logout` resets `~/.visa-cli/config.json` to a clean default
+  document, clearing Visa OAuth, card cache, region, and continuation state.
 - If the user actively chooses a PENDING Instruction, preserve that exact ID
   and use the normal `bind-pi -> ordinary activation` flow. Do not reinterpret
   this as automatic latest-PENDING activation or replace the Instruction.
