@@ -30836,6 +30836,30 @@ async function resolvePendingVisaAuthorization(dependencies, context, maxWaitSec
     return resolveQuickVisaAuthorization(dependencies, context, quick, pending.instruction, maxWaitSeconds, browserAction);
   }
   if (pending.state !== "ACTIVE" || !pending.instruction || !pendingInstructionId2 || !pendingResumeCommand) {
+    const pendingPaymentInstrumentId = pending.instruction ? instructionPaymentInstrumentId(pending.instruction) : void 0;
+    if (pending.state === "PENDING" && pendingInstructionId2 && pending.instruction && !pendingPaymentInstrumentId) {
+      return {
+        ready: false,
+        stage: "card",
+        status: pending.timedOut ? "timeout" : "pending",
+        terminal: false,
+        userActionRequired: true,
+        reason: "bind_a_visa_card_in_agent_portal",
+        instructionId: pendingInstructionId2,
+        instructionStatus: pending.instructionStatus,
+        phase: "pending",
+        bindCardUrl: dependencies.bindingPortalUrl?.() ?? null,
+        ...pendingResumeCommand ? {
+          resumeCommand: pendingResumeCommand,
+          resumeReadOnly: true
+        } : {},
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false,
+        rerunAllowed: true,
+        resumeMode: "same_command",
+        checkoutStarted: false
+      };
+    }
     return {
       ready: false,
       stage: "instruction_activation",
@@ -34175,7 +34199,7 @@ function createVisaCommerceCliDependencies(context, commerceContext, agentState)
         ...continuation.paymentInstrumentId ? { paymentInstrumentId: continuation.paymentInstrumentId } : {}
       };
     },
-    bindingPortalUrl: () => new URL("/agent-authorization", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
+    bindingPortalUrl: () => new URL("/", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
     saveContinuation: async (continuation) => {
       agentStateIsQuick = false;
       currentAgentState = {
