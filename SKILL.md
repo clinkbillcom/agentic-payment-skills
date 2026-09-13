@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.88. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.89. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.88"
+  version: "0.1.89"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -25,14 +25,38 @@ If direct execution fails, report that launcher error.
 
 Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
 Edition: it includes every Base Command plus Visa discovery and the CLI-owned
-`visa product-search`, `visa commerce-login`, and `visa commerce-run`
-aggregates.
+`visa recommend-products`, `visa product-search`, `visa commerce-login`,
+`visa commerce-run`, `visa pending-instructions`, and `visa browser-open`
+commands.
 
-Keep execution small. Do not read reference files, inspect source or workflow
-scripts, invoke runtime `--help`, run `date`, use a fixed `sleep`, or load
-JavaScript orchestration modules. Interpret the user's intent, collect only
+Keep normal execution small. Do not read reference files, inspect source or
+workflow scripts, invoke runtime `--help`, run `date`, use a fixed `sleep`, or
+load JavaScript orchestration modules. Interpret the user's intent, collect only
 missing business facts, obtain the required authorization, run the shortest
 matching CLI capability, and report the structured result.
+
+### Aggregate Failure Diagnosis
+
+Normal successful execution does not read references. When an aggregate command
+returns an error, partial coverage, user-action state, or a non-terminal result,
+read only the reference matching that command:
+
+| Command | Reference |
+| --- | --- |
+| `visa recommend` | `references/visa-recommend.md` |
+| `visa recommend-products` | `references/visa-recommend-products.md` |
+| `visa product-search` | `references/visa-product-search.md` |
+| `visa commerce-login` | `references/visa-commerce-login.md` |
+| `visa commerce-run` | `references/visa-commerce-run.md` |
+| `visa pending-instructions` | `references/visa-pending-instructions.md` |
+| `visa browser-open` | `references/visa-browser-open.md` |
+
+Use returned `stage`, `status`, `reason`, `error`, `detail`, `instructionId`,
+`paymentInstrumentId`, `resumeCommand`, and `recovery` to identify the failed
+stage. Run an atomic command only when the matching reference marks it as safe
+read-only diagnosis or the user explicitly authorizes that mutation. Never
+decompose an uncertain purchase into manual payment calls, create a replacement
+Instruction, or retry Checkout.
 
 ## Global Contract
 

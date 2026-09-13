@@ -62,7 +62,23 @@ interface:
     a Program only when its exact code equals merchant ext.visa_program_id.
     Offer URLs never select a merchant.
     Never issue separate recommend, detail, product-search, merchant-list, or
-    external-page calls.
+    external-page calls during normal discovery. Normal successful aggregate
+    execution does not read reference files. When an aggregate returns an
+    error, partial coverage, user-action state, or non-terminal result, read
+    only its matching reference:
+    references/visa-recommend.md,
+    references/visa-recommend-products.md,
+    references/visa-product-search.md,
+    references/visa-commerce-login.md,
+    references/visa-commerce-run.md,
+    references/visa-pending-instructions.md, or
+    references/visa-browser-open.md.
+    Use returned stage, status, reason, error, detail, instructionId,
+    paymentInstrumentId, resumeCommand, and recovery to identify the failed
+    aggregate step. Use an atomic command only when that reference marks it as
+    safe read-only diagnosis or the user explicitly authorizes the mutation.
+    Never blindly decompose a failed purchase, create a replacement
+    Instruction, retry Checkout, or retry payment.
     Read only products and visaBenefits. Before display, lightly check every
     row against the original request using product title/sourceTitle/merchant
     and Benefit title/summary/tags. Remove clearly unrelated rows: a coffee

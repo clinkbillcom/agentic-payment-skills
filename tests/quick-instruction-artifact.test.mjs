@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const root = new URL('../', import.meta.url);
@@ -62,8 +63,23 @@ test('runtime artifacts do not load historical or filter reference files', async
   assert.doesNotMatch(combined, /visa-recommend-filters\.md/u);
   assert.doesNotMatch(combined, /quick-instruction-cases\.md/u);
   assert.doesNotMatch(combined, /references\/change-log\.md/u);
-  const referenceFiles = await walk(new URL('references/', root));
-  assert.deepEqual(referenceFiles, []);
+  const referenceFiles = await walk(fileURLToPath(new URL('references/', root)));
+  assert.deepEqual(
+    referenceFiles.map((path) => path.split('/').pop()).sort(),
+    [
+      'visa-browser-open.md',
+      'visa-commerce-login.md',
+      'visa-commerce-run.md',
+      'visa-pending-instructions.md',
+      'visa-product-search.md',
+      'visa-recommend-products.md',
+      'visa-recommend.md',
+    ],
+  );
+  for (const path of referenceFiles) {
+    const text = await readFile(path, 'utf8');
+    assert.match(text, /Read this file only after/u, path);
+  }
 });
 
 test('unknown browser host guidance never emits a placeholder', () => {

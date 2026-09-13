@@ -35,7 +35,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.88');
+  assert.equal(packageJson.version, '0.1.89');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -73,15 +73,25 @@ test('startup execution is short and non-exploratory', () => {
   );
   assert.match(
     skill,
-    /Keep execution small[\s\S]*Do not read reference files[\s\S]*invoke runtime `--help`[\s\S]*fixed `sleep`/iu,
+    /Keep normal execution small[\s\S]*Do not read reference files[\s\S]*invoke runtime `--help`[\s\S]*fixed `sleep`/iu,
   );
   assert.doesNotMatch(combined, /visa-recommend-filters\.md|quick-instruction-cases\.md/u);
 });
 
-test('runtime package has no maintenance or filter reference files', async () => {
+test('runtime package ships only current aggregate diagnostic references', async () => {
   assert.deepEqual(
-    (await walk(join(root, 'references'))).map((path) => relative(root, path)),
-    [],
+    (await walk(join(root, 'references')))
+      .map((path) => relative(root, path))
+      .sort(),
+    [
+      'references/visa-browser-open.md',
+      'references/visa-commerce-login.md',
+      'references/visa-commerce-run.md',
+      'references/visa-pending-instructions.md',
+      'references/visa-product-search.md',
+      'references/visa-recommend-products.md',
+      'references/visa-recommend.md',
+    ],
   );
   for (const path of ['lib', 'scripts', 'docs']) {
     await assert.rejects(stat(join(root, path)));
@@ -92,6 +102,29 @@ test('runtime package has no maintenance or filter reference files', async () =>
     .filter((path) => !path.startsWith('tests/'))
     .filter((path) => /\.(?:js|mjs|cjs|ts)$/u.test(path));
   assert.deepEqual(runtimeFiles, []);
+});
+
+test('aggregate references map failures to stages and safe atomic commands', async () => {
+  const expected = {
+    'visa-recommend.md': ['visa recommend', 'retryFilters', 'never authorizes'],
+    'visa-recommend-products.md': ['visa recommend-products', 'productMatching.failures', 'product-search'],
+    'visa-product-search.md': ['visa product-search', 'PRODUCT_SELECTION_REQUIRED', 'PRODUCT_VERIFIED'],
+    'visa-commerce-login.md': ['visa commerce-login', 'quick_instruction_get', 'browser-open'],
+    'visa-commerce-run.md': ['visa commerce-run', 'instruction_create', 'read-only'],
+    'visa-pending-instructions.md': ['visa pending-instructions', 'activation_ready', 'select_in_portal'],
+    'visa-browser-open.md': ['visa browser-open', 'manual_required', 'browser-opened'],
+  };
+  for (const [name, needles] of Object.entries(expected)) {
+    const text = await readFile(join(root, 'references', name), 'utf8');
+    for (const needle of needles) {
+      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      assert.match(text, new RegExp(escaped, 'u'), name);
+    }
+    assert.match(text, /Do not|Never/u, name);
+  }
+  assert.match(skill, /Normal successful execution does not read references/u);
+  assert.match(skill, /read only the reference matching that command/u);
+  assert.match(agent, /Never blindly decompose a failed purchase/u);
 });
 
 test('discovery keeps region and Catalog guidance in the main Skill', () => {
