@@ -26,7 +26,7 @@ validate restriction and frozen purchase context
 | `restriction` | `instruction` restriction check | Refused or incomplete purchase facts; fix input, do not create an Instruction |
 | `login_status` / `login` | `visa status` or `visa commerce-login` | Login is unavailable or failed before purchase |
 | `product_resolution` / `product_revalidation` | `visa product-search` or the exact internal product read | Product route, identity, price, currency, or availability drifted |
-| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` | Refresh cards and verify one explicit/default PI; never choose by list order |
+| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` or returned `bindCardUrl` | Refresh cards; when an exact Quick/PENDING ID has no card, tell the user to bind a Visa card and open the returned URL; never choose by list order |
 | `pending_instruction_prepare` | pending-instruction preparation | A PENDING operation was not prepared; do not create a second one from the error alone |
 | `instruction_list` / `instruction_selection` / `instruction_active_verify` | `instruction list --valid-only --payment-instrument-id <selectedPI>` then exact `instruction get` | Only the selected PI's complete usable ACTIVE matches can be reused |
 | `instruction_create` | `instruction create --payment-instrument-id <selectedPI> ...` | Creation failed or did not return a trustworthy ID; do not repeat blindly |
@@ -79,7 +79,13 @@ state first and does not reopen the browser. A closed page or opener failure is
 not proof of business failure.
 
 Binding, VIC, Passkey, and PENDING activation share the ten-minute Agent wait
-boundary. The recovery list comes from
+boundary. An exact saved Quick/PENDING Instruction without a bound card is
+different: return its `instructionId`, `phase=pending`, and `bindCardUrl`
+immediately. The Agent tells the user to bind a Visa card, runs
+`visa browser-open --url <bindCardUrl>`, then reruns the same command with
+`--browser-opened`; manual completion uses `--manual-completed` and checks
+authoritative state first. Continue with the same Instruction ID. For other
+waits, the recovery list comes from
 `GET /agent/cwallet/instructions/activatable`, which may return both PENDING and
 CREATED Instructions. After timeout, use `visa pending-instructions` with the exact ID when
 known. Without exact context, return its instruction list and Portal URL for

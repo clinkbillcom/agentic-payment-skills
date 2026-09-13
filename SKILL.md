@@ -615,10 +615,13 @@ The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category
 original Quick continuation (or normal Instruction selection only without a Quick),
 product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
-The command returns before browser opening when user action is required. Use
-`visa browser-open --url <operation-url>` for a system-browser attempt, then
-rerun with `--browser-opened` to wait. For a user-completed operation, rerun
-with `--manual-completed` so the CLI checks status first without reopening.
+When the saved Quick/PENDING Instruction has no bound card, the command returns
+immediately with `instructionId`, `phase=pending`, and `bindCardUrl`; tell the
+user that a Visa card must be bound, then run
+`visa browser-open --url <bindCardUrl>` in the system browser. After a
+successful launch, rerun the same command with `--browser-opened` to wait for
+binding/activation. If the user completed it manually, rerun with
+`--manual-completed`; the CLI checks status first and does not reopen.
 Missing/changed facts, a real error, refusal, cancellation, or timeout require
 a user-facing interruption.
 
@@ -939,9 +942,12 @@ unchanged into the next command. Do not write them to a local file.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC; the CLI never opens Bind Card. Timed-out card,
-  VIC, or Passkey waits (10 minutes) exit through the pending-instruction
-  recovery, never through a VIC URL or the Portal home page.
+- Portal owns binding and VIC. A saved Quick/PENDING Instruction without a card
+  immediately returns its exact `bindCardUrl`; tell the user to bind a Visa
+  card and use `visa browser-open` to open it in the system browser. Continue
+  with the same `instructionId` after the authoritative card/Instruction check.
+  Other timed-out card, VIC, or Passkey waits (10 minutes) exit through the
+  pending-instruction recovery, never through a VIC URL or the Portal home page.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
   Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.

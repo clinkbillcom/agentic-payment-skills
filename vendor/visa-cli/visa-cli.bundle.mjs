@@ -30984,34 +30984,53 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
     }
     let enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
     if (enabledVisa.length === 0) {
-      const wait2 = await waitForExact();
+      const bindingUrl = dependencies.bindingPortalUrl?.() ?? null;
+      const bindingResult = (status, extra = {}) => ({
+        ready: false,
+        stage: "card",
+        status,
+        terminal: false,
+        userActionRequired: true,
+        reason: "bind_a_visa_card_in_agent_portal",
+        instructionId: quick.instructionId,
+        bindCardUrl: bindingUrl,
+        phase: "pending",
+        createsAnotherInstruction: false,
+        paymentRetryAllowed: false,
+        rerunAllowed: true,
+        resumeMode: "same_command",
+        checkoutStarted: false,
+        ...extra
+      });
+      if (browserAction === void 0) {
+        return bindingResult("pending");
+      }
+      let wait2;
+      if (browserAction === "browser_opened") {
+        wait2 = await dependencies.waitForEvents({
+          type: "payment_method.added,payment_method.updated,purchase_instruction.activated",
+          maxWaitSeconds: waitSeconds
+        });
+      }
       const exact2 = await readExact();
-      if (!valid(exact2))
-        return failure("quick_instruction_changed_or_unavailable_after_wait");
+      if (!valid(exact2)) {
+        return failure(browserAction === "manual_completed" ? "quick_instruction_changed_or_unavailable_after_manual_completion" : "quick_instruction_changed_or_unavailable_after_wait");
+      }
       instruction = exact2;
       cards = await dependencies.refreshCards();
-      if (instructionStatus(instruction) === "ACTIVE")
+      if (instructionStatus(instruction) === "ACTIVE") {
         return activeResult(instruction, cards);
+      }
       if (!createdCardReady()) {
         return failure("created_quick_instruction_bound_card_not_vic_ready_or_mismatched");
       }
       enabledVisa = cards.filter((card2) => !cardDisabled(card2) && cardIsVisa(card2));
       if (enabledVisa.length === 0) {
-        return {
-          ready: false,
-          stage: "card",
-          status: wait2.timedOut ? "timeout" : "pending",
-          terminal: false,
-          userActionRequired: true,
-          reason: "bind_a_visa_card_in_agent_portal",
-          instructionId: quick.instructionId,
-          bindCardUrl: dependencies.bindingPortalUrl?.() ?? null,
-          createsAnotherInstruction: false,
-          paymentRetryAllowed: false,
-          rerunAllowed: true,
-          resumeMode: "same_command",
-          checkoutStarted: false
-        };
+        return bindingResult(browserAction === "manual_completed" ? "user_action_still_pending" : wait2?.timedOut ? "timeout" : "pending", {
+          ...wait2 ? { browserAction: "browser_opened" } : {},
+          ...browserAction === "manual_completed" ? { manualCompletionChecked: true } : {},
+          ...wait2?.resumeCommand ? { resumeCommand: wait2.resumeCommand } : {}
+        });
       }
     }
     const boundPi = instructionPaymentInstrumentId(instruction);
