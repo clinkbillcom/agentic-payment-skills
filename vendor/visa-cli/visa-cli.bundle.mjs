@@ -30999,6 +30999,16 @@ async function resolveQuickVisaAuthorization(dependencies, context, quick, instr
   };
   try {
     let cards = await dependencies.refreshCards();
+    if (instructionStatus(instruction) === "PENDING" && cards.some((card2) => !cardDisabled(card2) && cardIsVisa(card2))) {
+      const refreshed = await readExact();
+      if (!valid(refreshed)) {
+        return failure("quick_instruction_changed_or_unavailable_after_card_refresh");
+      }
+      instruction = refreshed;
+      if (instructionStatus(instruction) === "ACTIVE") {
+        return activeResult(instruction, cards);
+      }
+    }
     if (instructionStatus(instruction) === "ACTIVE") {
       return activeResult(instruction, cards);
     }
