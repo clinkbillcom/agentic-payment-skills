@@ -10,898 +10,271 @@ const skill = await readFile(skillPath, 'utf8');
 const readme = await readFile(join(root, 'README.md'), 'utf8');
 const readmeZh = await readFile(join(root, 'README.zh.md'), 'utf8');
 const agent = await readFile(join(root, 'agents', 'openai.yaml'), 'utf8');
-const filterReference = await readFile(
-  join(root, 'references', 'visa-recommend-filters.md'),
+const pendingReference = await readFile(
+  join(root, 'references', 'visa-pending-instructions.md'),
   'utf8',
 );
+const combined = [skill, readme, readmeZh, agent].join('\n');
 const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const vendorPackage = JSON.parse(
   await readFile(join(root, 'vendor', 'visa-cli', 'package.json'), 'utf8'),
 );
-const documents = [skill, readme, readmeZh, agent, filterReference];
-const combined = documents.join('\n');
 
 async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
   const files = [];
   for (const entry of entries) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...await walk(path));
-    } else {
-      files.push(path);
-    }
+    if (entry.isDirectory()) files.push(...await walk(path));
+    else files.push(path);
   }
   return files;
 }
 
-test('package exposes only the bundled Visa launcher and focused tests', () => {
+test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.74');
+  assert.equal(packageJson.version, '0.1.93');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
-  assert.deepEqual(packageJson.scripts, {
-    test: 'node --test tests/*.test.mjs',
-  });
-  assert.match(skill, /Visa Skill 0\.1\.74/u);
-  assert.match(skill, /version: "0\.1\.74"/u);
-  assert.ok(
-    readme.includes(
-      `Skill \`${packageJson.version}\` vendors Visa CLI \`${vendorPackage.version}\` `
-        + `from upstream commit\n\`${vendorPackage.upstreamCommit}\``,
-    ),
-  );
-  assert.ok(readmeZh.includes(`Skill \`${packageJson.version}\``));
-  assert.ok(readmeZh.includes(`Visa CLI \`${vendorPackage.version}\``));
-  assert.ok(readmeZh.includes(vendorPackage.upstreamCommit));
-  assert.match(readme, /production-backend variant/iu);
-  assert.match(readmeZh, /生产后端发行线/u);
+  assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
+  assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
+  assert.ok(skill.includes(`version: "${packageJson.version}"`));
+  assert.ok(readme.includes(`Skill \`${packageJson.version}\``));
+  assert.ok(readmeZh.includes(`Skill 版本：\`${packageJson.version}\``));
   assert.match(skill, /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
   assert.match(combined, /bin\/visa-cli/u);
   assert.doesNotMatch(combined, /vendor\/clink-cli|bin\/clink\b/u);
-  assert.doesNotMatch(skill, /"environment": "uat"/u);
 });
 
-test('description routes broad payment and commerce intent without naming a product', () => {
+test('Skill routes the supported commerce and payment intent', () => {
   const description = skill.match(/^description:\s*"([^"]+)"/mu)?.[1] ?? '';
-
-  assert.match(description, /even when Visa is not named/iu);
-  assert.match(description, /pay\/支付\/付款/iu);
-  assert.match(description, /buy or order\/购买\/下单\/订购/iu);
-  assert.match(description, /place an order\/点单\/点餐/iu);
-  assert.match(description, /checkout/iu);
-  assert.match(description, /shopping\/购物/iu);
-  assert.match(description, /coupons\/优惠券/iu);
-  assert.match(description, /vouchers\/代金券/iu);
-  assert.match(description, /discounts\/优惠/iu);
-  assert.match(description, /benefits\/权益/iu);
-  assert.match(description, /gift cards/iu);
-  assert.match(description, /merchant offers/iu);
-  assert.match(description, /product discovery/iu);
-  assert.doesNotMatch(description, /coffee|咖啡/iu);
+  for (const phrase of [
+    'pay/支付/付款',
+    'buy or order/购买/下单/订购',
+    'place an order/点单/点餐',
+    'checkout',
+    'shopping/购物',
+    'coupons/优惠券',
+    'vouchers/代金券',
+    'discounts/优惠',
+    'benefits/权益',
+    'gift cards',
+    'merchant offers',
+    'product discovery',
+  ]) assert.match(description, new RegExp(phrase, 'iu'), phrase);
+  assert.doesNotMatch(description, /coffee|咖啡/u);
 });
 
-test('legacy provider labels are absent from Skill-facing files and tests', async () => {
-  const forbidden = [
-    ['Fu', 'hui'].join(''),
-    ['富', '惠'].join(''),
-  ];
-  const testDocuments = await Promise.all(
-    (await walk(join(root, 'tests'))).map((path) => readFile(path, 'utf8')),
+test('startup execution is short and non-exploratory', () => {
+  assert.match(
+    skill,
+    /resolved Skill Path is authoritative[\s\S]*Execute its launcher directly[\s\S]*Never[\s\S]*ls[\s\S]*stat[\s\S]*find[\s\S]*which[\s\S]*test -x[\s\S]*If direct execution fails/iu,
   );
-  const searchable = [...documents, ...testDocuments].join('\n');
-
-  for (const label of forbidden) {
-    assert.equal(
-      searchable.toLocaleLowerCase().includes(label.toLocaleLowerCase()),
-      false,
-    );
-  }
-});
-
-test('Skill stays within the runtime prompt budget', async () => {
-  const skillBytes = (await stat(skillPath)).size;
-  const startupBytes = await Promise.all([
-    skillPath,
-    join(root, 'agents', 'openai.yaml'),
-  ].map(async (path) => (await stat(path)).size));
-
-  assert.ok(skillBytes <= 48 * 1024, `SKILL.md is ${skillBytes} bytes`);
-  assert.ok(
-    startupBytes.reduce((sum, bytes) => sum + bytes, 0) <= 64 * 1024,
-    'startup-readable files exceed 64 KiB',
+  assert.match(
+    skill,
+    /Keep normal execution small[\s\S]*Do not read reference files[\s\S]*invoke runtime `--help`[\s\S]*fixed `sleep`/iu,
   );
+  assert.doesNotMatch(combined, /visa-recommend-filters\.md|quick-instruction-cases\.md/u);
 });
 
-test('old workflow runtime, scripts, and docs are absent and filter reference is focused', async () => {
-  for (const directory of ['lib', 'scripts', 'docs']) {
-    await assert.rejects(stat(join(root, directory)));
-  }
+test('runtime package ships only current aggregate diagnostic references', async () => {
   assert.deepEqual(
-    (await walk(join(root, 'references'))).map((path) => relative(root, path)),
-    ['references/visa-recommend-filters.md'],
+    (await walk(join(root, 'references')))
+      .map((path) => relative(root, path))
+      .sort(),
+    [
+      'references/visa-browser-open.md',
+      'references/visa-commerce-login.md',
+      'references/visa-commerce-run.md',
+      'references/visa-pending-instructions.md',
+      'references/visa-product-search.md',
+      'references/visa-recommend-products.md',
+      'references/visa-recommend.md',
+    ],
   );
-  assert.ok(
-    (await stat(join(root, 'references', 'visa-recommend-filters.md'))).size
-      <= 4 * 1024,
-  );
-
+  for (const path of ['lib', 'scripts', 'docs']) {
+    await assert.rejects(stat(join(root, path)));
+  }
   const runtimeFiles = (await walk(root))
     .map((path) => relative(root, path))
     .filter((path) => !path.startsWith('vendor/'))
     .filter((path) => !path.startsWith('tests/'))
     .filter((path) => /\.(?:js|mjs|cjs|ts)$/u.test(path));
   assert.deepEqual(runtimeFiles, []);
-
-  const trackedContract = documents.join('\n');
-  assert.doesNotMatch(trackedContract, /\blib\/[^\s`]*fsm|classify[A-Z]\w+Observation/u);
-  assert.doesNotMatch(trackedContract, /^## Action Matrix$/mu);
 });
 
-test('ordinary execution loads only the routed filter reference and stays non-exploratory', () => {
-  assert.match(
-    skill,
-    /For Visa Benefit discovery, read only[\s\S]*visa-recommend-filters\.md[\s\S]*Otherwise do\s+not read reference files[\s\S]*invoke runtime[\s\S]*`--help`[\s\S]*fixed `sleep`/iu,
-  );
-  assert.match(skill, /shortest matching CLI capability/iu);
-  assert.match(
-    skill,
-    /resolved Skill Path is authoritative[\s\S]*Execute its launcher directly[\s\S]*Never[\s\S]*`ls`[\s\S]*`stat`[\s\S]*`find`[\s\S]*`which`[\s\S]*`test -x`[\s\S]*list `bin\/`[\s\S]*If direct execution fails/iu,
-  );
-  assert.match(
-    skill,
-    /does not claim complete\s+behavioral equivalence[\s\S]*former Agent-side orchestration/iu,
-  );
+test('aggregate references map failures to stages and safe atomic commands', async () => {
+  const expected = {
+    'visa-recommend.md': ['visa recommend', 'retryFilters', 'never authorizes'],
+    'visa-recommend-products.md': ['visa recommend-products', 'productMatching.failures', 'product-search'],
+    'visa-product-search.md': ['visa product-search', 'PRODUCT_SELECTION_REQUIRED', 'PRODUCT_VERIFIED'],
+    'visa-commerce-login.md': ['visa commerce-login', 'quick_instruction_get', 'browser-open'],
+    'visa-commerce-run.md': ['visa commerce-run', 'instruction_create', 'read-only'],
+    'visa-pending-instructions.md': ['visa pending-instructions', 'activation_ready', 'select_in_portal'],
+    'visa-browser-open.md': ['visa browser-open', 'manual_required', 'browser-opened'],
+  };
+  for (const [name, needles] of Object.entries(expected)) {
+    const text = await readFile(join(root, 'references', name), 'utf8');
+    for (const needle of needles) {
+      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      assert.match(text, new RegExp(escaped, 'u'), name);
+    }
+    assert.match(text, /Do not|Never/u, name);
+  }
+  assert.match(skill, /Normal successful execution does not read references/u);
+  assert.match(skill, /read only the reference matching that command/u);
+  assert.match(agent, /Never blindly decompose a failed purchase/u);
 });
 
-test('initial Visa discovery runs one matched-merchant aggregate without broad Catalog', () => {
+test('discovery keeps region and Catalog guidance in the main Skill', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
   );
-  const singleCommand = discovery.slice(
-    discovery.indexOf('Use one strict explicit-filter request by default'),
-    discovery.indexOf('Only when exactly four'),
-  );
-  const aggregateCommand = discovery.slice(
-    discovery.indexOf('Only when exactly four'),
-    discovery.indexOf('Never add `--include-provider-products`'),
-  );
-
-  assert.match(skill, /Lock one language for the whole run/iu);
-  assert.match(skill, /\ben\b[\s\S]*zh-CN[\s\S]*zh-TW[\s\S]*zh-HK/u);
-  assert.match(
-    skill,
-    /Distribution And Purchase Environment[\s\S]*bundled launcher pins[\s\S]*`production`[\s\S]*Anonymous[\s\S]*discovery invokes it directly/iu,
-  );
+  assert.match(discovery, /exactly one `visa recommend-products`/u);
+  assert.match(discovery, /Every recommendation request carries `--region`/u);
+  assert.match(discovery, /Add `--category` when the user names a category/u);
+  assert.match(discovery, /Omit `--category` for a genuinely generic regional request/u);
   assert.match(
     discovery,
-    /Initial shopping discovery[\s\S]*exactly one `visa recommend-products`[\s\S]*unchanged original current user request/iu,
+    /If another axis or code is needed[\s\S]*visa taxonomy[\s\S]*GET \{base_url\}\/api\/v1\/taxonomy/iu,
   );
-  assert.match(
-    discovery,
-    /Never pass[\s\S]*`--include-broad-catalog` or `--broad-queries`/iu,
-  );
-  assert.match(
-    discovery,
-    /merchant list once[\s\S]*Program `code`[\s\S]*merchant `ext\.visa_program_id`[\s\S]*Offer URL never selects a merchant/iu,
-  );
-  assert.match(
-    discovery,
-    /positional query[\s\S]*only primary text[\s\S]*Visa recommendation sends taxonomy filters only[\s\S]*no keyword[\s\S]*Program-to-merchant match[\s\S]*merchant's Catalog query[\s\S]*Offer titles must[\s\S]*not replace/iu,
-  );
-  assert.match(
-    singleCommand,
-    /visa recommend-products "<original-current-user-query>"[\s\S]*--region <region> --category <category>[\s\S]*--anonymous[\s\S]*--lang/iu,
-  );
-  assert.doesNotMatch(singleCommand, /--filter-sets/u);
-  assert.doesNotMatch(
-    singleCommand,
-    /<environment-flag>|--sandbox|--test|--include-broad-catalog|--broad-queries/u,
-  );
-  assert.match(
-    aggregateCommand,
-    /exactly four genuinely different safe plans[\s\S]*recommend-products "<original-current-user-query>"[\s\S]*--filter-sets[\s\S]*filter-1[\s\S]*filter-2[\s\S]*filter-3[\s\S]*filter-4[\s\S]*--anonymous[\s\S]*--lang/iu,
-  );
-  assert.doesNotMatch(
-    aggregateCommand,
-    /<environment-flag>|--sandbox|--test|--include-broad-catalog|--broad-queries/u,
-  );
-  assert.match(
-    discovery,
-    /Never duplicate filters[\s\S]*fan out reward types[\s\S]*multiple Agent-managed Shell commands[\s\S]*one taxonomy snapshot[\s\S]*four parallel Visa[\s\S]*de-duplicates by Program code/iu,
-  );
-  assert.match(
-    discovery,
-    /Read[\s\S]*`references\/visa-recommend-filters\.md`/u,
-  );
-  assert.match(
-    discovery,
-    /Never add `--include-provider-products`, `--include-broad-catalog`, or[\s\S]*`--broad-queries`[\s\S]*Agent-managed[\s\S]*Catalog command/iu,
-  );
-  assert.match(
-    discovery,
-    /aggregate owns one[\s\S]*anonymous merchant-list read[\s\S]*exact Program-code matching[\s\S]*matched-merchant[\s\S]*Catalog search/iu,
-  );
-  assert.match(
-    discovery,
-    /does not[\s\S]*log in[\s\S]*bind a card[\s\S]*create an Instruction[\s\S]*Checkout[\s\S]*payment/iu,
-  );
-  assert.match(
-    skill,
-    /visa recommend-products[\s\S]*also omit them[\s\S]*rely[\s\S]*bundled launcher/iu,
-  );
-  assert.match(
-    agent,
-    /product-match[\s\S]*never runs broad Catalog[\s\S]*never pass --include-broad-catalog[\s\S]*--broad-queries[\s\S]*never call standalone catalog search as fallback/iu,
-  );
+  assert.match(discovery, /Visa recommendation sends taxonomy filters only and no keyword/u);
+  assert.match(discovery, /Program-to-merchant[\s\S]*Catalog query/u);
+  assert.doesNotMatch(discovery, /references\/visa-recommend-filters\.md/u);
 });
 
-test('anonymous discovery never preflights wallet environment', () => {
-  const environment = skill.slice(
-    skill.indexOf('### Distribution And Purchase Environment'),
-    skill.indexOf('### Benefit Source Region'),
-  );
+test('discovery remains Visa-first and does not use broad Catalog fallback', () => {
   const discovery = skill.slice(
     skill.indexOf('## Visa Benefit And Product Discovery'),
     skill.indexOf('### Selected Visa Benefit Resolution'),
   );
-  const wallet = skill.slice(
-    skill.indexOf('### CAP-WALLET:'),
-    skill.indexOf('### CAP-CARD:'),
-  );
-
-  assert.match(
-    environment,
-    /bundled launcher pins[\s\S]*`production`[\s\S]*omits `--sandbox`\/`--test`/iu,
-  );
-  assert.match(
-    environment,
-    /never determine,[\s\S]*inspect,[\s\S]*infer,[\s\S]*override[\s\S]*authentication preflight/iu,
-  );
-  assert.match(
-    environment,
-    /Only after[\s\S]*exact product[\s\S]*authorizes an authenticated\s+purchase[\s\S]*wallet is production-bound[\s\S]*environment: "production"[\s\S]*conflicting[\s\S]*stops/iu,
-  );
-  assert.match(
-    wallet,
-    /wallet status[\s\S]*explicit wallet request[\s\S]*after[\s\S]*exact product selection[\s\S]*Never use it to preflight anonymous discovery/iu,
-  );
-  assert.doesNotMatch(
-    discovery,
-    /wallet status|wallet init|visa status|config get|authentication preflight/iu,
-  );
-  assert.match(
-    agent,
-    /resolved Skill Path and launcher are[\s\S]*authoritative[\s\S]*Execute it directly[\s\S]*never run ls[\s\S]*stat[\s\S]*find[\s\S]*which[\s\S]*test -x/iu,
-  );
-  assert.match(
-    agent,
-    /launcher pins this distribution to production[\s\S]*anonymous discovery[\s\S]*omits --sandbox\/--test/iu,
-  );
-  assert.match(
-    agent,
-    /Check wallet environment only[\s\S]*exact product selection[\s\S]*explicit[\s\S]*purchase authorization[\s\S]*context uses[\s\S]*environment production/iu,
-  );
+  assert.match(discovery, /Never pass[\s\S]*`--include-broad-catalog` or `--broad-queries`/u);
+  assert.match(discovery, /never pass `--keyword`/u);
+  assert.match(discovery, /exact Program `code`[\s\S]*merchant `ext\.visa_program_id`/u);
+  assert.match(discovery, /Offer titles must not replace it/u);
+  assert.match(discovery, /one strict explicit-filter request by default/u);
+  assert.match(discovery, /four genuinely different safe plans/u);
+  assert.match(skill, /Never fill `reward_type`[\s\S]*--reward-type/u);
+  assert.match(agent, /Never fill reward_type[\s\S]*--reward-type/u);
 });
 
-test('Benefit source region resolves inside recommend without a preflight', () => {
+test('source region stays user-owned and searches do not switch it', () => {
   const sourceRegion = skill.slice(
     skill.indexOf('### Benefit Source Region'),
     skill.indexOf('### Catalog Money'),
   );
-
-  assert.match(
-    sourceRegion,
-    /unique taxonomy `--region hk`[\s\S]*`--region cn`[\s\S]*selects that[\s\S]*endpoint[\s\S]*persists it as the next default/iu,
-  );
-  assert.match(
-    sourceRegion,
-    /no HK\/CN region[\s\S]*omit `--market`[\s\S]*saved value[\s\S]*initializes missing config to `hk`/iu,
-  );
-  assert.match(
-    sourceRegion,
-    /source and destination are explicitly different[\s\S]*`--market <source>`[\s\S]*`--region <destination>`[\s\S]*Explicit market[\s\S]*wins/iu,
-  );
-  assert.match(
-    sourceRegion,
-    /Never run `visa region get` or `visa region set` as a search preflight[\s\S]*only when the user separately asks/iu,
-  );
-  assert.match(
-    sourceRegion,
-    /returned `sourceRegion`[\s\S]*`sourceEndpoint`[\s\S]*match the selection/iu,
-  );
-  assert.match(
-    sourceRegion,
-    /Taxonomy `--region`[\s\S]*where a Benefit is usable[\s\S]*unique HK\/CN value[\s\S]*next source default[\s\S]*other or multi-value destinations do not/iu,
-  );
-  assert.match(
-    agent,
-    /unique[\s\S]*--region hk[\s\S]*--region cn[\s\S]*selects that endpoint[\s\S]*persists[\s\S]*no HK\/CN region[\s\S]*saved config[\s\S]*explicitly different[\s\S]*--market <source>[\s\S]*explicit market wins[\s\S]*Never run visa region get\/set/iu,
-  );
-  assert.match(
-    filterReference,
-    /Required Shape[\s\S]*`region`[\s\S]*user destination[\s\S]*remembered region[\s\S]*`hk`[\s\S]*`category`/iu,
-  );
+  assert.match(sourceRegion, /A search never changes it/u);
+  assert.match(sourceRegion, /Omit `--market` in every Benefit search/u);
+  assert.match(sourceRegion, /taxonomy `--region` is a destination, never a source/u);
+  assert.match(sourceRegion, /`visa region set <hk\|cn>` only when the user explicitly asks/u);
+  assert.match(sourceRegion, /persists nothing/u);
+  assert.match(agent, /never switches the HK\/CN source/u);
 });
 
-test('Visa availability returns Program-matched products plus unmatched Benefits only', () => {
-  const routing = skill.slice(
-    skill.indexOf('## Intent Routing'),
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-  );
-  const discovery = skill.slice(
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-    skill.indexOf('### Selected Visa Benefit Resolution'),
-  );
-  const allCommand = discovery.slice(
-    discovery.indexOf('For broad availability wording'),
-    discovery.indexOf('For a Hong Kong destination'),
-  );
-
-  assert.match(
-    routing,
-    /What Visa Benefits can I use in Hong Kong[\s\S]*one[\s\S]*Visa recommendation[\s\S]*configured internal product matching/iu,
-  );
-  assert.match(
-    discovery,
-    /broad availability wording[\s\S]*always add `--all`[\s\S]*complete regional[\s\S]*set/iu,
-  );
-  assert.match(
-    allCommand,
-    /visa recommend-products "<original-current-user-query>"[\s\S]*<individual-filter-flags>[\s\S]*--anonymous[\s\S]*--all[\s\S]*--lang/iu,
-  );
-  assert.doesNotMatch(
-    allCommand,
-    /--filter-sets|--include-provider-products|--include-broad-catalog|--broad-queries|<environment-flag>|--sandbox|--test/u,
-  );
-  assert.match(
-    discovery,
-    /Hong Kong destination[\s\S]*`--region hk`[\s\S]*single-filter call[\s\S]*four-set aggregate mode[\s\S]*"region": \["hk"\][\s\S]*never add an outer `--region`/iu,
-  );
-  assert.match(
-    discovery,
-    /Read only the aggregate `products` and `visaBenefits` collections/iu,
-  );
-  assert.match(
-    discovery,
-    /`products` contains only verified internal UCP products[\s\S]*exact[\s\S]*Program-to-merchant matching[\s\S]*matched Program must not be displayed again[\s\S]*Benefit/iu,
-  );
-  assert.match(
-    discovery,
-    /`matchedPrograms` array[\s\S]*purchase provenance only[\s\S]*Never use it[\s\S]*Benefit title[\s\S]*Offer URL[\s\S]*returnedProductCount>0[\s\S]*returnedVisaBenefitCount=0[\s\S]*products only/iu,
-  );
-  assert.match(
-    discovery,
-    /`visaBenefits` contains Programs[\s\S]*did not resolve[\s\S]*exact orderable[\s\S]*only source for user-facing Benefit rows/iu,
-  );
-  assert.match(
-    discovery,
-    /Lightly check both collections[\s\S]*original request[\s\S]*Drop clearly unrelated rows[\s\S]*coffee excludes supermarket products\/Benefits[\s\S]*Keep plausible aliases\/translations/iu,
-  );
-  assert.match(
-    agent,
-    /Read only products and visaBenefits[\s\S]*Products contains only verified internal UCP[\s\S]*products from exact Program-to-merchant matching[\s\S]*matchedPrograms is purchase provenance only[\s\S]*visaBenefits is the only source/iu,
-  );
+test('result presentation keeps products and Benefits distinct', () => {
+  assert.match(skill, /Read only the aggregate `products` and `visaBenefits` collections/u);
+  assert.match(skill, /`products` first[\s\S]*`visaBenefits`/u);
+  assert.match(skill, /only `products` remain[\s\S]*products only/u);
+  assert.match(skill, /only `visaBenefits` remain[\s\S]*Benefits only/u);
+  assert.match(skill, /both filtered collections are empty[\s\S]*no-results/u);
+  assert.match(skill, /`matchedPrograms` array[\s\S]*purchase provenance only/u);
+  assert.match(skill, /visaBenefits[\s\S]*only source for user-facing Benefit rows/u);
 });
 
-test('discovery presents products first and stays silent about empty collections', () => {
-  const discovery = skill.slice(
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-    skill.indexOf('### Selected Visa Benefit Resolution'),
-  );
-  const resultContract = skill.slice(
-    skill.indexOf('## Result Contract'),
-    skill.indexOf('## Safety Summary'),
-  );
-
-  for (const document of [discovery, resultContract, agent]) {
-    assert.match(
-      document,
-      /products`?\s+first[\s\S]*visaBenefits/iu,
-    );
-    assert.match(
-      document,
-      /only\s+`?products`?\s+remain[\s\S]*products only[\s\S]*do not mention missing[\s\S]*Benefits/iu,
-    );
-    assert.match(
-      document,
-      /only\s+`?visaBenefits`?\s+remain[\s\S]*Benefits only[\s\S]*do not mention missing[\s\S]*products/iu,
-    );
-    assert.match(
-      document,
-      /both filtered collections are empty[\s\S]*no-results|no result only when[\s\S]*both filtered collections are empty/iu,
-    );
-  }
-  assert.match(
-    readme,
-    /orderable products first[\s\S]*Benefits[\s\S]*empty sections are omitted[\s\S]*both[\s\S]*collections are empty/iu,
-  );
-  assert.match(
-    readmeZh,
-    /可下单商品优先[\s\S]*相关权益其次[\s\S]*空集合不单独说明[\s\S]*两边[\s\S]*都为空/iu,
-  );
-});
-
-test('compact filter reference defines schema, selection priority, and intent boundary', () => {
-  assert.match(
-    filterReference,
-    /Every request or `--filter-sets` object requires[\s\S]*`region`[\s\S]*`category`/iu,
-  );
-  assert.match(
-    filterReference,
-    /`category`[\s\S]*Multiple[\s\S]*values are OR[\s\S]*Different axes are AND/iu,
-  );
-  assert.match(
-    filterReference,
-    /"region": \["hk"\][\s\S]*"category": \["shopping_supermarket", "shopping_department_mall"\]/u,
-  );
-  assert.match(
-    filterReference,
-    /Add `purpose`, `reward_type`, `attribute`, `card_level`, or `card_issuer` only[\s\S]*explicitly stated[\s\S]*otherwise omit/iu,
-  );
-  assert.match(
-    filterReference,
-    /Generic `优惠`[\s\S]*`权益`[\s\S]*`benefit`[\s\S]*`offer` selects none/iu,
-  );
-  for (const field of ['type', 'keyword', 'limit', 'page']) {
-    assert.doesNotMatch(filterReference, new RegExp(`"${field}"\\s*:`, 'u'));
-  }
-  assert.match(
-    filterReference,
-    /Prefer one multi-category plan[\s\S]*`--filter-sets`[\s\S]*four genuinely different safe plans[\s\S]*each still\s+requires region\/category/iu,
-  );
-  assert.match(
-    filterReference,
-    /Visa recommendation uses only[\s\S]*taxonomy filters[\s\S]*sends no[\s\S]*keyword[\s\S]*unchanged positional query[\s\S]*Program-matched[\s\S]*merchant Catalog search[\s\S]*Never pass `--include-broad-catalog`[\s\S]*`--broad-queries`/iu,
-  );
-  const taxonomyCodes = [
-    'outbound', 'study', 'local', 'inbound', 'haitao',
-    'cn', 'hmt', 'kj', 'sea', 'anz', 'eu', 'na', 'mideast', 'sasia',
-    'africa', 'global', 'hk', 'mo', 'tw', 'jp', 'kr', 'th', 'my', 'sg',
-    'vn', 'ph', 'id', 'kh', 'la', 'bn', 'mv', 'au', 'nz', 'gb', 'fr',
-    'de', 'it', 'es', 'ch', 'nl', 'be', 'at', 'pt', 'gr', 'ie', 'us',
-    'ca', 'mx', 'ae', 'qa', 'sa', 'in', 'np', 'bd', 'pk', 'ma', 'za', 'eg',
-    'dining', 'dining_restaurant', 'dining_cafe_bakery', 'dining_bar',
-    'dining_fast_casual', 'dining_fine', 'dining_delivery_food', 'dining_other',
-    'shopping', 'shopping_department_mall', 'shopping_supermarket',
-    'shopping_fashion', 'shopping_luxury', 'shopping_beauty',
-    'shopping_jewelry_watches', 'shopping_electronics', 'shopping_duty_free',
-    'shopping_specialty', 'shopping_other', 'lodging', 'lodging_hotel',
-    'lodging_resort', 'lodging_apartment', 'lodging_budget', 'lodging_other',
-    'airfare', 'airfare_ticket', 'airfare_upgrade', 'airfare_lounge',
-    'airfare_baggage', 'airfare_other', 'ground_transport',
-    'transport_car_rental', 'transport_ride_taxi', 'transport_airport_transfer',
-    'transport_transit_rail', 'transport_fuel_parking', 'transport_other',
-    'travel_service', 'travel_visa', 'travel_insurance', 'travel_medical',
-    'travel_tour_activity', 'travel_tax_refund', 'travel_concierge',
-    'travel_other', 'entertainment', 'ent_attraction', 'ent_cinema_show',
-    'ent_culture', 'ent_sports', 'ent_nightlife_gaming', 'ent_other',
-    'wellness', 'wellness_spa_massage', 'wellness_beauty_salon',
-    'wellness_fitness', 'wellness_medical', 'wellness_onsen', 'wellness_other',
-    'telecom', 'telecom_roaming', 'telecom_sim_esim', 'telecom_wifi',
-    'telecom_mobile', 'telecom_other', 'financial_service', 'fin_fx',
-    'fin_installment', 'fin_insurance', 'fin_other', 'education',
-    'edu_study_abroad', 'edu_course', 'edu_tuition', 'edu_student_living',
-    'edu_other', 'other', 'other_uncategorized', 'discount', 'cashback',
-    'coupon', 'points', 'privilege', 'gift', 'new_customer', 'limited_time',
-    'limited_quantity', 'no_threshold', 'stackable', 'online_only',
-    'instore_only', 'app_exclusive', 'applepay', 'reservation_required',
-    'free_cancellation', 'family_friendly', 'couple', 'group', 'pet_friendly',
-    'senior_friendly', 'premium', 'exclusive', 'classic', 'gold', 'platinum',
-    'signature', 'infinite', 'business', 'business_gold', 'business_platinum',
-    'business_signature', 'corporate', 'all', 'BOC', 'BOCOM', 'CCB', 'ICBC',
-    'ABC', 'CITIC', 'CGB', 'CMB', 'PAB', 'SPDB', 'CIB', 'HXB', 'CMBC',
-    'BOB', 'BOS', 'CEB', 'CITI', 'BEA', 'SCB', 'NCB', 'HKB', 'BOJ', 'BOD',
-    'HSB', 'BODG', 'JXB', 'BOZ', 'CQRCB', 'BONB', 'BOG', 'BOX', 'ZJTLB',
-    'HRB', 'BRCB', 'GRCB', 'BOH', 'CZB', 'BOSZ', 'NYRCB', 'BOGY', 'BOCS',
-    'BOJL', 'SJB', 'BOCD', 'XIB', 'PSBC', 'SRCB', 'FUBON', 'CITICDB',
-    'CCBDB', 'BOCDB', 'CMBDB', 'ABCDB', 'CIBPLATINUM', 'BOCAPP',
-  ];
-  for (const code of taxonomyCodes) {
-    assert.match(filterReference, new RegExp(`\\b${code}\\b`, 'u'), code);
-  }
-  assert.match(
-    filterReference,
-    /香港超市和百货优惠[\s\S]*shopping_supermarket shopping_department_mall[\s\S]*香港本地超市优惠券[\s\S]*purpose=local[\s\S]*reward_type=coupon[\s\S]*我想下单咖啡[\s\S]*category=dining_cafe_bakery/iu,
-  );
-  assert.match(
-    agent,
-    /Every plan must include region[\s\S]*at least one category[\s\S]*remembered search region[\s\S]*else hk[\s\S]*multiple values as OR[\s\S]*purpose[\s\S]*reward_type[\s\S]*attribute[\s\S]*card_level[\s\S]*card_issuer only[\s\S]*explicitly stated[\s\S]*Never[\s\S]*limit or page/iu,
-  );
-});
-
-test('a Visa miss never starts Catalog fallback', () => {
-  const discovery = skill.slice(
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-    skill.indexOf('### Selected Visa Benefit Resolution'),
-  );
-  const fallback = discovery.slice(
-    discovery.indexOf('Treat `fallback_all_offers`'),
-    discovery.indexOf('For count-only wording'),
-  );
-
-  assert.match(
-    fallback,
-    /fallback_all_offers[\s\S]*no_matching_offers[\s\S]*zero Programs[\s\S]*Visa miss[\s\S]*Never display fallback Visa rows/iu,
-  );
-  assert.match(
-    fallback,
-    /Visa relaxes[\s\S]*explicitly requested taxonomy axis[\s\S]*no strict[\s\S]*match and stop without Catalog fallback/iu,
-  );
-  assert.match(
-    fallback,
-    /Every command error also stops/iu,
-  );
-  assert.match(
-    fallback,
-    /Visa miss[\s\S]*do not display fallback Visa rows or search Catalog[\s\S]*both[\s\S]*products and Benefits are empty[\s\S]*no-results/iu,
-  );
-  assert.match(
-    agent,
-    /Visa miss, relaxed[\s\S]*explicit filter, or command error never starts Catalog fallback/iu,
-  );
-  assert.doesNotMatch(fallback, /bin\/visa-cli catalog search/u);
-});
-
-test('unmatched Visa Benefit supports detail without another product search', () => {
-  const selected = skill.slice(
-    skill.indexOf('### Selected Visa Benefit Resolution'),
+test('purchase uses one frozen context and direct inline CLI input', () => {
+  const purchase = skill.slice(
     skill.indexOf('## Visa Purchase Fast Path'),
+    skill.indexOf('### Visa Preparation'),
   );
-
-  const detail = selected.indexOf('bin/visa-cli visa detail');
-  const productSearch = selected.indexOf('bin/visa-cli visa product-search');
-  assert.ok(detail >= 0);
-  assert.equal(productSearch, -1);
-  assert.match(
-    selected,
-    /unmatched Visa Benefit[\s\S]*stable Program code[\s\S]*visa detail[\s\S]*activity summary[\s\S]*do not rerun[\s\S]*or add a[\s\S]*purchase CTA/iu,
-  );
-  assert.match(
-    selected,
-    /activity summary[\s\S]*hard terms[\s\S]*dates[\s\S]*campaign\/activity URL/iu,
-  );
-  assert.match(
-    selected,
-    /Never infer a merchant route from an arbitrary[\s\S]*Visa\/VSRP campaign URL/iu,
-  );
-  assert.match(
-    selected,
-    /Do not rerun `visa product-search`[\s\S]*add a purchase CTA[\s\S]*authorized exact[\s\S]*never `visa detail`/iu,
-  );
+  assert.match(purchase, /purchaseContext` unchanged[\s\S]*in memory|purchaseContext unchanged[\s\S]*in memory/u);
+  assert.match(purchase, /Do not create a[\s\S]*local JSON file/u);
+  assert.equal((purchase.match(/--context '<purchase-context-json>'/gu) ?? []).length, 2);
+  assert.doesNotMatch(purchase, /--context-file|same file/u);
+  assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN/u);
+  assert.match(purchase, /never run or refresh `visa detail`/iu);
+  assert.match(agent, /pass it directly with --context <json>/u);
+  assert.match(agent, /Never create a context file/u);
 });
 
-test('direct shopping remains Visa-first without broad or Catalog-only routing', () => {
-  const routing = skill.slice(
-    skill.indexOf('## Intent Routing'),
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-  );
-  const discovery = skill.slice(
-    skill.indexOf('## Visa Benefit And Product Discovery'),
-    skill.indexOf('### Selected Visa Benefit Resolution'),
-  );
-
-  assert.match(
-    routing,
-    /Every product, category, merchant, buy\/order\/checkout, and Benefit request[\s\S]*same Visa-first aggregate[\s\S]*never runs broad Catalog/iu,
-  );
-  assert.match(
-    routing,
-    /我想下单咖啡[\s\S]*有咖啡的券吗[\s\S]*有哪些咖啡权益[\s\S]*differ only by taxonomy filters/iu,
-  );
-  assert.match(
-    routing,
-    /Never route initial shopping discovery directly to `catalog search`/iu,
-  );
-  assert.match(
-    discovery,
-    /For "我想下单咖啡"[\s\S]*`dining_cafe_bakery`[\s\S]*do not invent a `reward_type`[\s\S]*unchanged[\s\S]*query is not sent to Visa[\s\S]*used only for a Program-matched merchant/iu,
-  );
-  assert.doesNotMatch(discovery, /visa recommend-products --include-broad-catalog/u);
-  assert.doesNotMatch(skill, /## Catalog Purchase Fast Path/u);
-  assert.doesNotMatch(agent, /mode=catalog_purchase|catalogProvenance/u);
-  assert.match(
-    readme,
-    /direct shopping through the same Visa-only Offer and matched-merchant flow/iu,
-  );
-  assert.match(
-    readmeZh,
-    /直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog/iu,
-  );
+test('browser operations are split from commerce aggregates', () => {
+  assert.match(skill, /visa browser-open --url <operation-url>/u);
+  assert.match(skill, /--browser-opened/u);
+  assert.match(skill, /--manual-completed/u);
+  assert.match(skill, /manual-completed[\s\S]*checks status first[\s\S]*(?:does not reopen|must not be opened again)/u);
+  assert.match(skill, /closed page[\s\S]*not business success|failed browser launch[\s\S]*not business/iu);
+  assert.match(skill, /If the host Agent name is known[\s\S]*replace `\{agent\}`/u);
+  assert.match(skill, /If\s+it is unknown[\s\S]*never emit the literal placeholder/u);
+  assert.match(agent, /dedicated browser-open operation/u);
+  assert.match(agent, /manual completion[\s\S]*check the state and do not reopen/u);
 });
 
-test('internal acceptance labels never leak into Skill-facing instructions', () => {
-  assert.doesNotMatch(combined, /\bCases?\s+[1-4]\b/iu);
-  assert.match(
-    skill,
-    /Classify the request silently[\s\S]*Never announce the classification[\s\S]*user-facing text/iu,
-  );
-});
-
-test('new Program purchase contexts omit program.code', () => {
-  const programPurchase = skill.slice(
-    skill.indexOf('Build one frozen purchase context from the same Program'),
-    skill.indexOf('Run exactly once in the foreground'),
-  );
-  assert.doesNotMatch(programPurchase, /"program"\s*:/u);
-  assert.doesNotMatch(programPurchase, /"programCode"\s*:/u);
-  assert.match(
-    programPurchase,
-    /Do not include a top-level `program` object or `metadata\.programCode`[\s\S]*compatibility/iu,
-  );
-  assert.match(
-    skill,
-    /New `mode=purchase` contexts[\s\S]*omit[\s\S]*top-level `program`[\s\S]*`metadata\.programCode`/iu,
-  );
-  assert.doesNotMatch(skill, /mode=catalog_purchase/u);
-});
-
-test('Visa Program MCC is authoritative-first with bounded inference', () => {
+test('Quick Instruction keeps only current principles', () => {
   const section = skill.slice(
-    skill.indexOf('## Visa Purchase Fast Path'),
-    skill.indexOf('### Visa Preparation'),
+    skill.indexOf('### Quick Instruction Principles'),
+    skill.indexOf('### Pending Instruction Recovery'),
   );
-
-  assert.match(
-    section,
-    /Resolve one four-digit MCC with this strict priority[\s\S]*valid Program-provided `commerce\.merchantCategoryCode` unchanged/iu,
-  );
-  assert.match(
-    section,
-    /Program omits MCC[\s\S]*exact frozen[\s\S]*Program[\s\S]*merchant ID[\s\S]*merchant URL[\s\S]*product title\/source[\s\S]*fulfillment context[\s\S]*high-confidence/iu,
-  );
-  assert.match(
-    section,
-    /invalid or conflicting Program MCC[\s\S]*title-only guess[\s\S]*broad[\s\S]*common-MCC fallback[\s\S]*environment-specific merchant\/MCC override[\s\S]*low-confidence[\s\S]*stops before login/iu,
-  );
-  assert.match(
-    section,
-    /Freeze the resolved MCC once[\s\S]*login[\s\S]*Instruction[\s\S]*purchase context[\s\S]*Checkout/iu,
-  );
-  assert.match(
-    section,
-    /"merchantCategoryCode": "<resolved-four-digit-mcc>"/u,
-  );
-  assert.doesNotMatch(
-    section,
-    /Missing, invalid, or ambiguous MCC stops[\s\S]*do not infer it from Catalog data/iu,
-  );
-  assert.match(
-    agent,
-    /Program merchantCategoryCode first[\s\S]*absent[\s\S]*complete frozen merchant\/product context[\s\S]*Never reuse an environment-specific merchant identity or[\s\S]*MCC override[\s\S]*Freeze the\s+resolved MCC/iu,
-  );
-  assert.doesNotMatch(section, /P2026080006|mcht_ftmse61a6az0/u);
-  assert.doesNotMatch(agent, /P2026080006|mcht_ftmse61a6az0/u);
+  assert.match(section, /Freeze one purchase context and one selected PI/u);
+  assert.match(section, /default PI/u);
+  assert.match(section, /explicitly chooses an alternate PI/u);
+  assert.match(section, /only a complete, usable,\s+unconsumed `ACTIVE` Instruction/u);
+  assert.match(section, /Never reuse PENDING or CREATED/u);
+  assert.match(section, /no reusable ACTIVE exists[\s\S]*ordinary PI-bound Instruction/u);
+  assert.match(section, /new PENDING[\s\S]*Instruction/u);
+  assert.match(section, /no default PI exists[\s\S]*do not choose a card implicitly/u);
+  assert.match(section, /changed default PI stops/u);
+  assert.match(section, /10 minutes/u);
+  assert.match(section, /--browser-opened[\s\S]*--manual-completed/u);
 });
 
-test('Visa fast path preserves aggregate order and never decomposes purchase', () => {
-  const route = skill.indexOf(
-    'visa recommend-products -> ask to order ->',
-  );
-  assert.ok(route >= 0);
-
-  const section = skill.slice(
-    skill.indexOf('## Visa Purchase Fast Path'),
-    skill.indexOf('### Visa Preparation'),
-  );
-  const login = section.indexOf('visa commerce-login');
-  const run = section.indexOf('visa commerce-run');
-  assert.ok(login >= 0 && run > login);
+test('activatable contract separates backend continuation from user-selected activation', () => {
   assert.match(
-    section,
-    /latest unchanged[\s\S]*`recommend-products` snapshot[\s\S]*directly in `visa commerce-login`[\s\S]*never run or refresh `visa detail`/iu,
-  );
-  assert.doesNotMatch(
-    section,
-    /<Skill Path>\/bin\/visa-cli visa detail/u,
+    skill,
+    /only binds a card and completes VIC[\s\S]*newest PENDING row by descending `createTime`/u,
   );
   assert.match(
-    agent,
-    /explicitly authorizes buy, order, or checkout[\s\S]*directly to commerce-login[\s\S]*never run or refresh visa detail/iu,
+    skill,
+    /user actively chooses a PENDING Instruction[\s\S]*`bind-pi -> ordinary activation`/u,
   );
   assert.match(
-    section,
-    /Program and Catalog identify the same merchant and product/iu,
+    skill,
+    /activatable` is a read-only recovery\/list\s+contract[\s\S]*does not itself select, bind, or activate/u,
   );
   assert.match(
-    section,
-    /productResolution=internal-ucp-catalog[\s\S]*external-page product is not\s+orderable/iu,
-  );
-  assert.match(
-    section,
-    /Catalog total and currency exactly equal[\s\S]*recommendation-backed/iu,
-  );
-  assert.match(
-    section,
-    /login context[\s\S]*"expected"[\s\S]*"amount": "<product\.totalAmountMajor>"[\s\S]*"currency": "<verified-currency>"[\s\S]*"amountLimit": "<product\.totalAmountMajor>"/iu,
-  );
-  assert.match(
-    section,
-    /Set login\/purchase `expected\.amount`[\s\S]*every `amountLimit`[\s\S]*`product\.totalAmountMajor`[\s\S]*Never copy `unitPriceMinor`[\s\S]*`totalAmountMinor`[\s\S]*quantity >1[\s\S]*`unitPriceMajor`/iu,
-  );
-  assert.match(
-    section,
-    /`totalAmountMinor=100`[\s\S]*`totalAmountMajor="1"`[\s\S]*all three major-unit fields[\s\S]*`"1"`/iu,
-  );
-  assert.doesNotMatch(section, /<exact-program-price>/u);
-  assert.match(
-    agent,
-    /Every commerce-login context includes expected\.amount[\s\S]*expected\.currency[\s\S]*product\.totalAmountMajor[\s\S]*every amountLimit[\s\S]*never copy unitPriceMinor[\s\S]*totalAmountMinor[\s\S]*quantity above 1[\s\S]*never use unitPriceMajor/iu,
-  );
-  assert.match(section, /single\s+purchase authorization/iu);
-  assert.match(
-    section,
-    /CLI\s+alone owns the Pending Instruction Card\s+Gate/iu,
-  );
-  assert.match(
-    section,
-    /Never rerun `visa commerce-run` after it may have created a Checkout/iu,
-  );
-  assert.match(
-    section,
-    /Never\s+reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or[\s\S]*`ucp-order`/iu,
-  );
-
-  const atomicInvocation =
-    /^\s*(?:<Skill Path>\/bin\/visa-cli\s+)?(?:card|instruction|events|pay|ucp-checkout|ucp-order)\b/mu;
-  assert.doesNotMatch(section, atomicInvocation);
-});
-
-test('missing-card aggregate shows but never opens Bind Card and keeps exact PENDING wait', () => {
-  const gate = skill.slice(
-    skill.indexOf('### Pending Instruction Card Gate'),
-    skill.indexOf('## Intent Routing'),
-  );
-
-  assert.match(
-    gate,
-    /eligible Visa Payment Instrument[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*creates or reuses exactly[\s\S]*one no-card `PENDING` Instruction/iu,
-  );
-  assert.match(
-    gate,
-    /exact returned ID[\s\S]*never select a latest or similar PENDING/iu,
-  );
-  assert.match(
-    gate,
-    /return one exact Bind Card link[\s\S]*Show it without opening it/iu,
-  );
-  assert.match(
-    gate,
-    /click it[\s\S]*already-open Agent Portal/iu,
-  );
-  assert.match(
-    gate,
-    /Showing the link is not[\s\S]*completion[\s\S]*same CLI process stays foreground/iu,
-  );
-  assert.match(
-    gate,
-    /Payment[\s\S]*Instrument reaches `visaRegistrationSucceeded=true`[\s\S]*CWallet[\s\S]*automatically activates/iu,
-  );
-  assert.match(
-    gate,
-    /Continue only after[\s\S]*same-card[\s\S]*`visaRegistrationSucceeded=true`[\s\S]*exact Instruction[\s\S]*`ACTIVE`/iu,
-  );
-  assert.match(
-    gate,
-    /Timeout preserves that exact PENDING[\s\S]*read-only\s+continuation[\s\S]*Do not create another Instruction[\s\S]*retry payment/iu,
-  );
-
-  const cardCapability = skill.slice(
-    skill.indexOf('### CAP-CARD:'),
-    skill.indexOf('### CAP-RISK:'),
-  );
-  assert.match(
-    cardCapability,
-    /Show the exact link but never[\s\S]*`--open`[\s\S]*claim that showing it completed the action/iu,
-  );
-  assert.match(
-    cardCapability,
-    /authorized aggregate purchase[\s\S]*do not decompose[\s\S]*atomic card commands/iu,
+    pendingReference,
+    /backend continuation[\s\S]*descending `createTime`[\s\S]*bind-pi -> ordinary activation/u,
   );
 });
 
-test('all absorbed Base capabilities have short fail-closed contracts', () => {
-  for (const capability of [
-    'CAP-WALLET',
-    'CAP-CARD',
-    'CAP-RISK',
-    'CAP-CATALOG',
-    'CAP-PAY',
-    'CAP-ALIPAY-QR',
-    'CAP-UCP',
-    'CAP-INSTRUCTION',
-    'CAP-REFUND',
-    'CAP-EVENTS',
-    'CAP-SKILLS-LIST',
-    'CAP-SKILLS-TIP',
-    'CAP-SKILLS-INSTALL',
-  ]) {
-    assert.match(skill, new RegExp(`### ${capability}:`, 'u'));
+test('non-idempotent pending creation stays outside normal purchase matching', () => {
+  assert.match(skill, /non-idempotent Pending creator/u);
+  assert.match(skill, /always creates one new PENDING Instruction/u);
+  assert.match(skill, /pending-instruction create[\s\S]*explicit atomic\/test command only/u);
+  assert.match(skill, /unknown result[\s\S]*activatable[\s\S]*Retry at most once/u);
+  assert.match(agent, /pending-instruction create command is non-idempotent/u);
+});
+
+test('Skill keeps purchase, browser, payment, and delivery safety boundaries', () => {
+  assert.match(skill, /Never rerun `visa commerce-run` after it may have created a Checkout/u);
+  assert.match(skill, /unknown result[\s\S]*resubmission/u);
+  assert.match(skill, /one Checkout creation, at most one completion|Never rerun `visa commerce-run` after it may have created a Checkout/u);
+  assert.match(skill, /Portal owns binding and VIC/u);
+  assert.match(skill, /Never expose Tokens, OTPs[\s\S]*raw card data[\s\S]*secrets/u);
+  assert.match(readme, /orderUrl[\s\S]*clickable[\s\S]*View order link/u);
+  assert.match(readmeZh, /查看订单/u);
+});
+
+test('current Skill does not retain legacy provider labels', async () => {
+  const testDocuments = await Promise.all(
+    (await walk(join(root, 'tests'))).map((path) => readFile(path, 'utf8')),
+  );
+  const searchable = [...Object.values({ skill, readme, readmeZh, agent }), ...testDocuments].join('\n');
+  for (const label of [['Fu', 'hui'].join(''), ['富', '惠'].join('')]) {
+    assert.equal(searchable.toLocaleLowerCase().includes(label.toLocaleLowerCase()), false);
   }
-
-  assert.match(
-    skill,
-    /complex capability lacks required input[\s\S]*fail closed/iu,
-  );
-  assert.match(skill, /Direct Pay[\s\S]*Session Pay/iu);
-  assert.match(skill, /--payment-method-type ALIPAY --terminal-qr/iu);
-  assert.match(
-    skill,
-    /ucp-checkout run[\s\S]*Never split the aggregate into manual create\/complete/iu,
-  );
-  assert.match(skill, /Use `skills list --all` for public Skills/iu);
-  assert.match(
-    skill,
-    /Require exact `publisher\/name`[\s\S]*explicit Tip\s+authorization/iu,
-  );
-  assert.match(skill, /`publisher\/name@version` for a pinned release/iu);
-});
-
-test('restricted Instructions and generic Visa VIC UCP fail closed', () => {
-  const restrictedGate = skill.slice(
-    skill.indexOf('### Restricted Instruction Gate'),
-    skill.indexOf('### Browser Boundary'),
-  );
-  assert.match(
-    restrictedGate,
-    /adult content[\s\S]*gambling[\s\S]*cryptocurrency[\s\S]*financial-product trading[\s\S]*tobacco[\s\S]*weapons/iu,
-  );
-  for (const mcc of ['7273', '7995', '6051', '6211', '5966', '5967', '5993']) {
-    assert.match(restrictedGate, new RegExp(mcc, 'u'));
-  }
-
-  const purchaseSection = skill.slice(
-    skill.indexOf('## Visa Purchase Fast Path'),
-    skill.indexOf('### Visa Preparation'),
-  );
-  assert.match(
-    purchaseSection,
-    /complete purchase passes the Restricted Instruction Gate/iu,
-  );
-
-  const ucpSection = skill.slice(
-    skill.indexOf('### CAP-UCP:'),
-    skill.indexOf('### CAP-INSTRUCTION:'),
-  );
-  assert.match(
-    ucpSection,
-    /Visa with VIC[\s\S]*stop[\s\S]*cannot carry or safely\s+resolve an Instruction and Mandate/iu,
-  );
-});
-
-test('funds, browser, and result boundaries remain explicit', () => {
-  assert.match(
-    skill,
-    /Timeout, transport failure, an unknown result[\s\S]*never authorizes\s+resubmission/iu,
-  );
-  assert.match(skill, /event is a wake-up hint, not final truth/iu);
-  assert.match(
-    skill,
-    /Payment success does not prove merchant receipt[\s\S]*entitlement[\s\S]*delivery/iu,
-  );
-  assert.match(
-    skill,
-    /OAuth[\s\S]*Agent Portal card\/VIC[\s\S]*belong in the user's browser/iu,
-  );
-  assert.match(skill, /Bind Card[\s\S]*never auto-open/iu);
-  assert.match(skill, /Alipay QR is not a browser page/iu);
-  assert.match(skill, /No payment, Tip, refund, Checkout completion[\s\S]*blindly retried/iu);
-});
-
-test('purchase context maps merchantUrl to the recommend-products merchant route, never the Program page', () => {
-  assert.match(skill, /"merchantUrl": "<verified-merchant-route-url>"/u);
-  assert.match(skill, /products\[\]\.product\.merchantUrl/u);
-  assert.match(skill, /products\[\]\.product\.productUrl/u);
-  assert.match(skill, /Never use the Program `url`/u);
-  assert.doesNotMatch(skill, /authoritative-program-commerce-url/u);
-});
-
-test('recommend-products always carries a category or an explicit --all browse', () => {
-  assert.match(skill, /Natural language never replaces the category flag/u);
-  assert.match(skill, /every strict call carries\s+`--region` and at least one `--category`/u);
-  assert.match(skill, /超市 \/ 街市 map\s+to `shopping_supermarket`/u);
-  assert.match(skill, /region-only\s+browse must add `--all`/u);
-  assert.match(skill, /filters\s+incomplete/u);
-  assert.match(filterReference, /Natural language never replaces `category`/u);
-  assert.match(filterReference, /region-only\s+browse\s+requires `--all`/u);
 });

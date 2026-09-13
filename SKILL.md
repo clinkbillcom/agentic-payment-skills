@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.74. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.93. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.74"
+  version: "0.1.93"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -25,16 +25,38 @@ If direct execution fails, report that launcher error.
 
 Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
 Edition: it includes every Base Command plus Visa discovery and the CLI-owned
-`visa product-search`, `visa commerce-login`, and `visa commerce-run`
-aggregates.
+`visa recommend-products`, `visa product-search`, `visa commerce-login`,
+`visa commerce-run`, `visa pending-instructions`, and `visa browser-open`
+commands.
 
-Keep execution small. For Visa Benefit discovery, read only
-`references/visa-recommend-filters.md` before selecting filters. Otherwise do
-not read reference files, inspect source or workflow scripts, invoke runtime
-`--help`, run `date`, use a fixed `sleep`, or load JavaScript orchestration
-modules. Interpret the user's intent, collect only missing business facts,
-obtain the required authorization, run the shortest matching CLI capability,
-and report the structured result.
+Keep normal execution small. Do not read reference files, inspect source or
+workflow scripts, invoke runtime `--help`, run `date`, use a fixed `sleep`, or
+load JavaScript orchestration modules. Interpret the user's intent, collect only
+missing business facts, obtain the required authorization, run the shortest
+matching CLI capability, and report the structured result.
+
+### Aggregate Failure Diagnosis
+
+Normal successful execution does not read references. When an aggregate command
+returns an error, partial coverage, user-action state, or a non-terminal result,
+read only the reference matching that command:
+
+| Command | Reference |
+| --- | --- |
+| `visa recommend` | `references/visa-recommend.md` |
+| `visa recommend-products` | `references/visa-recommend-products.md` |
+| `visa product-search` | `references/visa-product-search.md` |
+| `visa commerce-login` | `references/visa-commerce-login.md` |
+| `visa commerce-run` | `references/visa-commerce-run.md` |
+| `visa pending-instructions` | `references/visa-pending-instructions.md` |
+| `visa browser-open` | `references/visa-browser-open.md` |
+
+Use returned `stage`, `status`, `reason`, `error`, `detail`, `instructionId`,
+`paymentInstrumentId`, `resumeCommand`, and `recovery` to identify the failed
+stage. Run an atomic command only when the matching reference marks it as safe
+read-only diagnosis or the user explicitly authorizes that mutation. Never
+decompose an uncertain purchase into manual payment calls, create a replacement
+Instruction, or retry Checkout.
 
 ## Global Contract
 
@@ -54,16 +76,15 @@ authoritative Program, merchant, product, and Skill names exactly as returned.
 
 ### Distribution And Purchase Environment
 
-The bundled launcher pins this distribution to `production`. Anonymous
-discovery invokes it directly and omits `--sandbox`/`--test`; never determine,
-inspect, infer, or override that environment at runtime. Do not read files,
-wrapper/package/config, wallet state, or process environment, and do not run
-any shell or authentication preflight.
+The bundled launcher already pins the distribution search environment.
+Anonymous discovery invokes it directly and omits `--sandbox`/`--test`; never
+determine, inspect, infer, or override that environment at runtime. Do not read
+files, wrapper/package/config, wallet state, or process environment, and do not
+run any shell or authentication preflight.
 
 Only after the user selects an exact product and authorizes an authenticated
-purchase may the Skill verify that the wallet is production-bound. Every new
-login, preparation, and purchase context must use `environment: "production"`.
-Any conflicting saved or requested environment stops the flow.
+purchase may the Skill verify that wallet and purchase environments agree and
+write the verified environment into purchase contexts.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
 `--sandbox` or `--test`. For `visa recommend-products`, also omit them and rely
@@ -71,23 +92,24 @@ on the bundled launcher.
 
 ### Benefit Source Region
 
-Resolve and remember the HK/CN source inside the Benefit search itself:
+Only the user changes the HK/CN Benefit source. A search never changes it:
 
-- A unique taxonomy `--region hk` or `--region cn` automatically selects that
-  endpoint and persists it as the next default.
-- With no HK/CN region, omit `--market`; recommend uses the saved value and
-  initializes missing config to `hk`.
-- When source and destination are explicitly different, pass both
-  `--market <source>` and `--region <destination>`; explicit market wins.
-- Never run `visa region get` or `visa region set` as a search preflight. Use
-  them only when the user separately asks to inspect or change the default
-  without performing a Benefit search.
+- Omit `--market` in every Benefit search. Recommend uses the saved source and
+  defaults missing config to `hk`.
+- A taxonomy `--region` is a destination, never a source. `--region hk`,
+  `--region cn`, and `--region jp` all leave the saved source unchanged, and the
+  CLI writes no config during a search.
+- Run `visa region set <hk|cn>` only when the user explicitly asks to switch the
+  Benefit market, and `visa region get` only when the user asks which market is
+  active. Neither is ever a search preflight, and a request to see offers in a
+  place is not a request to switch markets.
+- Pass `--market <source>` only when the user explicitly names the card-issuing
+  market for that one call; it overrides the source for that call only and
+  persists nothing.
 - Benefit source region is independent of wallet environment and never requires
   a wallet preflight.
 - Require returned `sourceRegion` and `sourceEndpoint` to match the selection.
-
-Taxonomy `--region` still means where a Benefit is usable. A unique HK/CN value
-also becomes the next source default; other or multi-value destinations do not.
+  `sourceRegionReason` is `explicit_market` or `saved_or_default`.
 
 ### Catalog Money
 
@@ -112,6 +134,11 @@ display it as `USD 100` or rewrite the title denomination.
 - One explicit authorization covers the unchanged frozen mutation. Ask again
   only if merchant, item, quantity, amount, currency, recipient, refund scope,
   or fulfillment materially changes.
+- When one exact product and its displayed order facts are unchanged, "买这个",
+  "帮我下单", "确认购买", "buy this", and "confirm purchase" are sufficient.
+  Resolve short replies against that displayed order. Never require the user
+  to repeat the full order or follow a confirmation template. Ask only for
+  genuinely missing or materially changed facts.
 - Never invent an amount, currency, merchant ID, session ID, order ID, payment
   instrument ID, Instruction ID, mandate ID, endpoint, product ID, shipping
   address, Skill identity, or version.
@@ -124,6 +151,7 @@ display it as `USD 100` or rewrite the title denomination.
 
 - Run a payment, Checkout completion, Tip, refund creation, Skill install, or
   Instruction mutation at most once for one authorization.
+  With an existing Quick, create zero additional Instructions in every case.
 - Timeout, transport failure, an unknown result, or exit code 6 never authorizes
   resubmission. Verify through a bound read-only status or continuation.
 - An event is a wake-up hint, not final truth. Refresh the authoritative
@@ -154,10 +182,40 @@ Never reroute a refused purchase through plain `pay` or UCP.
 ### Browser Boundary
 
 OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
-belong in the user's browser. CLI `--open` may launch OAuth/login, Instruction,
-3DS, or risk; on failure, show only the exact CLI `manualOpenUrl`.
+belong in the user's system browser. For commerce-login and commerce-run, the
+aggregate returns the exact operation URL and continuation state before opening
+it. Use `visa browser-open --url <operation-url>` for a separate system-browser
+attempt; do not use the Agent's built-in browser.
 
-For card/VIC work, show but never auto-open an exact CLI-returned Bind Card
+For commerce-login and commerce-run, when a user browser operation is needed,
+the aggregate returns the exact operation URL and continuation state first. Tell
+the user to complete it in the system browser and never in the Agent built-in
+browser. If the host Agent name is known, replace `{agent}` with that name. If
+it is unknown, say `请在系统浏览器中完成操作，不要使用 Agent 内置浏览器。`
+and never emit the literal placeholder.
+
+Then use the dedicated browser-open operation to attempt the system browser:
+
+```text
+<Skill Path>/bin/visa-cli visa browser-open --url "<operation-url>" --format json
+```
+
+A successful launch is not business success. After automatic opening, continue
+with the original command and check its operation state. If the user completed
+the operation manually, continue with the original command and mark the manual
+completion; the first step is an authoritative status check and the browser
+must not be opened again. A failed launch returns the exact URL for manual use.
+A closed page is not business failure. Unknown payment or authorization
+results stop the flow and require read-only recovery.
+Never kill/restart an unrelated running command or use shell background jobs.
+After possible Checkout creation, only CLI-returned read-only recovery is
+allowed.
+Without these explicit continuation fields, do not infer that a command is safe
+to rerun. After possible Checkout creation, only CLI-returned read-only recovery
+is allowed. Browser opening success is not proof that the page appeared on a phone;
+if the user reports that mismatch, explain it rather than claiming failure detection.
+
+For standalone card-link requests, show but never auto-open an exact CLI-returned Bind Card
 link. The user may click it or use an already-open Agent Portal. Never inspect,
 fill, or submit protected pages with an Agent browser. Merchant product pages
 may be inspected by the Agent.
@@ -166,27 +224,95 @@ An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
 exactly, or use the CLI-returned private `imagePath` only when terminal QR
 rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
-### Pending Instruction Card Gate
+### Quick Instruction Principles
 
-For every authorized `visa commerce-login` purchase:
+For every authorized purchase:
 
-- Without an eligible Visa Payment Instrument whose
-  `visaRegistrationSucceeded=true`, the aggregate creates or reuses exactly
-  one no-card `PENDING` Instruction for the frozen intent. Bind every check to
-  its exact returned ID; never select a latest or similar PENDING.
-- It may return one exact Bind Card link. Show it without opening it. The user
-  may click it or bind in an already-open Agent Portal. Showing the link is not
-  completion: the same CLI process stays foreground for bounded event waiting
-  and authoritative exact-ID refresh.
-- Agent Portal owns binding, 3DS, Visa Passkey, and VIC. When one exact Payment
-  Instrument reaches `visaRegistrationSucceeded=true`, CWallet associates that
-  same card and automatically activates the exact PENDING Instruction.
-- Continue only after refresh proves same-card
-  `visaRegistrationSucceeded=true` and that exact Instruction is `ACTIVE`.
-  Card-added, Passkey, VIC event, or another ACTIVE Instruction is insufficient.
-- Timeout preserves that exact PENDING and permits only its bound read-only
-  continuation. Do not create another Instruction, regenerate the link, rerun
-  either aggregate, create a Checkout, or retry payment.
+- Freeze one purchase context and one selected PI. Use the default PI unless
+  the user explicitly chooses an alternate PI; do not infer a default from the
+  first, only, newest, or VIC-ready card.
+- Query only the selected PI's Instructions. Reuse only a complete, usable,
+  unconsumed `ACTIVE` Instruction whose amount, currency, merchant/product
+  scope, MCC, expiry, recurrence, and Mandates match the frozen context.
+- If no reusable ACTIVE exists, create a new ordinary PI-bound Instruction
+  when the selected PI has completed VIC; otherwise create a new PENDING
+  Instruction for the exact selected PI and purchase operation.
+- Never reuse PENDING or CREATED as another purchase's match. The PENDING
+  `instructionId` stays fixed through VIC, Passkey, and activation.
+- If no default PI exists, do not choose a card implicitly. Create the pending
+  purchase operation, return Agent Portal card management, and re-read the
+  default after the user acts. An explicit alternate PI may be used without
+  making it default.
+- A default PI change stops a default-based purchase and requires
+  reconfirmation. An explicit alternate remains selected only while it is still
+  customer-owned and usable.
+- Binding, VIC readiness, Passkey authorization, and PENDING activation are one
+  user-operation wait stage capped at 10 minutes. Timeout never creates a
+  replacement Instruction or retries Checkout/payment.
+- Browser launch success is not business success. After `browser-open`, rerun
+  with `--browser-opened` to wait; after manual completion, rerun with
+  `--manual-completed` to check status first without reopening.
+- Before Checkout, verify the exact Instruction is ACTIVE and re-check the
+  selected PI/default rule. A changed default PI stops a default-based purchase
+  and requires reconfirmation. Checkout is created and completed at most once;
+  never repeat either operation.
+
+- Card/VIC readiness uses `GET /agent/cwallet/card/info`.
+  `cardSchemeRegistrationEnabled` means that a Visa card supports VIC;
+  `visaRegistrationSucceeded` or card-level `strongAuthRegistered` means VIC
+  is complete. These facts are separate. Capability false, unknown, or a
+  failed card-info read must not enter VIC or Checkout.
+
+The direct `POST /agent/cwallet/instructions/pending` capability is a
+non-idempotent Pending creator. It always creates one new PENDING Instruction;
+it does not match or reuse ACTIVE/PENDING/CREATED, select a card, or turn a
+VIC-ready card into CREATED. Normal purchase orchestration must check the
+selected PI's matching ACTIVE Instructions first and use the aggregate's
+ordinary or Pending branch instead of blindly calling this creator.
+
+These principles are the complete Skill-facing Quick contract. Detailed state
+combinations and regression cases belong in the development Skill, not here.
+
+### Pending Instruction Recovery
+
+Run `visa pending-instructions [--open] [--instruction-id <id>]
+[--payment-instrument-id <id>] [--format json]` after any `commerce-run`
+not-ready exit (stages card, vic, card_selection, card_verification,
+instruction_activation, instruction_authorization), when the user returns to
+finish or activate an earlier purchase, or when the user reports a binding,
+VIC, or Passkey problem. The CLI reads `GET /agent/cwallet/instructions/activatable`
+(the current PENDING/CREATED Instructions that can still be activated), refreshes cards,
+and returns one `status` from `activation_ready`, `card_selection_required`,
+`portal_binding_required`, `instruction_not_activatable`, `select_in_portal`,
+or `none_pending`, always with `context` (`exact` or `unknown`) and `portalUrl`,
+plus `instructionId`, `instructionStatus`, `paymentInstrumentId`, `card`,
+`cards[]`, `pendingInstructions[]`, `activationUrl`, `browserLaunch`,
+`manualOpenUrl`, `reason`, and `nextAction` as applicable. Exact context is
+`--instruction-id`, else the pending row matching a saved Quick continuation,
+else the only pending row. Pass `--instruction-id` whenever the original Quick
+ID is known; pass `--payment-instrument-id` only with the card the user chose
+from `cards[]`. The command creates nothing and mutates nothing; only its
+`--open` may open the browser. Tell the user plainly what the status means:
+which Instruction is waiting, which card the CLI opened, which cards to choose
+from, or that the list page is where they pick and activate. Never construct
+the Passkey or Portal URL, never present the Portal home page as the
+activation link, and never fall back to creating or selecting another
+Instruction.
+
+There are two distinct activation paths:
+
+- If the user only binds a card and completes VIC without choosing an
+  Instruction, backend continuation may activate exactly one PENDING
+  Instruction: the newest PENDING row by descending `createTime`. This is not
+  Agent selection; exact-GET the resulting ID and verify `ACTIVE` before
+  Checkout.
+- If the user actively chooses a PENDING Instruction, preserve that exact ID
+  and use the normal `bind-pi -> ordinary activation` flow. Do not reinterpret
+  this as automatic latest-PENDING activation or replace the Instruction.
+
+`GET /agent/cwallet/instructions/activatable` is a read-only recovery/list
+contract for both cases. It does not itself select, bind, or activate an
+Instruction.
 
 ## Intent Routing
 
@@ -201,7 +327,7 @@ user-facing text; respond directly to the user's request.
   the same Visa-only discovery with the current category wording.
 - Requests such as "Are there Watsons coupons?" use the same Visa-only
   discovery with the current brand or product wording.
-- Every product, category, merchant, buy/order/checkout, and Benefit request
+- Every initial product, category, merchant, buy/order/checkout, and Benefit request
   uses the same Visa-first aggregate. It never runs broad Catalog. "我想下单咖啡",
   "有咖啡的券吗", and "有哪些咖啡权益" differ only by taxonomy filters.
 - Never route initial shopping discovery directly to `catalog search`.
@@ -210,9 +336,12 @@ Use Program aggregation after the one-round result contains an exact orderable
 product selected by the user:
 
 ```text
-visa recommend-products -> ask to order ->
-visa commerce-login -> visa commerce-run
+visa recommend-products -> exact product selection and purchase authorization
+-> visa commerce-login -> visa commerce-run
 ```
+
+An already authorized selection proceeds directly to commerce-login with the
+unchanged snapshot. Do not search again or ask to order again.
 
 New `mode=purchase` contexts omit both the top-level `program` object and
 `metadata.programCode`. Older callers may still provide `program.code` as
@@ -231,26 +360,51 @@ merchant `ext.visa_program_id`; Offer URL never selects a merchant. The
 positional query is the only primary text: never pass `--keyword` or filter-set
 `keyword`. Visa recommendation sends taxonomy filters only and no keyword.
 After a Program-to-merchant match, CLI uses the unchanged positional query as
-that merchant's Catalog query. Offer titles must not replace it. Read
-`references/visa-recommend-filters.md`.
+that merchant's Catalog query. Offer titles must not replace it.
+
+Keep `region` and Catalog routing in this Skill:
+
+- Every recommendation request carries `--region`.
+- Add `--category` when the user names a category, merchant, brand, or product.
+- Omit `--category` for a genuinely generic regional request.
+- Do not guess taxonomy values. If another axis or code is needed, run
+  `visa taxonomy` and use the current enum returned by
+  `GET {base_url}/api/v1/taxonomy`.
+- Never fill `reward_type` or pass `--reward-type` unless the current taxonomy
+  and the user's request explicitly require it.
+- Use one strict filter plan by default. Use `--filter-sets` only for four
+  genuinely different safe plans, each carrying its own `region`.
+- Recommendation never logs in, binds a card, creates an Instruction, or
+  prepares payment.
 
 Use one strict explicit-filter request by default:
 
 ```text
 <Skill Path>/bin/visa-cli visa recommend-products "<original-current-user-query>" \
-  --region <region> --category <category> \
+  --region <region> [--category <category>] \
   --anonymous \
   --lang <language-tag> \
   --format json
 ```
 
-Natural language never replaces the category flag: every strict call carries
-`--region` and at least one `--category`. Supermarket / grocery / 超市 / 街市 map
-to `shopping_supermarket`, department store / mall / 百货 / 商场 to
-`shopping_department_mall`, coffee / 咖啡 to `dining_cafe_bakery`. A region-only
-browse must add `--all`. The CLI rejects a call with neither (`filters
-incomplete`, exit code 2); treat that error as a missing category and rerun
-with one, never as "no results".
+Every call carries `--region`. `--category` is required whenever the request
+names a category, merchant, brand, or product, and natural language never
+replaces that flag: supermarket / grocery / 超市 / 街市 map to
+`shopping_supermarket`, department store / mall / 百货 / 商场 to
+`shopping_department_mall`, coffee / 咖啡 to `dining_cafe_bakery`. Omit
+`--category` only for a genuinely generic regional request such as
+`日本有什么优惠`, `有什么权益`, or `any offers`, which names no category,
+merchant, brand, or product; that call returns the region's first page.
+
+Never invent a category for a generic request. When no offer satisfies every
+requested filter, the server drops one axis and returns offers that do not match,
+so the CLI fails the call with `reason=no_offer_for_filter_combination` in
+`error.details`. That means the axes are too narrow together, not that the
+region has no Benefit at all: rerun once with the `retryFilters` object from
+those details (the same filters minus `relaxedAxes`), then answer from that
+result. Never guess a different category, never repeat the same filters, and
+never report "no offers" from the failed call alone. Report no results only
+after the narrower rerun also returns none.
 
 Only when exactly four genuinely different safe plans improve recall, use one
 aggregate call:
@@ -268,6 +422,11 @@ issue multiple Agent-managed Shell commands to reach a count. The four-set
 aggregate validates one taxonomy snapshot, runs four parallel Visa requests,
 excludes `fallback_all_offers` rows, preserves filter-set priority, and
 de-duplicates by Program code.
+
+In aggregate mode an unmatchable set does not fail the command: it degrades to
+no-match, its `filterSelection.sources` row carries `strictMatchFailure`, and
+the result lists `strictMatchFailures`. Present the Programs the other sets
+returned, and never describe a degraded set's axes as unavailable Benefits.
 
 Never add `--include-provider-products`, `--include-broad-catalog`, or
 `--broad-queries`, and never issue another Agent-managed recommend,
@@ -294,12 +453,13 @@ For a Hong Kong destination, use `--region hk` in a single-filter call. In
 four-set aggregate mode, include `"region": ["hk"]` in every filter object and
 never add an outer `--region`; the CLI rejects mixed filter ownership.
 `--market hk` remains a source selector and is used only when Hong Kong card
-issuance is explicit.
+issuance is explicit; it never becomes the saved market.
 
 Never infer or pass `--type` for `recommend-products`; Benefit, reward, coupon,
-discount, or purchase wording does not select it. Set `reward_type` only when
-the user explicitly requests one. Generic "优惠", "benefit", "offer", or
-"礼遇" selects none. Never fan out reward types; use one safe plan when possible.
+discount, or purchase wording does not select it. Never fill `reward_type` in
+filter objects or pass `--reward-type`, even for coupon or discount requests.
+Keep region, category, and explicitly requested purpose such as local.
+Use one safe plan when possible.
 
 For category-, merchant-, or product-specific shopping requests, choose one
 strict plan by default and use four-set aggregation only for four meaningful
@@ -374,160 +534,75 @@ UCP result.
 
 ## Visa Purchase Fast Path
 
-An explicit request to buy one unambiguous selected Visa Benefit is the single
-purchase authorization. A reply selecting a previously shown Benefit and
-asking to buy it is also sufficient.
+An explicit request to buy one unambiguous selected product is the single
+purchase authorization. The short replies in Authorization And Input are valid.
+This path supports one product with quantity 1 only. For a multi-item or
+multi-quantity request, explain this limit; never silently reduce the quantity
+or split the purchase into several orders.
 
 After authorization, use the latest unchanged `recommend-products` snapshot
 directly in `visa commerce-login`; never run or refresh `visa detail`. If the
 snapshot is missing or invalidated, stop and return to discovery.
 
-Before login, require all of the following:
+Require `PRODUCT_VERIFIED`, `CONTINUE_TO_COMMERCE_LOGIN`, and
+`productResolution=internal-ucp-catalog`. Keep that selected row's
+`purchaseContext` unchanged in memory. It uses `mode=selected_product` and
+contains the single-item facts already displayed to the user. Do not create a
+local JSON file just to pass context between CLI commands.
 
-1. `PRODUCT_VERIFIED` and `CONTINUE_TO_COMMERCE_LOGIN`.
-2. `productResolution=internal-ucp-catalog`; an external-page product is not
-   orderable through this Visa Benefit flow.
-3. Program and Catalog identify the same merchant and product.
-4. Catalog total and currency exactly equal the recommendation-backed purchase
-   facts; missing or different price/currency stops the flow.
-5. Resolve one four-digit MCC with this strict priority:
-   - Use a valid Program-provided `commerce.merchantCategoryCode` unchanged.
-   - When the Program omits MCC, classify one only from the exact frozen
-     Program, merchant ID, merchant URL, merchant name, product title/source
-     title, category, and fulfillment context. The classification must be
-     high-confidence and must pass the Restricted Instruction Gate.
-   - An invalid or conflicting Program MCC, title-only guess, broad
-     common-MCC fallback, environment-specific merchant/MCC override, or
-     low-confidence classification stops before login.
-   Freeze the resolved MCC once and reuse it unchanged in login, Instruction,
-   purchase context, and Checkout.
-6. Every required product, fulfillment, and environment field is present.
-7. The complete purchase passes the Restricted Instruction Gate.
+Do not build an Instruction context, infer MCC, copy Program fields, or
+recalculate amounts. The CLI constructs and validates these inputs. If
+`purchaseContext` is absent, report `purchaseContextUnavailable`; do not
+invent the missing data or use `visa detail` to repair it.
 
-Build this login context:
-
-```json
-{
-  "environment": "production",
-  "expected": {
-    "amount": "<product.totalAmountMajor>",
-    "currency": "<verified-currency>"
-  },
-  "instructionContext": {
-    "title": "<selected-program-title>",
-    "mandates": [
-      {
-        "title": "<selected-program-title>",
-        "description": "Purchase the selected Visa Program",
-        "amountLimit": "<product.totalAmountMajor>",
-        "currencyCode": "<program-currency>",
-        "merchantCategoryCode": "<resolved-four-digit-mcc>"
-      }
-    ]
-  }
-}
-```
-
-Set login/purchase `expected.amount` and every `amountLimit` to
-`product.totalAmountMajor`. Never copy `unitPriceMinor`, `totalAmountMinor`, or,
-for quantity >1, `unitPriceMajor`. Example: `totalAmountMinor=100` and
-`totalAmountMajor="1"` make all three major-unit fields `"1"`.
-
-Say that login, card, VIC, and Instruction readiness are being checked. Login
-may open in the browser. Show but never open a returned Bind Card link; an
-already-open Agent Portal also works. Then run once in the foreground:
+After the user's purchase request, start login once without another conversation
+checkpoint. Before the command, say once in the locked language:
+"现在启动登录流程，可能打开浏览器登录页面。" An already-ready login does not
+need another login page. This is a notice, not a question; execute immediately:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-login \
-  --context-file <login-context.json> \
+  --context '<purchase-context-json>' \
   --confirm-purchase \
-  --open \
   --format json
 ```
 
-Keep it foreground until `ok=true` and `ready=true` or a bound timeout. The CLI
-alone owns the Pending Instruction Card Gate. Never inspect or copy registration
-fields, `pendingInstructionId`, or login-returned Instruction IDs; Quick
-Instruction is acceleration, not purchase identity.
+The command returns before browser opening when user action is required. Show the
+exact operation URL, tell the user to use the system browser rather than the
+Agent built-in browser, then run `visa browser-open --url <operation-url>`.
+After a successful launch, rerun this command with `--browser-opened`. If the
+user completed the operation manually, rerun it with `--manual-completed`; the
+CLI checks status first and does not reopen the browser. Do not copy
+login-returned Instruction IDs into the purchase context.
 
-Build one frozen purchase context from the same Program and verified product:
-
-```json
-{
-  "mode": "purchase",
-  "environment": "production",
-  "requestText": "<original purchase request>",
-  "selection": {
-    "merchantUrl": "<verified-merchant-route-url>",
-    "merchantId": "<verified-merchant-id>",
-    "endpoint": "<verified-endpoint>",
-    "productId": "<verified-item-id>",
-    "productQuery": "<selected-program-title>",
-    "quantity": 1
-  },
-  "expected": {
-    "merchantName": "<verified-merchant-name>",
-    "itemTitle": "<provider-source-title>",
-    "amount": "<product.totalAmountMajor>",
-    "currency": "<verified-currency>"
-  },
-  "instructionContext": {
-    "title": "<selected-program-title>",
-    "mandates": [
-      {
-        "title": "<selected-program-title>",
-        "description": "Purchase the selected Visa Program",
-        "amountLimit": "<product.totalAmountMajor>",
-        "currencyCode": "<program-currency>",
-        "merchantCategoryCode": "<resolved-four-digit-mcc>"
-      }
-    ]
-  },
-  "digitalDeliveryExpected": true,
-  "metadata": {
-    "productResolution": "<verified-resolution>",
-    "productUrl": "<verified-product-url>",
-    "displayTitle": "<localized-display-title>",
-    "unitPriceMajor": "<verified-unit-major>",
-    "unitPriceMinor": "<verified-unit-minor>",
-    "totalAmountMajor": "<verified-total-major>",
-    "totalAmountMinor": "<verified-total-minor>",
-    "availability": "<verified-availability>"
-  }
-}
-```
-
-`selection.merchantUrl` is the merchant route URL of the same `recommend-products`
-product: copy `products[].product.merchantUrl` when the CLI returns it, otherwise
-`products[].product.productUrl`. Never use the Program `url` (an Offer page such as
-`https://vsrp.hk/...`) or any URL that is not from that product object; the CLI
-rejects it at `product_resolution`. Keep `merchantId` and `endpoint` exactly as
-returned for the same product.
-
-Do not include a top-level `program` object or `metadata.programCode`.
-`commerce-run` may accept legacy Program metadata for compatibility, but this
-Skill never sends it and never treats it as a purchase prerequisite.
-
-Use native JSON types: `quantity` is a positive integer and
-`digitalDeliveryExpected` is a boolean. Use `true` only for a verified digital
-artifact. Keep Program, Catalog, expected, and Instruction facts unchanged.
-Never add an Instruction ID or caller-generated Checkout ID.
-
-Run exactly once in the foreground:
+When login is ready, immediately run commerce-run once with the same inline
+JSON context, without asking for authorization or another user reply. Browser authorization
+is completed on the opened page, not through a conversation checkpoint.
+Before the command, say once in the locked language:
+"登录已就绪，直接执行购买流程，可能打开浏览器授权页面。" Then execute immediately:
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
-  --context-file <frozen-context.json> \
+  --context '<purchase-context-json>' \
   --confirm-purchase \
-  --open \
   --format json
 ```
 
-The CLI owns card refresh and VIC readiness, restricted-category enforcement,
-eligible ACTIVE Instruction selection or exact-price regular Instruction
-creation, product revalidation, one Checkout creation, at most one completion,
+The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category enforcement,
+original Quick continuation (or normal Instruction selection only without a Quick),
+product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
+The command returns before browser opening when user action is required. Use
+`visa browser-open --url <operation-url>` for a system-browser attempt, then
+rerun with `--browser-opened` to wait. For a user-completed operation, rerun
+with `--manual-completed` so the CLI checks status first without reopening.
+Missing/changed facts, a real error, refusal, cancellation, or timeout require
+a user-facing interruption.
 
+After `commerce-login` creates a Quick Instruction, apply the Quick Instruction
+Card Gate: preserve the exact ID in every card/VIC state. Never create another
+Instruction merely because a wait timed out, a card became VIC-ready, or
+another ACTIVE Instruction exists.
 Never rerun `visa commerce-run` after it may have created a Checkout. Execute
 only an exact CLI-returned aggregate read-only continuation, once. Never
 reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
@@ -552,8 +627,7 @@ show but never auto-open a Bind Card link and must stay foreground.
 
 ```text
 <Skill Path>/bin/visa-cli visa commerce-run \
-  --context-file <frozen-context.json> \
-  --open \
+  --context '<frozen-context-json>' \
   --format json
 ```
 
@@ -663,6 +737,13 @@ general workflow engine.
 - Recurring or scheduled use requires explicit cadence, per-run cap, currency,
   validity horizon, and pinned Instruction plus Mandate IDs. Missing scope
   stops; unattended execution never substitutes another authorization.
+- `pending-instruction create` is an explicit atomic/test command only. It
+  always creates a new PENDING Instruction and returns its exact ID; it is not
+  a normal-purchase fallback and must not be retried blindly.
+- If that non-idempotent create returns an unknown result, reconcile with the
+  read-only `activatable` query first. Retry at most once only when the
+  expected new Instruction is not found; otherwise stop and preserve the
+  identified Instruction.
 
 ### CAP-REFUND: Refund
 
@@ -725,6 +806,12 @@ general workflow engine.
   matched Program facts remain provenance, not a duplicate display row.
 - For payment or Checkout, distinguish authorized, submitted, paid, failed,
   unknown, delivery pending, delivery failed, and delivery ready.
+- Whenever the CLI returns `orderUrl`, include a clickable "View order" link in
+  the locked language in the purchase result or order-detail reply, without
+  another question. The CLI owns its environment and Clink payment-order identity.
+  Never build `/transaction/` from a UCP `order.id`, Checkout ID, or the example
+  in this Skill. If `orderUrlUnavailable` is returned, explain that the Portal
+  link is not available yet; do not invent an ID or retry the purchase.
 - Report digital delivery only when nonempty authoritative artifacts exist.
 - Preserve successful payment when delivery is pending, timed out, or failed.
 - Keep all user-facing text in the locked language and omit internal workflow
@@ -747,13 +834,14 @@ general workflow engine.
   product resolution; it never starts with standalone `catalog search`.
 - A matched Visa Program purchase uses the latest unchanged
   `recommend-products` snapshot directly in the purchase aggregates.
-- For a Program purchase, the Program and internal UCP Catalog product identity
-  plus recommendation-backed purchase amount/currency must agree.
+- Purchase facts come from the CLI-generated single-item product snapshot;
+  the Agent never derives purchase fields from Program metadata.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- `visa commerce-login` owns the Pending Instruction Card Gate; showing a Bind
-  Card link never ends its foreground exact-ID wait.
+- Portal owns binding and VIC; the CLI never opens Bind Card. Timed-out card,
+  VIC, or Passkey waits (10 minutes) exit through the pending-instruction
+  recovery, never through a VIC URL or the Portal home page.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
   Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.

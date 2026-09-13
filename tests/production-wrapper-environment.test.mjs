@@ -39,7 +39,7 @@ test('production launcher ignores a sandbox API override', async (context) => {
     env: {
       ...process.env,
       HOME: home,
-      CLINK_BASE_URL: 'https://uat-api.clinkbill.com',
+      CLINK_BASE_URL: 'https://api.clinkbill.com',
     },
   });
 

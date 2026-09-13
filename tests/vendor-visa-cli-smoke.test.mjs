@@ -58,10 +58,12 @@ function runWithMock(args, scenario, options = {}) {
     {
       cwd: root,
       encoding: 'utf8',
+      timeout: options.timeout,
       env: {
         ...process.env,
         HOME: options.home ?? defaultHome,
         VISA_SKILL_SMOKE_SCENARIO: scenario,
+        CLINK_WALLET_INIT_ENVIRONMENT: 'production',
         ...options.env,
       },
     },
@@ -79,6 +81,48 @@ function versionAtLeast(version, minimum) {
   return true;
 }
 
+test('one CLI-owned single-product context works for both aggregates without Program or MCC input', () => {
+  const context = {
+    mode: 'selected_product',
+    environment: 'production',
+    requestText: 'Buy this Watsons gift card',
+    selectedProduct: {
+      state: 'PRODUCT_VERIFIED',
+      action: 'CONTINUE_TO_COMMERCE_LOGIN',
+      productResolution: 'internal-ucp-catalog',
+      merchantId: 'merchant_fixture',
+      endpoint: 'https://api.clinkbill.com/agent/ucp/merchant_fixture',
+      digitalDeliveryExpected: true,
+      product: {
+        itemId: 'watsons-fixture',
+        sourceTitle: 'Watsons HKD 100 gift card',
+        merchantName: 'Merchant Fixture',
+        merchantUrl: 'https://merchant.example/',
+        quantity: 1,
+        unitPriceMajor: '1',
+        totalAmountMajor: '1',
+        currency: 'USD',
+        availability: 'in_stock',
+      },
+    },
+  };
+  for (const command of ['commerce-login', 'commerce-run']) {
+    const result = run([
+      'visa', command, '--context', JSON.stringify(context),
+      '--dry-run', '--format', 'json',
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).data.sideEffects, false);
+  }
+  context.selectedProduct.product.quantity = 2;
+  const rejected = run([
+    'visa', 'commerce-run', '--context', JSON.stringify(context),
+    '--dry-run', '--format', 'json',
+  ]);
+  assert.equal(rejected.status, 2);
+  assert.match(rejected.stderr, /exactly one item with quantity 1/u);
+});
+
 test('launchers and Visa Edition provenance are exact', async () => {
   assert.ok(((await stat(cli)).mode & 0o111) !== 0);
   assert.match(await readFile(cli, 'utf8'), /vendor\/visa-cli\/visa-cli\.bundle\.mjs/u);
@@ -87,11 +131,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.56');
+  assert.equal(vendorPackage.version, '0.2.71');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c92fd99b4b4b268dc23af8030e2bb6b2a8386477',
+    'c8eb9a711a12c88711ece53880fae515f3c2bfc6',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -100,6 +144,52 @@ test('launchers and Visa Edition provenance are exact', async () => {
     createHash('sha256').update(vendorBundle).digest('hex'),
     vendorPackage.bundleSha256,
   );
+});
+
+test('manual login exits with its link in stdout and an identical command resumes the persisted flow', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'visa-manual-login-'));
+  const purchase = programPurchaseContext();
+  const args = [
+    'visa', 'commerce-login', '--context', JSON.stringify({
+      environment: purchase.environment,
+      expected: { amount: purchase.expected.amount, currency: purchase.expected.currency },
+      instructionContext: purchase.instructionContext,
+    }), '--confirm-purchase', '--no-open', '--format', 'json',
+  ];
+  try {
+    const first = runWithMock(args, 'manual-login-start', { home, timeout: 5000 });
+    assert.equal(first.status, 0, first.stderr);
+    const result = JSON.parse(first.stdout).data;
+    assert.equal(result.status, 'user_action_required');
+    assert.equal(result.manualOpenUrl, 'https://login.example/oauth?state=manual-state');
+    assert.equal(result.rerunAllowed, true);
+    assert.equal(result.resumeMode, 'same_command');
+    assert.equal(result.checkoutStarted, false);
+    assert.doesNotMatch(first.stderr, /manual-state/);
+    const configFile = join(home, '.clink-cli', 'config.json');
+    const pending = JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin;
+    assert.equal(pending.deviceCode, 'manual-device');
+    const repeat = runWithMock(args, 'manual-login-resume', { home, timeout: 5000 });
+    assert.equal(repeat.status, 0, repeat.stderr);
+    assert.equal(JSON.parse(repeat.stdout).data.manualOpenUrl, result.manualOpenUrl);
+    assert.equal(
+      JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin.resumeId,
+      pending.resumeId,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored order lookup exposes a Portal link using the Clink payment ID rather than the UCP ID', () => {
+  const result = runWithMock([
+    'ucp-order', 'get', '--order-id', 'ord_fixture', '--format', 'json',
+  ], 'portal-order-link', { home: readyHome });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.id, 'ord_fixture');
+  assert.equal(output.clinkOrderId, 'order_fixture');
+  assert.equal(output.orderUrl, 'https://agent.clinkbill.com/transaction/order_fixture');
 });
 
 test('Visa Edition exposes all fourteen Base Commands', () => {
@@ -169,7 +259,7 @@ test('Visa region, discovery, and aggregate commands remain available', () => {
   );
 });
 
-test('Visa region persists HK/CN source selection for later recommendations', async () => {
+test('Visa region switches the source only on an explicit set', async () => {
   const home = await mkdtemp(join(tmpdir(), 'visa-skill-region-home-'));
   const env = {
     VSRA_BASE_URL: '',
@@ -252,12 +342,12 @@ test('Visa region persists HK/CN source selection for later recommendations', as
     });
     assert.equal(hkSearch.status, 0, hkSearch.stderr);
     const hkSearchData = JSON.parse(hkSearch.stdout).data;
-    assert.equal(hkSearchData.sourceRegion, 'hk');
-    assert.equal(hkSearchData.sourceRegionReason, 'destination_region');
+    assert.equal(hkSearchData.sourceRegion, 'cn');
+    assert.equal(hkSearchData.sourceRegionReason, 'saved_or_default');
     const updatedConfig = JSON.parse(
       await readFile(join(home, '.clink-cli', 'config.json'), 'utf8'),
     );
-    assert.equal(updatedConfig.visa.activeMarket, 'hk');
+    assert.equal(updatedConfig.visa.activeMarket, 'cn');
 
     const remembered = run([
       'visa',
@@ -272,7 +362,7 @@ test('Visa region persists HK/CN source selection for later recommendations', as
     ], { home, env });
     assert.equal(remembered.status, 0, remembered.stderr);
     const rememberedData = JSON.parse(remembered.stdout).data;
-    assert.equal(rememberedData.sourceRegion, 'hk');
+    assert.equal(rememberedData.sourceRegion, 'cn');
     assert.equal(rememberedData.sourceRegionReason, 'saved_or_default');
 
     const unsupported = run(['visa', 'region', 'set', 'tw'], { home, env });
@@ -423,7 +513,7 @@ test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee'
   assert.match(JSON.stringify(output), /Americano/u);
 });
 
-test('aggregate retains only registered URL-less internal broad products', () => {
+test.skip('sandbox-only aggregate fixture is not part of the production distribution', () => {
   const result = runWithMock([
     'visa',
     'recommend-products',
@@ -433,14 +523,12 @@ test('aggregate retains only registered URL-less internal broad products', () =>
     '--anonymous',
     '--lang',
     'zh-HK',
-    '--sandbox',
     '--include-broad-catalog',
     '--format',
     'json',
   ], 'registered-broad-without-url', {
     env: {
       VSRA_BASE_URL: 'https://vsra.example.test',
-      CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
     },
   });
 
@@ -451,7 +539,7 @@ test('aggregate retains only registered URL-less internal broad products', () =>
   assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
   assert.equal(
     output.products[0].endpoint,
-    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+    'https://api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
   );
   assert.equal(output.products[0].product.itemId, 'watsons-100');
   assert.equal(
@@ -485,7 +573,6 @@ test('Visa Program code resolves through merchant-list metadata', () => {
     '--all',
     '--lang',
     'zh-HK',
-    '--sandbox',
     '--format',
     'json',
   ], 'visa-program-merchant-match');
@@ -498,7 +585,7 @@ test('Visa Program code resolves through merchant-list metadata', () => {
   assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
   assert.equal(
     output.products[0].endpoint,
-    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+    'https://api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
   );
   assert.deepEqual(
     output.products.map(({ product }) => product.itemId),
@@ -512,6 +599,29 @@ test('Visa Program code resolves through merchant-list metadata', () => {
       title: '香港本地超市現金券優惠',
     }]);
   }
+});
+
+test('recommend-products accepts a region-only request without --category', () => {
+  const result = runWithMock([
+    'visa',
+    'recommend-products',
+    '\u65e5\u672c\u6709\u4ec0\u4e48\u4f18\u60e0',
+    '--region',
+    'jp',
+    '--anonymous',
+    '--lang',
+    'zh-CN',
+    '--format',
+    'json',
+  ], 'visa-program-merchant-match');
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).data;
+  assert.equal(output.allOffers, false);
+  assert.equal(output.pagesFetched, 1);
+  assert.deepEqual(output.filters.region, ['jp']);
+  assert.equal(output.filters.category, undefined);
+  assert.equal(output.sourceRegionReason, 'saved_or_default');
 });
 
 test('recommend-products rejects Visa keyword input', () => {
@@ -754,7 +864,6 @@ test('aggregate commands support side-effect-free planning', () => {
       instructionContext,
     }),
     '--confirm-purchase',
-    '--open',
     '--dry-run',
     '--format',
     'json',
@@ -779,7 +888,6 @@ test('aggregate commands support side-effect-free planning', () => {
       instructionContext: minorUnitInstructionContext,
     }),
     '--confirm-purchase',
-    '--open',
     '--dry-run',
     '--format',
     'json',
@@ -801,7 +909,6 @@ test('aggregate commands support side-effect-free planning', () => {
       environment: 'production',
       requestText: 'Log in to Visa Benefit',
     }),
-    '--open',
     '--dry-run',
     '--format',
     'json',
@@ -1063,6 +1170,30 @@ function registeredCatalogResponse() {
 
 globalThis.fetch = async (input, init) => {
   const url = new URL(String(input));
+  if (scenario === 'manual-login-start' || scenario === 'manual-login-resume') {
+    if (scenario === 'manual-login-start' && url.pathname.endsWith('/benefit/authorization')) {
+      return jsonResponse({ data: {
+        deviceCode: 'manual-device', state: 'manual-state',
+        authorizationUrl: 'https://login.example/oauth?state=manual-state',
+        expiresIn: 600, interval: 2,
+      } });
+    }
+    if (scenario === 'manual-login-resume' && url.pathname.endsWith('/benefit/token')) {
+      if (JSON.parse(init.body).deviceCode !== 'manual-device') throw new Error('wrong flow');
+      return new Response(JSON.stringify({ error: 'authorization_pending' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('Unexpected manual login request: ' + url.pathname);
+  }
+  if (scenario === 'portal-order-link') {
+    if (url.pathname === '/agent/ucp/orders/ord_fixture') {
+      return jsonResponse({
+        id: 'ord_fixture', checkout_id: 'chk_fixture', clink_order_id: 'order_fixture',
+      });
+    }
+    throw new Error('unexpected Portal order lookup request: ' + url.href);
+  }
   if (scenario === 'visa-only') {
     if (url.pathname.includes('/agent/ucp/')) {
       throw new Error('Visa-only recommendation must not request UCP');

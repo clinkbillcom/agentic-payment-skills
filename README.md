@@ -1,9 +1,15 @@
 # Visa Skill
 
-This branch is the production-backend variant of
-`wujh/visa-offer-product-match-0901` in `agentic-payment-skills`. Its bundled
-launcher pins discovery, wallet initialization, and authenticated commerce to
-the production Clink environment.
+During login/run, the aggregate returns the exact browser operation before
+opening it. Use the separate `visa browser-open --url <url>` command for a
+system-browser attempt. After automatic opening, resume with
+`--browser-opened`; after manual completion, resume with `--manual-completed`,
+which checks state first and does not reopen the browser.
+Purchase and order-detail replies include the returned `orderUrl` as a clickable
+View order link; never construct a Portal URL from an OMS/UCP order ID.
+
+This branch is the lightweight Visa Skill distribution hosted in
+`agentic-payment-skills`.
 
 It ships one Visa Edition bundle:
 
@@ -36,8 +42,10 @@ The lightweight shopping routes cover:
 - Agent-selected `recommend-products` filters never infer or pass `--type`
 - every filter plan requires region and one or more OR-combined categories;
   other taxonomy axes are used only when explicitly requested
-- login and purchase mandates use `product.totalAmountMajor`; minor-unit
-  Catalog amounts are never copied into `amountLimit`
+- one product with quantity 1; the CLI generates a reusable purchase snapshot,
+  including exact amounts and required Instruction fields
+- natural-language purchase replies authorize the unchanged displayed order;
+  no full-order restatement or repeated confirmation
 - automatic HK/CN source persistence from a unique `visa recommend --region`,
   with explicit `--market` reserved for cross-source searches
 - one unified `products` collection plus unmatched `visaBenefits`; a Program
@@ -54,10 +62,10 @@ The lightweight shopping routes cover:
 - matched Program purchase directly from the unchanged `recommend-products`
   snapshot through `commerce-login` and `commerce-run`, without `visa detail`
 - direct shopping through the same Visa-only Offer and matched-merchant flow
-- one aggregate missing-card contract: create or reuse an exact no-card
-  `PENDING` Instruction, optionally show but never auto-open the Bind Card link,
-  keep the CLI in the foreground, and continue only after the same card is
-  VIC-ready and CWallet activates that exact Instruction
+- Portal owns binding and VIC; CLI never opens Bind Card. Card/VIC/Passkey
+  waits are capped at 10 minutes and exit through `visa pending-instructions`
+  recovery; unknown/in-progress ceremonies must not trigger another automatic
+  opening
 
 Initial discovery never uses `--include-provider-products`,
 `--include-broad-catalog`, `--broad-queries`, standalone Catalog, or an
@@ -72,14 +80,12 @@ Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
 Program provenance. That provenance is never a display source: only
 `visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
-use `visa detail`, but the Skill does not rerun product-search. Production
-merchant identity must come from the production merchant list through an exact
-Program-code match; Offer URLs never select a merchant, and UAT configuration
-must not be treated as production identity. For a verified Program purchase, a
-valid Program MCC remains authoritative. When it is missing, the Skill may
-classify one high-confidence MCC from the complete frozen merchant/product
-context. Environment-specific MCC overrides, malformed/conflicting Program
-MCCs, and low-confidence or title-only guesses still stop before login.
+use `visa detail`, but the Skill does not rerun product-search. UAT merchant
+`mcht_ftmse61a6az0` is selected only when a returned Program code exactly
+matches its merchant-list `ext.visa_program_id`; Offer URLs never select it.
+The selected product's CLI-generated `purchaseContext` is used unchanged by
+both purchase commands. The Agent does not infer MCC or construct Program-based
+purchase fields. Missing configured input is returned as `purchaseContextUnavailable`.
 
 Visa Program purchases remain CLI-aggregated. The
 Skill does not contain runtime workflow JavaScript, long action tables, or
@@ -87,22 +93,43 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.74` vendors Visa CLI `0.2.56` from upstream commit
-`c92fd99b4b4b268dc23af8030e2bb6b2a8386477`. This product-match branch performs
+Skill `0.1.93` vendors Visa CLI `0.2.71` from upstream commit
+`c8eb9a711a12c88711ece53880fae515f3c2bfc6`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
-contexts and requires the aggregate missing-card flow to show rather than
-auto-open a Bind Card link, remain in the foreground after showing it, wait on
-one exact PENDING Instruction, and continue only after same-card
-`visaRegistrationSucceeded=true` plus exact-Instruction `ACTIVE`.
+contexts. The bundle is unchanged in this rules-only update; the contract
+below is not a claim of new CLI runtime acceptance or backend deployment.
 
 The vendored bundle was refreshed through the official `clink-cli`
 synchronization flow. If another distribution does not implement the required
-missing-card contract, the installation is incompatible and must stop instead
-of opening a card/VIC page, returning after a link, falling back to Program
-mode, or decomposing the purchase into atomic commands.
+purchase-snapshot contract, it must report the limitation instead of inferring
+missing purchase data or decomposing the purchase into atomic commands.
+
+## Quick Instruction Principles
+
+- Freeze one purchase context and one selected PI. Use the default PI unless
+  the user explicitly chooses an alternate; never infer a default from card
+  order or VIC readiness.
+- Query only the selected PI's Instructions. Reuse only a complete, usable,
+  unconsumed ACTIVE match. PENDING and CREATED are never another purchase's
+  reuse candidates.
+- With no ACTIVE match, create a new ordinary PI-bound Instruction when the
+  selected PI is VIC-ready; otherwise create a PENDING Instruction and carry
+  its exact ID through VIC, Passkey, and activation.
+- A changed default PI stops a default-based purchase. An explicit alternate
+  remains selected only while it is customer-owned and usable.
+- If no default exists, do not choose a card implicitly. Return card management
+  and re-read the default after the user acts.
+- Binding, VIC, Passkey, and PENDING activation share a ten-minute wait bound.
+  Timeout never creates a replacement Instruction or retries payment.
+- Verify the exact Instruction is ACTIVE before Checkout, which is created and
+  completed at most once.
+
+Maintainers: the runtime package keeps only the current Quick Instruction
+principles. Detailed case matrices and historical traceability belong outside
+this runtime package.
 
 ## Requirements
 
@@ -110,8 +137,8 @@ mode, or decomposing the purchase into atomic commands.
 - Invoke the bundled launcher by path; do not use a global CLI
 - Complete OAuth, card, Passkey, 3DS, Instruction, and risk pages in the user's
   system browser
-- A Bind Card link may be displayed, but the CLI must not auto-open it or stop
-  waiting for the same PENDING Instruction after displaying it
+- Login and purchase continue without another conversation checkpoint; browser
+  authorization stays in Portal, and only a failed opener needs a fallback link
 
 ## Verification
 
@@ -120,7 +147,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.74`
+Skill version: `0.1.93`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by
