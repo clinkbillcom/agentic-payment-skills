@@ -34199,7 +34199,7 @@ function createVisaCommerceCliDependencies(context, commerceContext, agentState)
         ...continuation.paymentInstrumentId ? { paymentInstrumentId: continuation.paymentInstrumentId } : {}
       };
     },
-    bindingPortalUrl: () => new URL("/", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
+    bindingPortalUrl: () => new URL("/payment-method-setup", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
     saveContinuation: async (continuation) => {
       agentStateIsQuick = false;
       currentAgentState = {

@@ -94,7 +94,7 @@ Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
 Skill `0.1.98` vendors Visa CLI `0.2.76` from upstream commit
-`28894dae956c70ee008d12dba62dd591136177af`. This product-match branch performs
+`9d16d2a67c19151bb58350c1621bf4c50c13f02b`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog

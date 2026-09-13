@@ -616,15 +616,16 @@ original Quick continuation (or normal Instruction selection only without a Quic
 product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
 When an exact PENDING Instruction has no bound card, the command returns
-immediately with `instructionId`, `phase=pending`, and `bindCardUrl`; tell the
-user that a Visa card must be bound, then run
-`visa browser-open --url <bindCardUrl>` in the system browser. After a
-successful launch, rerun the same command with `--browser-opened` to wait for
-binding/activation. If the user completed it manually, rerun with
-`--manual-completed`; the CLI checks status first and does not reopen.
-For UAT, the returned bind-card URL is the Agent Portal root
-`https://uat-agent.clinkbill.com/`; do not replace it with
-`/agent-authorization`.
+immediately with `instructionId`, `phase=pending`, and `bindCardUrl`. For a
+PENDING Instruction created by the preceding `commerce-login` Quick flow, do
+not call `browser-open` again: tell the user to bind the card in the page
+already opened during login. If that page is no longer open, tell the user to
+manually open the dedicated UAT page
+`https://uat-agent.clinkbill.com/payment-method-setup`. After the user
+finishes, rerun with `--manual-completed`; the CLI checks status first and does
+not reopen. For a Pending Instruction created directly by `commerce-run`, use
+`visa browser-open --url <bindCardUrl>` when the flow requires a new browser
+operation, then rerun with `--browser-opened`.
 Missing/changed facts, a real error, refusal, cancellation, or timeout require
 a user-facing interruption.
 
@@ -946,9 +947,12 @@ unchanged into the next command. Do not write them to a local file.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
 - Portal owns binding and VIC. An exact PENDING Instruction without a card
-  immediately returns its exact `bindCardUrl`; tell the user to bind a Visa
-  card and use `visa browser-open` to open it in the system browser. Continue
-  with the same `instructionId` after the authoritative card/Instruction check.
+  immediately returns its exact `bindCardUrl`. For the login-created Quick
+  case, tell the user to bind the card in the already-open login page and do
+  not open another browser page; if it was closed, use the dedicated UAT
+  `https://uat-agent.clinkbill.com/payment-method-setup` page manually.
+  Continue with the same `instructionId` after the authoritative
+  card/Instruction check.
   Other timed-out card, VIC, or Passkey waits (10 minutes) exit through the
   pending-instruction recovery, never through a VIC URL or the Portal home page.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits

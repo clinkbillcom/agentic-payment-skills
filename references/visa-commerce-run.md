@@ -81,11 +81,15 @@ not proof of business failure.
 Binding, VIC, Passkey, and PENDING activation share the ten-minute Agent wait
 boundary. An exact PENDING Instruction without a bound card is
 different: return its `instructionId`, `phase=pending`, and `bindCardUrl`
-immediately. The Agent tells the user to bind a Visa card, runs
-`visa browser-open --url <bindCardUrl>`, then reruns the same command with
-`--browser-opened`; manual completion uses `--manual-completed` and checks
-authoritative state first. In UAT, `<bindCardUrl>` is the Agent Portal root
-`https://uat-agent.clinkbill.com/`, not `/agent-authorization`. Continue with the same Instruction ID. For other
+immediately. For a PENDING Instruction created by the preceding
+`commerce-login` Quick flow, the Agent tells the user to bind the card in the
+already-open login page and does not call `browser-open` again. If that page was
+closed, the user manually opens the dedicated UAT page
+`https://uat-agent.clinkbill.com/payment-method-setup`. After completion,
+rerun with `--manual-completed` so the CLI checks authoritative state first.
+For a Pending Instruction created directly by `commerce-run`, use
+`visa browser-open --url <bindCardUrl>` when a new browser operation is needed,
+then rerun with `--browser-opened`. Continue with the same Instruction ID. For other
 waits, the recovery list comes from
 `GET /agent/cwallet/instructions/activatable`, which may return both PENDING and
 CREATED Instructions. After timeout, use `visa pending-instructions` with the exact ID when
