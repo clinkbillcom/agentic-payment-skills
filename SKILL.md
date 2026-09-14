@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.100. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.101. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.100"
+  version: "0.1.101"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -24,16 +24,59 @@ list `bin/`, read the wrapper/package/config, or inspect process environment.
 If direct execution fails, report that launcher error.
 
 Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
-Edition: it includes every Base Command plus Visa discovery and the CLI-owned
-`visa recommend-products`, `visa product-search`, `visa commerce-login`,
-`visa commerce-run`, `visa pending-instructions`, and `visa browser-open`
-commands.
+Edition: it includes every Base Command plus five independent command
+capabilities: `visa recommend-products`, `visa login`, `visa payment-method resolve`,
+`visa instruction candidates|create|get|wait`, and `visa checkout`.
+`visa commerce-login` and `visa commerce-run` remain compatibility-only
+commands/exports, not the normal Skill path or a fallback for missing commands.
 
 Keep normal execution small. Do not read reference files, inspect source or
 workflow scripts, invoke runtime `--help`, run `date`, use a fixed `sleep`, or
 load JavaScript orchestration modules. Interpret the user's intent, collect only
 missing business facts, obtain the required authorization, run the shortest
 matching CLI capability, and report the structured result.
+
+### Independent Invocation
+
+The Agent owns orchestration. Each capability has its own CLI command/file and
+can be invoked independently; the numbered steps below are one shopping example,
+not a mandatory CLI pipeline or a record of commands that must have run.
+Login before recommend is valid. A login-only request needs no product,
+recommendation, purchase context, or purchase authorization.
+
+| Request/state | Agent command plan | Boundary |
+| --- | --- | --- |
+| Login only; no product | `visa login` | Report login; stop |
+| Login, then ask for offers | `visa login` -> `visa recommend-products` | No card/Instruction/Checkout |
+| Browse while logged out or logged in | `visa recommend-products` | No login preflight |
+| Check card readiness; authenticated, no product | `visa payment-method resolve` | Report card state; stop |
+| Resume exact authorization; complete context | `visa instruction get` or `visa instruction wait` | No rediscovery/create |
+| Authorized purchase; ready PI and selected ACTIVE pair | `visa checkout` | Recheck gates; no prior-command replay |
+
+Independent invocation does not bypass business prerequisites. Supply the
+required inputs, exact IDs, current authentication/readiness, and confirmation
+for mutations. Continue to another capability only when the user's intent calls
+for it; a ready result or suggested nextAction does not expand that intent.
+
+### Validation Ownership
+
+The CLI's `purchase-context-validation.ts` checks only currency, amount/limit, and
+MCC. It must not validate title/description content, compare their strings, or
+classify purchase meaning from them. Titles and descriptions remain data for
+the Agent's semantic purchase validation, not CLI semantic gates.
+
+| Check | Owner |
+| --- | --- |
+| Currency, amount, MCC | CLI purchase-context validator |
+| Intent, restricted-category meaning, title/description, merchant/SKU/denomination/region/quantity equivalence | Agent |
+| Required arguments and identifiers | CLI command parser |
+| Auth, PI/VIC, ACTIVE, expiry, usage/reserve, recurring | CLI command |
+| Authoritative merchant/product IDs, price/currency, availability | CLI product revalidation |
+
+Numeric/MCC validation or technical eligibility does not prove product
+equivalence or user authorization. The Agent still screens the complete
+purchase and stops on ambiguous evidence. Keep the CLI's per-command safety
+checks; removing title/description semantic validation does not weaken them.
 
 ### Aggregate Failure Diagnosis
 
@@ -46,6 +89,10 @@ read only the reference matching that command:
 | `visa recommend` | `references/visa-recommend.md` |
 | `visa recommend-products` | `references/visa-recommend-products.md` |
 | `visa product-search` | `references/visa-product-search.md` |
+| `visa login` | `references/visa-login.md` |
+| `visa payment-method resolve` | `references/visa-payment-method.md` |
+| `visa instruction candidates/create/get/wait` | `references/visa-instruction.md` |
+| `visa checkout` | `references/visa-checkout.md` |
 | `visa commerce-login` | `references/visa-commerce-login.md` |
 | `visa commerce-run` | `references/visa-commerce-run.md` |
 | `visa pending-instructions` | `references/visa-pending-instructions.md` |
@@ -82,9 +129,11 @@ determine, inspect, infer, or override that environment at runtime. Do not read
 files, wrapper/package/config, wallet state, or process environment, and do not
 run any shell or authentication preflight.
 
-Only after the user selects an exact product and authorizes an authenticated
-purchase may the Skill verify that wallet and purchase environments agree and
-write the verified environment into purchase contexts.
+Login, payment-method, Instruction, and Checkout commands use
+`--environment sandbox` for this UAT distribution, including standalone login
+before any recommendation. Preserve that environment
+through all continuations. Do not inspect config or switch to production to
+repair a failed command.
 
 `visa recommend`, `visa detail`, and `visa taxonomy` do not accept
 `--sandbox` or `--test`. For `visa recommend-products`, also omit them and rely
@@ -123,7 +172,7 @@ A denomination in a product title is product identity, not the purchase price.
 For example, an `HKD 100 Gift Card` with Catalog `price.amount=100` and
 `currency=USD` has face value `HKD 100` and purchase price `USD 1.00`; never
 display it as `USD 100` or rewrite the title denomination.
-For flat `commerce-login` and `commerce-run` arguments, `--amount` must equal
+For flat `visa instruction` and `visa checkout` arguments, `--amount` must equal
 the authoritative `product.totalAmountMajor` value. Never pass
 `product.totalAmountMinor`; this example uses `--amount 1`, not `--amount 100`.
 
@@ -154,7 +203,7 @@ the authoritative `product.totalAmountMajor` value. Never pass
 
 - Run a payment, Checkout completion, Tip, refund creation, Skill install, or
   Instruction mutation at most once for one authorization.
-  With an existing Quick, create zero additional Instructions in every case.
+  With an existing Instruction continuation, create zero additional Instructions.
 - Timeout, transport failure, an unknown result, or exit code 6 never authorizes
   resubmission. Verify through a bound read-only status or continuation.
 - An event is a wake-up hint, not final truth. Refresh the authoritative
@@ -166,11 +215,12 @@ the authoritative `product.totalAmountMajor` value. Never pass
 
 ### Restricted Instruction Gate
 
-Before `visa commerce-login` carries an Instruction context, or before any
-standalone `instruction create`, screen the complete user request, merchant,
-Program, product, URL, title, description, every mandate, and MCC.
+Before a purchase mutation or any standalone `instruction create`, the Agent
+screens the complete user request, merchant, Program, product, URL, title,
+description, every mandate, and MCC. Do not delegate semantic screening to
+the CLI purchase-context validator. Standalone login needs no purchase context.
 
-Refuse before login or draft creation when the purchase is, or may reasonably
+Refuse the purchase before draft creation or Checkout when it is, or may reasonably
 be, adult content/services, dating or companionship, gambling or lottery,
 prescription drugs, cryptocurrency, public file-sharing/cyberlocker services,
 paid skill-based prize games, securities or financial-product trading,
@@ -184,157 +234,70 @@ Never reroute a refused purchase through plain `pay` or UCP.
 
 ### Browser Boundary
 
-OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
-belong in the user's system browser. For commerce-login and commerce-run, the
-aggregate returns the exact operation URL and continuation state before opening
-it. For authorization pages other than Bind Card, use
-`visa browser-open --url <operation-url>` for a separate system-browser
-attempt; do not use the Agent's built-in browser.
+OAuth, card/VIC, Passkey, Instruction, 3DS, and risk pages belong in the user's
+system browser. Never inspect, fill, or submit them with an Agent browser.
+Within the five-step purchase, `visa browser-open` is allowed only for Step2
+login and Step4 Instruction activation, using the exact returned `manualOpenUrl`.
 
-Bind Card is URL-only in every flow, including standalone card setup and
-PENDING Instructions created by login or commerce-run. Show the exact returned
-`bindCardUrl` or `bindingUrl`; never use `browser-open`, `--open`, an OS opener,
-or an Agent browser to open a Bind Card page. The user may already be filling
-the login page; offer the URL only as a manual fallback. This rule overrides
-the general browser-opening instructions below.
+The ENTIRE Step3 is URL-only: show `bindCardUrl`, `manageCardUrl`, or `vicUrl`;
+never use `browser-open`, `--open`, an OS opener, preview, or an Agent browser.
+This includes VIC and card management, not just binding. Bind Card is URL-only
+in every flow, including standalone card setup.
 
-For commerce-login and commerce-run, when a user browser operation is needed,
-the aggregate returns the exact operation URL and continuation state first. Tell
-the user to complete it in the system browser and never in the Agent built-in
-browser. If the host Agent name is known, replace `{agent}` with that name. If
-it is unknown, say `请在系统浏览器中完成操作，不要使用 Agent 内置浏览器。`
-and never emit the literal placeholder.
-
-For Passkey, VIC, OAuth, and other authorization pages, use the dedicated
-browser-open operation to attempt the system browser:
+Before an allowed opener, tell the user to use the system browser and avoid
+the actual host's built-in browser. If the host Agent name is known, use that
+name. If it is unknown, say `请在系统浏览器中完成操作，不要使用 Agent 内置浏览器。`
+and never emit the literal placeholder; never emit {agent}.
 
 ```text
-<Skill Path>/bin/visa-cli visa browser-open --url "<operation-url>" --format json
+<Skill Path>/bin/visa-cli visa browser-open --url "<manualOpenUrl>" --format json
 ```
 
-A successful launch is not business success. After automatic opening, continue
-with the original command and check its operation state. If the user completed
-the operation manually, continue with the original command and mark the manual
-completion; the first step is an authoritative status check and the browser
-must not be opened again. A failed launch returns the exact URL for manual use.
-Say: "If the page did not open successfully, you can reopen it using this
-link: <operation-url>".
-A closed page is not business failure. Unknown payment or authorization
-results stop the flow and require read-only recovery.
-Never kill/restart an unrelated running command or use shell background jobs.
-After possible Checkout creation, only CLI-returned read-only recovery is
-allowed.
-Without these explicit continuation fields, do not infer that a command is safe
-to rerun. After possible Checkout creation, only CLI-returned read-only recovery
-is allowed. Browser opening success is not proof that the page appeared on a phone;
-if the user reports that mismatch, explain it rather than claiming failure detection.
-
-For standalone card-link requests, show but never auto-open an exact CLI-returned Bind Card
-link. The user may click it or use an already-open Agent Portal. Never inspect,
-fill, or submit protected pages with an Agent browser. Merchant product pages
-may be inspected by the Agent.
+A successful browser launch is not business success; a closed page or failed
+browser launch is not business failure. After manual completion, check state
+first without reopening: resume the same login, repeat the same payment-method
+resolve, or exact-get the same Instruction as appropriate. A failed opener
+leaves the exact URL available for manual use. Never kill/restart an unrelated
+command or use shell background jobs.
 
 An Alipay QR is not a browser page. Display the CLI-rendered terminal QR
 exactly, or use the CLI-returned private `imagePath` only when terminal QR
 rendering is unavailable. Never expose or reconstruct QR payloads or Base64.
 
-### Quick Instruction Principles
+### Purchase Identity
 
-For every authorized purchase:
+Freeze the selected merchant, productId, price, currency, and all other
+purchase facts from discovery. Payment-method readiness freezes BOTH `paymentInstrumentId`
+and `selectionSource=default|explicit`; carry both unchanged through Steps 4-5.
+Never infer a default from the first, only, newest, or VIC-ready card.
 
-- Freeze one purchase context and one selected PI. Use the default PI unless
-  the user explicitly chooses an alternate PI; do not infer a default from the
-  first, only, newest, or VIC-ready card.
-- Query only the selected PI's Instructions. Reuse only a complete, usable,
-  unconsumed `ACTIVE` Instruction whose amount, currency, merchant/product
-  scope, MCC, expiry, recurrence, and Mandates match the frozen context.
-- If no reusable ACTIVE exists, create a new ordinary PI-bound Instruction
-  when the selected PI has completed VIC; otherwise create a new PENDING
-  Instruction for the exact selected PI and purchase operation.
-- Never reuse PENDING or CREATED as another purchase's match. The PENDING
-  `instructionId` stays fixed through VIC, Passkey, and activation.
-- If a Quick PENDING Instruction has a selected/bound PI, `commerce-run`
-  first calls the Agent `/agent/cwallet/instructions/{instructionId}/bind-pi`
-  operation and requires the same Instruction to become `CREATED`; only then
-  does it present the Passkey authorization page.
-- If no default PI exists, do not choose a card implicitly. Create the pending
-  purchase operation, return Agent Portal card management, and re-read the
-  default after the user acts. An explicit alternate PI may be used without
-  making it default.
-- A default PI change stops a default-based purchase and requires
-  reconfirmation. An explicit alternate remains selected only while it is still
-  customer-owned and usable.
-- Binding, VIC readiness, Passkey authorization, and PENDING activation are one
-  user-operation wait stage capped at 10 minutes. Timeout never creates a
-  replacement Instruction or retries Checkout/payment.
-- Browser launch success is not business success. After `browser-open`, rerun
-  with `--browser-opened` to wait; after manual completion, rerun with
-  `--manual-completed` to check status first without reopening.
-- Before Checkout, verify the exact Instruction is ACTIVE and re-check the
-  selected PI/default rule. A changed default PI stops a default-based purchase
-  and requires reconfirmation. Checkout is created and completed at most once;
-  never repeat either operation.
+A changed default PI stops a default-based purchase and requires reconfirmation.
+An explicitly chosen alternate PI remains selected despite a later default
+change, provided it is still owned, usable, and VIC-ready. Do not ask which card
+to use or whether to make an alternate default; the user may proactively supply
+an exact PI ID.
 
-- Card/VIC readiness uses `GET /agent/cwallet/card/info`.
-  `cardSchemeRegistrationEnabled` means that a Visa card supports VIC;
-  `visaRegistrationSucceeded` or card-level `strongAuthRegistered` means VIC
-  is complete. These facts are separate. Capability false, unknown, or a
-  failed card-info read must not enter VIC or Checkout.
+Never reuse PENDING or CREATED as another purchase's match. The new purchase
+path creates no Quick or PENDING Instruction and never calls `bind-pi`.
+Only `visa instruction create` may create an ordinary PI-bound CREATED
+Instruction, with a ready frozen PI. No prior-command history is required.
+Preserve its exact ID and original authorization deadline; timeout or
+unknown state never authorizes a replacement Instruction.
 
-The direct `POST /agent/cwallet/instructions/pending` capability is a
-non-idempotent Pending creator. It always creates one new PENDING Instruction;
-it does not match or reuse ACTIVE/PENDING/CREATED, select a card, or turn a
-VIC-ready card into CREATED. Normal purchase orchestration must check the
-selected PI's matching ACTIVE Instructions first and use the aggregate's
-ordinary or Pending branch instead of blindly calling this creator.
+Continuation belongs to the current Agent conversation, not a context file or
+CLI config. Retain purchase facts, PI, selectionSource, instructionId,
+mandateId, authorizationDeadline, and returned phase explicitly. When
+`phase=checkout_started`, Checkout may already exist; only exact CLI-returned
+read-only recovery is allowed.
 
-These principles are the complete Skill-facing Quick contract. Detailed state
-combinations and regression cases belong in the development Skill, not here.
+### Compatibility Recovery
 
-### Pending Instruction Recovery
-
-Run `visa pending-instructions [--open] [--instruction-id <id>]
-[--payment-instrument-id <id>] [--format json]` after any `commerce-run`
-not-ready exit (stages card, vic, card_selection, card_verification,
-instruction_activation, instruction_authorization), when the user returns to
-finish or activate an earlier purchase, or when the user reports a binding,
-VIC, or Passkey problem. The CLI reads `GET /agent/cwallet/instructions/activatable`
-(the current PENDING/CREATED Instructions that can still be activated), refreshes cards,
-and returns one `status` from `activation_ready`, `card_selection_required`,
-`portal_binding_required`, `instruction_not_activatable`, `select_in_portal`,
-or `none_pending`, always with `context` (`exact` or `unknown`) and `portalUrl`,
-plus `instructionId`, `instructionStatus`, `paymentInstrumentId`, `card`,
-`cards[]`, `pendingInstructions[]`, `activationUrl`, `browserLaunch`,
-`manualOpenUrl`, `reason`, and `nextAction` as applicable. Exact context is
-`--instruction-id`, else the pending row matching a saved Quick continuation,
-else the only pending row. Pass `--instruction-id` whenever the original Quick
-ID is known; pass `--payment-instrument-id` only with the card the user chose
-from `cards[]`. The command creates nothing and mutates nothing; only its
-`--open` may open the browser. Tell the user plainly what the status means:
-which Instruction is waiting, which card the CLI opened, which cards to choose
-from, or that the list page is where they pick and activate. Never construct
-the Passkey or Portal URL, never present the Portal home page as the
-activation link, and never fall back to creating or selecting another
-Instruction.
-
-There are two distinct activation paths:
-
-- If the user only binds a card and completes VIC without choosing an
-  Instruction, backend continuation may activate exactly one PENDING
-  Instruction: the newest PENDING row by descending `createTime`. This is not
-  Agent selection; exact-GET the resulting ID and verify `ACTIVE` before
-  Checkout.
-
-- In the UAT Visa Skill, execute `wallet logout` to reset
-  `~/.visa-cli/config.json` to a clean default document, clearing Visa OAuth,
-  card cache, region, and continuation state. Do not execute `visa wallet logout`.
-- If the user actively chooses a PENDING Instruction, preserve that exact ID
-  and use the normal `bind-pi -> ordinary activation` flow. Do not reinterpret
-  this as automatic latest-PENDING activation or replace the Instruction.
-
-`GET /agent/cwallet/instructions/activatable` is a read-only recovery/list
-contract for both cases. It does not itself select, bind, or activate an
-Instruction.
+`visa commerce-login`, `visa commerce-run`, and `visa pending-instructions`
+remain available for existing callers, not as the new purchase path. Diagnose
+an existing legacy operation with its matching reference and preserve its exact
+IDs. Do not transfer an unresolved legacy purchase into a new Checkout.
+The read-only `GET /agent/cwallet/instructions/activatable` recovery list is
+not an Instruction creator or permission to select the latest row.
 
 ## Intent Routing
 
@@ -349,21 +312,25 @@ user-facing text; respond directly to the user's request.
   the same Visa-only discovery with the current category wording.
 - Requests such as "Are there Watsons coupons?" use the same Visa-only
   discovery with the current brand or product wording.
-- Every initial product, category, merchant, buy/order/checkout, and Benefit request
+- Every initial product, category, merchant, buy/order/checkout, and Benefit discovery request
   uses the same Visa-first aggregate. It never runs broad Catalog. "我想下单咖啡",
   "有咖啡的券吗", and "有哪些咖啡权益" differ only by taxonomy filters.
 - Never route initial shopping discovery directly to `catalog search`.
 
-Use Program aggregation after the one-round result contains an exact orderable
-product selected by the user:
+For a shopping request without prepared state, the Agent may use this sequence
+after selecting an exact orderable product. It is not enforced command order:
 
 ```text
 visa recommend-products -> exact product selection and purchase authorization
--> visa commerce-login -> visa commerce-run
+-> visa login -> visa payment-method resolve
+-> visa instruction candidates (reuse) or create + get/wait (authorize)
+-> visa checkout
 ```
 
-An already authorized selection proceeds directly to commerce-login with the
-unchanged snapshot. Do not search again or ask to order again.
+An already authorized selection keeps the unchanged snapshot. The Agent invokes
+login only if needed, then the needed readiness/authorization capability, or
+checkout directly when the current gates and exact IDs are available. Do not
+search again, replay completed commands, or ask to order again.
 
 New `mode=purchase` contexts omit both the top-level `program` object and
 `metadata.programCode`. Older callers may still provide `program.code` as
@@ -554,7 +521,11 @@ A new Visa query, refreshed recommendation, changed language, changed
 geography, or changed environment invalidates the prior Program selection and
 UCP result.
 
-## Visa Purchase Fast Path
+## Visa Purchase Five-Step Flow
+
+The step numbers label capabilities, not invocation prerequisites. The Agent
+orchestrates this shopping example and owns semantic purchase validation;
+independent login, discovery, readiness, and exact-ID continuation remain valid.
 
 An explicit request to buy one unambiguous selected product is the single
 purchase authorization. The short replies in Authorization And Input are valid.
@@ -562,117 +533,227 @@ This path supports one product with quantity 1 only. For a multi-item or
 multi-quantity request, explain this limit; never silently reduce the quantity
 or split the purchase into several orders.
 
-After authorization, use the latest unchanged `recommend-products` snapshot
-directly in `visa commerce-login`; never run or refresh `visa detail`. If the
+After authorization, use the latest unchanged `recommend-products` snapshot;
+never run or refresh `visa detail`. If the
 snapshot is missing or invalidated, stop and return to discovery.
 
-Require `PRODUCT_VERIFIED`, `CONTINUE_TO_COMMERCE_LOGIN`, and
-`productResolution=internal-ucp-catalog`. Keep that selected row's
+Require `PRODUCT_VERIFIED` and `productResolution=internal-ucp-catalog`.
+Discovery's compatibility action `CONTINUE_TO_COMMERCE_LOGIN` is a purchase
+handoff hint, not a command-order requirement; do not call the legacy command.
+Keep that selected row's
 `purchaseContext` unchanged in memory. It uses `mode=selected_product` and
 contains the single-item facts already displayed to the user. Do not create a
 local JSON file just to pass context between CLI commands.
 
 Do not build an Instruction context, infer MCC, copy Program fields, or
-recalculate amounts. The CLI constructs and validates these inputs. If
-`purchaseContext` is absent, report `purchaseContextUnavailable`; do not
+recalculate amounts. The CLI constructs the Instruction data and checks
+currency/amount/MCC; the Agent validates purchase meaning and title/description.
+If `purchaseContext` is absent, report `purchaseContextUnavailable`; do not
 invent the missing data or use `visa detail` to repair it.
 
-After the user's purchase request, start login once without another conversation
-checkpoint. Before the command, say once in the locked language:
-"现在启动登录流程，可能打开浏览器登录页面。" An already-ready login does not
-need another login page. This is a notice, not a question; execute immediately:
+### Step1: Recommend And Freeze
+
+Discovery is unchanged: `visa recommend-products` returns `products` and
+`visaBenefits`. Freeze the selected merchant + productId + authoritative
+price/currency and quantity 1. Do not search again for an already authorized
+unchanged selection.
+
+### Step2: Login Only
 
 ```text
-<Skill Path>/bin/visa-cli visa commerce-login \
-  --mode selected_product --environment <environment> \
+<Skill Path>/bin/visa-cli visa login --environment sandbox --format json
+```
+
+This command performs authentication only: no `instructionContext`, Quick,
+PENDING, card selection, card setup, or Instruction creation. Never call
+`wallet init` or substitute `visa init` in this path.
+It is independently callable before recommend, with no selected product.
+
+For login-only intent, report `ready` and stop. For a broader request, the Agent
+chooses the next needed capability; login does not invoke it. Otherwise show
+the exact `manualOpenUrl`, give the
+system-browser notice, and use `visa browser-open --url "<manualOpenUrl>"`.
+Resume using only the returned login identifier:
+
+```text
+<Skill Path>/bin/visa-cli visa login --environment sandbox \
+  --resume <id> --format json
+```
+
+After the user completes login, resume checks state first without reopening.
+Login carries no purchase or PI arguments. It never creates a Quick Instruction.
+
+### Step3: Resolve Payment Method
+
+```text
+<Skill Path>/bin/visa-cli visa payment-method resolve \
+  --environment sandbox --format json
+```
+
+Use the persisted default PI without asking which card. Only when the user
+proactively chooses an alternate by exact ID, pass:
+
+```text
+<Skill Path>/bin/visa-cli visa payment-method resolve \
+  --environment sandbox --payment-instrument-id <id> \
+  --selection-source explicit --format json
+```
+
+For a frozen default recheck, supply its exact ID with `--selection-source default`.
+Never label an Agent-selected card `explicit`.
+This command needs authentication, not a selected product or a prior recommend
+call. For a readiness-only request, report its result without starting Step4.
+The purchase actions in the table apply only to an authorized purchase.
+
+| Card state | Result | Agent action |
+| --- | --- | --- |
+| No card | `bindCardUrl` at the Agent Portal root | Show URL; stop for user setup |
+| Cards but no persisted default, using default selection | `manageCardUrl` | Show URL; stop for user card management |
+| Selected card supports VIC but is not ready | `vicUrl` | Show URL; stop for user VIC |
+| VIC support false or unknown, or card-info read fails | Stop/manual card management | Never enter VIC or Checkout |
+| Selected card is owned, usable, and VIC-ready | `ready`, `paymentInstrumentId`, `selectionSource` | Freeze BOTH values; advance to Step4 |
+
+The ENTIRE Step3 NEVER browser-opens or uses `--open`, including `vicUrl` and
+`manageCardUrl`. Show only the exact returned URL. When the user returns,
+repeat the same resolve command to recheck authoritative state; no automatic
+card/VIC wait or Instruction creation. An explicit alternate must become
+VIC-ready too and need not become default.
+An exact explicit selection can be ready even when no persisted default exists.
+
+Card readiness uses `GET /agent/cwallet/card/info`.
+`cardSchemeRegistrationEnabled` is support, not completion;
+`visaRegistrationSucceeded` or card-level `strongAuthRegistered` is completion.
+Capability false/unknown and failed reads stop even if a cached card looked ready.
+
+### Shared Purchase Arguments
+
+In Steps 4-5, `<purchase-args>` denotes these same flat arguments from the
+frozen `purchaseContext`, not a literal CLI flag or a context file:
+
+```text
+--mode selected_product --environment sandbox \
   --request-text "<original request>" \
   --merchant-id <merchant-id> --endpoint "<endpoint>" \
   --merchant-url "<merchant-url>" --merchant-name "<merchant-name>" \
   --product-id <product-id> --title "<product title>" \
   --amount <total amount> --currency <currency> --quantity 1 \
   --availability in_stock --digital-delivery-expected <true|false> \
-  [--mandate-mcc <mcc>] \
-  --confirm-purchase \
-  --format json
+  [--mandate-mcc <mcc>]
 ```
 
-The command returns before browser opening when user action is required. Show the
-exact operation URL, tell the user to use the system browser rather than the
-Agent built-in browser, then run `visa browser-open --url <operation-url>`.
-After a successful launch, rerun this command with `--browser-opened`. If the
-user completed the operation manually, rerun it with `--manual-completed`; the
-CLI checks status first and does not reopen the browser. Do not copy
-login-returned Instruction IDs into the purchase context.
+Preserve any authoritative optional merchant, recurrence, buyer, shipping, or
+Catalog fields using the existing selected_product flat arguments. Never mix
+legacy `--context <json>` with flat input. No Program fields or amount buffer.
 
-When login is ready, immediately run commerce-run once with the same inline
-JSON context, without asking for authorization or another user reply. Browser authorization
-is completed on the opened page, not through a conversation checkpoint.
-Before the command, say once in the locked language:
-"登录已就绪，直接执行购买流程，可能打开浏览器授权页面。" Then execute immediately:
+### Step4: Select Or Authorize An Instruction
+
+Invoke the requested subcommand directly with complete inputs; an existing
+exact-ID get/wait does not rerun candidates or create. Candidate selection and
+the decision to create belong to the Agent, not an automatic CLI transition.
 
 ```text
-<Skill Path>/bin/visa-cli visa commerce-run \
-  --mode selected_product --environment <environment> \
-  --request-text "<original request>" \
-  --merchant-id <merchant-id> --endpoint "<endpoint>" \
-  --merchant-url "<merchant-url>" --merchant-name "<merchant-name>" \
-  --product-id <product-id> --title "<product title>" \
-  --amount <total amount> --currency <currency> --quantity 1 \
-  --availability in_stock --digital-delivery-expected <true|false> \
-  [--mandate-mcc <mcc>] \
-  [--purchase-instruction-id <activated-id>] \
-  --confirm-purchase \
-  --format json
+<Skill Path>/bin/visa-cli visa instruction candidates <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> --format json
 ```
 
-The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category enforcement,
-original Quick continuation (or normal Instruction selection only without a Quick),
-product revalidation, one Checkout creation, at most one completion,
-non-retriable payment handling, and bounded delivery waiting.
-When an exact PENDING Instruction has no bound card, the command returns
-immediately with `instructionId`, `phase=pending`, and `bindCardUrl`. For every
-PENDING bind-card result, do not call `browser-open`: tell the user to bind the
-card in the page already opened during login, or manually open the returned
-`bindCardUrl` if needed. After the user finishes, rerun with
-`--manual-completed`; the CLI checks status first and does not reopen.
-Missing/changed facts, a real error, refusal, cancellation, or timeout require
-a user-facing interruption.
+`candidates` is read-only. CLI filters ACTIVE status, the frozen PI, currency,
+amount limit >= purchase amount, MCC, future expiry, usage/reserve, and recurring
+constraints. It returns all eligible candidate Instructions, their
+`eligibleMandates` (`mandateId`, `title`, `description`, amount/currency/MCC),
+and the PI. It does not pick a product by text equality.
+Purchase-context validation checks only currency/amount/MCC, not title/description;
+the command separately enforces technical eligibility.
 
-After `commerce-login` creates a Quick Instruction, apply the Quick Instruction
-Card Gate: preserve the exact ID in every card/VIC state. Never create another
-Instruction merely because a wait timed out, a card became VIC-ready, or
-another ACTIVE Instruction exists.
-Never rerun `visa commerce-run` after it may have created a Checkout. Execute
-only an exact CLI-returned aggregate read-only continuation, once. Never
-reconstruct `card`, `instruction`, `events`, `pay`, `ucp-checkout`, or
-`ucp-order` component commands for this Visa Program purchase.
+The Agent selects semantically from that eligible set: require the same merchant
+and SKU, denomination, region, and quantity. Equivalent translated titles are
+not required to be string-equal. Inspect title and description with authoritative
+product facts; a matching amount alone is insufficient. Ambiguous evidence
+means stop for clarification, not guess or create. Never select by list order.
+
+A clear match freezes its exact `instructionId` and eligible `mandateId` and
+lets the Agent invoke Step5 for the authorized purchase, without creation or
+browser activation. Only a verified no-match
+allows one ordinary PI-bound CREATED draft:
+
+```text
+<Skill Path>/bin/visa-cli visa instruction create <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> \
+  --confirm-purchase --format json
+```
+
+`create` requires `--confirm-purchase` and a ready PI. It creates ONLY an
+ordinary PI-bound CREATED Instruction, never PENDING and never `bind-pi`.
+It returns `manualOpenUrl`, `instructionId`, and `authorizationDeadline`
+(epoch milliseconds). Retain all three. Tell the user to complete authorization
+in the system browser, avoiding the actual host's built-in browser or the
+generic Agent built-in browser when unknown, then run:
+
+```text
+<Skill Path>/bin/visa-cli visa browser-open --url "<manualOpenUrl>" --format json
+```
+
+Next check immediately, without reopening:
+
+```text
+<Skill Path>/bin/visa-cli visa instruction get <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> \
+  --instruction-id <id> --format json
+```
+
+Or wait on that exact ID with the original deadline:
+
+```text
+<Skill Path>/bin/visa-cli visa instruction wait <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> \
+  --instruction-id <id> --authorization-deadline <ms> --format json
+```
+
+`get` and `wait` require the same purchase, PI, source, and exact
+`--instruction-id`. Both are read-only and never reopen or recreate.
+`get` checks immediately. `wait` checks state first and waits at most 600 seconds
+(10 minutes), bounded by the original epoch-ms `authorizationDeadline`.
+No resume, manual completion, or reopening resets it. Timeout preserves the
+same ID for read-only recovery. Require exact ACTIVE state and choose an
+eligible Mandate before Step5; CREATED is not authorization.
+
+### Step5: Checkout Once
+
+```text
+<Skill Path>/bin/visa-cli visa checkout <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> \
+  --purchase-instruction-id <id> --mandate-id <id> \
+  --confirm-purchase --format json
+```
+
+Checkout requires the frozen ready PI and exact-GET verification of the ACTIVE
+Instruction and chosen eligible Mandate. Recheck PI/source consistency and
+product merchant/product IDs, amount, currency, and availability. Changed facts
+require reconfirmation; failed/unknown gates stop.
+Invoke checkout directly when its complete authorized context and current gates
+are available; it does not require replaying the other commands. The Agent
+validates purchase semantics; CLI title/description comparisons are not a gate.
+
+There is no implicit login, card selection, Instruction matching, creation, or
+browser opening in Step5. Run one Checkout creation, at most one completion.
+Never rerun `visa checkout` after possible Checkout creation:
+`--phase checkout_started` refuses repeats and permits only exact returned
+read-only recovery. Never clear the phase to retry an uncertain purchase.
+
+The chosen `instructionId` and `mandateId` are CLIENT GATE IDs. The current
+UCP complete wire carries PI only; it does not forward these chosen IDs or
+prove that the backend consumed that exact Instruction/Mandate. The backend
+resolver is unchanged in this scope. Do not claim backend exact-ID enforcement.
+Payment and delivery must still be verified and reported separately.
 
 ### Visa Preparation
 
-For explicit login-only or Visa card readiness, use the aggregate in prepare
-mode:
-
-```json
-{
-  "mode": "prepare",
-  "target": "login",
-  "environment": "uat",
-  "requestText": "Log in to Visa Benefit"
-}
-```
-
-Use `target: "visa_card_ready"` for card/VIC preparation. The aggregate may
-show but never auto-open a Bind Card link and must stay foreground.
-
-```text
-<Skill Path>/bin/visa-cli visa commerce-run \
-  --mode prepare --target <login|visa_card_ready> \
-  --environment <environment> --request-text "<request>" \
-  --format json
-```
-
-Prepare mode must not receive `--confirm-purchase`, an Instruction context, or
-permission to create an Instruction, Checkout, or payment.
+For explicit login-only requests, use Step2 `visa login --environment sandbox`
+before or after recommend with no purchase or card context, then report and stop.
+For explicit card readiness, invoke Step3 with current authentication; login
+only if needed. Neither may create an Instruction, Checkout, or payment.
+Continue ready capabilities only within the requested scope, without repeated
+purchase confirmation; stop for URL-only card setup,
+material changes, ambiguous evidence, refusal, timeout, or unknown results.
 
 ## Base Capability Contracts
 
@@ -685,10 +766,12 @@ general workflow engine.
 - Use `wallet status --format json` only for an explicit wallet request or after
   an exact product selection when an authenticated operation is about to begin.
   Never use it to preflight anonymous discovery.
-- Use `visa init --email <email> --open --format json` for Visa Skill login,
-  re-login, or authenticated Visa operations that need a wallet. Keep that one
-  process alive while OAuth completes. Do not use `wallet init` for Visa login.
+- Use `visa login --environment sandbox --format json` for Visa Skill login
+  or re-login; resume with the returned `--resume <id>`. No purchase context or
+  card setup belongs in login. Do not use `wallet init` for Visa login.
 - Use `wallet logout --format json` exactly once for explicit logout.
+  It resets Visa-local state in `~/.visa-cli/config.json`; Main CLI state in
+  `~/.clink-cli/config.json` is independent. Do not use `visa wallet logout`.
 - Use `config get/set` only for requested local settings. Never print secrets
   or switch environment to recover from a network error.
 
@@ -697,8 +780,8 @@ general workflow engine.
 - Use `card binding-link`, `setup-link`, `modify-link`, or `passkey-link` only
   for the requested card action. Show the exact link but never pass `--open`,
   Agent-open it, or claim that showing it completed the action.
-- During an authorized aggregate purchase, do not decompose the Pending
-  Instruction Card Gate into atomic card commands.
+- During an authorized purchase, use Step3 `visa payment-method resolve`;
+  all its card-management and VIC links are URL-only.
 - Refresh current card state before selecting a payment instrument. Require one
   exact enabled instrument; never choose from stale or ambiguous data.
 - Card and Passkey pages are user-browser handoffs. A returned event must be
@@ -755,7 +838,7 @@ general workflow engine.
 - Refresh the selected payment instrument first. If it is Visa with VIC
   enabled, stop: this lightweight generic aggregate cannot carry or safely
   resolve an Instruction and Mandate. Visa Program purchases must use
-  `visa commerce-run`; another generic Visa+VIC UCP purchase remains
+  the five-step path ending in `visa checkout`; another generic Visa+VIC UCP purchase remains
   unsupported until the CLI owns an authorization aggregate.
 - Run one foreground `ucp-checkout run ... --confirm-purchase --format json`.
   Add bounded delivery waiting only for verified digital goods.
@@ -776,90 +859,21 @@ general workflow engine.
   result makes an Instruction usable.
 - A normal `instruction create` creates a `CREATED` draft: the Instruction
   exists and is bound to a PI, but is not authorized and cannot be used for
-  Checkout. Always invoke it with `--open --watch`, complete the Passkey page
-  in the system browser, and continue only after the matching activation event
-  and an exact read show `ACTIVE`.
-
-Use the standalone command in this form:
-
-```text
-<Skill Path>/bin/visa-cli instruction create \
-  --title "<title>" \
-  --mandates '<mandates-json>' \
-  --open --watch --format json
-```
-
-When the command returns, `CREATED` means authorization is still required;
-after the watch completes, exact-read the same `instructionId` and require
-`ACTIVE`.
-- A normal `instruction create` creates a `CREATED` draft. `CREATED` means
-  the Instruction exists and is bound to a PI, but it is not authorized and
-  cannot be used for Checkout yet. Always invoke this command with
-  `--open --watch`, complete the Passkey page in the system browser, and
-  continue only after the matching event and an exact read show `ACTIVE`.
-- An ordinary `instruction create` creates a `CREATED` draft bound to the
-  selected/default PI. `CREATED` means the Instruction exists but is not yet
-  authorized and cannot be used for Checkout. Use the returned Passkey URL,
-  complete authorization in the system browser, and continue only after an
-  exact read confirms `ACTIVE`.
-- For this command, always pass `--open --watch`: `--open` attempts to open the
-  system-browser Passkey page and `--watch` waits for the matching activation
-  event. Do not leave the Agent waiting on an implicit default watch.
-- When the user asks to create an Instruction without explicitly saying
-  `pending`, use ordinary `instruction create` and omit
-  `--payment-instrument-id`; the CLI uses only the explicitly marked default PI.
-  If that default Visa supports VIC but is not registered, guide the user
-  through VIC before authorization. If it does not support VIC, use the
-  existing alternate/new-card flow rather than forcing that card through VIC.
+  Checkout. For an explicitly requested standalone Instruction, use the atomic
+  capability only with complete authorized inputs and a ready selected/default
+  PI. Verify the exact ID is `ACTIVE` after user authorization. This capability
+  is not a substitute for Step4's flat `visa instruction create|get|wait`.
 - Recurring or scheduled use requires explicit cadence, per-run cap, currency,
   validity horizon, and pinned Instruction plus Mandate IDs. Missing scope
   stops; unattended execution never substitutes another authorization.
 - `pending-instruction create` is an explicit atomic/test command only. It
   always creates a new PENDING Instruction and returns its exact ID; it is not
   a normal-purchase fallback and must not be retried blindly.
-- Use `visa commerce-run --purchase-instruction-id <id>` only after the user
-  has activated that exact Instruction. The CLI exact-GETs that ID. It must be ACTIVE,
-  have the same ID, selected PI, future expiry, enough amount limit, and an
-  unused/unreserved mandate. It does not require the old
-  Instruction's merchant scope to be textually identical to regenerated
-  commerce-run fields; Checkout uses the current verified order context. A
-  failed required check is terminal and never creates a replacement.
-- Login for this Visa Skill uses `visa init`, not `wallet init`. Use
-  `wallet init` only for the Main CLI.
-
-Instruction continuation state belongs to the current Agent conversation and
-must not be restored from CLI files. When a command returns these fields, carry
-them explicitly to the next command:
-
-```text
---instruction-id <id> --phase <pending|authorization|checkout_started>
-[--payment-instrument-id <pi>]
-```
-
-`pending` means the exact PENDING Instruction still needs card/VIC setup;
-`authorization` means the exact Instruction is waiting for Passkey/VIC
-authorization; `checkout_started` means Checkout may already exist and only
-read-only recovery is allowed. Do not write `instructionId`, `phase`, or
-`paymentInstrumentId` to a local file.
-
-Instruction continuation state is Agent-owned and must be passed explicitly;
-the CLI does not restore it from a previous conversation. Pass:
-
-```text
---instruction-id <id> --phase <pending|authorization|checkout_started>
-[--payment-instrument-id <pi>]
-```
-
-`pending` means the exact PENDING Instruction still needs card/VIC setup;
-`authorization` means the exact Instruction is waiting for Passkey/VIC
-authorization; `checkout_started` means Checkout may already exist and the
-purchase command must stop and use only the returned read-only recovery.
-Carry the returned `instructionId`, `phase`, and `paymentInstrumentId`
-unchanged into the next command. Do not write them to a local file.
-- If that non-idempotent create returns an unknown result, reconcile with the
-  read-only `activatable` query first. Retry at most once only when the
-  expected new Instruction is not found; otherwise stop and preserve the
-  identified Instruction.
+- If an explicit atomic create returns an unknown result, reconcile read-only
+  and stop. An empty recovery list is not proof that creation failed.
+- Purchase continuation must not be restored from CLI files. The five-step
+  path preserves both PI/source and the exact Instruction/Mandate IDs in the
+  current conversation; no latest-ID recovery or replacement.
 
 ### CAP-REFUND: Refund
 
@@ -874,7 +888,7 @@ unchanged into the next command. Do not write them to a local file.
   the initiating operation. Do not use broad uncorrelated polling.
 - Acknowledge or consume according to the CLI result, then refresh the
   authoritative card, Instruction, refund, Checkout, or order state.
-- OAuth Device Authorization is handled by the original `visa init` process,
+- OAuth Device Authorization is handled by `visa login` and its exact resume,
   not `events poll`.
 
 ### CAP-SKILLS-LIST: Public Skill Discovery
@@ -949,23 +963,25 @@ unchanged into the next command. Do not write them to a local file.
 - Direct shopping uses the same Visa-only recommendation and matched-merchant
   product resolution; it never starts with standalone `catalog search`.
 - A matched Visa Program purchase uses the latest unchanged
-  `recommend-products` snapshot directly in the purchase aggregates.
+  `recommend-products` snapshot through the five-step path.
 - Purchase facts come from the CLI-generated single-item product snapshot;
   the Agent never derives purchase fields from Program metadata.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC. Every Bind Card result is URL-only, regardless
-  of which command created the PENDING Instruction. Show the returned
-  `bindCardUrl`; the user can continue in an existing login page or manually
-  open the link. Never open a Bind Card page for the user.
-  Continue with the same `instructionId` after the authoritative
-  card/Instruction check.
-  Other timed-out card, VIC, or Passkey waits (10 minutes) exit through the
-  pending-instruction recovery, never through a VIC URL or the Portal home page.
-- Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
-  Checkout; timeout permits only the bound read-only continuation.
-- `visa commerce-run` is never rerun after possible Checkout creation.
+- Portal owns binding and VIC. The whole Step3 is URL-only and creates no
+  Instruction. Login and Step4 activation are the only purchase browser-open
+  operations.
+- The Agent owns orchestration and semantic purchase validation. Five independent
+  commands do not force a sequence; login before recommend is valid.
+- CLI purchase-context validation checks only currency/amount/MCC, not
+  title/description. Step4 separately checks technical eligibility; the Agent
+  selects a product-matching Mandate. Ambiguous evidence stops without guessing.
+- Only frozen PI/source readiness plus exact ACTIVE Instruction/Mandate checks
+  permit Step5. Timeout preserves the same ID and original 600-second deadline.
+- `visa checkout` is never rerun after possible Checkout creation.
+- Instruction/Mandate IDs are client gates; the backend UCP wire still carries
+  PI only and the backend resolver is unchanged.
 - Generic capabilities execute only with complete, authoritative input and
   fail closed otherwise.
 - No payment, Tip, refund, Checkout completion, or Instruction mutation is

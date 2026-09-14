@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.100');
+  assert.equal(packageJson.version, '0.1.101');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -89,8 +89,12 @@ test('runtime package ships only current aggregate diagnostic references', async
       .sort(),
     [
       'references/visa-browser-open.md',
+      'references/visa-checkout.md',
       'references/visa-commerce-login.md',
       'references/visa-commerce-run.md',
+      'references/visa-instruction.md',
+      'references/visa-login.md',
+      'references/visa-payment-method.md',
       'references/visa-pending-instructions.md',
       'references/visa-product-search.md',
       'references/visa-recommend-products.md',
@@ -115,8 +119,12 @@ test('aggregate references map failures to stages and safe atomic commands', asy
     'visa-product-search.md': ['visa product-search', 'PRODUCT_SELECTION_REQUIRED', 'PRODUCT_VERIFIED'],
     'visa-commerce-login.md': ['visa commerce-login', 'quick_instruction_get', 'browser-open'],
     'visa-commerce-run.md': ['visa commerce-run', 'instruction_create', 'read-only'],
+    'visa-login.md': ['visa login', '--resume', 'manualOpenUrl'],
+    'visa-payment-method.md': ['visa payment-method resolve', 'selectionSource', 'same_resolve'],
+    'visa-instruction.md': ['visa instruction candidates', 'eligibleMandates', '--authorization-deadline'],
+    'visa-checkout.md': ['visa checkout', '--mandate-id', 'read-only'],
     'visa-pending-instructions.md': ['visa pending-instructions', 'activation_ready', 'select_in_portal'],
-    'visa-browser-open.md': ['visa browser-open', 'manual_required', 'browser-opened'],
+    'visa-browser-open.md': ['visa browser-open', 'manual_required', '--authorization-deadline'],
   };
   for (const [name, needles] of Object.entries(expected)) {
     const text = await readFile(join(root, 'references', name), 'utf8');
@@ -189,110 +197,91 @@ test('result presentation keeps products and Benefits distinct', () => {
 
 test('purchase uses one frozen context and direct flat CLI input', () => {
   const purchase = skill.slice(
-    skill.indexOf('## Visa Purchase Fast Path'),
+    skill.indexOf('## Visa Purchase Five-Step Flow'),
     skill.indexOf('### Visa Preparation'),
   );
   assert.match(purchase, /purchaseContext` unchanged[\s\S]*in memory|purchaseContext unchanged[\s\S]*in memory/u);
   assert.match(purchase, /Do not create a[\s\S]*local JSON file/u);
-  assert.equal((purchase.match(/--mode selected_product[\s\S]*?--digital-delivery-expected/gu) ?? []).length, 2);
+  assert.match(purchase, /Steps 4-5[\s\S]*same flat arguments[\s\S]*--mode selected_product/u);
   assert.doesNotMatch(purchase, /--context-file|same file/u);
   assert.doesNotMatch(purchase, /--context '<purchase-context-json>'/u);
-  assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN/u);
+  assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN[\s\S]*not a command-order requirement[\s\S]*do not call the legacy command/u);
   assert.match(purchase, /never run or refresh `visa detail`/iu);
   assert.match(agent, /same frozen facts as flat --xxx arguments/u);
   assert.match(agent, /Never create a context file/u);
 });
 
-test('purchase documents major-unit amount and explicit Instruction reuse', () => {
+test('purchase documents major-unit amount and exact Instruction plus Mandate gates', () => {
   assert.match(skill, /`--amount` must equal[\s\S]*product\.totalAmountMajor[\s\S]*never pass[\s\S]*totalAmountMinor/iu);
-  assert.match(skill, /ordinary `instruction create`[\s\S]*explicitly marked default PI/u);
-  assert.match(skill, /commerce-run --purchase-instruction-id <id>[\s\S]*must be ACTIVE/u);
-  assert.match(agent, /--purchase-instruction-id <id>[\s\S]*must be ACTIVE/u);
+  assert.match(skill, /--purchase-instruction-id <id> --mandate-id <id>[\s\S]*exact-GET[\s\S]*ACTIVE/u);
+  assert.match(agent, /--purchase-instruction-id <id> --mandate-id <id> --confirm-purchase/u);
+  assert.match(skill, /CLIENT GATE IDs[\s\S]*UCP complete wire carries PI only/u);
 });
 
-test('instruction creation documents CREATED and explicit browser watching', () => {
+test('instruction creation documents ordinary CREATED and exact read-only continuation', () => {
   assert.match(skill, /normal `instruction create` creates a `CREATED` draft/u);
-  assert.match(skill, /`--open --watch`[\s\S]*exact read show `ACTIVE`/u);
-  assert.match(skill, /Login for this Visa Skill uses `visa init`/u);
+  assert.match(skill, /ONLY an[\s\S]*ordinary PI-bound CREATED Instruction, never PENDING and never `bind-pi`/u);
+  assert.match(skill, /--instruction-id <id> --authorization-deadline <ms>/u);
+  assert.match(skill, /Both are read-only and never reopen or recreate/u);
   assert.match(skill, /must not be restored from CLI files/u);
 });
 
-test('browser operations are split from commerce aggregates', () => {
-  assert.match(skill, /visa browser-open --url <operation-url>/u);
-  assert.match(skill, /--browser-opened/u);
-  assert.match(skill, /--manual-completed/u);
-  assert.match(skill, /manual-completed[\s\S]*checks status first[\s\S]*(?:does not reopen|must not be opened again)/u);
-  assert.match(skill, /closed page[\s\S]*not business success|failed browser launch[\s\S]*not business/iu);
-  assert.match(skill, /If the host Agent name is known[\s\S]*replace `\{agent\}`/u);
-  assert.match(skill, /If\s+it is unknown[\s\S]*never emit the literal placeholder/u);
-  assert.match(agent, /dedicated browser-open operation/u);
+test('browser opening is limited to login and Instruction activation', () => {
+  assert.match(skill, /visa browser-open --url "<manualOpenUrl>"/u);
+  assert.match(skill, /allowed only for Step2[\s\S]*login and Step4 Instruction activation/u);
+  assert.match(skill, /After manual completion, check state[\s\S]*first without reopening/u);
+  assert.match(skill, /failed[\s\S]*browser launch is not business failure/u);
+  assert.match(skill, /If the host Agent name is known[\s\S]*use that[\s\S]*name/u);
+  assert.match(skill, /If it is unknown[\s\S]*never emit the literal placeholder/u);
   assert.match(agent, /manual completion[\s\S]*check the state and do not reopen/u);
 });
 
-test('Bind Card stays URL-only across purchase and recovery guidance', async () => {
+test('card setup and VIC stay URL-only across purchase and recovery guidance', async () => {
   const runReference = await readFile(
     join(root, 'references', 'visa-commerce-run.md'), 'utf8',
   );
   for (const text of [skill, agent, runReference]) {
-    assert.match(text, /Bind Card is URL-only in every flow/u);
-    assert.match(text, /--manual-completed/u);
+    assert.match(text, /Bind Card is URL-only\s+in every flow/u);
     assert.match(text, /instructionId/u);
     assert.doesNotMatch(text, /browser-open --url <bindCardUrl>/u);
   }
-  assert.match(skill, /never use `browser-open`, `--open`, an OS opener/u);
-  assert.match(agent, /never use browser-open,\s+--open, an OS opener/u);
-  assert.match(runReference, /never call `browser-open` for it/u);
+  assert.match(skill, /ENTIRE Step3[\s\S]*manageCardUrl[\s\S]*vicUrl[\s\S]*never use `browser-open`, `--open`, an OS opener/u);
+  assert.match(agent, /ENTIRE Step3 is URL-only: never use browser-open, --open, an OS opener/u);
+  assert.match(runReference, /card-management and VIC URLs are[\s\S]*manual-only/u);
 });
 
-test('Quick Instruction keeps only current principles', () => {
+test('purchase identity freezes both PI and selection source without Quick fallback', () => {
   const section = skill.slice(
-    skill.indexOf('### Quick Instruction Principles'),
-    skill.indexOf('### Pending Instruction Recovery'),
+    skill.indexOf('### Purchase Identity'),
+    skill.indexOf('### Compatibility Recovery'),
   );
-  assert.match(section, /Freeze one purchase context and one selected PI/u);
-  assert.match(section, /default PI/u);
-  assert.match(section, /explicitly chooses an alternate PI/u);
-  assert.match(section, /only a complete, usable,\s+unconsumed `ACTIVE` Instruction/u);
+  assert.match(section, /BOTH `paymentInstrumentId`[\s\S]*`selectionSource=default\|explicit`/u);
+  assert.match(section, /explicitly chosen alternate PI remains selected despite a later default/iu);
   assert.match(section, /Never reuse PENDING or CREATED/u);
-  assert.match(section, /no reusable ACTIVE exists[\s\S]*ordinary PI-bound Instruction/u);
-  assert.match(section, /new PENDING[\s\S]*Instruction/u);
-  assert.match(section, /no default PI exists[\s\S]*do not choose a card implicitly/u);
+  assert.match(section, /creates no Quick or PENDING Instruction and never calls `bind-pi`/u);
   assert.match(section, /changed default PI stops/u);
-  assert.match(section, /10 minutes/u);
-  assert.match(section, /--browser-opened[\s\S]*--manual-completed/u);
+  assert.match(section, /Do not ask which card/u);
+  assert.match(section, /original authorization deadline/u);
 });
 
-test('activatable contract separates backend continuation from user-selected activation', () => {
-  assert.match(
-    skill,
-    /only binds a card and completes VIC[\s\S]*newest PENDING row by descending `createTime`/u,
-  );
-  assert.match(
-    skill,
-    /user actively chooses a PENDING Instruction[\s\S]*`bind-pi -> ordinary activation`/u,
-  );
-  assert.match(
-    skill,
-    /activatable` is a read-only recovery\/list\s+contract[\s\S]*does not itself select, bind, or activate/u,
-  );
-  assert.match(
-    pendingReference,
-    /backend continuation[\s\S]*descending `createTime`[\s\S]*bind-pi -> ordinary activation/u,
-  );
+test('legacy pending recovery cannot become the new purchase path', () => {
+  assert.match(skill, /remain available for existing callers, not as the new purchase path/u);
+  assert.match(pendingReference, /not Step3 or Step4 of the new path/u);
+  assert.match(pendingReference, /read-only list[\s\S]*not a creator, selection, binding, or[\s\S]*activation/u);
+  assert.match(pendingReference, /never infer[\s\S]*newest or only row/u);
 });
 
 test('non-idempotent pending creation stays outside normal purchase matching', () => {
-  assert.match(skill, /non-idempotent Pending creator/u);
-  assert.match(skill, /always creates one new PENDING Instruction/u);
+  assert.match(skill, /always creates a new PENDING Instruction/u);
   assert.match(skill, /pending-instruction create[\s\S]*explicit atomic\/test command only/u);
-  assert.match(skill, /unknown result[\s\S]*activatable[\s\S]*Retry at most once/u);
-  assert.match(agent, /pending-instruction create command is non-idempotent/u);
+  assert.match(skill, /empty recovery list is not proof that creation failed/u);
+  assert.match(agent, /pending-instruction create is[\s\S]*explicit atomic\/test use only/u);
 });
 
 test('Skill keeps purchase, browser, payment, and delivery safety boundaries', () => {
-  assert.match(skill, /Never rerun `visa commerce-run` after it may have created a Checkout/u);
+  assert.match(skill, /Never rerun `visa checkout` after possible Checkout creation/u);
   assert.match(skill, /unknown result[\s\S]*resubmission/u);
-  assert.match(skill, /one Checkout creation, at most one completion|Never rerun `visa commerce-run` after it may have created a Checkout/u);
+  assert.match(skill, /one Checkout creation, at most one completion/u);
   assert.match(skill, /Portal owns binding and VIC/u);
   assert.match(skill, /Never expose Tokens, OTPs[\s\S]*raw card data[\s\S]*secrets/u);
   assert.match(readme, /orderUrl[\s\S]*clickable[\s\S]*View order link/u);

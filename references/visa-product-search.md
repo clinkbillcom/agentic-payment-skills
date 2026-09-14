@@ -37,7 +37,8 @@ identify whether the failure is routing, availability, parsing, or selection.
 - For an internal route or Catalog error, repeat the matching read-only atomic
   command once with the same merchant URL and query to isolate the stage.
 - Only a successful `PRODUCT_VERIFIED` result may produce the frozen purchase
-  context for `commerce-login` and `commerce-run`.
+  context for the five-step purchase; every Step4/5 command uses its unchanged
+  flat arguments. Login receives no purchase context.
 
 ## Do Not Do
 
