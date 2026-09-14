@@ -63,7 +63,7 @@ visa commerce-run
 可下单商品已经由聚合命令完成内部 UCP 精确匹配并归一化价格、币种、库存和
 商户身份。商品中的 matched Program 仅作购买 provenance；只有 `visaBenefits`
 可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
-UAT 只有在返回的 Program code 与商户 `mcht_ftmse61a6az0` 的 merchant-list
+只有在返回的 Program code 与商户 merchant-list
 `ext.visa_program_id` 完全相同时才建立路由；Offer URL 不再选择商户。
 登录和购买复用选中商品的 `purchaseContext`，Agent 不再推断 MCC、复制 Program
 字段或拼装 Instruction。现有数据不足时报告 `purchaseContextUnavailable`。
@@ -74,12 +74,12 @@ Visa Program 购买保持 CLI 聚合。Skill 不包含
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.97` 已刷新 vendor，来源提交
-`eb67422ba3d2fdd1658cd61bc848b321f3ea1c2a` 的 Visa CLI `0.2.72`。本
+Skill `0.1.99` 已刷新 vendor，来源提交
+`3036aee7bab068043c7902fbb29f073862fad4c6` 的 Visa CLI `0.2.76`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
-新购买上下文仍不发送 `program.code`。本次同步了 CLI bundle；
-以下契约不等于 CLI 新流程已通过运行时验收或后端已部署。
+新购买上下文仍不发送 `program.code`。本次同步了生产 CLI bundle；
+以下契约不等于后端已经部署。
 
 本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
 购买快照合同，应报告限制，不猜测缺失字段，也不拆成原子命令执行购买。
@@ -129,7 +129,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.97`
+Skill 版本：`0.1.99`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

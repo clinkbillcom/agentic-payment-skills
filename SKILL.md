@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.97. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.99. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.97"
+  version: "0.1.99"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -244,6 +244,10 @@ For every authorized purchase:
   Instruction for the exact selected PI and purchase operation.
 - Never reuse PENDING or CREATED as another purchase's match. The PENDING
   `instructionId` stays fixed through VIC, Passkey, and activation.
+- If a Quick PENDING Instruction has a selected/bound PI, `commerce-run`
+  first calls the Agent `/agent/cwallet/instructions/{instructionId}/bind-pi`
+  operation and requires the same Instruction to become `CREATED`; only then
+  does it present the Passkey authorization page.
 - If no default PI exists, do not choose a card implicitly. Create the pending
   purchase operation, return Agent Portal card management, and re-read the
   default after the user acts. An explicit alternate PI may be used without
@@ -311,6 +315,9 @@ There are two distinct activation paths:
   Instruction: the newest PENDING row by descending `createTime`. This is not
   Agent selection; exact-GET the resulting ID and verify `ACTIVE` before
   Checkout.
+
+- `visa-cli wallet logout` resets `~/.visa-cli/config.json` to a clean default
+  document, clearing Visa OAuth, card cache, region, and continuation state.
 - If the user actively chooses a PENDING Instruction, preserve that exact ID
   and use the normal `bind-pi -> ordinary activation` flow. Do not reinterpret
   this as automatic latest-PENDING activation or replace the Instruction.
@@ -612,10 +619,17 @@ The CLI owns card refresh, waiting for Portal VIC readiness, restricted-category
 original Quick continuation (or normal Instruction selection only without a Quick),
 product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
-The command returns before browser opening when user action is required. Use
-`visa browser-open --url <operation-url>` for a system-browser attempt, then
-rerun with `--browser-opened` to wait. For a user-completed operation, rerun
-with `--manual-completed` so the CLI checks status first without reopening.
+When an exact PENDING Instruction has no bound card, the command returns
+immediately with `instructionId`, `phase=pending`, and `bindCardUrl`. For a
+PENDING Instruction created by the preceding `commerce-login` Quick flow, do
+not call `browser-open` again: tell the user to bind the card in the page
+already opened during login. If that page is no longer open, tell the user to
+manually open the dedicated production page
+`https://agent.clinkbill.com/payment-method-setup`. After the user
+finishes, rerun with `--manual-completed`; the CLI checks status first and does
+not reopen. For a Pending Instruction created directly by `commerce-run`, use
+`visa browser-open --url <bindCardUrl>` when the flow requires a new browser
+operation, then rerun with `--browser-opened`.
 Missing/changed facts, a real error, refusal, cancellation, or timeout require
 a user-facing interruption.
 
@@ -666,9 +680,9 @@ general workflow engine.
 - Use `wallet status --format json` only for an explicit wallet request or after
   an exact product selection when an authenticated operation is about to begin.
   Never use it to preflight anonymous discovery.
-- Use `wallet init --email <email> --open --format json` only for an explicit
-  setup, login, re-login, or authenticated operation that needs a wallet. Keep
-  that one process alive while OAuth completes.
+- Use `visa init --email <email> --open --format json` for Visa Skill login,
+  re-login, or authenticated Visa operations that need a wallet. Keep that one
+  process alive while OAuth completes. Do not use `wallet init` for Visa login.
 - Use `wallet logout --format json` exactly once for explicit logout.
 - Use `config get/set` only for requested local settings. Never print secrets
   or switch environment to recover from a network error.
@@ -755,6 +769,37 @@ general workflow engine.
   amount buffer.
 - Passkey and edit pages belong to the user. Only an authoritative `ACTIVE`
   result makes an Instruction usable.
+- A normal `instruction create` creates a `CREATED` draft: the Instruction
+  exists and is bound to a PI, but is not authorized and cannot be used for
+  Checkout. Always invoke it with `--open --watch`, complete the Passkey page
+  in the system browser, and continue only after the matching activation event
+  and an exact read show `ACTIVE`.
+
+Use the standalone command in this form:
+
+```text
+<Skill Path>/bin/visa-cli instruction create \
+  --title "<title>" \
+  --mandates '<mandates-json>' \
+  --open --watch --format json
+```
+
+When the command returns, `CREATED` means authorization is still required;
+after the watch completes, exact-read the same `instructionId` and require
+`ACTIVE`.
+- A normal `instruction create` creates a `CREATED` draft. `CREATED` means
+  the Instruction exists and is bound to a PI, but it is not authorized and
+  cannot be used for Checkout yet. Always invoke this command with
+  `--open --watch`, complete the Passkey page in the system browser, and
+  continue only after the matching event and an exact read show `ACTIVE`.
+- An ordinary `instruction create` creates a `CREATED` draft bound to the
+  selected/default PI. `CREATED` means the Instruction exists but is not yet
+  authorized and cannot be used for Checkout. Use the returned Passkey URL,
+  complete authorization in the system browser, and continue only after an
+  exact read confirms `ACTIVE`.
+- For this command, always pass `--open --watch`: `--open` attempts to open the
+  system-browser Passkey page and `--watch` waits for the matching activation
+  event. Do not leave the Agent waiting on an implicit default watch.
 - When the user asks to create an Instruction without explicitly saying
   `pending`, use ordinary `instruction create` and omit
   `--payment-instrument-id`; the CLI uses only the explicitly marked default PI.
@@ -768,8 +813,44 @@ general workflow engine.
   always creates a new PENDING Instruction and returns its exact ID; it is not
   a normal-purchase fallback and must not be retried blindly.
 - Use `visa commerce-run --purchase-instruction-id <id>` only after the user
-  has activated that exact Instruction. It must be ACTIVE and match the frozen
-  purchase context; a mismatch is terminal and does not create a replacement.
+  has activated that exact Instruction. The CLI exact-GETs that ID. It must be ACTIVE,
+  have the same ID, selected PI, future expiry, enough amount limit, and an
+  unused/unreserved mandate. It does not require the old
+  Instruction's merchant scope to be textually identical to regenerated
+  commerce-run fields; Checkout uses the current verified order context. A
+  failed required check is terminal and never creates a replacement.
+- Login for this Visa Skill uses `visa init`, not `wallet init`. Use
+  `wallet init` only for the Main CLI.
+
+Instruction continuation state belongs to the current Agent conversation and
+must not be restored from CLI files. When a command returns these fields, carry
+them explicitly to the next command:
+
+```text
+--instruction-id <id> --phase <pending|authorization|checkout_started>
+[--payment-instrument-id <pi>]
+```
+
+`pending` means the exact PENDING Instruction still needs card/VIC setup;
+`authorization` means the exact Instruction is waiting for Passkey/VIC
+authorization; `checkout_started` means Checkout may already exist and only
+read-only recovery is allowed. Do not write `instructionId`, `phase`, or
+`paymentInstrumentId` to a local file.
+
+Instruction continuation state is Agent-owned and must be passed explicitly;
+the CLI does not restore it from a previous conversation. Pass:
+
+```text
+--instruction-id <id> --phase <pending|authorization|checkout_started>
+[--payment-instrument-id <pi>]
+```
+
+`pending` means the exact PENDING Instruction still needs card/VIC setup;
+`authorization` means the exact Instruction is waiting for Passkey/VIC
+authorization; `checkout_started` means Checkout may already exist and the
+purchase command must stop and use only the returned read-only recovery.
+Carry the returned `instructionId`, `phase`, and `paymentInstrumentId`
+unchanged into the next command. Do not write them to a local file.
 - If that non-idempotent create returns an unknown result, reconcile with the
   read-only `activatable` query first. Retry at most once only when the
   expected new Instruction is not found; otherwise stop and preserve the
@@ -788,7 +869,7 @@ general workflow engine.
   the initiating operation. Do not use broad uncorrelated polling.
 - Acknowledge or consume according to the CLI result, then refresh the
   authoritative card, Instruction, refund, Checkout, or order state.
-- OAuth Device Authorization is handled by the original `wallet init` process,
+- OAuth Device Authorization is handled by the original `visa init` process,
   not `events poll`.
 
 ### CAP-SKILLS-LIST: Public Skill Discovery
@@ -869,9 +950,15 @@ general workflow engine.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC; the CLI never opens Bind Card. Timed-out card,
-  VIC, or Passkey waits (10 minutes) exit through the pending-instruction
-  recovery, never through a VIC URL or the Portal home page.
+- Portal owns binding and VIC. An exact PENDING Instruction without a card
+  immediately returns its exact `bindCardUrl`. For the login-created Quick
+  case, tell the user to bind the card in the already-open login page and do
+  not open another browser page; if it was closed, use the dedicated
+  `https://agent.clinkbill.com/payment-method-setup` page manually.
+  Continue with the same `instructionId` after the authoritative
+  card/Instruction check.
+  Other timed-out card, VIC, or Passkey waits (10 minutes) exit through the
+  pending-instruction recovery, never through a VIC URL or the Portal home page.
 - Only same-card VIC readiness plus exact-Instruction `ACTIVE` permits
   Checkout; timeout permits only the bound read-only continuation.
 - `visa commerce-run` is never rerun after possible Checkout creation.

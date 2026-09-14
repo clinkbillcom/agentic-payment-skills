@@ -8,7 +8,7 @@ incomplete state. Normal execution must not load command references.
 ```text
 validate the unchanged frozen context
   -> inspect Benefit login status
-  -> initialize or resume Benefit OAuth when needed
+  -> initialize or resume Visa OAuth through visa init when needed
   -> persist the exact login continuation
   -> exact-GET any returned Quick Instruction
   -> return login readiness and the original continuation
@@ -17,6 +17,9 @@ validate the unchanged frozen context
 `commerce-login` does not create a normal Instruction, open Bind Card, create
 Checkout, or pay. A Quick Instruction may be created by the backend as part of
 the Benefit login flow; the returned ID must remain tied to this purchase.
+
+Visa Skill authentication uses `visa init`, not `wallet init`. Continuation
+fields are supplied by the Agent and are not restored from CLI files.
 
 ## Stage Mapping
 

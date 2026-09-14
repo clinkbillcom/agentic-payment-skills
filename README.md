@@ -80,9 +80,9 @@ Exact orderable matches are already normalized in `products`, with
 major-unit price, currency, availability, merchant identity, and matched
 Program provenance. That provenance is never a display source: only
 `visaBenefits` may create user-facing Benefit rows. Unmatched Benefits can later
-use `visa detail`, but the Skill does not rerun product-search. UAT merchant
-`mcht_ftmse61a6az0` is selected only when a returned Program code exactly
-matches its merchant-list `ext.visa_program_id`; Offer URLs never select it.
+use `visa detail`, but the Skill does not rerun product-search. A merchant is
+selected only when a returned Program code exactly matches its merchant-list
+`ext.visa_program_id`; Offer URLs never select it.
 The selected product's CLI-generated `purchaseContext` is used unchanged by
 both purchase commands. The Agent does not infer MCC or construct Program-based
 purchase fields. Missing configured input is returned as `purchaseContextUnavailable`.
@@ -93,14 +93,14 @@ operation references. General wallet, card, risk, payment, Alipay QR, UCP,
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.97` vendors Visa CLI `0.2.75` from upstream commit
-`4bb6235d6a2f4a66a176293dcdb08019b417deb1`. This product-match branch performs
+Skill `0.1.99` vendors Visa CLI `0.2.76` from upstream commit
+`3036aee7bab068043c7902fbb29f073862fad4c6`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
-contexts. The bundle is unchanged in this rules-only update; the contract
-below is not a claim of new CLI runtime acceptance or backend deployment.
+contexts. The bundle is built from the corresponding production CLI branch;
+cwallet deployment remains a separate operation.
 
 The vendored bundle was refreshed through the official `clink-cli`
 synchronization flow. If another distribution does not implement the required
@@ -147,7 +147,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.97`
+Skill version: `0.1.99`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

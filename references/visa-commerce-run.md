@@ -26,7 +26,7 @@ validate restriction and frozen purchase context
 | `restriction` | `instruction` restriction check | Refused or incomplete purchase facts; fix input, do not create an Instruction |
 | `login_status` / `login` | `visa status` or `visa commerce-login` | Login is unavailable or failed before purchase |
 | `product_resolution` / `product_revalidation` | `visa product-search` or the exact internal product read | Product route, identity, price, currency, or availability drifted |
-| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` | Refresh cards and verify one explicit/default PI; never choose by list order |
+| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` or returned `bindCardUrl` | Refresh cards; when an exact PENDING ID has no card, tell the user to bind a Visa card and open the returned URL; never choose by list order |
 | `pending_instruction_prepare` | pending-instruction preparation | A PENDING operation was not prepared; do not create a second one from the error alone |
 | `instruction_list` / `instruction_selection` / `instruction_active_verify` | `instruction list --valid-only --payment-instrument-id <selectedPI>` then exact `instruction get` | Only the selected PI's complete usable ACTIVE matches can be reused |
 | `instruction_create` | `instruction create --payment-instrument-id <selectedPI> ...` | Creation failed or did not return a trustworthy ID; do not repeat blindly |
@@ -41,10 +41,18 @@ The aggregate error envelope is expected to expose `stage`, `status`, and
 `recovery`. Preserve these fields when explaining the failure.
 
 When `--purchase-instruction-id <id>` is supplied, the aggregate uses only that
-exact Instruction. It must be ACTIVE, bound to the selected PI, unconsumed, and
-an exact usable match for the frozen purchase context. A non-ACTIVE or
-mismatched Instruction is a terminal error; do not create or activate a
-replacement.
+exact Instruction. The CLI exact-GETs it and requires the same ID, ACTIVE
+status, the selected PI, future expiry, sufficient amount limit, and an
+unused/unreserved mandate. It does not re-compare the old Instruction's
+merchant scope with merchant fields regenerated for this commerce-run;
+Checkout uses the current verified order context. A failed required check is
+terminal; do not create or activate a replacement.
+
+Continuation state is supplied by the Agent, not restored from CLI files:
+`--instruction-id <id> --phase <pending|authorization|checkout_started>` and,
+when known, `--payment-instrument-id <pi>`. `pending` is card/VIC setup,
+`authorization` is Passkey/VIC authorization, and `checkout_started` requires
+read-only Checkout recovery only.
 
 ## Instruction And PI Rules
 
@@ -54,6 +62,10 @@ replacement.
   atomic path creates one ordinary PI-bound Instruction.
 - If VIC/card setup is required, keep the one returned PENDING Instruction ID
   through the browser operation and final status check.
+- If the exact Quick PENDING Instruction has a selected/bound PI,
+  `commerce-run` calls `POST /agent/cwallet/instructions/{instructionId}/bind-pi`
+  first, verifies the same ID is `CREATED`, and only then returns the ordinary
+  Passkey authorization operation.
 - If the user only binds a card and completes VIC without selecting an
   Instruction, backend continuation may activate the newest PENDING row by
   descending `createTime`; exact-GET that resulting ID and verify `ACTIVE`.
@@ -71,7 +83,18 @@ state first and does not reopen the browser. A closed page or opener failure is
 not proof of business failure.
 
 Binding, VIC, Passkey, and PENDING activation share the ten-minute Agent wait
-boundary. The recovery list comes from
+boundary. An exact PENDING Instruction without a bound card is
+different: return its `instructionId`, `phase=pending`, and `bindCardUrl`
+immediately. For a PENDING Instruction created by the preceding
+`commerce-login` Quick flow, the Agent tells the user to bind the card in the
+already-open login page and does not call `browser-open` again. If that page was
+closed, the user manually opens the dedicated production page
+`https://agent.clinkbill.com/payment-method-setup`. After completion,
+rerun with `--manual-completed` so the CLI checks authoritative state first.
+For a Pending Instruction created directly by `commerce-run`, use
+`visa browser-open --url <bindCardUrl>` when a new browser operation is needed,
+then rerun with `--browser-opened`. Continue with the same Instruction ID. For other
+waits, the recovery list comes from
 `GET /agent/cwallet/instructions/activatable`, which may return both PENDING and
 CREATED Instructions. After timeout, use `visa pending-instructions` with the exact ID when
 known. Without exact context, return its instruction list and Portal URL for
