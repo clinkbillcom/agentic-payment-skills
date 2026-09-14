@@ -458,6 +458,102 @@ test('instruction prepare card-ready result refreshes instead of creating anothe
   assert.equal(result.reason, 'authorization_prepare_card_ready');
 });
 
+test('pending instruction card-ready fallback refreshes after NDJSON or separate final stdout', () => {
+  const initial = JSON.stringify({
+    ok: true,
+    data: {
+      instructionId: 'ins_pending',
+      status: 'PENDING',
+      bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+      watchReady: true,
+      watchEventType: 'purchase_instruction.activated',
+      processRunning: true,
+      terminal: false,
+    },
+  });
+  const final = JSON.stringify({
+    ok: true,
+    data: {
+      command: 'instruction prepare',
+      stage: 'instruction_activation',
+      status: 'card_ready',
+      terminal: true,
+      instructionId: 'ins_pending',
+      instructionStatus: 'VIC_READY',
+      instruction: {
+        instructionId: 'ins_pending',
+        status: 'PENDING',
+        ceremonyInProgress: true,
+        activationExpected: false,
+      },
+      eventTypes: ['vic_device.binding_succeeded'],
+      watchReady: true,
+      bindingLinkPresented: true,
+      fallbackReason: 'card_vic_ready_without_pending_activation',
+      ceremony: { inProgress: true, activationExpected: false },
+    },
+  });
+
+  for (const observation of [
+    { stdout: `${initial}\n${final}`, exitCode: 0 },
+    { stdout: initial, finalStdout: final, exitCode: 0 },
+  ]) {
+    const result = classifyAuthorizationPrepareObservation(observation);
+    assert.deepEqual(result, {
+      state: AuthorizationWorkflowState.PAYMENT_INSTRUMENT_REFRESH_REQUIRED,
+      action: AuthorizationWorkflowAction.REFRESH_PAYMENT_INSTRUMENT_LIST,
+      terminal: false,
+      reason: 'authorization_prepare_card_ready',
+    });
+    assert.equal(result.authorization, undefined);
+    assert.equal(result.instructionId, undefined);
+    assert.equal(result.paymentInstrumentId, undefined);
+    assert.equal(result.resumeCommand, undefined);
+  }
+});
+
+test('pending instruction card-ready fallback rejects mismatched IDs and unrelated commands', () => {
+  const initial = {
+    ok: true,
+    data: {
+      instructionId: 'ins_pending',
+      status: 'PENDING',
+      bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+      watchReady: true,
+      watchEventType: 'purchase_instruction.activated',
+      processRunning: true,
+      terminal: false,
+    },
+  };
+  const final = {
+    command: 'instruction prepare',
+    status: 'card_ready',
+    terminal: true,
+    instructionId: 'ins_pending',
+    instructionStatus: 'VIC_READY',
+    instruction: { instructionId: 'ins_pending', status: 'PENDING' },
+    fallbackReason: 'card_vic_ready_without_pending_activation',
+  };
+
+  for (const [data, expectedReason] of [
+    [{ ...final, instructionId: 'ins_other' }, 'authorization_prepare_instruction_mismatch'],
+    [{
+      ...final,
+      instruction: { instructionId: 'ins_other', status: 'PENDING' },
+    }, 'authorization_prepare_instruction_mismatch'],
+    [{ ...final, command: 'card binding-link' }, 'authorization_prepare_final_envelope_invalid'],
+  ]) {
+    const result = classifyAuthorizationPrepareObservation({
+      stdout: initial,
+      finalStdout: { ok: true, data },
+      exitCode: 0,
+    });
+    assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ERROR);
+    assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+    assert.equal(result.reason, expectedReason);
+  }
+});
+
 test('authorization draft observation verifies once the built-in watch delivers the activation', () => {
   const result = classifyAuthorizationDraftObservation({
     stdout: JSON.stringify({

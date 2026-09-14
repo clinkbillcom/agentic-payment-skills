@@ -4214,8 +4214,8 @@ var require_yauzl = __commonJS({
             var isUtf8 = (entry.generalPurposeBitFlag & 2048) !== 0;
             entry.fileComment = decodeBuffer(entry.fileCommentRaw, isUtf8);
             entry.fileName = getFileNameLowLevel(entry.generalPurposeBitFlag, entry.fileNameRaw, entry.extraFields, self.strictFileNames);
-            var errorMessage2 = validateFileName(entry.fileName);
-            if (errorMessage2 != null) return emitErrorAndAutoClose(self, new Error(errorMessage2));
+            var errorMessage3 = validateFileName(entry.fileName);
+            if (errorMessage3 != null) return emitErrorAndAutoClose(self, new Error(errorMessage3));
           } else {
             entry.fileComment = entry.fileCommentRaw;
             entry.fileName = entry.fileNameRaw;
@@ -11749,6 +11749,16 @@ function assertValidCollectTarget(options2) {
     throw validationError("nextToken requires checkoutId");
   }
   assertValidExpectedResource(options2.expectedResource);
+  if (options2.resourceScopedTypes !== void 0) {
+    const requested = new Set((options2.type ?? "").split(",").map((type) => type.trim()).filter((type) => type.length > 0));
+    const scoped = options2.resourceScopedTypes;
+    if (scoped.length === 0 || scoped.some((type) => normalizedValue(type) === void 0 || !requested.has(type.trim()))) {
+      throw validationError("resourceScopedTypes must list non-blank event types included in type");
+    }
+    if (options2.expectedResource === void 0) {
+      throw validationError("resourceScopedTypes requires expectedResource");
+    }
+  }
 }
 function assertValidExpectedResource(expectedResource) {
   if (expectedResource === void 0) {
@@ -11829,13 +11839,16 @@ async function collectWebhookEvents(options2) {
     throw new CliError("validation_error", "checkoutId requires exactly one agent_order.succeeded or agent_order.failed event type", 2);
   }
   const hasResourceFilter = Object.values(options2.expectedResource ?? {}).some((value) => normalizedValue(value) !== void 0);
-  const matchesExpectedResource = (event) => !hasResourceFilter || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
+  const resourceScopedTypes = options2.resourceScopedTypes ? new Set(options2.resourceScopedTypes) : void 0;
+  const matchesExpectedResource = (event) => !hasResourceFilter || resourceScopedTypes !== void 0 && !resourceScopedTypes.has(event.eventType) || eventMatchesExpectedResource(event, options2.expectedResource ?? {});
   const matchesTarget = (event, sourceRecord) => (!hasTypeFilter || matchesRequestedType(event)) && (!hasCheckoutFilter || recordMatchesCheckoutId(sourceRecord, checkoutId) && recordHasConsistentPaymentOrderIdAliases(sourceRecord)) && matchesExpectedResource(event);
   const runtimeState = { value: options2.runtimeConfig };
   const getRuntimeConfig = trackRuntimeConfigLoader(runtimeState, options2.getRuntimeConfig);
   const refreshRuntimeConfig = trackRuntimeConfigRefresher(runtimeState, options2.refreshRuntimeConfig);
   const collected = [];
   const ackedEventIds = [];
+  let watchReady = false;
+  let lastRecoverablePollError;
   let checkoutNextToken = normalizedValue(options2.nextToken);
   const targetReached = () => collected.length > 0;
   const processPolledRecords = async (records) => {
@@ -11868,45 +11881,73 @@ async function collectWebhookEvents(options2) {
     }
     return targetReached();
   };
-  const deadline = now() + maxDurationMs;
+  let deadline = now() + maxDurationMs;
   for (; ; ) {
-    const page = hasCheckoutFilter ? await pollWebhookEventPage({
-      runtimeConfig: runtimeState.value,
-      ...getRuntimeConfig ? { getRuntimeConfig } : {},
-      ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
-      timeoutMs: options2.timeoutMs,
-      pageSize: effectivePageSize,
-      eventTypes: [...requestedTypes],
-      checkoutId,
-      ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
-    }) : {
-      records: await pollWebhookEvents({
+    try {
+      const page = hasCheckoutFilter ? await pollWebhookEventPage({
         runtimeConfig: runtimeState.value,
         ...getRuntimeConfig ? { getRuntimeConfig } : {},
         ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
         timeoutMs: options2.timeoutMs,
         pageSize: effectivePageSize,
-        ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
-      })
-    };
-    const records = page.records;
-    if (await processPolledRecords(records)) {
-      return { ready: true, timedOut: false, events: collected, ackedEventIds };
-    }
-    if (hasCheckoutFilter) {
-      if (page.nextToken !== void 0) {
-        if (records.length > 0 && page.nextToken === checkoutNextToken) {
-          throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+        eventTypes: [...requestedTypes],
+        checkoutId,
+        ...checkoutNextToken ? { nextToken: checkoutNextToken } : {}
+      }) : {
+        records: await pollWebhookEvents({
+          runtimeConfig: runtimeState.value,
+          ...getRuntimeConfig ? { getRuntimeConfig } : {},
+          ...refreshRuntimeConfig ? { refreshRuntimeConfig } : {},
+          timeoutMs: options2.timeoutMs,
+          pageSize: effectivePageSize,
+          ...hasTypeFilter ? { eventTypes: [...requestedTypes] } : {}
+        })
+      };
+      const records = page.records;
+      if (!watchReady) {
+        if (options2.onReady) {
+          const polledIdentity = runtimeAuthorizationIdentity(runtimeState.value);
+          if (getRuntimeConfig) {
+            const currentRuntimeConfig = await getRuntimeConfig();
+            assertRuntimeIdentity(currentRuntimeConfig, polledIdentity);
+          }
+          assertPolledEventCustomers(records, polledIdentity);
+          deadline = now() + maxDurationMs;
         }
-        checkoutNextToken = page.nextToken;
-      } else if (records.length >= effectivePageSize) {
-        throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
+        watchReady = true;
+        options2.onReady?.();
       }
+      if (await processPolledRecords(records)) {
+        return { ready: true, timedOut: false, events: collected, ackedEventIds };
+      }
+      if (hasCheckoutFilter) {
+        if (page.nextToken !== void 0) {
+          if (records.length > 0 && page.nextToken === checkoutNextToken) {
+            throw apiError("Event Hub checkout selector returned a non-advancing nextToken", 502);
+          }
+          checkoutNextToken = page.nextToken;
+        } else if (records.length >= effectivePageSize) {
+          throw apiError("Event Hub checkout selector returned a full page without nextToken; cursor-backed selector support is required", 502);
+        }
+      }
+    } catch (error) {
+      if (options2.onReady && !watchReady && isRecoverableWatchPollError(error)) {
+        lastRecoverablePollError = error;
+        if (now() + pollIntervalMs >= deadline) {
+          break;
+        }
+        await sleep3(pollIntervalMs);
+        continue;
+      }
+      throw error;
     }
     if (now() + pollIntervalMs >= deadline) {
       break;
     }
     await sleep3(pollIntervalMs);
+  }
+  if (options2.onReady && !watchReady && lastRecoverablePollError !== void 0) {
+    throw lastRecoverablePollError;
   }
   return {
     ready: false,
@@ -13846,9 +13887,10 @@ Examples:
 var INSTRUCTION_HELP = `clink instruction
 
 Usage:
-  clink instruction <create|sign-url|list|get|update|cancel> [options]
+  clink instruction <prepare|create|sign-url|list|get|update|cancel> [options]
 
 Actions:
+  prepare   Create/reuse a no-card PENDING instruction, prompt for Portal card binding, and wait
   create    Create an instruction (CREATED draft) and print the Passkey URL to authorize it
   sign-url  Print the Passkey page URL; the page automatically signs after the user opens it
   list      List instructions, optionally filtered by --status, --valid-only and --payment-instrument-id
@@ -13857,6 +13899,13 @@ Actions:
   cancel    Print the agent page URL for user-managed cancellation; no backend cancel call in this phase
 
 Notes:
+  prepare POSTs the complete restricted instructionContext to
+  /agent/cwallet/instructions/pending. Only after CWallet returns the exact PENDING instructionId
+  does the CLI resolve the trusted card binding link. After the first successful exact-ID Event Hub
+  poll, it prints a machine-readable PENDING handoff envelope with watchReady=true, then keeps
+  waiting in the foreground. It never opens that link or a standalone VIC page. Activation is
+  exact-GET verified and timeout returns an instruction get continuation bound to the original ID;
+  it never creates a second Instruction or retries Checkout/payment.
   create POSTs /agent/cwallet/instructions and creates the instruction in CREATED (draft) state,
   then prints the Passkey page URL for the returned instructionId.
   An instruction turns ACTIVE only after the Passkey/FIDO signature completes on the agent page
@@ -13874,6 +13923,10 @@ Notes:
   create/sign-url/update/cancel poll for webhook events after printing the Passkey/agent URL (max 15 min); use --no-watch to skip.
 
 Examples:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
   clink instruction create \\
     --payment-instrument-id pi_xxx --title "Business trip" \\
     --effective-until-time "2026-06-25 00:00:00" \\
@@ -13884,6 +13937,68 @@ Examples:
   clink instruction list --valid-only --payment-instrument-id pi_xxx --format json
   clink instruction get --purchase-instruction-id ins_xxx --format json
   clink instruction cancel --format json
+`;
+var INSTRUCTION_PREPARE_HELP = `clink instruction prepare
+
+Usage:
+  clink instruction prepare --title <title> \\
+    (--mandates <json> | --mandates-file <path>) [options]
+
+Required Arguments:
+  --title <title>              Instruction title
+  --mandates <json>            Mandate JSON array; amount and currency live on each mandate
+  --mandates-file <path>       UTF-8 JSON array file; accepts files with a BOM
+
+Optional Arguments:
+  --description <text>         Instruction description
+  --effective-until-time <datetime>
+                              Instruction UTC expiry, format yyyy-MM-dd HH:mm:ss
+  --is-recurring               Mark the instruction as reusable/recurring
+  --shipping-address <json>    Shipping address JSON object for physical goods
+  --max-wait <seconds>         Foreground activation wait bound, defaults to 900
+
+Options:
+${CUSTOMER_API_KEY_REQUEST_OPTIONS}
+
+Endpoint:
+  POST /agent/cwallet/instructions/pending
+
+Behavior:
+  Sends the complete restricted instructionContext without paymentInstrumentId or extra. CWallet
+  creates or reuses one no-card PENDING Instruction and returns its exact instructionId/status.
+  The CLI then obtains the existing card binding link but withholds it until the first successful
+  Event Hub poll and identity validation. At readiness it writes the stable English prompt to stderr
+  and stdout emits a structured handoff envelope:
+  status=PENDING, the exact instructionId, trusted bindingUrl, watchReady=true,
+  watchEventType=purchase_instruction.activated, terminal=false, and processRunning=true.
+  The process remains in the foreground and later emits one final exact-ID envelope.
+  The CLI never opens the card binding link or a standalone VIC page. Portal owns card binding,
+  3DS, and VIC; after Portal completion CWallet attaches that card and activates the same ID.
+  The activation event is only a wake-up signal: the CLI exact-GETs the returned ID before reporting
+  ready. Timeout or a wait failure returns a read-only instruction get continuation for the same ID.
+  It never creates a replacement Instruction and never starts Checkout or payment.
+  Pending expiry is server-owned: exact verification requires one valid future Instruction expiry
+  shared by every Mandate, but does not require equality with caller-supplied expiry values.
+  If CWallet returns CARD_READY or VIC_READY without an instructionId because VIC completed during
+  the request race, the command returns card_ready without another POST or a binding handoff.
+  The watch also wakes on customer-wide payment_method.update / vic_device.binding_succeeded. A
+  Portal ceremony that started before this PENDING existed never activates it, so after a card
+  event the CLI waits a short grace period for the activation, exact-GETs the same ID, and if it is
+  still PENDING re-posts the identical context once; a VIC_READY answer returns card_ready with the
+  original instructionId and fallbackReason=card_vic_ready_without_pending_activation so the caller
+  continues with a regular Instruction on the ready card.
+  --open and --no-watch are intentionally unsupported.
+
+Mandate Fields:
+  Common fields include title, description (maximum 150 characters), amountLimit, currencyCode,
+  merchantCategoryCode, preferredMerchantName or merchantCategory, and effectiveUntilTime.
+  When --is-recurring is set, every mandate must include recurringFrequency (WEEKLY, MONTHLY, or YEARLY).
+
+Example:
+  clink instruction prepare \\
+    --title "Business trip" \\
+    --mandates '[{"title":"Hotel","description":"Hotel payment","amountLimit":1000.00,"currencyCode":"USD","merchantCategoryCode":"7011"}]' \\
+    --max-wait 900 --format json
 `;
 var INSTRUCTION_CREATE_HELP = `clink instruction create
 
@@ -14185,6 +14300,8 @@ function getRawHelpText(command, subcommand, nestedCommand) {
       return PAY_HELP;
     case "instruction":
       switch (subcommand) {
+        case "prepare":
+          return INSTRUCTION_PREPARE_HELP;
         case "create":
           return INSTRUCTION_CREATE_HELP;
         case "sign-url":
@@ -15165,7 +15282,7 @@ async function requestToken(options2) {
   }
   const agentClientId = options2.requireAgentClientId ? requiredString2(data.agent_client_id, "OAuth response is missing agent_client_id") : optionalString(data.agent_client_id);
   const visaRegistrationStatus = parseVisaRegistrationStatus2(data.visa_registration_status, options2.requireAgentClientId);
-  const pendingInstructionId = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
+  const pendingInstructionId2 = optionalString(data.pending_instruction_id ?? data.pendingInstructionId);
   return {
     tokenType: "Bearer",
     accessToken: requiredString2(data.access_token, "OAuth response is missing access_token"),
@@ -15175,7 +15292,7 @@ async function requestToken(options2) {
     customerId: requiredString2(data.customer_id, "OAuth response is missing customer_id"),
     ...agentClientId ? { agentClientId } : {},
     ...visaRegistrationStatus ? { visaRegistrationStatus } : {},
-    ...pendingInstructionId ? { pendingInstructionId } : {},
+    ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {},
     scope: requiredString2(data.scope, "OAuth response is missing scope")
   };
 }
@@ -19536,6 +19653,267 @@ function compact(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== void 0));
 }
 
+// dist/pending-instruction.js
+var TERMINAL_INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
+  "CANCELLED",
+  "CANCELED",
+  "EXPIRED",
+  "DECLINED",
+  "FAILED"
+]);
+var PENDING_ACTIVATION_EVENT_TYPE = "purchase_instruction.activated";
+var PENDING_CARD_READY_EVENT_TYPES = [
+  "payment_method.update",
+  "vic_device.binding_succeeded"
+];
+var PENDING_ACTIVATION_GRACE_SECONDS = 20;
+var PENDING_CARD_READY_FALLBACK_REASON = "card_vic_ready_without_pending_activation";
+async function preparePendingInstruction(instructionContext, maxWaitSeconds, dependencies) {
+  const now = dependencies.now ?? Date.now;
+  const created = await dependencies.createPendingInstruction(instructionContext);
+  const initialStatus = normalizedStatus(created.status);
+  if (initialStatus === "UNKNOWN") {
+    throw apiError("missing status in pending instruction response", 502);
+  }
+  if (isCardReadyStatus(initialStatus)) {
+    return {
+      instructionStatus: initialStatus,
+      state: "CARD_READY",
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false
+    };
+  }
+  let instructionId = requiredText(created.instructionId, "missing instructionId in pending instruction response");
+  if (initialStatus !== "PENDING" && initialStatus !== "ACTIVE" && !isTerminalInstructionStatus(initialStatus)) {
+    throw apiError(`unexpected pending instruction status: ${initialStatus}`, 502);
+  }
+  const ceremony = ceremonyHint(created.detail, instructionId);
+  if (initialStatus === "ACTIVE" || isTerminalInstructionStatus(initialStatus)) {
+    return finalizePendingInstruction({
+      instructionId,
+      initialStatus,
+      createdDetail: created.detail,
+      timedOut: false,
+      eventTypes: [],
+      watchReady: false,
+      bindingLinkPresented: false,
+      ...ceremony ? { ceremony } : {}
+    }, dependencies);
+  }
+  let bindingUrl;
+  let bindingLinkError;
+  try {
+    bindingUrl = await dependencies.resolveBindingUrl();
+  } catch (error) {
+    rethrowAuthError(error);
+    bindingLinkError = errorMessage2(error);
+  }
+  let timedOut = false;
+  const eventTypes = [];
+  let waitError;
+  let watchReady = false;
+  let exactGetError;
+  const deadlineMs = now() + maxWaitSeconds * 1e3;
+  const onReady = dependencies.onWatchReady ? () => {
+    watchReady = true;
+    dependencies.onWatchReady?.({
+      instructionId,
+      instructionStatus: initialStatus,
+      ...bindingUrl ? { bindingUrl } : {},
+      ...bindingLinkError ? { bindingLinkError } : {},
+      ...ceremony ? { ceremony } : {}
+    });
+  } : void 0;
+  let firstWait = true;
+  waitLoop: for (; ; ) {
+    const remainingSeconds = Math.ceil((deadlineMs - now()) / 1e3);
+    if (remainingSeconds <= 0) {
+      timedOut = true;
+      break;
+    }
+    let wait;
+    try {
+      wait = await dependencies.waitForInstructionActivation(instructionId, remainingSeconds, firstWait ? onReady : void 0, { wakeOnCardEvents: true });
+    } catch (error) {
+      rethrowAuthError(error);
+      waitError = errorMessage2(error);
+      break;
+    }
+    firstWait = false;
+    eventTypes.push(...wait.eventTypes);
+    if (wait.eventTypes.includes(PENDING_ACTIVATION_EVENT_TYPE)) {
+      break;
+    }
+    if (wait.timedOut) {
+      timedOut = true;
+      break;
+    }
+    if (!wait.eventTypes.some((eventType) => isCardReadyEventType(eventType))) {
+      break;
+    }
+    const graceSeconds = Math.min(PENDING_ACTIVATION_GRACE_SECONDS, Math.ceil((deadlineMs - now()) / 1e3));
+    if (graceSeconds > 0) {
+      try {
+        const grace = await dependencies.waitForInstructionActivation(instructionId, graceSeconds, void 0, { wakeOnCardEvents: false });
+        eventTypes.push(...grace.eventTypes);
+        if (grace.eventTypes.includes(PENDING_ACTIVATION_EVENT_TYPE)) {
+          break;
+        }
+      } catch (error) {
+        rethrowAuthError(error);
+        waitError = errorMessage2(error);
+        break;
+      }
+    }
+    let current;
+    try {
+      current = await dependencies.getInstruction(instructionId);
+    } catch (error) {
+      rethrowAuthError(error);
+      exactGetError = errorMessage2(error);
+      break;
+    }
+    if (current) {
+      assertExactInstruction(current, instructionId);
+      const currentStatus = normalizedStatus(current.status ?? current.state);
+      if (currentStatus === "ACTIVE" || isTerminalInstructionStatus(currentStatus)) {
+        break;
+      }
+    }
+    let recheck;
+    try {
+      recheck = await dependencies.createPendingInstruction(instructionContext);
+    } catch (error) {
+      rethrowAuthError(error);
+      waitError = errorMessage2(error);
+      break;
+    }
+    const recheckStatus = normalizedStatus(recheck.status);
+    if (isCardReadyStatus(recheckStatus)) {
+      dependencies.onCardReadyFallback?.({
+        instructionId,
+        instructionStatus: recheckStatus,
+        eventTypes: [...eventTypes]
+      });
+      return {
+        instructionId,
+        instructionStatus: recheckStatus,
+        state: "CARD_READY",
+        createdDetail: created.detail,
+        timedOut: false,
+        eventTypes,
+        watchReady,
+        bindingLinkPresented: watchReady && bindingUrl !== void 0,
+        fallbackReason: PENDING_CARD_READY_FALLBACK_REASON,
+        ...ceremony ? { ceremony } : {},
+        ...bindingLinkError ? { bindingLinkError } : {}
+      };
+    }
+    const recheckId = optionalText(recheck.instructionId);
+    if (recheckId && recheckId !== instructionId) {
+      instructionId = recheckId;
+    }
+    continue waitLoop;
+  }
+  return finalizePendingInstruction({
+    instructionId,
+    initialStatus,
+    createdDetail: created.detail,
+    timedOut,
+    eventTypes,
+    watchReady,
+    bindingLinkPresented: watchReady && bindingUrl !== void 0,
+    ...ceremony ? { ceremony } : {},
+    ...bindingLinkError ? { bindingLinkError } : {},
+    ...waitError ? { waitError } : {},
+    ...exactGetError ? { exactGetError } : {}
+  }, dependencies);
+}
+async function finalizePendingInstruction(input, dependencies) {
+  let instruction;
+  let exactGetError = input.exactGetError;
+  try {
+    instruction = await dependencies.getInstruction(input.instructionId);
+  } catch (error) {
+    rethrowAuthError(error);
+    exactGetError = errorMessage2(error);
+  }
+  if (instruction) {
+    assertExactInstruction(instruction, input.instructionId);
+  }
+  const instructionStatus = instruction ? normalizedStatus(instruction.status ?? instruction.state) : input.initialStatus;
+  const state = instructionStatus === "ACTIVE" ? "ACTIVE" : isTerminalInstructionStatus(instructionStatus) ? "TERMINAL" : "PENDING";
+  return {
+    instructionId: input.instructionId,
+    instructionStatus,
+    state,
+    ...instruction ? { instruction } : {},
+    createdDetail: input.createdDetail,
+    timedOut: input.timedOut,
+    eventTypes: input.eventTypes,
+    watchReady: input.watchReady,
+    bindingLinkPresented: input.bindingLinkPresented,
+    resumeCommand: dependencies.resumeCommand(input.instructionId),
+    ...input.ceremony ? { ceremony: input.ceremony } : {},
+    ...input.bindingLinkError ? { bindingLinkError: input.bindingLinkError } : {},
+    ...input.waitError ? { waitError: input.waitError } : {},
+    ...exactGetError ? { exactGetError } : {}
+  };
+}
+function pendingInstructionId(instruction) {
+  return optionalText(instruction.instructionId ?? instruction.purchaseInstructionId ?? instruction.id);
+}
+function isTerminalInstructionStatus(status) {
+  return TERMINAL_INSTRUCTION_STATUSES.has(normalizedStatus(status));
+}
+function ceremonyHint(detail, instructionId) {
+  if (typeof detail.ceremonyInProgress !== "boolean") {
+    return void 0;
+  }
+  const boundInstructionId = optionalText(detail.ceremonyBoundInstructionId);
+  const activationExpected = typeof detail.activationExpected === "boolean" ? detail.activationExpected : !detail.ceremonyInProgress || boundInstructionId === instructionId;
+  return {
+    inProgress: detail.ceremonyInProgress,
+    ...boundInstructionId ? { boundInstructionId } : {},
+    activationExpected
+  };
+}
+function isCardReadyEventType(eventType) {
+  return PENDING_CARD_READY_EVENT_TYPES.includes(eventType);
+}
+function isCardReadyStatus(status) {
+  return status === "CARD_READY" || status === "VIC_READY";
+}
+function assertExactInstruction(instruction, expectedInstructionId) {
+  if (pendingInstructionId(instruction) !== expectedInstructionId) {
+    throw apiError("pending Instruction identity mismatch during exact GET", 502);
+  }
+}
+function requiredText(value, message) {
+  const text = optionalText(value);
+  if (!text) {
+    throw apiError(message, 502);
+  }
+  return text;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.trim() ? value.normalize("NFKC").trim() : void 0;
+}
+function normalizedStatus(value) {
+  return optionalText(value)?.toUpperCase() ?? "UNKNOWN";
+}
+function errorMessage2(error) {
+  return error instanceof Error && error.message.trim() ? error.message.trim() : String(error);
+}
+function rethrowAuthError(error) {
+  if (error instanceof CliError && error.type === "auth_error") {
+    throw error;
+  }
+}
+
 // dist/payment/method-selection.js
 var LEGACY_DEFAULT_PAYMENT_METHOD_TYPES = /* @__PURE__ */ new Set(["CARD", "BALANCE"]);
 var OPTIONAL_PAYMENT_INSTRUMENT_TYPES = /* @__PURE__ */ new Set(["ALIPAY"]);
@@ -22180,6 +22558,7 @@ function isRecord17(value) {
 
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
+var PENDING_INSTRUCTION_PATH = `${INSTRUCTION_PATH2}/pending`;
 var CARD_SETUP_PATH = "/payment-method-setup";
 var CARD_MANAGEMENT_PATH = "/payment-method-modify";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
@@ -22803,6 +23182,33 @@ async function maybeWatchEvents(context, url, label, watchTarget = {}, onReady) 
     ...onReady ? { onReady } : {}
   });
   printSuccess(result, context.globalOptions.format);
+}
+async function collectCommandEvents(context, options2) {
+  const maxDurationMs = options2.maxWaitSeconds * 1e3;
+  await refreshOAuthAuthorization(context, {
+    minimumValidityMs: maxDurationMs + context.globalOptions.timeoutMs + OAUTH_OPERATION_VALIDITY_BUFFER_MS
+  });
+  const getRuntimeConfig = createRuntimeConfigLoader(context);
+  const refreshRuntimeConfig = createRuntimeConfigRefresher(context);
+  const result = await collectWebhookEvents({
+    runtimeConfig: context.runtimeConfig,
+    getRuntimeConfig,
+    resolveStoredRuntimeConfig: (storedConfig) => resolveRuntimeConfig(storedConfig, context.args.flags),
+    refreshRuntimeConfig,
+    timeoutMs: context.globalOptions.timeoutMs,
+    ack: true,
+    type: options2.type,
+    maxDurationMs,
+    ...options2.expectedResource ? { expectedResource: options2.expectedResource } : {},
+    ...options2.resourceScopedTypes ? { resourceScopedTypes: options2.resourceScopedTypes } : {},
+    ...options2.onReady ? { onReady: options2.onReady } : {}
+  });
+  return {
+    ...result,
+    ...result.timedOut ? {
+      resumeCommand: buildResumeCommand(options2.type, void 0, asOptionalString(options2.expectedResource?.paymentInstrumentId), result.nextToken, true, context.globalOptions.format, canonicalWalletOriginForResume(context.runtimeConfig.baseUrl), context.executableName)
+    } : {}
+  };
 }
 function printPendingWatchHandoff(url, eventType, executableName) {
   if (!url || !eventType) {
@@ -25147,6 +25553,8 @@ async function handleInstructionCommand(subcommand, context) {
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
+    case "prepare":
+      return instructionPrepare(context);
     case "create":
       return instructionCreate(context);
     case "sign-url":
@@ -25182,6 +25590,171 @@ async function instructionBody(context) {
     body.shippingAddress = shippingAddress;
   }
   return body;
+}
+async function instructionPrepare(context) {
+  if (getBooleanFlag(context.args.flags, "no-watch")) {
+    throw validationError("instruction prepare must keep waiting for the exact pending Instruction; --no-watch is not supported");
+  }
+  if ("open" in context.args.flags) {
+    throw validationError("instruction prepare never opens the card binding page; --open is not supported");
+  }
+  const instructionContext = await buildQuickInstructionContext(context.args.flags, "instruction prepare");
+  if (!instructionContext) {
+    throw validationError("instruction prepare requires --title and --mandates or --mandates-file");
+  }
+  const maxWaitSeconds = parseIntFlag(getStringFlag(context.args.flags, "max-wait"), "invalid --max-wait", 1) ?? 900;
+  if (context.globalOptions.dryRun) {
+    const result2 = await requestCommandPendingInstruction(context, instructionContext, true);
+    printSuccess(result2, context.globalOptions.format);
+    return EXIT_CODES.OK;
+  }
+  const result = await prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, { emitPendingEnvelope: true });
+  printSuccess(pendingInstructionCommandOutput(result), context.globalOptions.format);
+  return EXIT_CODES.OK;
+}
+async function prepareCommandPendingInstruction(context, instructionContext, maxWaitSeconds, options2 = {}) {
+  return preparePendingInstruction(instructionContext, maxWaitSeconds, {
+    createPendingInstruction: async (input) => {
+      const detail = await createCommandPendingInstruction(context, input);
+      const instructionId = asOptionalString(detail.instructionId ?? detail.purchaseInstructionId);
+      return {
+        ...instructionId ? { instructionId } : {},
+        status: asRequiredString(detail.status ?? detail.state ?? detail.readiness ?? detail.result, "missing status in pending instruction response"),
+        detail
+      };
+    },
+    getInstruction: (instructionId) => getCommandInstruction(context, instructionId),
+    waitForInstructionActivation: async (instructionId, waitSeconds, onReady, waitOptions) => {
+      const wakeOnCardEvents = waitOptions?.wakeOnCardEvents === true;
+      const wait = await collectCommandEvents(context, {
+        type: wakeOnCardEvents ? [PENDING_ACTIVATION_EVENT_TYPE, ...PENDING_CARD_READY_EVENT_TYPES].join(",") : PENDING_ACTIVATION_EVENT_TYPE,
+        maxWaitSeconds: waitSeconds,
+        expectedResource: {
+          instructionId,
+          purchaseInstructionId: instructionId
+        },
+        ...wakeOnCardEvents ? { resourceScopedTypes: [PENDING_ACTIVATION_EVENT_TYPE] } : {},
+        ...onReady ? { onReady } : {}
+      });
+      return {
+        timedOut: wait.timedOut,
+        eventTypes: wait.events.map((event) => event.eventType)
+      };
+    },
+    onCardReadyFallback: ({ instructionId, instructionStatus }) => {
+      process.stderr.write(`A Visa card became VIC-ready but pending Instruction ${instructionId} was not activated by that card binding ceremony (it started before the Instruction existed). CWallet reported ${instructionStatus}; continuing with a regular Instruction on the ready card, which needs one more Passkey confirmation.
+`);
+    },
+    resolveBindingUrl: async () => {
+      if (options2.bindingResolution?.status === "ready") {
+        return options2.bindingResolution.url;
+      }
+      if (options2.bindingResolution?.status === "failed") {
+        throw options2.bindingResolution.error;
+      }
+      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+      if (prepared.dryRun) {
+        throw apiError("card binding-link unexpectedly produced a dry-run response", 502);
+      }
+      return prepared.url;
+    },
+    onWatchReady: ({ instructionId, instructionStatus, bindingUrl, bindingLinkError, ceremony }) => {
+      process.stderr.write(`Pending Instruction ${instructionId} is ${instructionStatus}.
+`);
+      if (bindingUrl) {
+        process.stderr.write(`If no card is bound yet, open this link:
+${bindingUrl}
+`);
+      } else if (bindingLinkError) {
+        process.stderr.write(`Card binding link is unavailable (${bindingLinkError}); continuing to wait for Portal completion.
+`);
+      }
+      if (ceremony?.inProgress && !ceremony.activationExpected) {
+        process.stderr.write("A card binding ceremony already started before this Instruction existed and will not activate it. Finish that binding; the CLI will continue with a regular Instruction once the card is VIC-ready.\n");
+      }
+      process.stderr.write(`Waiting for exact Instruction ${instructionId} activation (or a VIC-ready card)...
+`);
+      if (options2.emitPendingEnvelope) {
+        printSuccess({
+          command: "instruction prepare",
+          stage: "instruction_activation",
+          status: "PENDING",
+          instructionId,
+          instructionStatus,
+          ...bindingUrl ? { bindingUrl } : {},
+          ...bindingLinkError ? { bindingLinkError } : {},
+          ...ceremony ? { ceremony } : {},
+          watchReady: true,
+          watchEventType: "purchase_instruction.activated",
+          cardReadyEventTypes: [...PENDING_CARD_READY_EVENT_TYPES],
+          terminal: false,
+          processRunning: true
+        }, context.globalOptions.format);
+      }
+    },
+    resumeCommand: (instructionId) => buildInstructionGetResumeCommand(context, instructionId)
+  });
+}
+async function requestCommandPendingInstruction(context, instructionContext, dryRun) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "POST",
+    path: PENDING_INSTRUCTION_PATH,
+    headers: buildInstructionHeaders(runtimeConfig),
+    body: instructionContext,
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun
+  }));
+  if (isDryRun3(result)) {
+    return result;
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord18(data)) {
+    throw apiError("invalid pending instruction response", 502);
+  }
+  return data;
+}
+async function createCommandPendingInstruction(context, instructionContext) {
+  const result = await requestCommandPendingInstruction(context, instructionContext, false);
+  if ("dryRun" in result) {
+    throw apiError("pending instruction unexpectedly produced a dry-run response", 502);
+  }
+  return result;
+}
+function pendingInstructionCommandOutput(result) {
+  const terminal = result.state !== "PENDING";
+  return {
+    command: "instruction prepare",
+    stage: "instruction_activation",
+    status: result.state === "ACTIVE" ? "ready" : result.state === "CARD_READY" ? "card_ready" : result.state === "TERMINAL" ? result.instructionStatus.toLowerCase() : result.timedOut ? "timeout" : "pending",
+    terminal,
+    instructionId: result.instructionId ?? null,
+    instructionStatus: result.instructionStatus,
+    instruction: result.instruction ?? result.createdDetail,
+    eventTypes: result.eventTypes,
+    watchReady: result.watchReady,
+    bindingLinkPresented: result.bindingLinkPresented,
+    ...result.fallbackReason ? { fallbackReason: result.fallbackReason } : {},
+    ...result.ceremony ? { ceremony: result.ceremony } : {},
+    ...result.state === "PENDING" && result.resumeCommand ? {
+      userActionRequired: true,
+      resumeCommand: result.resumeCommand,
+      resumeReadOnly: true,
+      createsAnotherInstruction: false,
+      paymentRetryAllowed: false
+    } : {},
+    ...result.bindingLinkError ? { bindingLinkError: result.bindingLinkError } : {},
+    ...result.waitError ? { waitError: result.waitError } : {},
+    ...result.exactGetError ? { exactGetError: result.exactGetError } : {}
+  };
+}
+function buildInstructionGetResumeCommand(context, instructionId) {
+  return preserveBaseUrlOverride([
+    `${context.executableName} instruction get`,
+    `--purchase-instruction-id ${quoteShellArgument(instructionId)}`,
+    `--format ${context.globalOptions.format}`
+  ].join(" "), canonicalWalletOriginForResume(context.runtimeConfig.baseUrl));
 }
 function requireJsonArrayFlag(flags, name) {
   const parsed = parseJsonFlag(requireStringFlag(flags, `missing --${name} (JSON array)`, name), `--${name}`);
@@ -25275,6 +25848,28 @@ async function instructionGet(context) {
     dryRun: context.globalOptions.dryRun
   }));
   return finishApiCommand(result, context);
+}
+async function getCommandInstruction(context, instructionId) {
+  const result = await requestOAuthBusinessJson(context, (runtimeConfig) => ({
+    baseUrl: runtimeConfig.baseUrl,
+    method: "GET",
+    path: `${INSTRUCTION_PATH2}/${encodeURIComponent(instructionId)}`,
+    headers: buildInstructionHeaders(runtimeConfig),
+    timeoutMs: context.globalOptions.timeoutMs,
+    dryRun: false
+  }));
+  if (isDryRun3(result)) {
+    throw apiError("instruction get unexpectedly produced a dry-run response");
+  }
+  if (result.status === 404) {
+    return void 0;
+  }
+  assertApiSuccess(result.status, result.body);
+  const data = unwrapApiData(result.body);
+  if (!isRecord18(data)) {
+    throw apiError("invalid instruction get response", 502);
+  }
+  return data;
 }
 async function instructionSignUrl(context) {
   const flags = context.args.flags;

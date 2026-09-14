@@ -285,9 +285,11 @@ Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. The CLI and CW
 - Before waiting, return a structured `PENDING` envelope with non-empty `instructionId`, trusted Agent Portal `bindingUrl`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`.
 - Keep that `instruction prepare` process in the foreground after the first envelope is emitted. The user may open the link or finish card/VIC setup in an Agent Portal page they already have open; the URL is not required to carry the Instruction ID.
 - CWallet attaches the card and activates the same Instruction only after Visa/VIC completion. `payment_method.added`, page completion text, or an activation event for another Instruction is insufficient.
-- The final CLI envelope must preserve the same `instructionId`, report `command=instruction prepare`, `status=ready`, `instructionStatus=ACTIVE`, and carry a non-empty `instruction.paymentInstrumentId`.
+- To use the prepared Instruction as authorization, the final CLI envelope must preserve the same `instructionId`, report `command=instruction prepare`, `status=ready`, `instructionStatus=ACTIVE`, and carry a non-empty `instruction.paymentInstrumentId`.
 
 `classifyAuthorizationPrepareObservation` returns `HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI` only after the exact watch-ready fields are present. Send `bindingUrl` once without auto-opening, prefetching, or inspecting it, then keep reading the same process. Do not start `card binding-link`, a standalone VIC registration flow, `events poll`, `instruction create`, another `instruction prepare`, Checkout, or payment beside it.
+
+The CLI may instead return `status=card_ready`, either immediately or after the PENDING envelope. In the latter case, its final `command=instruction prepare` envelope must retain the same Instruction ID. This can happen when a Portal binding ceremony started before the Instruction existed: the card becomes VIC-ready but does not activate that Instruction. The classifier returns `REFRESH_PAYMENT_INSTRUMENT_LIST`; refresh cards and run the ordinary authorization resolver, including ACTIVE Instruction selection or ordinary creation and Passkey authorization when needed. The old PENDING Instruction and the `card_ready` result do not authorize payment. Do not reuse their Instruction ID as a payment authorization. A different final Instruction ID remains an error.
 
 If the process times out or exits without its authoritative final envelope, run only:
 
