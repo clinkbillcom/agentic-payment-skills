@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.99');
+  assert.equal(packageJson.version, '0.1.100');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -227,6 +227,21 @@ test('browser operations are split from commerce aggregates', () => {
   assert.match(skill, /If\s+it is unknown[\s\S]*never emit the literal placeholder/u);
   assert.match(agent, /dedicated browser-open operation/u);
   assert.match(agent, /manual completion[\s\S]*check the state and do not reopen/u);
+});
+
+test('Bind Card stays URL-only across purchase and recovery guidance', async () => {
+  const runReference = await readFile(
+    join(root, 'references', 'visa-commerce-run.md'), 'utf8',
+  );
+  for (const text of [skill, agent, runReference]) {
+    assert.match(text, /Bind Card is URL-only in every flow/u);
+    assert.match(text, /--manual-completed/u);
+    assert.match(text, /instructionId/u);
+    assert.doesNotMatch(text, /browser-open --url <bindCardUrl>/u);
+  }
+  assert.match(skill, /never use `browser-open`, `--open`, an OS opener/u);
+  assert.match(agent, /never use browser-open,\s+--open, an OS opener/u);
+  assert.match(runReference, /never call `browser-open` for it/u);
 });
 
 test('Quick Instruction keeps only current principles', () => {

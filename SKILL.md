@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.99. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.100. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.99"
+  version: "0.1.100"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -187,8 +187,16 @@ Never reroute a refused purchase through plain `pay` or UCP.
 OAuth, Agent Portal card/VIC, Visa Passkey, Instruction, 3DS, and risk pages
 belong in the user's system browser. For commerce-login and commerce-run, the
 aggregate returns the exact operation URL and continuation state before opening
-it. Use `visa browser-open --url <operation-url>` for a separate system-browser
+it. For authorization pages other than Bind Card, use
+`visa browser-open --url <operation-url>` for a separate system-browser
 attempt; do not use the Agent's built-in browser.
+
+Bind Card is URL-only in every flow, including standalone card setup and
+PENDING Instructions created by login or commerce-run. Show the exact returned
+`bindCardUrl` or `bindingUrl`; never use `browser-open`, `--open`, an OS opener,
+or an Agent browser to open a Bind Card page. The user may already be filling
+the login page; offer the URL only as a manual fallback. This rule overrides
+the general browser-opening instructions below.
 
 For commerce-login and commerce-run, when a user browser operation is needed,
 the aggregate returns the exact operation URL and continuation state first. Tell
@@ -197,7 +205,8 @@ browser. If the host Agent name is known, replace `{agent}` with that name. If
 it is unknown, say `请在系统浏览器中完成操作，不要使用 Agent 内置浏览器。`
 and never emit the literal placeholder.
 
-Then use the dedicated browser-open operation to attempt the system browser:
+For Passkey, VIC, OAuth, and other authorization pages, use the dedicated
+browser-open operation to attempt the system browser:
 
 ```text
 <Skill Path>/bin/visa-cli visa browser-open --url "<operation-url>" --format json
@@ -621,16 +630,11 @@ original Quick continuation (or normal Instruction selection only without a Quic
 product revalidation, one Checkout creation, at most one completion,
 non-retriable payment handling, and bounded delivery waiting.
 When an exact PENDING Instruction has no bound card, the command returns
-immediately with `instructionId`, `phase=pending`, and `bindCardUrl`. For a
-PENDING Instruction created by the preceding `commerce-login` Quick flow, do
-not call `browser-open` again: tell the user to bind the card in the page
-already opened during login. If that page is no longer open, tell the user to
-manually open the dedicated UAT page
-`https://uat-agent.clinkbill.com/payment-method-setup`. After the user
-finishes, rerun with `--manual-completed`; the CLI checks status first and does
-not reopen. For a Pending Instruction created directly by `commerce-run`, use
-`visa browser-open --url <bindCardUrl>` when the flow requires a new browser
-operation, then rerun with `--browser-opened`.
+immediately with `instructionId`, `phase=pending`, and `bindCardUrl`. For every
+PENDING bind-card result, do not call `browser-open`: tell the user to bind the
+card in the page already opened during login, or manually open the returned
+`bindCardUrl` if needed. After the user finishes, rerun with
+`--manual-completed`; the CLI checks status first and does not reopen.
 Missing/changed facts, a real error, refusal, cancellation, or timeout require
 a user-facing interruption.
 
@@ -951,11 +955,10 @@ unchanged into the next command. Do not write them to a local file.
 - New `mode=purchase` contexts never send `program.code`.
 - One unchanged purchase authorization is enough; changed facts require a new
   authorization.
-- Portal owns binding and VIC. An exact PENDING Instruction without a card
-  immediately returns its exact `bindCardUrl`. For the login-created Quick
-  case, tell the user to bind the card in the already-open login page and do
-  not open another browser page; if it was closed, use the dedicated UAT
-  `https://uat-agent.clinkbill.com/payment-method-setup` page manually.
+- Portal owns binding and VIC. Every Bind Card result is URL-only, regardless
+  of which command created the PENDING Instruction. Show the returned
+  `bindCardUrl`; the user can continue in an existing login page or manually
+  open the link. Never open a Bind Card page for the user.
   Continue with the same `instructionId` after the authoritative
   card/Instruction check.
   Other timed-out card, VIC, or Passkey waits (10 minutes) exit through the

@@ -3,6 +3,9 @@
 Read this file only after the system-browser opener returns `manual_required` or
 an unexpected result. This command is already atomic and read-only.
 
+Do not invoke this command for Bind Card URLs. Show those URLs for manual use
+without opening a new page, even when commerce-run created the PENDING.
+
 ## Stages
 
 ```text

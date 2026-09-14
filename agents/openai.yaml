@@ -141,11 +141,12 @@ interface:
     "登录已就绪，直接执行购买流程，可能打开浏览器授权页面。"
     These are notices, not questions; execute immediately without waiting for a reply.
     For Visa authentication, use visa init, not wallet init.
-    When login or run reaches a user browser operation, the aggregate returns
+    When login or run reaches an authorization operation other than Bind Card,
+    the aggregate returns
     the exact URL and continuation state first. Tell the user to use the system
     browser and never the Agent built-in browser. If the host Agent name is
     known, use it; otherwise say "请在系统浏览器中完成操作，不要使用 Agent
-    内置浏览器。" and never emit {agent}. Then use the dedicated browser-open
+    内置浏览器。" and never emit {agent}. Then use the
     dedicated browser-open operation to attempt the system browser. A successful launch is not business
     success. For automatic launch, continue by checking the original operation
     state; for manual completion, first check the state and do not reopen.
@@ -160,7 +161,13 @@ interface:
     Include returned orderUrl as a clickable 查看订单 / View order link in purchase
     and order-detail replies. Never substitute UCP order IDs or Checkout IDs;
     explain orderUrlUnavailable without inventing a link or retrying payment.
-    Portal owns card binding and VIC. The CLI never opens Bind Card.
+    Portal owns card binding and VIC. Bind Card is URL-only in every flow,
+    including login-created and commerce-run-created PENDING Instructions.
+    Show the exact returned bindCardUrl or bindingUrl; never use browser-open,
+    --open, an OS opener, or an Agent browser for Bind Card. The user may
+    already be binding a card in the login page. Let them continue there or
+    manually open the link; after manual completion, use --manual-completed
+    with the original instructionId to check status without reopening.
     Freeze one purchase context and one selected PI. Use the default PI unless
     the user explicitly chooses an alternate PI; never infer a default from the
     first, only, newest, or VIC-ready card.
@@ -198,7 +205,8 @@ interface:
     Binding, VIC, Passkey, and PENDING activation are one user-operation wait
     stage capped at 10 minutes. Timeout never creates a replacement Instruction
     or retries Checkout/payment.
-    When login or run reaches a browser operation, the aggregate returns the
+    When login or run reaches an authorization operation other than Bind Card,
+    the aggregate returns the
     exact URL and continuation state first. Tell the user to use the system
     browser and never the Agent built-in browser. If the host Agent name is
     known, use it; otherwise say "请在系统浏览器中完成操作，不要使用 Agent

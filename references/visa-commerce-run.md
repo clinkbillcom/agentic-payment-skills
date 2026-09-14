@@ -26,7 +26,7 @@ validate restriction and frozen purchase context
 | `restriction` | `instruction` restriction check | Refused or incomplete purchase facts; fix input, do not create an Instruction |
 | `login_status` / `login` | `visa status` or `visa commerce-login` | Login is unavailable or failed before purchase |
 | `product_resolution` / `product_revalidation` | `visa product-search` or the exact internal product read | Product route, identity, price, currency, or availability drifted |
-| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` or returned `bindCardUrl` | Refresh cards; when an exact PENDING ID has no card, tell the user to bind a Visa card and open the returned URL; never choose by list order |
+| `card_refresh` / `card_selection` / `card_verification` | `card binding-link --no-watch --no-open` or returned `bindCardUrl` | Show the exact Bind Card URL for manual use; never open it or choose a card by list order |
 | `pending_instruction_prepare` | pending-instruction preparation | A PENDING operation was not prepared; do not create a second one from the error alone |
 | `instruction_list` / `instruction_selection` / `instruction_active_verify` | `instruction list --valid-only --payment-instrument-id <selectedPI>` then exact `instruction get` | Only the selected PI's complete usable ACTIVE matches can be reused |
 | `instruction_create` | `instruction create --payment-instrument-id <selectedPI> ...` | Creation failed or did not return a trustworthy ID; do not repeat blindly |
@@ -76,7 +76,8 @@ read-only Checkout recovery only.
 
 ## Browser And Timeout Recovery
 
-For a returned operation URL, use `visa browser-open` once. After automatic
+Bind Card is URL-only in every flow; never call `browser-open` for it.
+For other returned authorization URLs, use `visa browser-open` once. After automatic
 opening rerun the original command with `--browser-opened`; after manual
 completion rerun with `--manual-completed`. The latter checks authoritative
 state first and does not reopen the browser. A closed page or opener failure is
@@ -85,16 +86,12 @@ not proof of business failure.
 Binding, VIC, Passkey, and PENDING activation share the ten-minute Agent wait
 boundary. An exact PENDING Instruction without a bound card is
 different: return its `instructionId`, `phase=pending`, and `bindCardUrl`
-immediately. For a PENDING Instruction created by the preceding
-`commerce-login` Quick flow, the Agent tells the user to bind the card in the
-already-open login page and does not call `browser-open` again. If that page was
-closed, the user manually opens the dedicated UAT page
-`https://uat-agent.clinkbill.com/payment-method-setup`. After completion,
-rerun with `--manual-completed` so the CLI checks authoritative state first.
-For a Pending Instruction created directly by `commerce-run`, use
-`visa browser-open --url <bindCardUrl>` when a new browser operation is needed,
-then rerun with `--browser-opened`. Continue with the same Instruction ID. For other
-waits, the recovery list comes from
+immediately. Show the URL without opening it, whether login or commerce-run
+created the Instruction. The user may continue binding in the already-open
+login page or manually open the returned URL. After manual completion, rerun
+with `--manual-completed` and the same `instructionId` so the CLI checks
+authoritative state first without reopening. Other waits use the recovery list
+from
 `GET /agent/cwallet/instructions/activatable`, which may return both PENDING and
 CREATED Instructions. After timeout, use `visa pending-instructions` with the exact ID when
 known. Without exact context, return its instruction list and Portal URL for
