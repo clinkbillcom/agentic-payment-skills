@@ -46,6 +46,7 @@ function createServer(listener) {
 const bundlePath = fileURLToPath(
   new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
 );
+const wrapperPath = fileURLToPath(new URL('../bin/clink', import.meta.url));
 const vendorPackage = JSON.parse(
   await readFile(new URL('../vendor/clink-cli/package.json', import.meta.url), 'utf8'),
 );
@@ -106,13 +107,21 @@ function runBundle(args) {
 }
 
 function runBundleRaw(args, env = {}) {
+  return runCliRaw(process.execPath, [bundlePath, ...args], env);
+}
+
+function runWrapperRaw(args, env = {}) {
+  return runCliRaw(wrapperPath, args, env);
+}
+
+function runCliRaw(command, args, env = {}) {
   const childEnv = { ...testEnv, ...env };
   for (const [key, value] of Object.entries(childEnv)) {
     if (value === undefined) {
       delete childEnv[key];
     }
   }
-  return spawnSync(process.execPath, [bundlePath, ...args], {
+  return spawnSync(command, args, {
     encoding: 'utf8',
     env: childEnv,
   });
@@ -1571,7 +1580,7 @@ test('vendored CLI help exposes the internal UCP merchant-list contract', () => 
   );
 });
 
-test('vendored public Catalog commands ignore wallet config and select their own environment', async () => {
+test('Skill wrapper public Catalog commands ignore wallet config and use sandbox', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-vendored-public-catalog-'));
   const configDirectory = join(home, '.clink-cli');
   await mkdir(configDirectory, { recursive: true });
@@ -1580,7 +1589,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
   const publicEnv = {
     HOME: home,
     CLINK_BASE_URL: 'https://custom-api.example.com',
-    CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+    CLINK_WALLET_INIT_ENVIRONMENT: 'production',
     CLINK_CUSTOMER_ID: 'customer_must_not_be_sent',
     CLINK_CUSTOMER_API_KEY: 'key_must_not_be_sent',
   };
@@ -1590,7 +1599,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
         'ucp-catalog', 'search', '--merchant-id', 'merchant_1', '--query', '手表',
         '--dry-run', '--format', 'json',
       ],
-      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/search',
     },
     {
       args: [
@@ -1600,16 +1609,14 @@ test('vendored public Catalog commands ignore wallet config and select their own
       expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchant_1/catalog/product',
     },
     {
-      args: [
-        'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
-      ],
-      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/extra/catalog/search',
+      args: ['catalog', 'search', '--query', 'watch', '--dry-run', '--format', 'json'],
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/extra/catalog/search',
     },
   ];
 
   try {
     for (const { args, expectedUrl } of cases) {
-      const result = runBundleRaw(args, publicEnv);
+      const result = runWrapperRaw(args, publicEnv);
       assert.equal(result.status, 0, result.stderr);
       const request = JSON.parse(result.stdout).data.request;
       assert.equal(request.url, expectedUrl);
@@ -1621,7 +1628,13 @@ test('vendored public Catalog commands ignore wallet config and select their own
       assert.equal(request.body.context?.language, undefined);
     }
 
-    const credentials = runBundleRaw([
+    const testConflict = runWrapperRaw([
+      'catalog', 'search', '--query', 'watch', '--test', '--dry-run', '--format', 'json',
+    ], publicEnv);
+    assert.equal(testConflict.status, 2);
+    assert.match(testConflict.stderr, /fixed to sandbox|--sandbox and --test/u);
+
+    const credentials = runWrapperRaw([
       'catalog', 'search', '--query', 'watch', '--customer-api-key', 'must-not-be-used',
     ], publicEnv);
     assert.equal(credentials.status, 2);
@@ -1631,7 +1644,7 @@ test('vendored public Catalog commands ignore wallet config and select their own
   }
 });
 
-test('vendored UCP merchant list selects its public API environment and sends an anonymous bodyless GET', async () => {
+test('Skill wrapper UCP merchant list uses sandbox and sends an anonymous bodyless GET', async () => {
   const home = await mkdtemp(join(tmpdir(), 'clink-vendored-ucp-merchant-'));
   const configDirectory = join(home, '.clink-cli');
   await mkdir(configDirectory, { recursive: true });
@@ -1662,31 +1675,26 @@ test('vendored UCP merchant list selects its public API environment and sends an
   const fetchPreload = await createMerchantFetchPreload([upstreamMerchant]);
   const cases = [
     {
-      name: 'production',
+      name: 'default-sandbox',
       args: ['tool', 'internal-ucp', 'get-merchant-list', '--format', 'json'],
-      expectedUrl: 'https://api.clinkbill.com/agent/ucp/merchants',
-    },
-    {
-      name: 'sandbox',
-      args: ['tool', 'internal-ucp', 'get-merchant-list', '--sandbox', '--format', 'json'],
       expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchants',
     },
     {
-      name: 'test',
-      args: ['tool', 'internal-ucp', 'get-merchant-list', '--test', '--format', 'json'],
-      expectedUrl: 'https://api.clinkbill.dev/agent/ucp/merchants',
+      name: 'explicit-sandbox',
+      args: ['tool', 'internal-ucp', 'get-merchant-list', '--sandbox', '--format', 'json'],
+      expectedUrl: 'https://uat-api.clinkbill.com/agent/ucp/merchants',
     },
   ];
 
   try {
     for (const { name, args, expectedUrl } of cases) {
       const recordPath = join(fetchPreload.directory, `${name}-request.json`);
-      const result = runBundleRaw(args, {
+      const result = runWrapperRaw(args, {
         ...fetchPreload.env,
         HOME: home,
         CLINK_TEST_FETCH_RECORD_PATH: recordPath,
         CLINK_BASE_URL: 'https://must-be-ignored.example.com',
-        CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
+        CLINK_WALLET_INIT_ENVIRONMENT: 'production',
         CLINK_CUSTOMER_ID: 'customer_must_not_be_sent',
         CLINK_CUSTOMER_API_KEY: 'key_must_not_be_sent',
       });
@@ -1763,7 +1771,7 @@ test('vendored UCP merchant list normalizes null and missing descriptions to emp
   }
 });
 
-test('vendored UCP merchant list rejects credentials and conflicting environments before fetching', async () => {
+test('Skill wrapper UCP merchant list rejects credentials and conflicting environments before fetching', async () => {
   const fetchPreload = await createMerchantFetchPreload([]);
   const unexpectedRequestPath = join(fetchPreload.directory, 'unexpected-request.json');
   const cases = [
@@ -1791,6 +1799,13 @@ test('vendored UCP merchant list rejects credentials and conflicting environment
     {
       args: [
         'tool', 'internal-ucp', 'get-merchant-list',
+        '--test', '--format', 'json',
+      ],
+      message: /--sandbox and --test cannot be used together/u,
+    },
+    {
+      args: [
+        'tool', 'internal-ucp', 'get-merchant-list',
         '--sandbox', '--test', '--format', 'json',
       ],
       message: /--sandbox and --test cannot be used together/u,
@@ -1799,7 +1814,7 @@ test('vendored UCP merchant list rejects credentials and conflicting environment
 
   try {
     for (const { args, message } of cases) {
-      const result = runBundleRaw(args, {
+      const result = runWrapperRaw(args, {
         ...fetchPreload.env,
         CLINK_TEST_FETCH_RECORD_PATH: unexpectedRequestPath,
       });

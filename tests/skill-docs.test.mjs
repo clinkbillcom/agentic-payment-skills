@@ -77,13 +77,13 @@ test('skill frontmatter stays compact and trigger-focused', () => {
   assert.match(description, /^Use when/u);
 });
 
-test('environment guidance matches the production wallet-init distribution wrapper', () => {
-  assert.doesNotMatch(cliWrapper, /--sandbox|--test/u);
-  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=production/u);
+test('environment guidance matches the sandbox wallet-init distribution wrapper', () => {
+  assert.match(cliWrapper, /set -- "\$@" --sandbox/u);
+  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=sandbox/u);
   assert.match(cliInvocation, /Environment selection belongs to `wallet init`/u);
-  assert.match(cliInvocation, /pins `wallet init` to production/u);
+  assert.match(cliInvocation, /pins `wallet init` to sandbox/u);
   assert.match(cliInvocation, /there is no `--base-url` flag/u);
-  assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
+  assert.match(skill, /pins init to sandbox\/UAT/u);
 });
 
 test('UCP checkout docs leave idempotency-key generation to the CLI', () => {
@@ -910,9 +910,9 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--sandbox/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
@@ -958,14 +958,14 @@ test('catalog discovery loads the merchant list before matching intent on descri
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--test/u);
-  assert.match(skill, /clink catalog search --query <text>[^\n]*--test/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--sandbox/u);
+  assert.match(skill, /clink catalog search --query <text>[^\n]*--sandbox/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--test/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--sandbox/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--test\|--sandbox\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
@@ -974,16 +974,16 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
 test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
   assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
   assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
-  assert.match(cliInvocation, /no environment flag means production/u);
-  assert.match(cliInvocation, /`--sandbox` means sandbox\/UAT/u);
-  assert.match(cliInvocation, /`--test` means test/u);
+  assert.match(cliInvocation, /wrapper appends `--sandbox`/u);
+  assert.match(cliInvocation, /explicit `--test` conflicts and exits 2/u);
+  assert.match(cliInvocation, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(cliInvocation, /send no `Authorization`/u);
   assert.match(cliInvocation, /four Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
   assert.match(cliInvocation, /anonymous `GET \/agent\/ucp\/merchants`/u);
   assert.match(cliInvocation, /Preflight the selected API origin before the merchant-list command/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
-  assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
+  assert.match(catalogDiscovery, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(catalogDiscovery, /valid BCP47 tag/u);
   assert.match(catalogDiscovery, /Agent owns result-language detection/u);
   assert.match(catalogDiscovery, /--language zh-Hans --context '\{"address_country":"HK"\}'/u);
