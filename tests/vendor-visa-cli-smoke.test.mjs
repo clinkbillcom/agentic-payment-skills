@@ -131,11 +131,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.76');
+  assert.equal(vendorPackage.version, '0.2.77');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '3036aee7bab068043c7902fbb29f073862fad4c6',
+    '039756449fd3bc3011352e59f651cdbd7b19415a',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -513,7 +513,7 @@ test('Visa miss falls back to all-channel Catalog and can return Eats365 coffee'
   assert.match(JSON.stringify(output), /Americano/u);
 });
 
-test.skip('sandbox-only aggregate fixture is not part of the production distribution', () => {
+test('sandbox-only internal broad fixture is isolated from the production launcher', () => {
   const result = runWithMock([
     'visa',
     'recommend-products',
@@ -529,6 +529,7 @@ test.skip('sandbox-only aggregate fixture is not part of the production distribu
   ], 'registered-broad-without-url', {
     env: {
       VSRA_BASE_URL: 'https://vsra.example.test',
+      CLINK_WALLET_INIT_ENVIRONMENT: 'sandbox',
     },
   });
 
@@ -539,7 +540,7 @@ test.skip('sandbox-only aggregate fixture is not part of the production distribu
   assert.equal(output.products[0].merchantId, 'mcht_ftmse61a6az0');
   assert.equal(
     output.products[0].endpoint,
-    'https://api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
+    'https://uat-api.clinkbill.com/agent/ucp/mcht_ftmse61a6az0',
   );
   assert.equal(output.products[0].product.itemId, 'watsons-100');
   assert.equal(

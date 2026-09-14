@@ -1,8 +1,10 @@
 # Visa Skill
 
-登录/授权需要浏览器时，聚合命令先返回精确操作链接；由独立的
-`visa browser-open --url <url>` 尝试打开系统浏览器。自动打开后用
-`--browser-opened` 续接，用户手动完成后用 `--manual-completed` 续接，后者先查状态且不重新打开。
+生产 Skill 提供五个独立命令：推荐商品、登录、确定支付卡、选择/授权 Instruction、Checkout。
+各命令对应独立 CLI 文件，Agent 负责流程编排，并非强制五步流水线。
+先登录再推荐有效；仅登录不需要商品、购买上下文或购买授权，报告登录结果即结束。
+仅登录和 Instruction 激活可用 `visa browser-open` 打开返回的精确链接。
+整个支付卡步骤只展示链接，包括绑卡、卡管理和 VIC；用户回来后原命令查状态。
 购买结果及订单查询直接展示 CLI 返回的
 `orderUrl` 为“查看订单”链接，不能拿 OMS/UCP 订单号自行拼 Portal URL。
 
@@ -15,16 +17,18 @@ bin/visa-cli
 vendor/visa-cli/visa-cli.bundle.mjs
 ```
 
-Visa Edition 同时包含全部 Base Commands，并保留 Visa 权益查询与快速聚合购买：
+Visa Edition 保留 Base Commands 与 Visa 权益查询，Skill 购买契约为：
 
 ```text
-visa recommend
-visa detail
-visa taxonomy
-visa product-search
-visa commerce-login
-visa commerce-run
+visa recommend-products
+visa login --environment production [--resume <id>]
+visa payment-method resolve --environment production
+visa instruction candidates|create|get|wait <purchase-args> <PI/source>
+visa checkout <purchase-args> <PI/source> --purchase-instruction-id <id> --mandate-id <id> --confirm-purchase
 ```
+
+`visa commerce-login`、`visa commerce-run` 命令/导出仅作兼容，不再是新购买
+主路径，也不用于缺少新命令时回退。
 
 轻量购物路由覆盖：
 
@@ -34,12 +38,11 @@ visa commerce-run
   命中商户后，才使用不改写的原始 query 搜索该商户；Offer 标题只作为展示信息
 - 不传 `--include-broad-catalog`，不生成 broad query，也不做 Catalog fallback
 - Agent 为 `recommend-products` 选择筛选条件时不推断、不传 `--type`
-- 每个筛选方案必须包含 region 和至少一个 category；多个 category 按 OR，
-  其他 taxonomy 轴仅在用户明确提及时填写
+- 每个筛选方案必须包含 region；明确品类/商户/品牌/商品时必须有 category，
+  泛地区请求省略 category；其他 taxonomy 轴仅在用户明确提及时填写
 - 单次只买一种商品、数量 1；CLI 生成可复用购买快照及所需授权参数
 - 已展示订单事实不变时，“买这个”“帮我下单”“确认购买”均有效，不要求复述完整订单
-- 唯一 `visa recommend --region hk|cn` 会自动选择并保存对应来源；
-  只有跨来源查询才额外使用 `--market`
+- HK/CN 来源仅由用户显式切换，目的地 `--region` 不修改已保存来源
 - 最终统一返回可下单商品和未匹配 Visa 权益；已匹配成商品的权益不重复展示
 - Agent 展示前做轻度相关性检查，过滤明显无关商品和权益，同时保留合理别名与翻译
 - 展示顺序固定为可下单商品优先、相关权益其次；空集合不单独说明，只有两边
@@ -48,10 +51,10 @@ visa commerce-run
 - 只有精确 `internal-ucp-catalog` 命中才提示是否下单；未命中时只展示
   Visa 活动介绍与权威活动链接，不追加购买引导
 - 命中的 Program 下单直接使用未变化的 `recommend-products` 快照进入
-  `commerce-login`、`commerce-run`，不执行 `visa detail`
+  五步购买流程，不执行 `visa detail`
 - 直接购物也只使用 Visa Offer 与命中商户搜索，不进入广域 Catalog
-- 绑卡交给 Portal，CLI 不打开 Bind Card；绑卡/VIC/Passkey 等待上限 10 分钟，
-  超时统一走 `visa pending-instructions` 恢复出口，未知/进行中的授权不能重复自动打开
+- 绑卡与 VIC 交给 Portal；整个 Step3 只展示链接，用户回来后重复同一 resolve
+  命令，只读核验后才继续
 
 首轮不使用 `--include-provider-products`、`--include-broad-catalog` 或
 `--broad-queries`，也不调用 standalone Catalog 或 Agent-managed merchant-list。
@@ -65,49 +68,68 @@ visa commerce-run
 可以生成用户可见权益。未匹配权益后续只允许用 `visa detail` 查看详情，不重复 product-search。
 只有在返回的 Program code 与商户 merchant-list
 `ext.visa_program_id` 完全相同时才建立路由；Offer URL 不再选择商户。
-登录和购买复用选中商品的 `purchaseContext`，Agent 不再推断 MCC、复制 Program
+所有 Step4/5 命令复用选中商品 `purchaseContext` 的扁平参数，登录不带购买上下文。
+Agent 不推断 MCC、复制 Program
 字段或拼装 Instruction。现有数据不足时报告 `purchaseContextUnavailable`。
 
-Visa Program 购买保持 CLI 聚合。Skill 不包含
-运行时工作流 JavaScript、长 Action Matrix 或大量操作 reference。钱包、
+CLI 负责权威读取、技术资格过滤和执行，Agent 负责流程编排与购买语义校验。
+`purchase-context-validation.ts` 只检查币种、金额、MCC，不校验或比对
+title/description 的内容。Agent 判断意图、限制品类与商品语义，包括
+eligibleMandates 匹配；CLI 参数解析、PI/VIC、ACTIVE、有效期/使用态/recurring、
+商品 ID/价格/可售性等独立检查保持不变。
+Skill 不包含运行时工作流 JavaScript。钱包、
 卡片、风控、Direct/Session Pay、支付宝二维码、UCP、Instruction、退款、
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.99` 已刷新 vendor，来源提交
-`3036aee7bab068043c7902fbb29f073862fad4c6` 的 Visa CLI `0.2.76`。本
+Skill `0.1.102` 内含来源提交
+`039756449fd3bc3011352e59f651cdbd7b19415a` 的 Visa CLI `0.2.77`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
-新购买上下文仍不发送 `program.code`。本次同步了生产 CLI bundle；
-以下契约不等于后端已经部署。
+新购买上下文仍不发送 `program.code`。官方 Visa bundle 已同步五个独立命令；
+CLI 回归 1472/1472、Skill 回归 65/65 通过，包含生产启动器及独立命令测试。仅为本地回归，
+不代表后端部署或真实支付验收。
 
-本分支已通过 `clink-cli` 官方同步流程刷新 vendor。若其他发行版未实现上述
-购买快照合同，应报告限制，不猜测缺失字段，也不拆成原子命令执行购买。
+若发行版缺少新命令，应报告限制，不猜测字段、不回退旧聚合、不拆成原子支付。
 
-## Quick Instruction 原则
+## 五步规则
 
-- 每次购买冻结一个购买上下文和一个 selected PI。默认使用 default PI；
-  只有用户明确选择 alternate PI 时才使用其他卡。
-- 只查询 selected PI 的 Instruction；仅完整匹配、可用且未消费的 ACTIVE
-  可以复用。PENDING/CREATED 不作为其他购买的复用对象。
-- 没有 ACTIVE 匹配时，selected PI 已完成 VIC 就创建普通绑定 Instruction；
-  否则创建 PENDING，并用原 ID 完成 VIC、Passkey 和激活。
-- 没有 default PI 时不猜卡，返回卡管理入口并在用户操作后重新读取。
-- default PI 变化时停止并重新确认；显式 alternate PI 只要仍归属用户且可用，
-  就继续使用，不会被新 default 静默替换。
-- 绑卡、VIC、Passkey、PENDING 激活共用最多 10 分钟的等待边界，超时不创建
-  替代 Instruction，也不重试支付。
-- 必须 exact-GET 验证 Instruction 为 ACTIVE 后才能 Checkout，Checkout 最多创建
-  和完成各一次。
+编号仅表示购物示例，不是调用先后凭证。卡就绪查询不要求已有商品；原 ID 的
+get/wait 和具备完整上下文及当前资格的 checkout 均可直接调用，不重跑前序命令。
+ready 或 nextAction 不能把“仅登录/仅查卡”的请求扩展成购买。
 
-绑卡并完成 VIC 但用户没有选择 Instruction 时，后端可顺带激活按
-`createTime` 倒序筛选的最新 PENDING；Agent 只校验后端返回的 exact ID 和
-ACTIVE 状态。用户主动选择 Pending 时，必须保留该 ID，走
-`bind-pi -> 普通激活`，不能改成最新 Pending 自动选择。
+1. `visa recommend-products` 不变：保留商品和权益，冻结商户、productId、
+   权威价格/币种及数量 1。
+2. `visa login --environment production [--resume <id>]` 只登录，不带
+   instructionContext，不生成 Quick/PENDING、不碰卡。返回 ready 或
+   manualOpenUrl，允许精确链接 browser-open；不能调用 wallet init。
+3. `visa payment-method resolve --environment production` 默认取已保存默认卡，
+   不问用哪张。用户主动指定非默认卡 exact ID 时传
+   `--payment-instrument-id <id> --selection-source explicit`，也必须完成 VIC。
+   无卡返回 Portal 根页 bindCardUrl；默认选择模式下无默认卡返回 manageCardUrl；支持但未就绪
+   返回 vicUrl；支持为 false/unknown 或读取失败则停止/手动卡管理。
+   整个 Step3 禁止 browser-open、`--open` 或其他自动打开，只展示 URL；
+   用户回来后同一命令复查。ready 后同时冻结 paymentInstrumentId 和
+   selectionSource default|explicit 并传给 Step4/5。默认卡改变必须重新确认；
+   显式非默认选择不会被新默认卡替换，也不要求存在默认卡或设为默认。
+4. candidates 只读过滤 ACTIVE、PI、币种、额度 >= 购买金额、MCC、有效期、
+   使用/占用与 recurring，返回全部 eligible Instructions 及 eligibleMandates
+   的 mandateId/title/description/金额/币种/MCC 和 PI。Agent 按同商户、SKU、
+   面值、地区、数量语义匹配，接受等价翻译，不以标题字符串相等为条件；
+   证据模糊就停止澄清，不能猜。命中冻结两个 ID 去 Step5；确定无匹配才用
+   `--confirm-purchase` 创建普通 PI-bound CREATED，绝不创建 PENDING 或 bind-pi。
+   先告知使用系统浏览器、避开实际宿主内置浏览器，再 browser-open 精确
+   manualOpenUrl。保留 instructionId 和 epoch 毫秒 authorizationDeadline；
+   get 立即检查，wait 带 `--instruction-id`、`--authorization-deadline <ms>`，
+   最多 600 秒（10 分钟），不重置截止时间、不重新创建或打开。
+5. checkout 使用同一扁平购买参数、PI/source、Instruction/Mandate 两个 ID 及确认；
+   必须 PI ready、exact-GET ACTIVE Instruction 与 eligible Mandate，并复核商品
+   ID、金额、币种和可售性。不隐式登录、选卡、匹配/创建 Instruction 或打开浏览器。
+   `--phase checkout_started` 拒绝重跑，只允许返回的只读恢复。
 
-`pending-instruction create` 是显式测试/原子命令，每次只创建新的
-PENDING Instruction，不匹配或复用已有 Instruction。创建结果未知时先用
-`activatable` 做只读确认，最多重试一次。
+Instruction/Mandate ID 是客户端 gate；当前 UCP complete wire 仅传 PI，后端
+resolver 不变，不能宣称后端转发或精确消费了选中的两个 ID。PENDING/CREATED
+不复用为另一笔购买的授权，未知结果或超时不允许替代 Instruction 或支付重试。
 
 卡是否支持 VIC 使用 `GET /agent/cwallet/card/info` 的
 `cardSchemeRegistrationEnabled`，是否完成 VIC 使用
@@ -120,7 +142,7 @@ Checkout。
 - Node.js 20 或更高版本
 - 始终按路径调用内置 launcher，不使用全局 CLI
 - OAuth、绑卡、Passkey、3DS、Instruction 和风控页面由用户在系统浏览器完成
-- 用户下单后自动完成登录与购买衔接，不插入新的聊天确认；用户只在浏览器中完成授权
+- ready 阶段不重复询问购买确认；Step3 用户操作、事实变化、歧义、超时或未知结果时停止
 
 ## 验证
 
@@ -129,7 +151,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.99`
+Skill 版本：`0.1.102`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

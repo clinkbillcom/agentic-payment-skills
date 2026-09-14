@@ -34,14 +34,17 @@ async function walk(directory) {
   return files;
 }
 
-test('runtime artifacts keep only current Quick principles', () => {
+test('runtime artifacts keep current five-step principles without a Quick creation path', () => {
   for (const path of paths.filter((path) => !['agents/openai.yaml', 'README.md', 'README.zh.md'].includes(path))) {
     const text = artifacts[path];
     assert.match(text, /ACTIVE/u, path);
     assert.match(text, /PENDING/u, path);
     assert.match(text, /paymentInstrumentId|selected PI|selectedPI/u, path);
-    assert.match(text, /selected PI|selectedPI/u, path);
+    assert.match(text, /paymentInstrumentId[\s\S]*selectionSource/u, path);
     assert.match(text, /10 minutes|10 分钟/u, path);
+    assert.match(text, /creates no Quick or PENDING Instruction/u, path);
+    assert.match(text, /visa instruction candidates/u, path);
+    assert.match(text, /visa checkout/u, path);
   }
   assert.match(combined, /Never reuse PENDING or CREATED|PENDING and CREATED[\s\S]*never reused/u);
   assert.match(combined, /usable[\s\S]*ACTIVE[\s\S]*match|ACTIVE[\s\S]*match/u);
@@ -52,11 +55,12 @@ test('runtime artifacts describe the selected PI and browser recovery contract',
   assert.match(combined, /default PI/u);
   assert.match(combined, /alternate PI/u);
   assert.match(combined, /browser-open --url/u);
-  assert.match(combined, /browser-opened/u);
-  assert.match(combined, /manual-completed/u);
+  assert.match(combined, /selectionSource/u);
+  assert.match(combined, /authorizationDeadline/u);
+  assert.match(combined, /--authorization-deadline <ms>/u);
   assert.match(combined, /system browser|系统浏览器/u);
   assert.match(combined, /built-in browser|内置浏览器/u);
-  assert.match(combined, /checkoutStarted=false|before Checkout/u);
+  assert.match(combined, /--phase checkout_started/u);
 });
 
 test('runtime artifacts do not load historical or filter reference files', async () => {
@@ -68,8 +72,12 @@ test('runtime artifacts do not load historical or filter reference files', async
     referenceFiles.map((path) => path.split('/').pop()).sort(),
     [
       'visa-browser-open.md',
+      'visa-checkout.md',
       'visa-commerce-login.md',
       'visa-commerce-run.md',
+      'visa-instruction.md',
+      'visa-login.md',
+      'visa-payment-method.md',
       'visa-pending-instructions.md',
       'visa-product-search.md',
       'visa-recommend-products.md',

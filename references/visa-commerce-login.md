@@ -1,61 +1,19 @@
-# `visa commerce-login` Failure Reference
+# `visa commerce-login` Compatibility Reference
 
-Read this file only after `visa commerce-login` returns an error or an
-incomplete state. Normal execution must not load command references.
+Read this file only after an existing `visa commerce-login` caller returns an
+error or incomplete state. This command/export remains compatibility-only.
+New Skill purchases use `visa login`, never this legacy aggregate.
 
-## Aggregate Stages
+Use returned stage, status, reason, error, exact login/Instruction IDs, and
+read-only recovery to diagnose the existing operation. `quick_instruction_get`
+identifies an existing Quick read failure, not permission to create one.
+Do not copy a legacy login-created Instruction into a new five-step purchase.
 
-```text
-validate the unchanged frozen context
-  -> inspect Benefit login status
-  -> initialize or resume Visa OAuth through visa init when needed
-  -> persist the exact login continuation
-  -> exact-GET any returned Quick Instruction
-  -> return login readiness and the original continuation
-```
+For an unresolved legacy login, preserve its returned continuation. Only an
+exact returned login URL may use browser-open after a system-browser notice.
+Do not open card/VIC URLs or infer that a browser launch proves readiness.
+After manual completion, check authoritative state without reopening.
 
-`commerce-login` does not create a normal Instruction, open Bind Card, create
-Checkout, or pay. A Quick Instruction may be created by the backend as part of
-the Benefit login flow; the returned ID must remain tied to this purchase.
-
-Visa Skill authentication uses `visa init`, not `wallet init`. Continuation
-fields are supplied by the Agent and are not restored from CLI files.
-
-## Stage Mapping
-
-| Returned `stage`/signal | Meaning | Safe atomic command |
-| --- | --- | --- |
-| `validation` or context error | Frozen context is incomplete, inconsistent, or unsafe | Fix the context in memory; do not call a live command |
-| `login` with `authentication_required` | Benefit login is not ready | `visa status` is a read-only Benefit status check |
-| `login` with `user_action_required` | OAuth/browser operation is pending | `visa browser-open --url <manualOpenUrl>` or complete manually, then rerun with the same continuation flag |
-| `quick_instruction_get` | Returned Quick Instruction could not be read | `instruction get --purchase-instruction-id <instructionId>` |
-| `read_only_recovery_required` | Existing continuation or instruction is uncertain | Run the exact returned read-only command; do not initialize another login |
-
-The primary error envelope has `stage`, `status`, `reason`/`detail`, and
-`browserLaunch`/`manualOpenUrl` when applicable. Use those fields to name the
-failed stage in the user-facing explanation.
-
-## Browser Recovery
-
-The aggregate returns the exact URL before a separate opener is used:
-
-```text
-visa browser-open --url "<manualOpenUrl>" --format json
-```
-
-If it reports `launched`, rerun the original `commerce-login` with
-`--browser-opened`. If the user completed the page manually, rerun with
-`--manual-completed`; that path checks status first and does not reopen the
-page. If the host Agent name is unknown, say:
-
-```text
-请在系统浏览器中完成操作，不要使用 Agent 内置浏览器。
-```
-
-Never output `{agent}` literally.
-
-## Do Not Do
-
-Do not call `instruction create` to repair a login error, create a second Quick
-Instruction, or continue to `commerce-run` unless login is authoritatively
-ready. A browser launch is not proof of login success.
+Never call wallet init, create a replacement Instruction, or start another
+purchase to repair an unknown result. If the existing continuation is missing,
+stop with read-only diagnosis rather than inventing it.
