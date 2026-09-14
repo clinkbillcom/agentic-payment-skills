@@ -34,6 +34,7 @@ Classify every URL with `classifyPageHandoff` from `lib/page-handoff.mjs` before
 | --- | --- | --- | --- |
 | OAuth device verification (`wallet init` live stderr) | `OAUTH_DEVICE_VERIFICATION` | `USER_DEVICE_ONLY`, single load | none; the original init process polls the OAuth device-token endpoint and resolves |
 | First card binding (`card binding-link`) | `CARD_BINDING` | `USER_DEVICE_ONLY` | `payment_method.added` |
+| PENDING Instruction card/VIC completion (`instruction prepare` `bindingUrl`) | `INSTRUCTION_PREPARE_CARD_BINDING` | `USER_DEVICE_ONLY`, single load | exact `purchase_instruction.activated` watch in the same foreground process |
 | Add a payment method (`card setup-link`) | `CARD_SETUP` | `USER_DEVICE_ONLY` | `payment_method.added` / `payment_method.update` |
 | Manage payment methods (`card modify-link`) | `CARD_MODIFY` | `USER_DEVICE_ONLY` | `payment_method.update` / `payment_method.default_change` |
 | Visa Passkey registration (`https://agent.clinkbill.com/passkey-auth/{paymentInstrumentId}?type=visa`) | `VIC_PASSKEY_REGISTRATION` | `USER_DEVICE_ONLY` | `vic_device.binding_succeeded` / same-card `payment_method.update` with `visaRegistrationSucceeded=true` (`payment_method.updated` is a compatibility alias) |
@@ -55,11 +56,13 @@ Never satisfy a Passkey page with a CDP virtual authenticator, and never fabrica
 
 ## CLI-Side Suppression
 
-Pass `--open` on every `wallet init` invocation. Pass `--no-open` on every other link-producing command:
+Pass `--open` on every `wallet init` invocation. Pass `--no-open` on these link-producing commands:
 
 `card binding-link`, `card setup-link`, `card modify-link`, `risk link`, `instruction create`, `instruction sign-url`, `instruction update`, `instruction cancel`.
 
 `--no-open` is a global flag and overrides both `--open` and the stored `default-open-links`. It suppresses browser launch only; it does not touch the built-in event watch, which `--no-watch` controls separately and which must stay on.
+
+`instruction prepare` is separate: it never auto-opens and rejects `--open` and `--no-watch`. Run it without either open flag and keep it in the foreground.
 
 Do not rely on the stored default being `false`. It lives in the machine-wide config every build shares (`~/.clink-cli/config.json`, see `references/clink-cli-invocation.md`), so one earlier `config set default-open-links true` — from this skill's host or any other build — silently re-arms host-side auto-open for all of those commands. Check it once per workflow:
 
@@ -84,9 +87,9 @@ The skill cannot know whether the host renders clickable links, runs in a termin
 
 Offering to continue on a phone is often right rather than a fallback: Passkey approval and 3DS codes usually live there. A QR rendering of the same URL is a legitimate transfer channel when the host can display one.
 
-The trusted card-setup `bindingUrl` returned by `wallet init` is not yet a handoff payload because init obtained it through a refresh whose Event Hub watch is disabled. Only when that refresh also reports `paymentMethodsCached=true` and `paymentMethodCount=0` should you launch `card binding-link --no-open --format json` without `--no-watch`. After the new command's first envelope reports an official Agent Portal HTTPS URL with the exact `/payment-method-setup` path, no fragment, and no query except one optional non-empty `email` parameter, plus `data.watchReady=true` and `data.watchEventType=payment_method.added`, proving the first scoped Event Hub poll succeeded while the same process remains alive, you **must hand that watched URL to the user**. Do not omit the link or return only OAuth success. A positive count already has a card, and a refresh error is not evidence that binding is required.
+The card-setup `bindingUrl` returned by `wallet init` is never a handoff payload. Wallet initialization ends at authenticated readiness and must not start card binding. For an authorized purchase with no card or a Visa that is not VIC-ready, `instruction prepare ... --format json` owns the handoff and does not support `--open`. Classify its URL with the distinct `INSTRUCTION_PREPARE_CARD_BINDING` kind. Emit it only when the first structured envelope has non-empty `instructionId`, `status=PENDING`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`. The old `CARD_BINDING` kind remains bound to `payment_method.added` and must not be used here. Keep the prepare process in the foreground after the link is sent. The user may open the link or finish card/VIC setup in an already-open Portal; never auto-open or inspect either page. The handoff completes only when the same process returns a final envelope with the same ID, `status=ready`, `instructionStatus=ACTIVE`, and non-empty `instruction.paymentInstrumentId`.
 
-`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages. For OAuth, `DEFER_OAUTH_TO_WALLET_WORKFLOW` keeps the URL hidden unless the browser launch reports failure; then emit it once through `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. Emit the other single-load URLs exactly once and never re-send any of them as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
+`OAUTH_DEVICE_VERIFICATION`, `CARD_BINDING`, `INSTRUCTION_PREPARE_CARD_BINDING`, `CARD_SETUP`, `CARD_MODIFY`, and `THREE_DS_CHALLENGE` are single-load pages. For OAuth, `DEFER_OAUTH_TO_WALLET_WORKFLOW` keeps the URL hidden unless the browser launch reports failure; then emit it once through `SHOW_OAUTH_VERIFICATION_URL_AND_WAIT`. Emit the other single-load URLs exactly once and never re-send any of them as a nudge. A second load can invalidate a one-time token or re-trigger code sending.
 
 ## Unattended Runs
 

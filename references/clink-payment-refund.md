@@ -81,10 +81,13 @@ Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs`
 
 Resolver branches:
 
-- `AUTHORIZATION_BYPASSED`: the selected/default card is non-Visa, or it is Visa but VIC is not enabled. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`.
+- `AUTHORIZATION_BYPASSED`: the selected/default card is non-Visa. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`.
+- `AUTHORIZATION_PREPARE_REQUIRED`: on an attended run, the refreshed list is empty, or the selected Visa is not VIC-ready. Run the restricted-category gate, then one foreground `clink instruction prepare ... --max-wait 900 --format json`; do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. An unattended run returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP` instead.
 - `AUTHORIZATION_LIST_REQUIRED`: the selected/default card is Visa + VIC ready. List ACTIVE instructions before pay.
 - `AUTHORIZATION_MATCHED`: pass the matched `instruction_id` and `mandate_id` to `clink pay`.
 - `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Run the restricted-category gate described below; only a clean result may start the instruction creation workflow. Stop the current pay attempt until activation.
+
+For `AUTHORIZATION_PREPARE_REQUIRED`, pass the structured PENDING envelope to `classifyAuthorizationPrepareObservation`. Return `bindingUrl` only with non-empty `instructionId`, `status=PENDING`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`, then keep the same CLI process in the foreground. Resume only when the final envelope preserves that ID and reports `status=ready`, `instructionStatus=ACTIVE`, and non-empty `instruction.paymentInstrumentId`. Timeout/pending may execute only the returned same-ID read-only `resumeCommand`; external process death permits only exact-ID read-only verification. Never run prepare, Checkout, or payment again.
 
 For the Visa + VIC ready branch, run:
 

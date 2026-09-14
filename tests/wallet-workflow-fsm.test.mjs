@@ -332,7 +332,7 @@ test('wallet init classifier rejects a truncated OAuth URL instead of surfacing 
   assert.equal(result.authorizationUrl, undefined);
 });
 
-test('wallet init classifier starts a watched binding command before exposing the next URL', () => {
+test('wallet init returns ready without starting or exposing a card-binding continuation', () => {
   const result = classifyWalletInitObservation({
     exitCode: 0,
     stdout: {
@@ -352,20 +352,14 @@ test('wallet init classifier starts a watched binding command before exposing th
   });
 
   assert.equal(result.state, WalletWorkflowState.WALLET_INITIALIZED);
-  assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
-  assert.equal(result.terminal, false);
-  assert.equal(result.reason, 'wallet_init_succeeded_card_binding_watch_required');
+  assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+  assert.equal(result.terminal, true);
+  assert.equal(result.reason, 'wallet_init_succeeded');
   assert.equal(result.walletReady, true);
-  assert.equal(result.bindingUrlRequired, true);
-  assert.equal(result.emitUrl, false);
-  assert.equal(result.command, 'clink card binding-link --no-open --format json');
-  assert.deepEqual(result.handoffRequirements, {
-    watchReady: true,
-    watchEventType: 'payment_method.added',
-    processRunning: true,
-    bindingUrl: 'required',
-  });
-  assert.doesNotMatch(result.command, /--no-watch/u);
+  assert.equal(result.cardReadiness, 'missing');
+  assert.equal(result.bindingUrlRequired, undefined);
+  assert.equal(result.emitUrl, undefined);
+  assert.equal(result.command, undefined);
   assert.equal(result.data.bindingUrl, 'https://agent.clinkbill.com');
 });
 
@@ -397,7 +391,7 @@ test('wallet init classifier returns wallet ready when a payment method already 
   assert.equal(result.emitUrl, undefined);
 });
 
-test('wallet init classifier surfaces a pending quick instruction id with the binding watch', () => {
+test('wallet init classifier preserves a pending instruction id without starting card binding', () => {
   const result = classifyWalletInitObservation({
     exitCode: 0,
     stdout: {
@@ -416,8 +410,10 @@ test('wallet init classifier surfaces a pending quick instruction id with the bi
     },
   });
 
-  assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
+  assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+  assert.equal(result.cardReadiness, 'missing');
   assert.equal(result.pendingInstructionId, 'ins_quick_1');
+  assert.equal(result.command, undefined);
 });
 
 test('wallet init classifier reports a null pending instruction id when the backend skipped creation', () => {
@@ -438,7 +434,8 @@ test('wallet init classifier reports a null pending instruction id when the back
       stdout: { ok: true, data },
     });
 
-    assert.equal(result.action, WalletWorkflowAction.START_WATCHED_CARD_BINDING);
+    assert.equal(result.action, WalletWorkflowAction.RETURN_WALLET_READY);
+    assert.equal(result.cardReadiness, 'missing');
     assert.equal(result.pendingInstructionId, null);
   }
 });

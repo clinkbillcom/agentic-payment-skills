@@ -8,6 +8,7 @@ import {
   ScheduledAuthorizationMode,
   classifyAuthorizationActiveVerification,
   classifyAuthorizationDraftObservation,
+  classifyAuthorizationPrepareObservation,
   classifyPaymentAuthorizationResolver,
   classifyQuickInstructionActivationGate,
   classifyScheduledAuthorizationReuse,
@@ -22,6 +23,17 @@ test('authorization resolver refreshes payment instruments before deciding', () 
   assert.equal(result.state, AuthorizationWorkflowState.PAYMENT_INSTRUMENT_REFRESH_REQUIRED);
   assert.equal(result.action, AuthorizationWorkflowAction.REFRESH_PAYMENT_INSTRUMENT_LIST);
   assert.equal(result.reason, 'payment_instrument_refresh_required');
+});
+
+test('authorization resolver starts the CLI pending-instruction continuation after an empty refresh', () => {
+  const result = classifyPaymentAuthorizationResolver({
+    paymentMethodsVoList: [],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_PREPARE_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.START_AUTHORIZATION_PREPARE_AND_WAIT);
+  assert.equal(result.reason, 'no_payment_instrument_pending_instruction_required');
+  assert.equal(result.paymentInstrumentId, undefined);
 });
 
 test('authorization resolver bypasses instruction matching for a non-Visa default card', () => {
@@ -41,7 +53,7 @@ test('authorization resolver bypasses instruction matching for a non-Visa defaul
   assert.equal(result.paymentInstrumentId, 'pi_mc');
 });
 
-test('authorization resolver bypasses instruction matching for Visa when VIC is not enabled', () => {
+test('authorization resolver starts the pending continuation for Visa when VIC is not ready', () => {
   const result = classifyPaymentAuthorizationResolver({
     paymentMethodsVoList: [
       {
@@ -53,9 +65,27 @@ test('authorization resolver bypasses instruction matching for Visa when VIC is 
     ],
   });
 
-  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
-  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'visa_vic_not_enabled_bypass_authorization');
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_PREPARE_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.START_AUTHORIZATION_PREPARE_AND_WAIT);
+  assert.equal(result.reason, 'visa_vic_not_ready_pending_instruction_required');
+  assert.equal(result.existingPaymentInstrumentId, 'pi_visa');
+});
+
+test('unattended Visa without VIC readiness surfaces a gap instead of preparing', () => {
+  const result = classifyPaymentAuthorizationResolver({
+    unattended: true,
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardBrand: 'VISA',
+      isDefault: true,
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.terminal, true);
+  assert.equal(result.reason, 'unattended_vic_readiness_missing');
   assert.equal(result.paymentInstrumentId, 'pi_visa');
 });
 
@@ -143,6 +173,289 @@ test('authorization draft observation sends the Passkey URL under the built-in w
     result.verifyCommand,
     'clink instruction get --purchase-instruction-id ins_123 --format json',
   );
+});
+
+test('pending instruction handoff exposes the bind-card URL only after the CLI watch is ready', () => {
+  const result = classifyAuthorizationPrepareObservation({
+    running: true,
+    stdout: JSON.stringify({
+      ok: true,
+      data: {
+        instructionId: 'ins_pending',
+        status: 'PENDING',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup?email=user%40example.com',
+        watchReady: true,
+        watchEventType: 'purchase_instruction.activated',
+        processRunning: true,
+        terminal: false,
+      },
+    }),
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ACTIVATION_WAIT_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI);
+  assert.equal(result.instructionId, 'ins_pending');
+  assert.equal(
+    result.bindingUrl,
+    'https://agent.clinkbill.com/payment-method-setup?email=user%40example.com',
+  );
+  assert.equal(result.processMustRemainRunning, true);
+  assert.equal(result.autoOpenAllowed, false);
+  assert.equal(result.pollCommand, undefined);
+  assert.equal(result.verifyCommand, undefined);
+});
+
+test('pending instruction handoff fails closed before the exact activation watch is ready', () => {
+  const valid = {
+    instructionId: 'ins_pending',
+    status: 'PENDING',
+    bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+    watchReady: true,
+    watchEventType: 'purchase_instruction.activated',
+    processRunning: true,
+    terminal: false,
+  };
+  const { processRunning: _processRunning, ...missingProcessRunning } = valid;
+  const { terminal: _terminal, ...missingTerminal } = valid;
+  for (const data of [
+    {
+      ...valid,
+      watchReady: false,
+    },
+    {
+      ...valid,
+      watchEventType: 'payment_method.added',
+    },
+    { ...valid, processRunning: false },
+    { ...valid, terminal: true },
+    missingProcessRunning,
+    missingTerminal,
+  ]) {
+    const result = classifyAuthorizationPrepareObservation({
+      running: true,
+      stdout: { ok: true, data },
+    });
+    assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+    assert.equal(result.reason, 'authorization_prepare_pending_envelope_invalid');
+    assert.equal(result.bindingUrl, undefined);
+  }
+});
+
+test('prepare process death before the final envelope returns only exact-id read-only verify', () => {
+  const result = classifyAuthorizationPrepareObservation({
+    running: false,
+    exitCode: 137,
+    stdout: {
+      ok: true,
+      data: {
+        instructionId: 'ins_died',
+        status: 'PENDING',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        watchReady: true,
+        watchEventType: 'purchase_instruction.activated',
+        processRunning: true,
+        terminal: false,
+      },
+    },
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_ACTIVATION_VERIFY_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_AFTER_WATCH_GAP);
+  assert.equal(result.reason, 'authorization_prepare_process_ended_before_final');
+  assert.equal(
+    result.resumeCommand,
+    'clink instruction get --purchase-instruction-id ins_died --format json',
+  );
+  assert.equal(result.resumeReadOnly, true);
+  assert.equal(result.mutationAllowed, false);
+  assert.equal(result.pollCommand, undefined);
+});
+
+test('pending instruction prepare uses instructionId without requiring a Quick pendingInstructionId', () => {
+  const result = classifyAuthorizationPrepareObservation({
+    running: true,
+    stdout: {
+      ok: true,
+      data: {
+        instructionId: 'ins_prepare',
+        status: 'PENDING',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        watchReady: true,
+        watchEventType: 'purchase_instruction.activated',
+        processRunning: true,
+        terminal: false,
+      },
+    },
+  });
+
+  assert.equal(result.action, AuthorizationWorkflowAction.HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI);
+  assert.equal(result.instructionId, 'ins_prepare');
+});
+
+test('pending instruction final envelope requires the same ACTIVE instruction and payment instrument', () => {
+  const initial = JSON.stringify({
+    ok: true,
+    data: {
+      instructionId: 'ins_pending',
+      status: 'PENDING',
+      bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+      watchReady: true,
+      watchEventType: 'purchase_instruction.activated',
+      processRunning: true,
+      terminal: false,
+    },
+  });
+  const active = JSON.stringify({
+    ok: true,
+    data: {
+      command: 'instruction prepare',
+      instructionId: 'ins_pending',
+      status: 'ready',
+      instructionStatus: 'ACTIVE',
+      instruction: {
+        instructionId: 'ins_pending',
+        paymentInstrumentId: 'pi_visa',
+        status: 'ACTIVE',
+      },
+    },
+  });
+
+  const result = classifyAuthorizationPrepareObservation({
+    stdout: `${initial}\n${active}`,
+    exitCode: 0,
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_READY);
+  assert.equal(result.action, AuthorizationWorkflowAction.RESUME_AUTHORIZED_PAYMENT);
+  assert.equal(result.instructionId, 'ins_pending');
+  assert.equal(result.paymentInstrumentId, 'pi_visa');
+  assert.equal(result.pendingInstructionContinuationCompleted, true);
+  assert.equal(result.authorization.paymentInstrumentId, 'pi_visa');
+
+  const missingInstrument = classifyAuthorizationPrepareObservation({
+    stdout: `${initial}\n${JSON.stringify({
+      ok: true,
+      data: {
+        command: 'instruction prepare',
+        instructionId: 'ins_pending',
+        status: 'ready',
+        instructionStatus: 'ACTIVE',
+        instruction: { instructionId: 'ins_pending', status: 'ACTIVE' },
+      },
+    })}`,
+    exitCode: 0,
+  });
+  assert.equal(missingInstrument.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+  assert.equal(missingInstrument.reason, 'authorization_payment_instrument_missing');
+});
+
+test('pending instruction timeout returns only exact read-only verification', () => {
+  const result = classifyAuthorizationPrepareObservation({
+    exitCode: 0,
+    stdout: [
+      JSON.stringify({
+        ok: true,
+        data: {
+          instructionId: 'ins_pending',
+          status: 'PENDING',
+          bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+          watchReady: true,
+          watchEventType: 'purchase_instruction.activated',
+          processRunning: true,
+          terminal: false,
+        },
+      }),
+      JSON.stringify({
+        ok: true,
+        data: {
+          command: 'instruction prepare',
+          instructionId: 'ins_pending',
+          status: 'timeout',
+          instructionStatus: 'PENDING',
+          instruction: {
+            instructionId: 'ins_pending',
+            status: 'PENDING',
+          },
+          resumeCommand:
+            'CLINK_BASE_URL=https://api.clinkbill.com '
+            + 'clink instruction get --purchase-instruction-id ins_pending --format json',
+          resumeReadOnly: true,
+          createsAnotherInstruction: false,
+          paymentRetryAllowed: false,
+        },
+      }),
+    ].join('\n'),
+  });
+
+  assert.equal(result.action, AuthorizationWorkflowAction.VERIFY_AUTHORIZATION_AFTER_WATCH_GAP);
+  assert.equal(result.reason, 'authorization_prepare_timed_out');
+  assert.equal(
+    result.resumeCommand,
+    'CLINK_BASE_URL=https://api.clinkbill.com '
+      + 'clink instruction get --purchase-instruction-id ins_pending --format json',
+  );
+  assert.equal(result.pollCommand, undefined);
+  assert.equal(result.mutationAllowed, false);
+});
+
+test('pending instruction rejects a mutation or different-id resume', () => {
+  const initial = JSON.stringify({
+    ok: true,
+    data: {
+      instructionId: 'ins_pending',
+      status: 'PENDING',
+      bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+      watchReady: true,
+      watchEventType: 'purchase_instruction.activated',
+      processRunning: true,
+      terminal: false,
+    },
+  });
+
+  for (const resumeCommand of [
+    'clink instruction prepare --title Again --format json',
+    'clink instruction get --purchase-instruction-id ins_other --format json',
+    'clink instruction get --purchase-instruction-id ins_pending --format json; clink pay',
+  ]) {
+    const result = classifyAuthorizationPrepareObservation({
+      exitCode: 0,
+      stdout: `${initial}\n${JSON.stringify({
+        ok: true,
+        data: {
+          command: 'instruction prepare',
+          instructionId: 'ins_pending',
+          status: 'timeout',
+          instructionStatus: 'PENDING',
+          instruction: { instructionId: 'ins_pending', status: 'PENDING' },
+          resumeCommand,
+          resumeReadOnly: true,
+          createsAnotherInstruction: false,
+          paymentRetryAllowed: false,
+        },
+      })}`,
+    });
+
+    assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_AUTHORIZATION_ERROR);
+    assert.equal(result.reason, 'authorization_prepare_resume_invalid');
+  }
+});
+
+test('instruction prepare card-ready result refreshes instead of creating another instruction', () => {
+  const result = classifyAuthorizationPrepareObservation({
+    exitCode: 0,
+    stdout: {
+      ok: true,
+      data: {
+        command: 'instruction prepare',
+        status: 'card_ready',
+        instructionId: null,
+      },
+    },
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.PAYMENT_INSTRUMENT_REFRESH_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.REFRESH_PAYMENT_INSTRUMENT_LIST);
+  assert.equal(result.reason, 'authorization_prepare_card_ready');
 });
 
 test('authorization draft observation verifies once the built-in watch delivers the activation', () => {
@@ -597,7 +910,7 @@ test('quick instruction gate waits for same-card VIC readiness before checking t
   assert.equal(result.waitSpec.verifyCommand, result.refreshCommand);
 });
 
-test('quick instruction gate performs only one bounded VIC wait after any poll outcome', () => {
+test('quick instruction gate moves a non-ready Visa into the pending continuation after one wait', () => {
   const initial = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
     paymentInstrumentId: 'pi_visa',
@@ -623,9 +936,9 @@ test('quick instruction gate performs only one bounded VIC wait after any poll o
     }],
   });
 
-  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_BYPASSED);
-  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
-  assert.equal(result.reason, 'visa_vic_not_enabled_bypass_authorization');
+  assert.equal(result.state, AuthorizationWorkflowState.AUTHORIZATION_PREPARE_REQUIRED);
+  assert.equal(result.action, AuthorizationWorkflowAction.START_AUTHORIZATION_PREPARE_AND_WAIT);
+  assert.equal(result.reason, 'visa_vic_not_ready_pending_instruction_required');
   assert.equal(
     result.quickInstructionFallbackReason,
     'vic_readiness_not_observed_after_bounded_wait',
@@ -633,7 +946,7 @@ test('quick instruction gate performs only one bounded VIC wait after any poll o
   assert.equal(result.pollCommand, undefined);
 });
 
-test('quick instruction gate keeps the original VIC timeout marker as a compatibility alias', () => {
+test('quick instruction gate keeps the original VIC timeout marker while moving to pending continuation', () => {
   const result = classifyQuickInstructionActivationGate({
     pendingInstructionId: 'ins_quick_1',
     paymentInstrumentId: 'pi_visa',
@@ -645,8 +958,27 @@ test('quick instruction gate keeps the original VIC timeout marker as a compatib
     }],
   });
 
-  assert.equal(result.action, AuthorizationWorkflowAction.RUN_PAY_WITHOUT_AUTHORIZATION);
+  assert.equal(result.action, AuthorizationWorkflowAction.START_AUTHORIZATION_PREPARE_AND_WAIT);
   assert.equal(result.quickInstructionFallbackReason, 'vic_readiness_not_observed_after_bounded_wait');
+});
+
+test('unattended Quick Visa without VIC readiness never waits or prepares', () => {
+  const result = classifyQuickInstructionActivationGate({
+    unattended: true,
+    pendingInstructionId: 'ins_quick_unattended',
+    paymentInstrumentId: 'pi_visa',
+    paymentMethodsVoList: [{
+      paymentInstrumentId: 'pi_visa',
+      cardScheme: 'Visa',
+      visaRegistrationSucceeded: false,
+    }],
+  });
+
+  assert.equal(result.state, AuthorizationWorkflowState.UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.action, AuthorizationWorkflowAction.SURFACE_UNATTENDED_AUTHORIZATION_GAP);
+  assert.equal(result.reason, 'unattended_vic_readiness_missing');
+  assert.equal(result.quickInstructionFallbackReason, 'vic_readiness_unavailable_unattended');
+  assert.equal(result.pollCommand, undefined);
 });
 
 test('quick instruction gate verifies the exact instruction and VIC-ready card', () => {

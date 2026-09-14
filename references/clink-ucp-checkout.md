@@ -145,7 +145,7 @@ Amount hard match means the checkout line-item total must equal the intended pro
 Before payment refresh or instruction list, classify the frozen product/order:
 
 - `PHYSICAL_GOODS_REQUIRES_SHIPPING`: shipped physical goods. Collect a standard complete shipping address before instruction list, instruction creation, or aggregate checkout. Do not restrict the address to the US.
-- `NO_SHIPPING_REQUIRED`: services, subscriptions, hotels, tickets, bookings, reservations, and digital goods. Do not ask the user for an address; use the fixed Apple Park default address when `instruction create` needs a shipping-address payload.
+- `NO_SHIPPING_REQUIRED`: services, subscriptions, hotels, tickets, bookings, reservations, and digital goods. Do not ask the user for an address; use the fixed Apple Park default address when `instruction prepare` or `instruction create` needs a shipping-address payload.
 - `UNKNOWN`: stop and ask the caller or user whether the order ships a physical item. Do not run instruction list or checkout while fulfillment is unknown.
 
 For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address for instruction creation. It is a payment-context placeholder, not a delivery address:
@@ -176,7 +176,7 @@ For `NO_SHIPPING_REQUIRED`, use this fixed Apple Park default address for instru
 
 For physical goods, collect one standard complete shipping address but serialize it differently for each downstream command:
 
-- CWallet instruction creation (`clink instruction create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country.
+- CWallet Instruction preparation/creation (`clink instruction prepare|create --shipping-address`) uses the instruction shipping shape. Required fields: `name`, `line1`, `city`, `state`, `zip`, and `countryCode`; `state` holds the region/province/administrative area, `zip` holds the postal code, and `countryCode` must be ISO 3166-1 alpha-2 for the destination country.
 - Aggregate UCP checkout (`clink ucp-checkout run --shipping-address`) uses UCP Postal Address shape. Required fields: `street_address`, `address_locality`, `address_region`, `address_country`, and `postal_code`; `address_country` must be ISO 3166-1 alpha-2 for the destination country. Include `first_name`, `last_name`, and `phone_number` when available because the automation worker fills the external checkout page from this object.
 
 ```json
@@ -212,13 +212,14 @@ Use the `clink` prefix defined for this workflow (see `references/clink-cli-invo
 clink card binding-link --no-watch --no-open --format json
 ```
 
-Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Freeze this exact `paymentInstrumentId` into the aggregate command. If no method exists, send the binding or setup URL from the card reference and wait for the matching event. Do not run checkout with a guessed card.
+Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Freeze this exact `paymentInstrumentId` into the aggregate command only after it is ready. If no method exists, mark `paymentInstrumentRefreshAttempted=true` and enter the foreground PENDING Instruction continuation in Step 2. Do not start `card binding-link` with a watch, emit its URL, or run checkout with a guessed card.
 
 ## Step 2: Authorization Gate And Candidate Instructions
 
 After `parse-item` and item selection freeze the product facts, run the authorization capability gate against the refreshed selected/default card.
 
-- If the selected/default card is not Visa, or it is Visa but VIC is not enabled, skip instruction and mandate matching.
+- If the selected/default card is non-Visa, skip instruction and mandate matching.
+- If there is no card, or the selected Visa is not VIC-ready, screen the frozen purchase and run one foreground `clink instruction prepare ... --max-wait 900 --format json`. Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. Return its structured PENDING envelope's Bind Card URL only with `processRunning=true` and `terminal=false`, without auto-opening it, and keep the same process waiting for the final same-ID ready envelope.
 - If the selected/default card is Visa + VIC ready, list candidate instructions before creating or checking out:
 
 ```bash
@@ -238,9 +239,9 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 
 If there is no matching instruction+mandate after filtering, screen the purchase with `classifyInstructionRestriction` from `lib/restricted-categories.mjs` (see `references/clink-restricted-categories.md`) — a restricted category refuses here and ends the checkout attempt without a draft — then start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not build or run the aggregate checkout command on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-When starting the instruction creation workflow, carry over the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification. For shipped physical goods, pass the real CWallet instruction address shape to `instruction create`. For `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address in the same CWallet instruction shape. Do not pass the UCP Postal Address shape to instruction creation. After `instruction create` / `sign-url`, run `classifyAuthorizationDraftObservation` on the draft envelope and send the Passkey URL at once; those commands keep their built-in watch, so the same process is the listener and no separate `events poll` belongs beside it. Pass the watch's second envelope back through the classifier as `watchStdout`. After the activation event is observed and correlated to the created instruction, run `clink instruction get --purchase-instruction-id <instructionId> --format json` and `classifyAuthorizationActiveVerification`; restart this checkout flow from Step 1 only after the instruction is ACTIVE so the instruction list is refreshed before matching.
+Carry the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification into either Instruction command. A VIC-ready Visa with no reusable match uses ordinary `instruction create` plus Passkey. A missing/incomplete Visa uses `instruction prepare` and the PENDING continuation described in `references/clink-instruction.md`. For shipped physical goods, pass the real CWallet instruction address shape; for `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address. The first prepare envelope is progress, not permission to return. Restart this checkout flow from Step 1 only after the final same-ID envelope reports `instructionStatus=ACTIVE` and non-empty `instruction.paymentInstrumentId`, so payment instruments and `instruction list --valid-only` are refreshed before matching.
 
-A quick instruction activated during wallet setup needs no special handling here: once the binding ceremony activates it, Step 2's `clink instruction list --valid-only` listing picks it up naturally, so do not start the instruction creation workflow for an intent that already carries an `ACTIVE` quick instruction. If the quick instruction is still `PENDING` when checkout reaches Step 2, it will not appear in the valid-only listing — fall back to the regular instruction creation workflow above rather than waiting here.
+An older Quick-capable `wallet init` may have returned a `pendingInstructionId`, but it does not drive a Skill-side continuation. `instruction prepare` authoritatively creates/reuses the frozen intent and returns the ID it waits on. A PENDING Instruction never appears in `--valid-only` and never authorizes checkout.
 
 ### Scheduled and unattended checkouts
 
