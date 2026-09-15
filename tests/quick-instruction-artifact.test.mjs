@@ -82,15 +82,13 @@ test('active and legacy handoff guidance separates root binding, card VIC and In
   assert.match(recovery, /\/agent-authorization` is the legacy Instruction-list recovery route, not a\s*bind-card entry/u);
 });
 
-test('Quick creation is webpage-owned while same Benefit OAuth token continuation remains required', async () => {
+test('Quick creation is webpage-owned and returned before the token exchange', async () => {
   for (const path of ['SKILL.md', 'agents/openai.yaml', 'README.md', 'references/visa-commerce-login.md']) {
     const text = await readFile(new URL(path, root), 'utf8');
-    assert.match(text, /webpage authorization/u, path);
+    assert.match(text, /webpage\s+authorization/u, path);
     assert.match(text, /independently of\s*POST \/oauth\/benefit\/token/u, path);
-    assert.match(text, /[Tt]oken polling\s+does not create\s+PENDING/u, path);
-    assert.match(text, /resume the same OAuth to obtain tokens/u, path);
-    assert.match(text, /[Nn]ever switch to Device OAuth/u, path);
-    assert.match(text, /backend callback fix/u, path);
+    assert.match(text, /before the token\s+exchange/u, path);
+    assert.match(text, /[Nn]ever switch to\s+Device OAuth/u, path);
   }
   assert.match(artifacts['SKILL.md'], /browser-open result does not prove authorization,\s*Quick creation, or login completion/u);
 });

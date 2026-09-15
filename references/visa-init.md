@@ -5,11 +5,13 @@ Normal successful execution does not load references.
 
 ## Contract
 
-`visa init --sandbox --start --no-open` authenticates only. Resume with
-`visa init --sandbox --resume <resumeId> --no-open` using the exact returned ID. It
-receives no purchase arguments, PI, or instructionContext; no Quick/PENDING
-Instruction or card setup is created. Never call wallet init or repair a
-login failure with Instruction creation.
+`visa init --sandbox --start --no-open` is the atomic standalone login: it
+authenticates only and receives no purchase arguments, PI, or instructionContext;
+no Quick/PENDING Instruction or card setup is created. Use `visa commerce-login`
+for an authorized purchase login; the CLI's legacy Quick options on `visa init`
+are not the Skill path. Resume with
+`visa init --sandbox --resume <resumeId> --no-open` using the exact returned ID.
+Never call wallet init or repair a login failure with Instruction creation.
 Login is independently callable before recommend; no product or purchase
 authorization is required. The Agent owns orchestration. Login does not invoke
 recommendation, payment-method resolve, Instruction, or Checkout.

@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.104. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.105. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.104"
+  version: "0.1.105"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -577,13 +577,14 @@ Failed card query, multiple explicit defaults, or unknown default support or
 completion returns a structured read-only error, never blind PENDING creation.
 Other cards never affect Quick. Do not repeat OAuth for an authenticated user.
 
-Unauthenticated: send instructionContext through Benefit OAuth. The backend
-must make the Quick decision during webpage authorization, independently of
-POST /oauth/benefit/token. Token polling does not create PENDING; the CLI still
-must resume the same OAuth to obtain tokens for authenticated card, Instruction,
-and checkout operations. A browser-open result does not prove authorization,
-Quick creation, or login completion. This requires the backend callback fix;
-CLI/Skill delivery alone does not prove it is deployed. Never switch to Device OAuth.
+Unauthenticated: send instructionContext through Benefit OAuth. CWallet makes the
+Quick decision during webpage authorization, independently of
+POST /oauth/benefit/token, so resume returns the exact pendingInstructionId as soon
+as the browser login completes, before the token exchange. Do not wait for CLI login
+or create a replacement; the CLI never creates that unauthenticated Quick itself.
+Token polling still obtains the tokens for authenticated card, Instruction, and
+checkout operations. A browser-open result does not prove authorization,
+Quick creation, or login completion. Never switch to Device OAuth.
 Show the exact
 manualOpenUrl and system-browser notice before separate visa browser-open.
 Repeat the same purchase command with --manual-completed after user completion,
@@ -595,7 +596,9 @@ Step3 never discards this continuation; Step4 must continue its exact ID.
 ### Standalone Login
 
 For pure login without purchase context, use `visa init`, independently callable
-before recommend. No product, purchase authorization or instructionContext is needed.
+before recommend. It is the atomic standalone login: no product, purchase
+authorization or instructionContext is needed, and it creates no Quick/PENDING
+Instruction. An authorized purchase login always uses `visa commerce-login`.
 
 ```text
 <Skill Path>/bin/visa-cli visa init --sandbox --start --no-open --format json

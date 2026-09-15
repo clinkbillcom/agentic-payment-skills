@@ -130,11 +130,11 @@ test('launchers and Visa Edition provenance are exact', async () => {
     /vendor\\visa-cli\\visa-cli\.bundle\.mjs/u,
   );
   assert.equal(vendorPackage.name, 'visa-cli-vendored');
-  assert.equal(vendorPackage.version, '0.2.79');
+  assert.equal(vendorPackage.version, '0.2.80');
   assert.equal(vendorPackage.edition, 'visa');
   assert.equal(
     vendorPackage.upstreamCommit,
-    'c03ffc9dd1708046059b9591e519e47b28bde71b',
+    '9ef41e11e851bf2d1d7b8153c428ccb4d65b3801',
   );
   assert.deepEqual(vendorPackage.bin, {
     'visa-cli': 'visa-cli.bundle.mjs',
@@ -175,6 +175,32 @@ test('manual login exits with its link in stdout and an identical command resume
       JSON.parse(await readFile(configFile, 'utf8')).visa.pendingBenefitLogin.resumeId,
       pending.resumeId,
     );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('vendored login returns the browser-prepared Quick ID before the token exchange', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'visa-quick-login-'));
+  const purchase = programPurchaseContext();
+  const args = [
+    'visa', 'commerce-login', '--context', JSON.stringify({
+      environment: purchase.environment,
+      expected: { amount: purchase.expected.amount, currency: purchase.expected.currency },
+      instructionContext: purchase.instructionContext,
+    }), '--confirm-purchase', '--no-open', '--format', 'json',
+  ];
+  try {
+    const first = runWithMock(args, 'manual-login-start', { home, timeout: 5000 });
+    assert.equal(first.status, 0, first.stderr);
+    const resumed = runWithMock(args, 'manual-login-quick', { home, timeout: 5000 });
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const result = JSON.parse(resumed.stdout).data;
+    assert.equal(result.status, 'user_action_required');
+    assert.equal(result.pendingInstructionId, 'ins_quick_browser');
+    assert.equal(result.instructionId, 'ins_quick_browser');
+    assert.equal(result.instructionStatus, 'PENDING');
+    assert.equal(result.phase, 'pending');
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -1190,6 +1216,13 @@ globalThis.fetch = async (input, init) => {
       });
     }
     throw new Error('Unexpected manual login request: ' + url.pathname);
+  }
+  if (scenario === 'manual-login-quick') {
+    if (url.pathname.endsWith('/benefit/token')) {
+      if (JSON.parse(init.body).deviceCode !== 'manual-device') throw new Error('wrong flow');
+      return jsonResponse({ status: 'authorization_pending', pending_instruction_id: 'ins_quick_browser' });
+    }
+    throw new Error('Unexpected manual Quick login request: ' + url.pathname);
   }
   if (scenario === 'portal-order-link') {
     if (url.pathname === '/agent/ucp/orders/ord_fixture') {

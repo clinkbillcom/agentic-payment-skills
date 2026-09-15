@@ -165,13 +165,14 @@ interface:
     missing/unusable/unsupported/incomplete default creates PENDING. Other ready
     cards do not affect this decision. Failed reads, ambiguous defaults or
     unknown capability/completion are read-only errors, not permission to create.
-    Logged out: send instructionContext through Benefit OAuth. The backend must
-    make the Quick decision during webpage authorization, independently of
-    POST /oauth/benefit/token. Token polling does not create PENDING; still
-    resume the same OAuth to obtain tokens for authenticated operations and checkout.
-    A browser-open result does not prove Quick creation or login completion.
-    The backend callback fix is a prerequisite, not proven deployed by this Skill.
-    Never switch to Device OAuth. Show manualOpenUrl,
+    Logged out: send instructionContext through Benefit OAuth. CWallet makes the
+    Quick decision during webpage authorization, independently of
+    POST /oauth/benefit/token, so resume returns the exact pendingInstructionId as
+    soon as the browser login completes, before the token exchange. Do not wait for
+    CLI login or create a replacement; the CLI never creates that unauthenticated
+    Quick itself. Token polling still obtains the tokens for authenticated
+    operations and checkout. A browser-open result does not prove Quick creation or
+    login completion. Never switch to Device OAuth. Show manualOpenUrl,
     give the system-browser notice, then separately invoke browser-open.
     Continue the identical commerce-login command with --browser-opened or
     --manual-completed; check the original login first, never reopen.

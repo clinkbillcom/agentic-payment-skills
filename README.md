@@ -103,8 +103,8 @@ no runtime workflow JavaScript. General wallet, card, risk, payment, Alipay QR, 
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.104` vendors Visa CLI `0.2.79` from upstream commit
-`c03ffc9dd1708046059b9591e519e47b28bde71b`. This product-match branch performs
+Skill `0.1.105` vendors Visa CLI `0.2.80` from upstream commit
+`9ef41e11e851bf2d1d7b8153c428ccb4d65b3801`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
@@ -128,11 +128,11 @@ gates. Readiness or nextAction alone never authorizes an unrequested next comman
    A ready default creates nothing; no default or a known unready default creates
    PENDING. Other cards do not affect Quick. Unknown reads stop; retain the exact
    Quick ID and deadline. Login URL is returned before separate browser-open.
-   For unauthenticated purchases, webpage authorization owns Quick creation,
-   independently of POST /oauth/benefit/token. Token polling does not create
-   PENDING; resume the same OAuth to obtain tokens for authenticated operations
-   and checkout. Browser-open is not completion. The backend callback fix
-   remains a deployment prerequisite; never switch to Device OAuth.
+   For unauthenticated purchases, CWallet owns Quick creation during webpage authorization,
+   independently of POST /oauth/benefit/token, so resume returns the exact Quick ID as soon
+   as the browser login completes, before the token exchange; never wait for CLI login or
+   create a replacement. Token polling still obtains the tokens for authenticated operations
+   and checkout. Browser-open is not completion. Never switch to Device OAuth.
 3. Resolve the persisted default without asking which card. A proactive exact-ID
    choice uses `--payment-instrument-id <id> --selection-source explicit`.
    No card returns bindCardUrl at Portal root; default selection without a
@@ -190,7 +190,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.104`
+Skill version: `0.1.105`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

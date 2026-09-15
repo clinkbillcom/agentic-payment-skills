@@ -4998,7 +4998,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.79";
+    CLI_VERSION = "0.2.80";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -27349,6 +27349,7 @@ async function requestVsraProgramDetail(options2) {
 function normalizeBenefitTokenResult(body, status = 200) {
   const source = unwrapRecord(body);
   const accessToken = optionalString3(pick(source, "access_token", "accessToken"));
+  const pendingInstructionId2 = optionalString3(pick(source, "pending_instruction_id", "pendingInstructionId"));
   if (accessToken) {
     const tokenType = optionalString3(pick(source, "token_type", "tokenType")) ?? "Bearer";
     if (tokenType.toLowerCase() !== "bearer") {
@@ -27362,7 +27363,6 @@ function normalizeBenefitTokenResult(body, status = 200) {
     const expiresIn = positiveNumber2(pick(source, "expires_in", "expiresIn"));
     const refreshExpiresIn = positiveNumber2(pick(source, "refresh_expires_in", "refreshExpiresIn"));
     const email = optionalString3(source.email)?.trim();
-    const pendingInstructionId2 = optionalString3(pick(source, "pending_instruction_id", "pendingInstructionId"));
     const oauthMode = parseBenefitOAuthMode(pick(source, "oauth_mode", "oauthMode"));
     const customerCreated = optionalBoolean(pick(source, "customer_created", "customerCreated"));
     const activationDriver = parseBenefitActivationDriver(pick(source, "activation_driver", "activationDriver"));
@@ -27392,13 +27392,25 @@ function normalizeBenefitTokenResult(body, status = 200) {
   const normalized = normalizedStatus2(pick(source, "error", "status", "state", "error_code", "errorCode", "message", "msg", "code"));
   const interval = positiveNumber2(pick(source, "interval", "retry_after", "retryAfter"));
   if (normalized === "authorization_pending" || normalized === "pending") {
-    return interval ? { status: "pending", interval } : { status: "pending" };
+    return {
+      status: "pending",
+      ...interval ? { interval } : {},
+      ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {}
+    };
   }
   if (normalized === "slow_down") {
-    return interval ? { status: "slow_down", interval } : { status: "slow_down" };
+    return {
+      status: "slow_down",
+      ...interval ? { interval } : {},
+      ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {}
+    };
   }
   if (normalized === "processing" || normalized === "exchanging" || normalized === "binding" || normalized === "token_exchanging") {
-    return interval ? { status: "processing", interval } : { status: "processing" };
+    return {
+      status: "processing",
+      ...interval ? { interval } : {},
+      ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {}
+    };
   }
   if (normalized === "access_denied" || normalized === "denied") {
     return { status: "denied" };
@@ -30638,14 +30650,14 @@ async function resumeVisaLogin(options2) {
   });
   if (polled.status === "pending") {
     return {
-      result: pendingBenefitResult(pending, "authorization_pending", true),
+      result: pendingBenefitResult(pending, "authorization_pending", true, polled.pendingInstructionId),
       storedConfig: await recoverStoredVisaConfig(now())
     };
   }
   if (polled.status === "processing") {
     await setVisaFsmState("CLINK_LOGIN_EXCHANGING", now(), "pendingBenefitLogin", pending.deviceCode);
     return {
-      result: pendingBenefitResult(pending, "authorization_processing", true),
+      result: pendingBenefitResult(pending, "authorization_processing", true, polled.pendingInstructionId),
       storedConfig: await recoverStoredVisaConfig(now())
     };
   }
@@ -30662,7 +30674,7 @@ async function resumeVisaLogin(options2) {
       return current;
     });
     return {
-      result: pendingBenefitResult(slowed, "authorization_pending", true),
+      result: pendingBenefitResult(slowed, "authorization_pending", true, polled.pendingInstructionId),
       storedConfig: await recoverStoredVisaConfig(now())
     };
   }
@@ -30706,7 +30718,7 @@ async function initializeVisaLogin(options2) {
         storedConfig: started.storedConfig,
         resumeId: started.result.resumeId
       });
-      if (resumed.result.status === "ready" || options2.browserAction !== "browser_opened") {
+      if (resumed.result.status === "ready" || options2.browserAction !== "browser_opened" || resumed.result.pendingInstructionId) {
         return resumed;
       }
       const pending2 = resumed.result;
@@ -31725,7 +31737,7 @@ function normalizeVisaConfig(config) {
   }
   return next;
 }
-function pendingBenefitResult(pending, status, reusedPending) {
+function pendingBenefitResult(pending, status, reusedPending, pendingInstructionId2) {
   return {
     status,
     source: "benefit_oauth",
@@ -31733,7 +31745,8 @@ function pendingBenefitResult(pending, status, reusedPending) {
     resumeId: pending.resumeId,
     expiresAt: pending.expiresAt,
     retryAfterSeconds: pending.interval,
-    reusedPending
+    reusedPending,
+    ...pendingInstructionId2 ? { pendingInstructionId: pendingInstructionId2 } : {}
   };
 }
 function authorizationFingerprint(authorization) {
@@ -36569,6 +36582,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
     if (!initialized.manualOpenUrl || !["authorization_pending", "authorization_processing"].includes(String(initialized.detail.status))) {
       throw authError("visa init exited without status=ready");
     }
+    const pendingInstructionId3 = initialized.pendingInstructionId;
     return {
       command: "visa commerce-login",
       stage: "login",
@@ -36580,6 +36594,9 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
       manualOpenUrl: initialized.manualOpenUrl ?? null,
       resumeId: initialized.detail.resumeId ?? null,
       browserLaunch: initialized.browserLaunch ?? null,
+      // The browser login completed server-side and already prepared the Quick Instruction; the
+      // token exchange may still be running, so retain the exact ID without an exact GET.
+      ...pendingInstructionId3 ? { instructionId: pendingInstructionId3, pendingInstructionId: pendingInstructionId3, instructionStatus: "PENDING", phase: "pending" } : {},
       rerunAllowed: true,
       resumeMode: "same_command",
       checkoutStarted: false
@@ -37061,7 +37078,10 @@ Behavior:
   readiness of ONLY the persisted default PI. A usable VIC-ready default creates no Instruction;
   no default or an unready default creates one PENDING directly, even if another card is ready.
   It never restarts OAuth for an authenticated customer. An unauthenticated customer uses
-  one Visa Benefit login with the exact instructionContext.
+  one Visa Benefit login with the exact instructionContext. CWallet creates the Quick Instruction
+  when the user completes the webpage authorization, independently of the later token exchange, so
+  resume returns that exact pendingInstructionId without waiting for CLI login. This command never
+  creates the unauthenticated Quick Instruction itself; it only reads the ID CWallet prepared.
   A returned pendingInstructionId is followed for both LOGIN and REGISTER, without depending on
   customerCreated or activationDriver. The Agent retains the exact ID in this conversation
   with environment and frozen instructionContext; the CLI exact-GETs that same ID once.
@@ -37298,6 +37318,9 @@ Options:
 ${OUTPUT_OPTIONS2}
 
 Behavior:
+  Standalone atomic login. It carries no purchase authorization or instructionContext and creates no
+  Quick/PENDING Instruction; use visa commerce-login for an authorized purchase. The Quick options
+  below are legacy compatibility input and are not part of the atomic login path.
   Calls POST /agent/cwallet/oauth/benefit/authorization with clientId clink-cli, a stable UUID v4
   installation identity, and the Agent Client device metadata also used by wallet init. The returned
   URL goes directly to VSRP OAuth and never contains deviceCode. The CLI polls
