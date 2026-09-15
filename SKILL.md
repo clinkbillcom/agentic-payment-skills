@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.101. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.103. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.101"
+  version: "0.1.103"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -25,9 +25,9 @@ If direct execution fails, report that launcher error.
 
 Never use a global `visa-cli`, `clink`, or `clink-cli`. The bundle is the Visa
 Edition: it includes every Base Command plus five independent command
-capabilities: `visa recommend-products`, `visa login`, `visa payment-method resolve`,
-`visa instruction candidates|create|get|wait`, and `visa checkout`.
-`visa commerce-login` and `visa commerce-run` remain compatibility-only
+capabilities: `visa recommend-products`, `visa commerce-login`, `visa payment-method resolve`,
+`visa instruction candidates|create|bind-pi|get|wait`, and `visa checkout`.
+Only `visa commerce-run` remains compatibility-only among the purchase
 commands/exports, not the normal Skill path or a fallback for missing commands.
 
 Keep normal execution small. Do not read reference files, inspect source or
@@ -46,8 +46,8 @@ recommendation, purchase context, or purchase authorization.
 
 | Request/state | Agent command plan | Boundary |
 | --- | --- | --- |
-| Login only; no product | `visa login` | Report login; stop |
-| Login, then ask for offers | `visa login` -> `visa recommend-products` | No card/Instruction/Checkout |
+| Login only; no product | `visa init` | Report login; stop |
+| Login, then ask for offers | `visa init` -> `visa recommend-products` | No card/Instruction/Checkout |
 | Browse while logged out or logged in | `visa recommend-products` | No login preflight |
 | Check card readiness; authenticated, no product | `visa payment-method resolve` | Report card state; stop |
 | Resume exact authorization; complete context | `visa instruction get` or `visa instruction wait` | No rediscovery/create |
@@ -89,9 +89,9 @@ read only the reference matching that command:
 | `visa recommend` | `references/visa-recommend.md` |
 | `visa recommend-products` | `references/visa-recommend-products.md` |
 | `visa product-search` | `references/visa-product-search.md` |
-| `visa login` | `references/visa-login.md` |
+| `visa init` | `references/visa-init.md` |
 | `visa payment-method resolve` | `references/visa-payment-method.md` |
-| `visa instruction candidates/create/get/wait` | `references/visa-instruction.md` |
+| `visa instruction candidates/create/bind-pi/get/wait` | `references/visa-instruction.md` |
 | `visa checkout` | `references/visa-checkout.md` |
 | `visa commerce-login` | `references/visa-commerce-login.md` |
 | `visa commerce-run` | `references/visa-commerce-run.md` |
@@ -129,9 +129,9 @@ determine, inspect, infer, or override that environment at runtime. Do not read
 files, wrapper/package/config, wallet state, or process environment, and do not
 run any shell or authentication preflight.
 
-Login, payment-method, Instruction, and Checkout commands use
-`--environment sandbox` for this UAT distribution, including standalone login
-before any recommendation. Preserve that environment
+Purchase login, payment-method, Instruction, and Checkout commands use
+`--environment sandbox` for this UAT distribution. Standalone login uses
+`visa init --sandbox --start --no-open` before any recommendation. Preserve that environment
 through all continuations. Do not inspect config or switch to production to
 repair a failed command.
 
@@ -277,10 +277,13 @@ change, provided it is still owned, usable, and VIC-ready. Do not ask which card
 to use or whether to make an alternate default; the user may proactively supply
 an exact PI ID.
 
-Never reuse PENDING or CREATED as another purchase's match. The new purchase
-path creates no Quick or PENDING Instruction and never calls `bind-pi`.
-Only `visa instruction create` may create an ordinary PI-bound CREATED
-Instruction, with a ready frozen PI. No prior-command history is required.
+Never reuse PENDING or CREATED as another purchase's match. commerce-login
+retains the exact Quick pendingInstructionId for this authorized purchase.
+ACTIVE verifies the same PI and eligible Mandate; PENDING explicitly binds the
+SAME ID via `visa instruction bind-pi` to the Step3 ready PI/source; CREATED
+continues same-ID ordinary activation. No replacement ordinary Instruction.
+Only when no Quick ID exists and ACTIVE candidates have no semantic match may
+`visa instruction create` create an ordinary PI-bound CREATED Instruction.
 Preserve its exact ID and original authorization deadline; timeout or
 unknown state never authorizes a replacement Instruction.
 
@@ -292,7 +295,7 @@ read-only recovery is allowed.
 
 ### Compatibility Recovery
 
-`visa commerce-login`, `visa commerce-run`, and `visa pending-instructions`
+`visa commerce-run` and `visa pending-instructions`
 remain available for existing callers, not as the new purchase path. Diagnose
 an existing legacy operation with its matching reference and preserve its exact
 IDs. Do not transfer an unresolved legacy purchase into a new Checkout.
@@ -322,8 +325,8 @@ after selecting an exact orderable product. It is not enforced command order:
 
 ```text
 visa recommend-products -> exact product selection and purchase authorization
--> visa login -> visa payment-method resolve
--> visa instruction candidates (reuse) or create + get/wait (authorize)
+-> visa commerce-login -> visa payment-method resolve
+-> exact Quick ID bind-pi/get/wait, or candidates/create when no Quick ID exists
 -> visa checkout
 ```
 
@@ -539,7 +542,8 @@ snapshot is missing or invalidated, stop and return to discovery.
 
 Require `PRODUCT_VERIFIED` and `productResolution=internal-ucp-catalog`.
 Discovery's compatibility action `CONTINUE_TO_COMMERCE_LOGIN` is a purchase
-handoff hint, not a command-order requirement; do not call the legacy command.
+handoff hint, not a command-order requirement. Use commerce-login only for an
+authorized purchase, not as an anonymous discovery preflight.
 Keep that selected row's
 `purchaseContext` unchanged in memory. It uses `mode=selected_product` and
 contains the single-item facts already displayed to the user. Do not create a
@@ -558,30 +562,46 @@ Discovery is unchanged: `visa recommend-products` returns `products` and
 price/currency and quantity 1. Do not search again for an already authorized
 unchanged selection.
 
-### Step2: Login Only
+### Step2: Purchase Login
 
 ```text
-<Skill Path>/bin/visa-cli visa login --environment sandbox --format json
+<Skill Path>/bin/visa-cli visa commerce-login <purchase-args> \
+  --confirm-purchase --no-open --format json
 ```
 
-This command performs authentication only: no `instructionContext`, Quick,
-PENDING, card selection, card setup, or Instruction creation. Never call
-`wallet init` or substitute `visa init` in this path.
-It is independently callable before recommend, with no selected product.
+This command first inspects login status with the authorized instructionContext.
+Already authenticated: check ONLY the persisted default PI. Proven usable and
+VIC-ready means no new Instruction. Known no default, missing/unusable card,
+unsupported card or confirmed incomplete VIC means direct PENDING creation.
+Failed card query, multiple explicit defaults, or unknown default support or
+completion returns a structured read-only error, never blind PENDING creation.
+Other cards never affect Quick. Do not repeat OAuth for an authenticated user.
 
-For login-only intent, report `ready` and stop. For a broader request, the Agent
-chooses the next needed capability; login does not invoke it. Otherwise show
-the exact `manualOpenUrl`, give the
-system-browser notice, and use `visa browser-open --url "<manualOpenUrl>"`.
-Resume using only the returned login identifier:
+Unauthenticated: send instructionContext through Benefit OAuth. Show the exact
+manualOpenUrl and system-browser notice before separate visa browser-open.
+Repeat the same purchase command with --manual-completed after user completion,
+or --browser-opened after a successful separate opener. Resume the original
+OAuth, check status first, and do not reopen. Retain pendingInstructionId,
+instructionStatus, PI when returned, and original authorizationDeadline.
+Step3 never discards this continuation; Step4 must continue its exact ID.
+
+### Standalone Login
+
+For pure login without purchase context, use `visa init`, independently callable
+before recommend. No product, purchase authorization or instructionContext is needed.
 
 ```text
-<Skill Path>/bin/visa-cli visa login --environment sandbox \
-  --resume <id> --format json
+<Skill Path>/bin/visa-cli visa init --sandbox --start --no-open --format json
 ```
 
-After the user completes login, resume checks state first without reopening.
-Login carries no purchase or PI arguments. It never creates a Quick Instruction.
+```text
+<Skill Path>/bin/visa-cli visa init --sandbox --resume <id> --no-open --format json
+```
+
+Show manualOpenUrl, give the system-browser notice, then open that exact URL
+separately. Resume only the returned ID; no reopening on manual completion.
+The --no-open flag prevents defaultOpenLinks=true from opening before the notice.
+Report and stop for login-only intent. Never call `wallet init`.
 
 ### Step3: Resolve Payment Method
 
@@ -627,7 +647,7 @@ Capability false/unknown and failed reads stop even if a cached card looked read
 
 ### Shared Purchase Arguments
 
-In Steps 4-5, `<purchase-args>` denotes these same flat arguments from the
+In Steps 2, 4-5, `<purchase-args>` denotes these same flat arguments from the
 frozen `purchaseContext`, not a literal CLI flag or a context file:
 
 ```text
@@ -650,6 +670,25 @@ legacy `--context <json>` with flat input. No Program fields or amount buffer.
 Invoke the requested subcommand directly with complete inputs; an existing
 exact-ID get/wait does not rerun candidates or create. Candidate selection and
 the decision to create belong to the Agent, not an automatic CLI transition.
+
+An existing Quick pendingInstructionId takes priority over candidates/create.
+ACTIVE: exact get verifies the same PI and eligible Mandate; the Agent checks
+semantic equivalence before reusing that pair. CREATED: same-ID get/ordinary
+activation. PENDING: after Step3 ready, explicitly bind the SAME ID:
+
+```text
+<Skill Path>/bin/visa-cli visa instruction bind-pi <purchase-args> \
+  --payment-instrument-id <pi> --selection-source <default|explicit> \
+  --instruction-id <id> --authorization-deadline <ms> \
+  --confirm-purchase --format json
+```
+
+Preserve the original authorizationDeadline on binding. `get/wait` are read-only:
+PENDING returns binding_required, never a hidden POST. Bind returns same-ID
+activation URL; continue the ordinary activation/get/wait below. Unknown binding
+requires read-only reconciliation. Never create a replacement ordinary Instruction.
+Only without a Quick ID use the candidate path below; other purchases' PENDING
+or CREATED Instructions are not candidate reuse.
 
 ```text
 <Skill Path>/bin/visa-cli visa instruction candidates <purchase-args> \
@@ -747,7 +786,7 @@ Payment and delivery must still be verified and reported separately.
 
 ### Visa Preparation
 
-For explicit login-only requests, use Step2 `visa login --environment sandbox`
+For explicit login-only requests, use `visa init --sandbox --start --no-open`
 before or after recommend with no purchase or card context, then report and stop.
 For explicit card readiness, invoke Step3 with current authentication; login
 only if needed. Neither may create an Instruction, Checkout, or payment.
@@ -766,9 +805,9 @@ general workflow engine.
 - Use `wallet status --format json` only for an explicit wallet request or after
   an exact product selection when an authenticated operation is about to begin.
   Never use it to preflight anonymous discovery.
-- Use `visa login --environment sandbox --format json` for Visa Skill login
-  or re-login; resume with the returned `--resume <id>`. No purchase context or
-  card setup belongs in login. Do not use `wallet init` for Visa login.
+- Use `visa init --sandbox --start --no-open --format json` for standalone login;
+  resume with `--sandbox --resume <id> --no-open`. Authorized purchases instead
+  use `visa commerce-login` with purchase context. Do not use `wallet init`.
 - Use `wallet logout --format json` exactly once for explicit logout.
   It resets Visa-local state in `~/.visa-cli/config.json`; Main CLI state in
   `~/.clink-cli/config.json` is independent. Do not use `visa wallet logout`.
@@ -888,7 +927,7 @@ general workflow engine.
   the initiating operation. Do not use broad uncorrelated polling.
 - Acknowledge or consume according to the CLI result, then refresh the
   authoritative card, Instruction, refund, Checkout, or order state.
-- OAuth Device Authorization is handled by `visa login` and its exact resume,
+- OAuth Device Authorization is handled by `visa init` and its exact resume,
   not `events poll`.
 
 ### CAP-SKILLS-LIST: Public Skill Discovery

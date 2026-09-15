@@ -7,8 +7,9 @@ interface:
     cat, grep, list bin, read wrapper/package/config, or inspect environment.
     The launcher already pins the distribution search environment, so anonymous
     discovery omits --sandbox/--test and performs no environment or wallet
-    preflight. Login, payment-method, Instruction, and Checkout use
-    --environment sandbox for this UAT distribution, even before discovery.
+    preflight. Purchase login, payment-method, Instruction, and Checkout use
+    --environment sandbox. Standalone login is visa init --sandbox --start --no-open,
+    with no purchase context, then --sandbox --resume <id> --no-open.
     The five capabilities are independent commands with separate CLI files,
     not a mandatory pipeline. The Agent owns orchestration and semantic
     purchase validation. Login before recommend is valid and login-only needs
@@ -85,7 +86,7 @@ interface:
     references/visa-recommend.md,
     references/visa-recommend-products.md,
     references/visa-product-search.md,
-    references/visa-login.md,
+    references/visa-init.md,
     references/visa-payment-method.md,
     references/visa-instruction.md,
     references/visa-checkout.md,
@@ -98,8 +99,8 @@ interface:
     aggregate step. Use an atomic command only when that reference marks it as
     safe read-only diagnosis or the user explicitly authorizes the mutation.
     Never blindly decompose a failed purchase, create a replacement
-    Instruction, retry Checkout, or retry payment. Legacy commerce-login and
-    commerce-run commands/exports are compatibility-only, not the main path
+    Instruction, retry Checkout, or retry payment. commerce-login is the purchase
+    login entry. Only commerce-run is compatibility-only, not the main path
     or a fallback for missing new commands. pending-instruction create is
     explicit atomic/test use only, never normal purchase preparation.
     Read only products and visaBenefits. Before display, lightly check every
@@ -147,8 +148,9 @@ interface:
     Only one product with quantity 1 is supported; never split orders or silently
     reduce a multi-item request. Keep the selected row's purchaseContext unchanged
     in memory and pass the same frozen facts as flat --xxx arguments to every
-    visa instruction candidates/create/get/wait and visa checkout command,
-    along with --payment-instrument-id and --selection-source default|explicit.
+    commerce-login and every visa instruction candidates/create/bind-pi/get/wait
+    and visa checkout command. Instruction/Checkout additionally carry
+    --payment-instrument-id and --selection-source default|explicit.
     --amount uses product.totalAmountMajor, never totalAmountMinor.
     Legacy --context <json> is compatibility-only; do not mix it with flat
     input. Never create a context file. Never build an Instruction context,
@@ -157,14 +159,19 @@ interface:
     The numbered steps are a shopping example, not enforced invocation order.
     Step1 is unchanged visa recommend-products: freeze merchant, productId,
     price, currency, and the selected single-item purchase context.
-    Step2 is visa login --environment sandbox [--resume <id>], authentication
-    only. It receives no purchase/PI arguments or instructionContext and must
-    not create Quick/PENDING Instructions or perform card setup. Do not call
-    wallet init or substitute visa init. It can run before recommend. A ready
-    result ends login-only intent; the Agent chooses any needed next capability
-    for a broader authorized request, without implicit command chaining;
-    otherwise show manualOpenUrl and use the separate visa browser-open
-    --url with that exact URL, then resume the returned login ID.
+    Step2 is visa commerce-login with authorized flat purchase arguments and
+    --confirm-purchase --no-open. It checks login status first. Already logged
+    in: a usable VIC-ready default PI creates nothing; known no default or a
+    missing/unusable/unsupported/incomplete default creates PENDING. Other ready
+    cards do not affect this decision. Failed reads, ambiguous defaults or
+    unknown capability/completion are read-only errors, not permission to create.
+    Logged out: send instructionContext through Benefit OAuth. Show manualOpenUrl,
+    give the system-browser notice, then separately invoke browser-open.
+    Continue the identical commerce-login command with --browser-opened or
+    --manual-completed; check the original login first, never reopen.
+    Retain pendingInstructionId, instructionStatus and original authorizationDeadline.
+    Standalone visa init can run before recommend without purchase context.
+    A ready result ends login-only intent; do not call wallet init.
     Step3 is visa payment-method resolve --environment sandbox. Use the
     persisted default without asking which card. A user may proactively choose
     an alternate by exact ID using --payment-instrument-id <id>
@@ -189,8 +196,16 @@ interface:
     Freeze BOTH through Steps 4-5. A changed default PI stops a default-based
     purchase and requires reconfirmation; an explicit alternate persists
     despite a default change while owned, usable, and VIC-ready.
-    For a purchase needing an authorization choice, the Agent calls visa
-    instruction candidates with the same purchase/PI/source. Existing exact-ID
+    Preserve any existing Quick ID through Step3. With that ID, Step4 exact-GETs:
+    ACTIVE reuses the same eligible PI/Mandate after Agent semantic verification;
+    CREATED continues ordinary activation; PENDING explicitly calls visa instruction
+    bind-pi with the same ID, Step3 PI/source, --confirm-purchase and the original
+    --authorization-deadline <ms>. Binding returns the same ID and activation URL.
+    get/wait remain read-only. Unknown binding requires exact read-only recovery,
+    never a replacement ordinary Instruction or blind rebind. VIC may activate a
+    different concurrent PENDING; verify this purchase's original ID.
+    Only without a Quick ID does the Agent call visa instruction candidates
+    with the same purchase/PI/source. Existing exact-ID
     get/wait skips candidates/create, and neither runs another command.
     It is read-only and filters ACTIVE, PI, currency, amount >= purchase amount,
     MCC, expiry, usage/reserve, and recurring constraints. It returns all
@@ -202,7 +217,7 @@ interface:
     clarification, never guess, choose by list order, or create.
     A match freezes instructionId and mandateId; the Agent may invoke Step5
     within the authorized purchase.
-    A verified no-match permits visa instruction create with the same flat
+    Without a Quick ID, a verified no-match permits visa instruction create with the same flat
     purchase/PI/source and --confirm-purchase. It creates only an ordinary
     PI-bound CREATED Instruction after PI readiness, never PENDING or bind-pi.
     Retain returned manualOpenUrl, instructionId, and authorizationDeadline

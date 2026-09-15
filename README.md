@@ -26,14 +26,15 @@ uses this purchase contract:
 
 ```text
 visa recommend-products
-visa login --environment sandbox [--resume <id>]
+visa commerce-login <purchase-args> --confirm-purchase --no-open
 visa payment-method resolve --environment sandbox
-visa instruction candidates|create|get|wait <purchase-args> <PI/source>
+visa instruction candidates|create|bind-pi|get|wait <purchase-args> <PI/source>
 visa checkout <purchase-args> <PI/source> --purchase-instruction-id <id> --mandate-id <id> --confirm-purchase
 ```
 
-`visa commerce-login` and `visa commerce-run` commands/exports remain
-compatibility-only; do not use them as the new path or a fallback.
+Standalone login is `visa init --sandbox --start --no-open`, followed by
+`visa init --sandbox --resume <id> --no-open`. It needs no product or purchase context.
+Only `visa commerce-run` remains compatibility-only, not a fallback.
 
 The lightweight shopping routes cover:
 
@@ -102,14 +103,14 @@ no runtime workflow JavaScript. General wallet, card, risk, payment, Alipay QR, 
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.101` includes Visa CLI `0.2.77` from upstream commit
-`4908e9bc8e0bed639eeb5a498c7d38ae3e8b108b`. This product-match branch performs
+Skill `0.1.103` includes Visa CLI `0.2.78` from upstream commit
+`479c0902658dcf6b1173bd6800c0a654320d482d`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
 contexts. The official Visa bundle includes the five independent commands.
-CLI tests pass 1472/1472 and bundled Skill tests pass 61/61. These are local
+CLI tests pass 1486/1486 and bundled Skill tests pass 61/61. These are local
 regression results, not backend deployment or live payment acceptance.
 If a distribution lacks a required command, report the limitation; do not
 fall back to legacy orchestration or invent missing purchase data.
@@ -123,9 +124,10 @@ gates. Readiness or nextAction alone never authorizes an unrequested next comman
 
 1. Keep `visa recommend-products` unchanged. Freeze merchant, productId,
    authoritative price/currency, and quantity 1.
-2. `visa login` authenticates only, without instructionContext, Quick/PENDING,
-   or cards. Return ready or manualOpenUrl; use the exact login resume ID.
-   Do not call wallet init.
+2. `visa commerce-login` checks login first and carries authorized instructionContext.
+   A ready default creates nothing; no default or a known unready default creates
+   PENDING. Other cards do not affect Quick. Unknown reads stop; retain the exact
+   Quick ID and deadline. Login URL is returned before separate browser-open.
 3. Resolve the persisted default without asking which card. A proactive exact-ID
    choice uses `--payment-instrument-id <id> --selection-source explicit`.
    No card returns bindCardUrl at Portal root; default selection without a
@@ -137,7 +139,9 @@ gates. Readiness or nextAction alone never authorizes an unrequested next comman
    for Steps 4-5. Every selected card must be VIC-ready. Default changes require
    reconfirmation; explicit alternates persist despite default changes and
    do not require a persisted default.
-4. Read-only candidates filters ACTIVE, PI, currency, amount >= purchase,
+4. Continue any Quick ID first: ACTIVE is checked, PENDING binds the same ID to
+   Step3 PI with explicit bind-pi, CREATED continues activation. No replacement.
+   Without a Quick ID, read-only candidates filters ACTIVE, PI, currency, amount >= purchase,
    MCC, expiry, usage/reserve, and recurring constraints. Return all eligible
    Instructions and eligibleMandates with mandateId, title, description,
    amount/currency/MCC, plus PI. The Agent matches merchant/SKU/denomination/
@@ -177,7 +181,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.101`
+Skill version: `0.1.103`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

@@ -1,11 +1,12 @@
-# `visa login` Failure Reference
+# `visa init` Failure Reference
 
-Read this file only after `visa login` returns an error or an incomplete state.
+Read this file only after `visa init` returns an error or an incomplete state.
 Normal successful execution does not load references.
 
 ## Contract
 
-`visa login --environment sandbox [--resume <id>]` authenticates only. It
+`visa init --sandbox --start --no-open` authenticates only. Resume with
+`visa init --sandbox --resume <resumeId> --no-open` using the exact returned ID. It
 receives no purchase arguments, PI, or instructionContext; no Quick/PENDING
 Instruction or card setup is created. Never call wallet init or repair a
 login failure with Instruction creation.

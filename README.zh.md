@@ -21,13 +21,13 @@ Visa Edition 保留 Base Commands 与 Visa 权益查询，Skill 购买契约为�
 
 ```text
 visa recommend-products
-visa login --environment sandbox [--resume <id>]
+visa commerce-login <purchase-args> --confirm-purchase --no-open
 visa payment-method resolve --environment sandbox
-visa instruction candidates|create|get|wait <purchase-args> <PI/source>
+visa instruction candidates|create|bind-pi|get|wait <purchase-args> <PI/source>
 visa checkout <purchase-args> <PI/source> --purchase-instruction-id <id> --mandate-id <id> --confirm-purchase
 ```
 
-`visa commerce-login`、`visa commerce-run` 命令/导出仅作兼容，不再是新购买
+`visa commerce-run` 命令/导出仅作兼容，不再是新购买
 主路径，也不用于缺少新命令时回退。
 
 轻量购物路由覆盖：
@@ -82,12 +82,12 @@ Skill 不包含运行时工作流 JavaScript。钱包、
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.101` 内含来源提交
-`4908e9bc8e0bed639eeb5a498c7d38ae3e8b108b` 的 Visa CLI `0.2.77`。本
+Skill `0.1.103` 内含来源提交
+`479c0902658dcf6b1173bd6800c0a654320d482d` 的 Visa CLI `0.2.78`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。官方 Visa bundle 已同步五个独立命令；
-CLI 回归 1472/1472、同步后 Skill 测试 61/61 通过。仅为本地回归结果，
+CLI 回归 1486/1486、同步后 Skill 测试 61/61 通过。仅为本地回归结果，
 不代表后端部署或真实支付验收。
 
 若发行版缺少新命令，应报告限制，不猜测字段、不回退旧聚合、不拆成原子支付。
@@ -100,9 +100,10 @@ ready 或 nextAction 不能把“仅登录/仅查卡”的请求扩展成购买�
 
 1. `visa recommend-products` 不变：保留商品和权益，冻结商户、productId、
    权威价格/币种及数量 1。
-2. `visa login --environment sandbox [--resume <id>]` 只登录，不带
-   instructionContext，不生成 Quick/PENDING、不碰卡。返回 ready 或
-   manualOpenUrl，允许精确链接 browser-open；不能调用 wallet init。
+2. `visa commerce-login` 先查登录状态，购买上下文携带 instructionContext。
+   默认卡 ready 不新建；无默认卡或默认卡明确未就绪创建 PENDING，其他卡不影响。
+   状态未知先只读核对。保留原 Quick ID 和 deadline，先返回链接再独立 browser-open。
+   纯登录用 `visa init --sandbox --start --no-open`，原 ID `--resume`，不调用 wallet init。
 3. `visa payment-method resolve --environment sandbox` 默认取已保存默认卡，
    不问用哪张。用户主动指定非默认卡 exact ID 时传
    `--payment-instrument-id <id> --selection-source explicit`，也必须完成 VIC。
@@ -151,7 +152,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.101`
+Skill 版本：`0.1.103`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

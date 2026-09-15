@@ -34,7 +34,7 @@ async function walk(directory) {
   return files;
 }
 
-test('runtime artifacts keep current five-step principles without a Quick creation path', () => {
+test('runtime artifacts preserve Quick creation and exact independent continuation', () => {
   for (const path of paths.filter((path) => !['agents/openai.yaml', 'README.md', 'README.zh.md'].includes(path))) {
     const text = artifacts[path];
     assert.match(text, /ACTIVE/u, path);
@@ -42,7 +42,10 @@ test('runtime artifacts keep current five-step principles without a Quick creati
     assert.match(text, /paymentInstrumentId|selected PI|selectedPI/u, path);
     assert.match(text, /paymentInstrumentId[\s\S]*selectionSource/u, path);
     assert.match(text, /10 minutes|10 分钟/u, path);
-    assert.match(text, /creates no Quick or PENDING Instruction/u, path);
+    assert.match(text, /visa commerce-login/u, path);
+    assert.match(text, /direct PENDING creation/u, path);
+    assert.match(text, /visa instruction bind-pi/u, path);
+    assert.doesNotMatch(text, /creates no Quick or PENDING Instruction/u, path);
     assert.match(text, /visa instruction candidates/u, path);
     assert.match(text, /visa checkout/u, path);
   }
@@ -75,8 +78,8 @@ test('runtime artifacts do not load historical or filter reference files', async
       'visa-checkout.md',
       'visa-commerce-login.md',
       'visa-commerce-run.md',
+      'visa-init.md',
       'visa-instruction.md',
-      'visa-login.md',
       'visa-payment-method.md',
       'visa-pending-instructions.md',
       'visa-product-search.md',

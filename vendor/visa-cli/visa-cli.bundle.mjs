@@ -4342,12 +4342,12 @@ function defaultRandomSecret() {
   return randomBytes(32).toString("base64url");
 }
 function buildFallbackLoginUrl(portalOrigin, returnPath, email) {
-  const login2 = new URL("/login", portalOrigin);
-  login2.searchParams.set("redirectUrl", returnPath);
+  const login = new URL("/login", portalOrigin);
+  login.searchParams.set("redirectUrl", returnPath);
   if (email) {
-    login2.searchParams.set("email", email);
+    login.searchParams.set("email", email);
   }
-  return login2.toString();
+  return login.toString();
 }
 async function sendRedirect(response, location) {
   if (response.destroyed || response.writableEnded) {
@@ -4998,7 +4998,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.77";
+    CLI_VERSION = "0.2.78";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -33478,13 +33478,13 @@ async function runVisaCommerce(context, options2, dependencies) {
       maxWaitSeconds
     });
   }
-  let login2;
+  let login;
   try {
-    login2 = await dependencies.inspectLogin();
+    login = await dependencies.inspectLogin();
   } catch (error) {
     return workflowFailure("login_status", error);
   }
-  if (!login2.ready) {
+  if (!login.ready) {
     return {
       command: "visa commerce-run",
       stage: "login",
@@ -33492,7 +33492,7 @@ async function runVisaCommerce(context, options2, dependencies) {
       terminal: true,
       userActionRequired: true,
       reason: "run_visa_commerce_login_before_purchase",
-      detail: login2.detail
+      detail: login.detail
     };
   }
   const continuation = await dependencies.getContinuation?.();
@@ -33613,7 +33613,7 @@ async function runVisaCommerce(context, options2, dependencies) {
       command: "visa commerce-run",
       ...cardResult,
       ...await recoveryFor(dependencies, cardResult),
-      login: login2.detail
+      login: login.detail
     };
   }
   const card = cardResult.card;
@@ -33734,11 +33734,11 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       ]
     };
   }
-  let login2;
+  let login;
   try {
-    login2 = await dependencies.inspectLogin();
-    if (!login2.ready) {
-      login2 = await dependencies.login();
+    login = await dependencies.inspectLogin();
+    if (!login.ready) {
+      login = await dependencies.login();
     }
   } catch (error) {
     return {
@@ -33748,7 +33748,7 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       ...workflowFailure("login", error)
     };
   }
-  if (!login2.ready) {
+  if (!login.ready) {
     return {
       command: "visa commerce-run",
       mode: "prepare",
@@ -33757,14 +33757,14 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       status: "authentication_pending",
       terminal: false,
       userActionRequired: true,
-      ..."manualOpenUrl" in login2 && login2.manualOpenUrl ? {
-        manualOpenUrl: login2.manualOpenUrl,
-        ..."browserLaunch" in login2 ? { browserLaunch: login2.browserLaunch } : {},
+      ..."manualOpenUrl" in login && login.manualOpenUrl ? {
+        manualOpenUrl: login.manualOpenUrl,
+        ..."browserLaunch" in login ? { browserLaunch: login.browserLaunch } : {},
         rerunAllowed: true,
         resumeMode: "same_command",
         checkoutStarted: false
       } : {},
-      detail: login2.detail
+      detail: login.detail
     };
   }
   if (context.target === "login") {
@@ -33775,7 +33775,7 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       stage: "login",
       status: "ready",
       terminal: true,
-      login: login2.detail
+      login: login.detail
     };
   }
   const cardResult = await ensureVisaCardReady(dependencies, void 0, options2.maxWaitSeconds ?? DEFAULT_WORKFLOW_WAIT_SECONDS, void 0, options2.browserAction);
@@ -33785,7 +33785,7 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
       mode: "prepare",
       target: "visa_card_ready",
       ...cardResult,
-      login: login2.detail
+      login: login.detail
     };
   }
   return {
@@ -33795,7 +33795,7 @@ async function runVisaCommercePreparation(context, options2, dependencies) {
     stage: "card",
     status: "ready",
     terminal: true,
-    login: login2.detail,
+    login: login.detail,
     card: safeCard(cardResult.card)
   };
 }
@@ -34418,15 +34418,6 @@ function selectVisaCard(cards, requestedPaymentInstrumentId) {
 function selectDefaultVisaCardForInstruction(cards) {
   const defaults = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card) && cardDefault(card));
   return defaults.length === 1 ? defaults[0] : void 0;
-}
-function selectExistingVisaCardForVic(cards) {
-  const visaCards = cards.filter((card) => !cardDisabled(card) && cardIsVisa(card));
-  if (visaCards.some((card) => resolveVisaVicCapability(card) !== "supported" || cardVicReady(card))) {
-    return void 0;
-  }
-  const defaults = visaCards.filter(cardDefault);
-  const selected = defaults.length === 1 ? defaults[0] : void 0;
-  return selected && resolveVisaVicReadiness(selected) === "not_ready" ? selected : void 0;
 }
 async function resolveRegularInstruction(context, paymentInstrumentId, dependencies, maxWaitSeconds, browserAction, createIfMissing = true) {
   const continuation = await dependencies.getContinuation?.();
@@ -35257,6 +35248,190 @@ var init_commerce_run = __esm({
   }
 });
 
+// dist/visa/command-support.js
+function flag(context, name, required = false) {
+  const value = getStringFlag(context.args.flags, name);
+  if (required && !value?.trim() || value !== void 0 && !value.trim()) {
+    throw validationError(`--${name} is required and must not be blank.`);
+  }
+  return value?.trim();
+}
+function paymentSelection(context, pinned) {
+  const pi = flag(context, "payment-instrument-id", pinned);
+  const source = flag(context, "selection-source", pinned) ?? (pi ? "explicit" : "default");
+  if (source !== "default" && source !== "explicit") {
+    throw validationError("--selection-source must be default or explicit, as returned by payment-method resolve.");
+  }
+  return { paymentInstrumentId: pi, selectionSource: source };
+}
+function requireSelection(selection) {
+  if (!selection.paymentInstrumentId) {
+    throw validationError("Pass the frozen --payment-instrument-id and --selection-source from payment-method resolve.");
+  }
+}
+function assertEnvironment(context, environment, login = false) {
+  const normalized = normalizeVisaCommerceEnvironment(environment);
+  const baseUrl = visaCommerceApiBaseUrl(normalized);
+  assertVisaCommerceEnvironmentLock(normalized, baseUrl);
+  if (!login && !context.globalOptions.dryRun && !sameHttpOrigin(baseUrl, context.runtimeConfig.baseUrl)) {
+    throw validationError("The wallet and requested environment differ. Run visa init for standalone login or visa commerce-login for an authorized purchase in this environment.");
+  }
+  return baseUrl;
+}
+function commandDependencies(context, commerce) {
+  const base = createVisaCommerceCliDependencies(context, commerce);
+  const portal = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
+  return {
+    ...base,
+    now: Date.now,
+    bindCardUrl: () => new URL("/", portal).href,
+    manageCardUrl: () => new URL("/payment-method-modify", portal).href,
+    vicUrl: (pi) => buildAgentPasskeyUrl(portal, pi, void 0, context.runtimeConfig.email)
+  };
+}
+function text2(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function record2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function timestamp(value) {
+  const input = text2(value);
+  if (!input)
+    return NaN;
+  return Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(input) ? `${input.replace(" ", "T")}Z` : input);
+}
+function outcome(stage, status, message, nextAction, data = {}) {
+  return {
+    stage,
+    status,
+    ready: false,
+    message,
+    nextAction,
+    checkoutStarted: false,
+    paymentRetryAllowed: false,
+    ...data
+  };
+}
+function failure(stage, error, nextAction, data = {}) {
+  return outcome(stage, "failed", `The ${stage} operation could not complete. ${nextAction}`, nextAction, {
+    reason: error instanceof CliError ? error.type : "unexpected_error",
+    error: {
+      name: error instanceof Error ? error.name : "Error",
+      message: error instanceof Error ? error.message : "Operation failed"
+    },
+    ...data
+  });
+}
+function commandError(context, stage, error) {
+  const cause = error instanceof CliError ? error : apiError(`${stage} failed before completion; inspect this command before retrying.`, 502);
+  throw new CliError(cause.type, cause.message, cause.exitCode, cause.code, {
+    ...cause.details,
+    stage,
+    command: context.args.positionals.join(" "),
+    nextAction: stage === "checkout" ? "verify_payment_and_instruction_then_check_inputs" : "check_command_inputs",
+    browserOpenAllowed: false,
+    paymentRetryAllowed: false
+  });
+}
+function restriction(context) {
+  const result = classifyVisaCommerceRestriction(context);
+  if (!result.allowed) {
+    return outcome("restriction", "refused", result.reason, "stop", { restriction: result, terminal: true });
+  }
+  return void 0;
+}
+var init_command_support = __esm({
+  "dist/visa/command-support.js"() {
+    "use strict";
+    init_args();
+    init_errors();
+    init_utils();
+    init_url();
+    init_commerce_context();
+    init_commerce_cli();
+    init_commerce_restriction();
+  }
+});
+
+// dist/visa/payment-method-readiness.js
+function cardExpired(card, now) {
+  if (card.expiryYear == null && card.expiryMonth == null)
+    return false;
+  const year = Number(card.expiryYear);
+  const month = Number(card.expiryMonth);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12)
+    return true;
+  return Date.UTC(year < 100 ? year + 2e3 : year, month, 1) <= now;
+}
+function isUsableCard(card, now) {
+  return !cardDisabled(card) && card.disabled !== true && (!text2(card.status) || text2(card.status).toUpperCase() === "ACTIVE") && !cardExpired(card, now);
+}
+async function verifyPaymentSelection(selection, dependencies) {
+  const cards = await dependencies.refreshCards();
+  const selectedId = selection.paymentInstrumentId;
+  const defaults = cards.filter(cardDefault);
+  const resume = {
+    selectionSource: selection.selectionSource,
+    ...selectedId ? { paymentInstrumentId: selectedId } : {},
+    browserOpenAllowed: false
+  };
+  const blocked2 = (reason, message, nextAction, data = {}) => ({
+    ...outcome("payment_method", "user_action_required", message, nextAction, {
+      reason,
+      userActionRequired: true,
+      ...resume,
+      ...data
+    }),
+    ready: false
+  });
+  if (selection.selectionSource === "explicit" && !selectedId) {
+    throw validationError("Explicit payment selection requires --payment-instrument-id from the user's card choice.");
+  }
+  const onlyNonCardMethods = cards.every((method) => {
+    const type = text2(method.paymentInstrumentType ?? method.paymentMethodType)?.toUpperCase();
+    return type !== void 0 && type !== "CARD" && !text2(method.cardScheme ?? method.cardBrand);
+  });
+  if (!cards.length || onlyNonCardMethods) {
+    return blocked2("no_cards", "Bind a Visa card in Agent Portal, then run Step 3 again to check VIC readiness.", "show_bind_card_url", { bindCardUrl: dependencies.bindCardUrl() });
+  }
+  if (selection.selectionSource === "default" && defaults.length !== 1) {
+    return blocked2("default_pi_required", "Set one default payment method in Agent Portal, then rerun Step 3.", "show_card_management_url", { manageCardUrl: dependencies.manageCardUrl() });
+  }
+  if (selection.selectionSource === "default" && selectedId && defaults[0].paymentInstrumentId !== selectedId) {
+    return blocked2("default_pi_changed", "The default card changed. Reconfirm payment selection before continuing.", "reconfirm_default_payment_method", { currentDefaultCard: safeCard(defaults[0]) });
+  }
+  const card = selectedId ? cards.find((entry) => entry.paymentInstrumentId === selectedId) : defaults[0];
+  if (!card) {
+    return blocked2("selected_pi_missing", "The selected card is no longer in this wallet. Do not switch cards automatically.", "show_card_management_url", { manageCardUrl: dependencies.manageCardUrl() });
+  }
+  const detail = { paymentInstrumentId: card.paymentInstrumentId, card: safeCard(card) };
+  if (cardDisabled(card) || card.disabled === true || text2(card.status) && text2(card.status).toUpperCase() !== "ACTIVE" || cardExpired(card, dependencies.now())) {
+    return blocked2("selected_pi_unusable", "The selected card is disabled, inactive, or expired. Resolve it in Agent Portal.", "show_card_management_url", { ...detail, manageCardUrl: dependencies.manageCardUrl() });
+  }
+  const capability = resolveVisaVicCapability(card);
+  if (capability !== "supported") {
+    return blocked2(capability === "unknown" ? "vic_support_unknown" : "vic_unsupported", capability === "unknown" ? "VIC support is unknown. Refresh or check the card-info service; do not start VIC." : "This card does not support Visa VIC. Step 3 cannot finish with this card.", "show_card_management_url", { ...detail, manageCardUrl: dependencies.manageCardUrl() });
+  }
+  const readiness = resolveVisaVicReadiness(card);
+  if (readiness === "unknown") {
+    return blocked2("vic_readiness_unknown", "VIC completion is unknown. Recheck the card-info service before continuing.", "retry_payment_method_read", detail);
+  }
+  if (readiness !== "ready") {
+    return blocked2("vic_required", "Complete VIC for the selected card using this link, then rerun Step 3.", "show_vic_url", { ...detail, vicUrl: dependencies.vicUrl(card.paymentInstrumentId) });
+  }
+  return { ready: true, card, paymentInstrumentId: card.paymentInstrumentId, selectionSource: selection.selectionSource };
+}
+var init_payment_method_readiness = __esm({
+  "dist/visa/payment-method-readiness.js"() {
+    "use strict";
+    init_errors();
+    init_card_vic_readiness();
+    init_commerce_run();
+    init_command_support();
+  }
+});
+
 // dist/visa/commerce-cli.js
 function createVisaCommerceCliDependencies(context, commerceContext, agentState) {
   const loginBaseUrl = visaCommerceApiBaseUrl(commerceContext.environment);
@@ -35421,7 +35596,8 @@ function createVisaBenefitLoginCliDependencies(context, environment, agentState)
       return {
         fingerprint: "agent-provided",
         instructionId: currentAgentState.instructionId,
-        phase: currentAgentState.phase
+        phase: currentAgentState.phase,
+        ...currentAgentState.paymentInstrumentId ? { paymentInstrumentId: currentAgentState.paymentInstrumentId } : {}
       };
     },
     saveQuickInstructionContinuation: async (instructionContext, instructionId2, paymentInstrumentId) => {
@@ -35453,14 +35629,21 @@ function createVisaBenefitLoginCliDependencies(context, environment, agentState)
     },
     preparePurchaseIntent: async (instructionContext) => {
       const cards = await refreshCards();
-      const selected = selectVisaCard(cards);
-      if (selected.action === "use") {
-        return { state: "VIC_READY" };
+      const defaults = cards.filter(cardDefault);
+      if (defaults.length > 1) {
+        return { state: "READ_ONLY_RECOVERY_REQUIRED", reason: "multiple_default_payment_methods" };
       }
-      if (selected.action !== "add") {
-        throw validationError("Select one eligible Visa card in Agent Portal before continuing");
+      const selected = defaults.length === 1 ? defaults[0] : void 0;
+      if (selected && isUsableCard(selected, Date.now())) {
+        const support = resolveVisaVicCapability(selected);
+        const readiness = resolveVisaVicReadiness(selected);
+        if (support === "unknown" || support === "supported" && readiness === "unknown") {
+          return { state: "READ_ONLY_RECOVERY_REQUIRED", reason: "default_vic_state_unknown" };
+        }
+        if (support === "supported" && readiness === "ready")
+          return { state: "VIC_READY" };
       }
-      const existingCardId = selectExistingVisaCardForVic(cards)?.paymentInstrumentId;
+      const existingCardId = selected?.paymentInstrumentId;
       const pending = await createCommandPendingInstruction(context, instructionContext);
       return {
         ...pending,
@@ -35486,7 +35669,7 @@ function createVisaBenefitLoginCliDependencies(context, environment, agentState)
         timeoutMs: context.globalOptions.timeoutMs,
         dryRun: false,
         returnOnBrowserFailure: true,
-        deferBrowserActions: !context.globalOptions.open,
+        deferBrowserActions: true,
         ...browserAction ? { browserAction } : {},
         ...instructionContext ? { instructionContext } : {},
         openAuthorization: async (url) => {
@@ -36147,6 +36330,8 @@ var init_commerce_cli = __esm({
     init_utils();
     init_commerce_context();
     init_commerce_run();
+    init_payment_method_readiness();
+    init_card_vic_readiness();
     init_service();
     init_errors();
     init_internal_ucp();
@@ -36264,6 +36449,26 @@ var init_commerce_login_context = __esm({
   }
 });
 
+// dist/visa/purchase-context-validation.js
+function matchesPurchaseAuthorization(authorization, purchase) {
+  if (typeof authorization.currencyCode !== "string" || authorization.currencyCode.trim().toUpperCase() !== purchase.currency.toUpperCase())
+    return false;
+  const mcc = authorization.merchantCategoryCode;
+  if (mcc != null && (typeof mcc !== "string" || mcc.trim() !== "" && mcc.trim() !== purchase.merchantCategoryCode))
+    return false;
+  try {
+    return majorAmountMinorUnits(String(authorization.amountLimit), purchase.currency) >= majorAmountMinorUnits(purchase.totalPrice, purchase.currency);
+  } catch {
+    return false;
+  }
+}
+var init_purchase_context_validation = __esm({
+  "dist/visa/purchase-context-validation.js"() {
+    "use strict";
+    init_commerce_context();
+  }
+});
+
 // dist/visa/commerce-login.js
 async function runVisaCommerceLogin(context, options2, dependencies) {
   if (!options2.dryRun && !options2.confirmedPurchase) {
@@ -36321,7 +36526,35 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
       await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, saved.instructionId);
       return readyLoginResult(context, dependencies, saved.instructionId, current.detail);
     }
-    const prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
+    let prepared;
+    try {
+      prepared = await dependencies.preparePurchaseIntent?.(context.instructionContext);
+    } catch (error) {
+      return failure("purchase_intent", error, "inspect_purchase_read_only_do_not_retry_create", {
+        command: "visa commerce-login",
+        loginReady: true,
+        terminal: true,
+        creationOutcome: "unknown",
+        createsAnotherInstruction: false,
+        rerunAllowed: false,
+        browserOpenAllowed: false
+      });
+    }
+    if (prepared?.state === "READ_ONLY_RECOVERY_REQUIRED") {
+      return {
+        command: "visa commerce-login",
+        stage: "purchase_intent",
+        status: "read_only_recovery_required",
+        reason: prepared.reason,
+        ready: false,
+        loginReady: true,
+        terminal: true,
+        nextAction: "inspect_default_payment_method",
+        createsInstruction: false,
+        browserOpenAllowed: false,
+        paymentRetryAllowed: false
+      };
+    }
     const pendingInstructionId3 = optionalText9(prepared?.instructionId);
     if (pendingInstructionId3) {
       await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, pendingInstructionId3, optionalText9(prepared?.paymentInstrumentId ?? prepared?.payment_instrument_id));
@@ -36342,6 +36575,7 @@ async function runVisaCommerceLogin(context, options2, dependencies) {
       terminal: false,
       userActionRequired: true,
       manualOpenUrl: initialized.manualOpenUrl ?? null,
+      resumeId: initialized.detail.resumeId ?? null,
       browserLaunch: initialized.browserLaunch ?? null,
       rerunAllowed: true,
       resumeMode: "same_command",
@@ -36363,10 +36597,16 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
   let status = null;
   let paymentInstrumentId;
   let valid = true;
+  let authorizationDeadline;
   if (quickId) {
     const instruction = await dependencies.getInstruction(quickId);
     assertExactInstruction2(instruction, quickId);
     status = instructionStatus2(instruction);
+    if (status === "PENDING" || status === "CREATED") {
+      const createdAt = timestamp(instruction.createTime ?? instruction.createdAt);
+      const expiry2 = timestamp(instruction.effectiveUntilTime ?? instruction.effective_until_time);
+      authorizationDeadline = Math.min((Number.isFinite(createdAt) ? createdAt : Date.now()) + 6e5, Number.isFinite(expiry2) ? expiry2 : Infinity);
+    }
     paymentInstrumentId = optionalText9(instruction.paymentInstrumentId ?? instruction.payment_instrument_id);
     const saved = await dependencies.getQuickInstructionContinuation?.(context.instructionContext);
     if (saved?.paymentInstrumentId && status !== "PENDING" && paymentInstrumentId !== saved.paymentInstrumentId)
@@ -36374,7 +36614,7 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     if (status === "PENDING" && paymentInstrumentId)
       valid = false;
     if (status === "CREATED") {
-      valid &&= quickInstructionMatchesContext(instruction, context.instructionContext);
+      valid &&= createdAuthorizationMatches(instruction, context.instructionContext);
       if (valid && paymentInstrumentId) {
         await dependencies.saveQuickInstructionContinuation?.(context.instructionContext, quickId, paymentInstrumentId);
       }
@@ -36400,16 +36640,33 @@ async function readyLoginResult(context, dependencies, quickId, detail) {
     loginReady: true,
     terminal: true,
     action: !ready ? "READ_ONLY_RECOVERY_REQUIRED" : quickId ? "CONTINUE_PURCHASE_FLOW" : "CONTINUE_REGULAR_INSTRUCTION_FLOW",
-    reason: !ready ? "quick_instruction_not_usable" : quickId ? "quick_instruction_saved_continue_commerce_run" : "visa_login_ready_without_quick_instruction",
+    reason: !ready ? "quick_instruction_not_usable" : quickId ? "quick_instruction_continue_exact_id" : "commerce_login_ready_without_quick_instruction",
     instructionId: quickId ?? null,
     pendingInstructionId: quickId ?? null,
     instructionStatus: status,
     paymentInstrumentId: paymentInstrumentId ?? null,
     instructionReady: ready && status === "ACTIVE",
+    nextAction: !ready ? "inspect_exact_instruction" : "payment_method_resolve",
+    ...authorizationDeadline !== void 0 ? { authorizationDeadline } : {},
     ...phase ? { phase } : {},
     ...!ready ? { rerunAllowed: false, paymentRetryAllowed: false } : {},
     detail
   };
+}
+function createdAuthorizationMatches(instruction, expected) {
+  const mandates2 = instruction.mandates ?? instruction.mandateList ?? instruction.mandateVoList;
+  const recurring2 = instruction.isRecurring ?? instruction.is_recurring;
+  if (![true, false, 0, 1, "0", "1"].includes(recurring2) || [true, 1, "1"].includes(recurring2) !== (expected.isRecurring === true) || !Array.isArray(mandates2))
+    return false;
+  return expected.mandates.every((required) => mandates2.some((mandate) => record2(mandate) && matchesPurchaseAuthorization({
+    currencyCode: mandate.currencyCode,
+    amountLimit: mandate.amountLimit,
+    merchantCategoryCode: mandate.merchantCategoryCode
+  }, {
+    currency: String(required.currencyCode),
+    totalPrice: String(required.amountLimit),
+    ...required.merchantCategoryCode ? { merchantCategoryCode: String(required.merchantCategoryCode) } : {}
+  }) && [0, "0"].includes(mandate.reserveStatus) && (mandate.effectiveUntilTime == null || timestamp(mandate.effectiveUntilTime) > Date.now()) && (!expected.isRecurring || mandate.recurringFrequency === required.recurringFrequency)));
 }
 function assertExactInstruction2(instruction, expectedInstructionId) {
   if (!instruction) {
@@ -36430,24 +36687,28 @@ var init_commerce_login = __esm({
   "dist/visa/commerce-login.js"() {
     "use strict";
     init_errors();
-    init_commerce_run();
+    init_command_support();
+    init_purchase_context_validation();
   }
 });
 
 // dist/visa/help.js
 function getVisaEditionHelpText(command, subcommand, nestedCommand) {
-  if (command === "visa" && ["login", "payment-method", "instruction", "checkout"].includes(subcommand ?? "")) {
+  if (command === "visa" && ["payment-method", "instruction", "checkout"].includes(subcommand ?? "")) {
     return renderVisaHelp(`clink visa ${subcommand}${nestedCommand ? ` ${nestedCommand}` : ""}
 
 Five-step purchase:
-  visa recommend-products -> visa login -> visa payment-method resolve
-  -> visa instruction candidates/create/get/wait -> visa checkout
+  visa recommend-products -> visa commerce-login -> visa payment-method resolve
+  -> visa instruction candidates/create/bind-pi/get/wait -> visa checkout
   Independent commands, not a CLI workflow. The Agent may log in before recommending.
 
 Step 2:
-  clink visa login --environment sandbox [--resume <id>] [--dry-run]
-  Authentication only; never sends instructionContext or prepares a card/Instruction.
-  First return manualOpenUrl; use visa browser-open, then login --resume.
+  clink visa commerce-login <purchase flags> --confirm-purchase --no-open
+  Status first: authenticated checks ONLY default PI, ready means no new Instruction;
+  no/unready default creates PENDING. Unauthenticated sends instructionContext through Benefit OAuth.
+  Preserve exact pendingInstructionId and authorizationDeadline; never replace that Instruction.
+  Standalone login: clink visa init --sandbox --start --no-open (no purchase context).
+  Show the returned URL before visa browser-open, then visa init --sandbox --resume <id> --no-open.
 
 Step 3:
   clink visa payment-method resolve --environment sandbox
@@ -36459,6 +36720,11 @@ Step 3:
   selectionSource (default or explicit). Carry both unchanged into Steps 4 and 5.
 
 Step 4:
+  Existing Quick ID takes priority over candidates/create. ACTIVE verifies same PI and Mandate;
+  PENDING explicitly binds the SAME ID to the frozen Step3 VIC-ready PI:
+  clink visa instruction bind-pi <same purchase and selection flags> --instruction-id <id>
+    --authorization-deadline <original-epoch-ms> --confirm-purchase
+  CREATED continues same-ID ordinary activation. Binding never resets the deadline.
   clink visa instruction candidates <purchase flags> --payment-instrument-id <pi>
     --selection-source <default|explicit>
   candidates contains only eligible ACTIVE Instructions with eligibleMandates and bound PI.
@@ -36471,6 +36737,7 @@ Step 4:
   clink visa instruction get <same purchase and selection flags> --instruction-id <id>
   clink visa instruction wait <same flags> --instruction-id <id>
     --authorization-deadline <original-epoch-ms>
+  get/wait are read-only; PENDING returns binding_required, never a hidden bind POST.
   get checks manual completion without opening/waiting. wait checks first and waits on
   the exact ID for at most the remaining ten-minute window. Never recreate on timeout.
 
@@ -36496,7 +36763,7 @@ Output:
   --format json (default), --dry-run, --timeout <ms>
   Read stage/status/message/nextAction/ready; exit 0 alone does not mean step completion.
   Errors include stage and a nextAction. Never treat unknown creation/payment as failure
-  permission to retry. Legacy commerce-login/commerce-run remain compatibility-only.
+  permission to retry. Only commerce-run remains compatibility-only.
 `);
   }
   if (!command) {
@@ -36565,9 +36832,8 @@ var init_help2 = __esm({
     VISA_HELP = `clink visa
 
 Usage:
-  clink visa login --environment sandbox [--resume <id>]
   clink visa payment-method resolve --environment sandbox
-  clink visa instruction <candidates|create|get|wait> <purchase and selection flags>
+  clink visa instruction <candidates|create|bind-pi|get|wait> <purchase and selection flags>
   clink visa checkout <purchase and selected PI/Instruction/Mandate flags>
   clink visa init [options]
   clink visa vsra-init [options]
@@ -36584,7 +36850,6 @@ Usage:
   clink visa pending-instructions [--open] [--instruction-id <id>] [--payment-instrument-id <id>]
 
 Subcommands:
-  login        Step 2: authentication only; no Quick or card setup
   payment-method Step 3: default/user-chosen VIC-ready card; show links only, never open
   instruction  Step 4: ACTIVE candidates for Agent choice, ordinary create, activation checks
   checkout     Step 5: execute with fixed PI and ACTIVE authorization; no setup or matching
@@ -36602,9 +36867,9 @@ Subcommands:
   commerce-run Complete Card/VIC, Instruction, Checkout, payment, and delivery
   pending-instructions List still-activatable Instructions and open the exact Passkey activation page
 
-The five-step Skill uses recommend-products, login, payment-method, instruction, checkout.
+The five-step Skill uses recommend-products, commerce-login, payment-method, instruction, checkout.
 Commands are independent; the Agent orchestrates them. Login may precede recommendation.
-commerce-login and commerce-run remain legacy aggregate compatibility commands.
+Standalone login uses visa init without purchase context. Only commerce-run remains compatibility-only.
 
 Examples:
   clink visa init --sandbox --open
@@ -36761,7 +37026,7 @@ ${OUTPUT_OPTIONS2}
 
 Behavior:
   A mode=selected_product purchaseContext returned by recommend-products is accepted unchanged
-  by both commerce-login and commerce-run. This path supports one product with quantity 1,
+  by commerce-login. This path supports one product with quantity 1,
   generates Instruction fields from the verified product, and never requires Agent-authored
   Program fields. Missing optional MCC is omitted; supplied invalid MCC is rejected.
 
@@ -36783,25 +37048,30 @@ Behavior:
   user opened and completed it manually, rerun with --manual-completed; the command checks status
   first and does not open the browser.
   The CLI resumes the persisted login without starting another flow. Card/VIC and Instruction
-  authorization belong to commerce-run; commerce-login never opens a separate VIC page.
+  authorization belong to payment-method resolve and instruction; commerce-login never opens a separate VIC page.
 
   Live execution first checks the local Visa Benefit login state. A ready login checks card
-  readiness and prepares/reuses PENDING only when no eligible VIC-ready Visa exists, without
-  restarting OAuth. Otherwise it runs one foreground Visa Benefit login with the exact context.
+  readiness of ONLY the persisted default PI. A usable VIC-ready default creates no Instruction;
+  no default or an unready default creates one PENDING directly, even if another card is ready.
+  It never restarts OAuth for an authenticated customer. An unauthenticated customer uses
+  one Visa Benefit login with the exact instructionContext.
   A returned pendingInstructionId is followed for both LOGIN and REGISTER, without depending on
-  customerCreated or activationDriver. The CLI saves the exact ID under the authenticated
-  customer, environment and frozen instructionContext, then exact-GETs that same ID once.
+  customerCreated or activationDriver. The Agent retains the exact ID in this conversation
+  with environment and frozen instructionContext; the CLI exact-GETs that same ID once.
   The legacy pendingInstructionId field can identify CREATED bound to a backend-selected
   VIC-ready Visa, or no-card PENDING. Never infer status from the field name.
   Authenticated valid CREATED, PENDING and ACTIVE return ready=true and loginReady=true immediately so
-  commerce-run can continue. instructionReady is true only for ACTIVE.
+  payment-method resolve and instruction can continue. instructionReady is true only for ACTIVE.
   CREATED login checks context and pins the nonempty bound PI from exact GET without another
-  card query; commerce-run still verifies card/VIC readiness. The binding alone is not VIC proof.
+  card query; Step3 still verifies card/VIC readiness. The binding alone is not VIC proof.
   Expired, terminal, missing or mismatched Quick Instructions fail closed.
-  All activation waiting is in commerce-run.
+  Step4 ACTIVE verifies the same PI and eligible Mandate. PENDING uses explicit
+  visa instruction bind-pi with that same ID, frozen Step3 PI/source, confirmation and the
+  original authorizationDeadline; CREATED uses same-ID get/wait and ordinary activation.
+  get/wait are read-only. Never create a replacement ordinary Instruction for a Quick ID.
   Responses without an Instruction ID continue the regular Instruction flow without polling.
-  Quick IDs are not written into purchase context and survive process restart and Token refresh.
-  The command persists a continuation on browser failure and never calls the standalone Instruction create
+  IDs, PI/source and authorizationDeadline are conversation-owned, never stored in context files.
+  Browser failure preserves the original OAuth resume. The command never calls the ordinary Instruction create
   API, resolves a merchant, searches Catalog, opens Bind Card, creates a Checkout, or pays.
 
 Examples:
@@ -37269,281 +37539,6 @@ ${OUTPUT_OPTIONS2}
   }
 });
 
-// dist/visa/command-support.js
-function flag(context, name, required = false) {
-  const value = getStringFlag(context.args.flags, name);
-  if (required && !value?.trim() || value !== void 0 && !value.trim()) {
-    throw validationError(`--${name} is required and must not be blank.`);
-  }
-  return value?.trim();
-}
-function paymentSelection(context, pinned) {
-  const pi = flag(context, "payment-instrument-id", pinned);
-  const source = flag(context, "selection-source", pinned) ?? (pi ? "explicit" : "default");
-  if (source !== "default" && source !== "explicit") {
-    throw validationError("--selection-source must be default or explicit, as returned by payment-method resolve.");
-  }
-  return { paymentInstrumentId: pi, selectionSource: source };
-}
-function requireSelection(selection) {
-  if (!selection.paymentInstrumentId) {
-    throw validationError("Pass the frozen --payment-instrument-id and --selection-source from payment-method resolve.");
-  }
-}
-function assertEnvironment(context, environment, login2 = false) {
-  const normalized = normalizeVisaCommerceEnvironment(environment);
-  const baseUrl = visaCommerceApiBaseUrl(normalized);
-  assertVisaCommerceEnvironmentLock(normalized, baseUrl);
-  if (!login2 && !context.globalOptions.dryRun && !sameHttpOrigin(baseUrl, context.runtimeConfig.baseUrl)) {
-    throw validationError("The wallet and requested environment differ. Run visa login for this environment first.");
-  }
-  return baseUrl;
-}
-function commandDependencies(context, commerce) {
-  const base = createVisaCommerceCliDependencies(context, commerce);
-  const portal = resolveAgentBaseUrl(context.runtimeConfig.baseUrl);
-  return {
-    ...base,
-    now: Date.now,
-    bindCardUrl: () => new URL("/", portal).href,
-    manageCardUrl: () => new URL("/payment-method-modify", portal).href,
-    vicUrl: (pi) => buildAgentPasskeyUrl(portal, pi, void 0, context.runtimeConfig.email)
-  };
-}
-function text2(value) {
-  return typeof value === "string" && value.trim() ? value.trim() : void 0;
-}
-function record2(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function timestamp(value) {
-  const input = text2(value);
-  if (!input)
-    return NaN;
-  return Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(input) ? `${input.replace(" ", "T")}Z` : input);
-}
-function outcome(stage, status, message, nextAction, data = {}) {
-  return {
-    stage,
-    status,
-    ready: false,
-    message,
-    nextAction,
-    checkoutStarted: false,
-    paymentRetryAllowed: false,
-    ...data
-  };
-}
-function failure(stage, error, nextAction, data = {}) {
-  return outcome(stage, "failed", `The ${stage} operation could not complete. ${nextAction}`, nextAction, {
-    reason: error instanceof CliError ? error.type : "unexpected_error",
-    error: {
-      name: error instanceof Error ? error.name : "Error",
-      message: error instanceof Error ? error.message : "Operation failed"
-    },
-    ...data
-  });
-}
-function commandError(context, stage, error) {
-  const cause = error instanceof CliError ? error : apiError(`${stage} failed before completion; inspect this command before retrying.`, 502);
-  throw new CliError(cause.type, cause.message, cause.exitCode, cause.code, {
-    ...cause.details,
-    stage,
-    command: context.args.positionals.join(" "),
-    nextAction: stage === "checkout" ? "verify_payment_and_instruction_then_check_inputs" : "check_command_inputs",
-    browserOpenAllowed: false,
-    paymentRetryAllowed: false
-  });
-}
-function restriction(context) {
-  const result = classifyVisaCommerceRestriction(context);
-  if (!result.allowed) {
-    return outcome("restriction", "refused", result.reason, "stop", { restriction: result, terminal: true });
-  }
-  return void 0;
-}
-var init_command_support = __esm({
-  "dist/visa/command-support.js"() {
-    "use strict";
-    init_args();
-    init_errors();
-    init_utils();
-    init_url();
-    init_commerce_context();
-    init_commerce_cli();
-    init_commerce_restriction();
-  }
-});
-
-// dist/visa/commands/login.js
-async function visaLogin(context) {
-  try {
-    return await login(context);
-  } catch (error) {
-    return commandError(context, "login", error);
-  }
-}
-async function login(context) {
-  if (context.args.positionals.length !== 2)
-    throw validationError("Usage: visa login --environment sandbox [--resume <id>].");
-  const rawEnvironment = flag(context, "environment") ?? clinkEnvironmentForApiBaseUrl(resolveWalletInitBaseUrl(context.args.flags)) ?? "production";
-  const baseUrl = assertEnvironment(context, rawEnvironment, true);
-  const readiness = getVisaBenefitLoginReadiness({ storedConfig: context.storedConfig, baseUrl });
-  if (!context.globalOptions.dryRun && readiness.ready) {
-    return {
-      command: "visa login",
-      stage: "login",
-      status: "ready",
-      ready: true,
-      nextAction: "payment_method_resolve",
-      createsInstruction: false
-    };
-  }
-  if (context.globalOptions.dryRun) {
-    const planned = await initializeVisaLogin({
-      storedConfig: context.storedConfig,
-      baseUrl,
-      timeoutMs: context.globalOptions.timeoutMs,
-      dryRun: true
-    });
-    return {
-      command: "visa login",
-      stage: "login",
-      status: "dry_run",
-      sideEffects: false,
-      createsInstruction: false,
-      plan: planned.result
-    };
-  }
-  const resumeId = flag(context, "resume");
-  const pending = context.storedConfig.visa?.pendingBenefitLogin;
-  if (pending && Date.parse(pending.expiresAt) > Date.now() && pending.instructionContextFingerprint !== commerceFingerprint(null)) {
-    throw validationError("An older purchase-enabled login is still pending. Finish that original flow before starting authentication-only visa login.");
-  }
-  const operation = {
-    storedConfig: context.storedConfig,
-    baseUrl,
-    timeoutMs: context.globalOptions.timeoutMs,
-    dryRun: false
-  };
-  const completed = resumeId ? await resumeVisaLogin({ ...operation, resumeId }) : await startVisaLogin({ ...operation, reuseInstructionContext: true });
-  context.storedConfig = completed.storedConfig;
-  context.runtimeConfig = resolveRuntimeConfig(completed.storedConfig, context.args.flags);
-  context.authorizationIdentity = runtimeAuthorizationIdentity(context.runtimeConfig);
-  const result = completed.result;
-  if (result.status === "authorization_pending" || result.status === "authorization_processing") {
-    return {
-      command: "visa login",
-      stage: "login",
-      status: "user_action_required",
-      ready: false,
-      message: "Complete Visa login in the system browser, then resume with the returned ID.",
-      manualOpenUrl: result.authorizationUrl,
-      resumeId: result.resumeId,
-      expiresAt: result.expiresAt,
-      resumeCommand: ["visa", "login", "--environment", rawEnvironment, "--resume", String(result.resumeId), "--format", "json"],
-      nextAction: "show_login_url_then_browser_open",
-      createsInstruction: false
-    };
-  }
-  const ready = getVisaBenefitLoginReadiness({ storedConfig: completed.storedConfig, baseUrl }).ready;
-  return {
-    command: "visa login",
-    stage: "login",
-    status: ready ? "ready" : "authentication_required",
-    ready,
-    nextAction: ready ? "payment_method_resolve" : "visa_login",
-    createsInstruction: false
-  };
-}
-var init_login = __esm({
-  "dist/visa/commands/login.js"() {
-    "use strict";
-    init_errors();
-    init_auth_identity();
-    init_config();
-    init_domains();
-    init_service();
-    init_commerce_continuation();
-    init_command_support();
-  }
-});
-
-// dist/visa/payment-method-readiness.js
-function cardExpired(card, now) {
-  if (card.expiryYear == null && card.expiryMonth == null)
-    return false;
-  const year = Number(card.expiryYear);
-  const month = Number(card.expiryMonth);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12)
-    return true;
-  return Date.UTC(year < 100 ? year + 2e3 : year, month, 1) <= now;
-}
-async function verifyPaymentSelection(selection, dependencies) {
-  const cards = await dependencies.refreshCards();
-  const selectedId = selection.paymentInstrumentId;
-  const defaults = cards.filter(cardDefault);
-  const resume = {
-    selectionSource: selection.selectionSource,
-    ...selectedId ? { paymentInstrumentId: selectedId } : {},
-    browserOpenAllowed: false
-  };
-  const blocked2 = (reason, message, nextAction, data = {}) => ({
-    ...outcome("payment_method", "user_action_required", message, nextAction, {
-      reason,
-      userActionRequired: true,
-      ...resume,
-      ...data
-    }),
-    ready: false
-  });
-  if (selection.selectionSource === "explicit" && !selectedId) {
-    throw validationError("Explicit payment selection requires --payment-instrument-id from the user's card choice.");
-  }
-  const onlyNonCardMethods = cards.every((method) => {
-    const type = text2(method.paymentInstrumentType ?? method.paymentMethodType)?.toUpperCase();
-    return type !== void 0 && type !== "CARD" && !text2(method.cardScheme ?? method.cardBrand);
-  });
-  if (!cards.length || onlyNonCardMethods) {
-    return blocked2("no_cards", "Bind a Visa card in Agent Portal, then run Step 3 again to check VIC readiness.", "show_bind_card_url", { bindCardUrl: dependencies.bindCardUrl() });
-  }
-  if (selection.selectionSource === "default" && defaults.length !== 1) {
-    return blocked2("default_pi_required", "Set one default payment method in Agent Portal, then rerun Step 3.", "show_card_management_url", { manageCardUrl: dependencies.manageCardUrl() });
-  }
-  if (selection.selectionSource === "default" && selectedId && defaults[0].paymentInstrumentId !== selectedId) {
-    return blocked2("default_pi_changed", "The default card changed. Reconfirm payment selection before continuing.", "reconfirm_default_payment_method", { currentDefaultCard: safeCard(defaults[0]) });
-  }
-  const card = selectedId ? cards.find((entry) => entry.paymentInstrumentId === selectedId) : defaults[0];
-  if (!card) {
-    return blocked2("selected_pi_missing", "The selected card is no longer in this wallet. Do not switch cards automatically.", "show_card_management_url", { manageCardUrl: dependencies.manageCardUrl() });
-  }
-  const detail = { paymentInstrumentId: card.paymentInstrumentId, card: safeCard(card) };
-  if (cardDisabled(card) || card.disabled === true || text2(card.status) && text2(card.status).toUpperCase() !== "ACTIVE" || cardExpired(card, dependencies.now())) {
-    return blocked2("selected_pi_unusable", "The selected card is disabled, inactive, or expired. Resolve it in Agent Portal.", "show_card_management_url", { ...detail, manageCardUrl: dependencies.manageCardUrl() });
-  }
-  const capability = resolveVisaVicCapability(card);
-  if (capability !== "supported") {
-    return blocked2(capability === "unknown" ? "vic_support_unknown" : "vic_unsupported", capability === "unknown" ? "VIC support is unknown. Refresh or check the card-info service; do not start VIC." : "This card does not support Visa VIC. Step 3 cannot finish with this card.", "show_card_management_url", { ...detail, manageCardUrl: dependencies.manageCardUrl() });
-  }
-  const readiness = resolveVisaVicReadiness(card);
-  if (readiness === "unknown") {
-    return blocked2("vic_readiness_unknown", "VIC completion is unknown. Recheck the card-info service before continuing.", "retry_payment_method_read", detail);
-  }
-  if (readiness !== "ready") {
-    return blocked2("vic_required", "Complete VIC for the selected card using this link, then rerun Step 3.", "show_vic_url", { ...detail, vicUrl: dependencies.vicUrl(card.paymentInstrumentId) });
-  }
-  return { ready: true, card, paymentInstrumentId: card.paymentInstrumentId, selectionSource: selection.selectionSource };
-}
-var init_payment_method_readiness = __esm({
-  "dist/visa/payment-method-readiness.js"() {
-    "use strict";
-    init_errors();
-    init_card_vic_readiness();
-    init_commerce_run();
-    init_command_support();
-  }
-});
-
 // dist/visa/commands/payment-method.js
 async function visaPaymentMethod(context) {
   try {
@@ -37578,26 +37573,6 @@ var init_payment_method = __esm({
     init_commerce_run();
     init_payment_method_readiness();
     init_command_support();
-  }
-});
-
-// dist/visa/purchase-context-validation.js
-function matchesPurchaseAuthorization(authorization, purchase) {
-  if (typeof authorization.currencyCode !== "string" || authorization.currencyCode.trim().toUpperCase() !== purchase.currency.toUpperCase())
-    return false;
-  const mcc = authorization.merchantCategoryCode;
-  if (mcc != null && (typeof mcc !== "string" || mcc.trim() !== "" && mcc.trim() !== purchase.merchantCategoryCode))
-    return false;
-  try {
-    return majorAmountMinorUnits(String(authorization.amountLimit), purchase.currency) >= majorAmountMinorUnits(purchase.totalPrice, purchase.currency);
-  } catch {
-    return false;
-  }
-}
-var init_purchase_context_validation = __esm({
-  "dist/visa/purchase-context-validation.js"() {
-    "use strict";
-    init_commerce_context();
   }
 });
 
@@ -37681,8 +37656,8 @@ var init_instruction_eligibility = __esm({
 async function visaInstruction(context) {
   try {
     const action = context.args.positionals[2];
-    if (context.args.positionals.length !== 3 || action !== "candidates" && action !== "create" && action !== "get" && action !== "wait") {
-      throw validationError("Use visa instruction candidates, create, get, or wait.");
+    if (context.args.positionals.length !== 3 || action !== "candidates" && action !== "create" && action !== "bind-pi" && action !== "get" && action !== "wait") {
+      throw validationError("Use visa instruction candidates, create, bind-pi, get, or wait.");
     }
     const purchase = await readVisaCommerceContext(context.args.flags);
     if (purchase.mode === "prepare")
@@ -37692,7 +37667,7 @@ async function visaInstruction(context) {
     const rawDeadline = flag(context, "authorization-deadline");
     const instructionId2 = flag(context, "instruction-id");
     if ((action === "candidates" || action === "create") && instructionId2) {
-      throw validationError("An existing --instruction-id must use get/wait. Never call create again to resume activation.");
+      throw validationError("An existing --instruction-id must use bind-pi/get/wait. Never call create again to resume activation.");
     }
     const deadline = rawDeadline ? Number(rawDeadline) : void 0;
     if (deadline !== void 0 && (!Number.isSafeInteger(deadline) || deadline <= 0)) {
@@ -37719,14 +37694,14 @@ function instructionRows(payload) {
 }
 async function runInstructionAction(context, options2, dependencies) {
   requireSelection(options2);
-  if (options2.action === "create" && !options2.confirmedPurchase && !options2.dryRun) {
-    throw validationError("Instruction creation requires --confirm-purchase after the Agent found no suitable ACTIVE candidate.");
+  if (["create", "bind-pi"].includes(options2.action) && !options2.confirmedPurchase && !options2.dryRun) {
+    throw validationError("Instruction creation/binding requires --confirm-purchase for this authorized purchase.");
   }
-  if (["get", "wait"].includes(options2.action) && !options2.instructionId) {
+  if (["bind-pi", "get", "wait"].includes(options2.action) && !options2.instructionId) {
     throw validationError("Pass --instruction-id from Step 4; do not create another Instruction to check activation.");
   }
-  if (options2.action === "wait" && (!Number.isFinite(options2.authorizationDeadline) || !options2.authorizationDeadline)) {
-    throw validationError("Instruction wait requires the original --authorization-deadline returned by create/get.");
+  if (["bind-pi", "wait"].includes(options2.action) && (!Number.isSafeInteger(options2.authorizationDeadline) || !options2.authorizationDeadline || options2.authorizationDeadline <= 0)) {
+    throw validationError("Instruction bind-pi/wait requires the original --authorization-deadline returned by commerce-login/create/get.");
   }
   const refused = restriction(context);
   if (refused)
@@ -37736,6 +37711,7 @@ async function runInstructionAction(context, options2, dependencies) {
   let stage = "card_refresh";
   let createdId;
   let createStarted = false;
+  let bindStarted = false;
   try {
     const payment = await verifyPaymentSelection(options2, dependencies);
     if (!payment.ready)
@@ -37782,6 +37758,37 @@ async function runInstructionAction(context, options2, dependencies) {
     const instructionId2 = createdId ?? options2.instructionId;
     stage = "instruction_get";
     let exact = await dependencies.getInstruction(instructionId2);
+    if (!exact || idOf(exact) !== instructionId2) {
+      throw apiError("The exact Instruction is missing or its identity changed. Preserve the ID; do not recreate.");
+    }
+    if (text2(exact.status)?.toUpperCase() === "PENDING" && !piOf(exact)) {
+      if (!eligibleInstruction({ ...exact, status: "ACTIVE", paymentInstrumentId: payment.paymentInstrumentId }, payment.paymentInstrumentId, context, dependencies.now())) {
+        return outcome("instruction_verification", "unavailable", "The pending Instruction does not satisfy this purchase's authorization conditions.", "inspect_exact_instruction", { ...selection, instructionId: instructionId2, createsAnotherInstruction: false, browserOpenAllowed: false });
+      }
+      if (options2.action !== "bind-pi" || options2.authorizationDeadline <= dependencies.now()) {
+        const timedOut2 = options2.authorizationDeadline !== void 0 && options2.authorizationDeadline <= dependencies.now();
+        return outcome("instruction", timedOut2 ? "timeout" : "binding_required", "Preserve this exact Quick Instruction. Binding requires the explicit bind-pi command and original deadline.", timedOut2 ? "inspect_exact_instruction" : "instruction_bind_pi", {
+          ...selection,
+          instructionId: instructionId2,
+          instructionStatus: "PENDING",
+          ...options2.authorizationDeadline !== void 0 ? { authorizationDeadline: options2.authorizationDeadline } : {},
+          createsAnotherInstruction: false,
+          browserOpenAllowed: false
+        });
+      }
+      stage = "product_revalidation";
+      await dependencies.resolvePurchase(context.purchaseContext);
+      const refreshed = await verifyPaymentSelection(options2, dependencies);
+      if (!refreshed.ready)
+        return { ...refreshed, instructionId: instructionId2, authorizationDeadline: options2.authorizationDeadline };
+      stage = "instruction_bind";
+      bindStarted = true;
+      const bound = await dependencies.bindPendingInstruction(instructionId2, payment.paymentInstrumentId);
+      if (idOf(bound) !== instructionId2 || piOf(bound) !== payment.paymentInstrumentId) {
+        throw apiError("Instruction binding response changed the exact ID or PI. Reconcile read-only.");
+      }
+      exact = await dependencies.getInstruction(instructionId2);
+    }
     if (!exact || idOf(exact) !== instructionId2 || piOf(exact) !== payment.paymentInstrumentId) {
       throw apiError("The exact Instruction is missing or bound to a different PI. Preserve the ID and inspect it; do not recreate.");
     }
@@ -37802,7 +37809,14 @@ async function runInstructionAction(context, options2, dependencies) {
     }
     const candidate = eligibleInstruction(exact, payment.paymentInstrumentId, context, dependencies.now());
     if (candidate)
-      return outcome("instruction", "ready", "The exact Instruction is ACTIVE and eligible.", "checkout", { ...selection, ready: true, instructionId: instructionId2, instruction: candidate, browserOpenAllowed: false });
+      return outcome("instruction", "ready", "The exact Instruction is ACTIVE and eligible.", "checkout", {
+        ...selection,
+        ready: true,
+        instructionId: instructionId2,
+        instruction: candidate,
+        browserOpenAllowed: false,
+        ...options2.authorizationDeadline !== void 0 ? { authorizationDeadline: options2.authorizationDeadline } : {}
+      });
     if (text2(exact.status)?.toUpperCase() !== "CREATED" || !(timestamp(exact.effectiveUntilTime) > dependencies.now())) {
       return outcome("instruction", "unavailable", "This Instruction is not an eligible ACTIVE or unexpired CREATED Instruction. Do not replace it automatically.", "inspect_exact_instruction", { ...selection, instructionId: instructionId2, instructionStatus: exact.status, createsAnotherInstruction: false });
     }
@@ -37823,10 +37837,12 @@ async function runInstructionAction(context, options2, dependencies) {
       createsAnotherInstruction: false
     });
   } catch (error) {
-    return failure(stage, error, createStarted ? "inspect_instruction_read_only_do_not_retry_create" : "retry_read_only_step", {
+    return failure(stage, error, createStarted ? "inspect_instruction_read_only_do_not_retry_create" : bindStarted ? "inspect_exact_instruction_read_only_do_not_retry_bind" : "retry_read_only_step", {
       paymentInstrumentId: options2.paymentInstrumentId,
       instructionId: createdId ?? options2.instructionId ?? null,
       ...createStarted ? { creationOutcome: createdId ? "created" : "unknown", createsAnotherInstruction: false } : {},
+      ...bindStarted ? { bindingOutcome: "unknown", createsAnotherInstruction: false, bindingRetryAllowed: false } : {},
+      ...options2.authorizationDeadline !== void 0 ? { authorizationDeadline: options2.authorizationDeadline } : {},
       browserOpenAllowed: false
     });
   }
@@ -37900,7 +37916,7 @@ async function checkoutPurchase(context, options2, dependencies) {
   let checkoutStarted = false;
   try {
     if (!(await dependencies.inspectLogin()).ready)
-      return outcome("login", "authentication_required", "Complete Step 2 Visa login first. Checkout will not log in or prepare payment.", "visa_login");
+      return outcome("login", "authentication_required", "Complete visa commerce-login for this authorized purchase first. Checkout will not log in or prepare payment.", "visa_commerce_login");
     stage = "product_revalidation";
     const purchase = await dependencies.resolvePurchase(context.purchaseContext);
     stage = "card_refresh";
@@ -37998,9 +38014,6 @@ async function handleVisaEditionCommand(command, subcommand, context) {
     return EXIT_CODES.OK;
   }
   switch (subcommand) {
-    case "login":
-      printSuccess(await visaLogin(context), context.globalOptions.format);
-      return EXIT_CODES.OK;
     case "payment-method":
       printSuccess({ command: "visa payment-method resolve", ...await visaPaymentMethod(context) }, context.globalOptions.format);
       return EXIT_CODES.OK;
@@ -38277,12 +38290,20 @@ async function visaInit(context) {
     throw validationError("--start/--resume cannot be combined with --dry-run");
   }
   const instructionContext = await buildQuickInstructionContext(context.args.flags, "visa init");
+  if (!instructionContext && !resumeId && !context.globalOptions.dryRun) {
+    const readiness = getVisaBenefitLoginReadiness({ storedConfig: context.storedConfig, baseUrl });
+    if (readiness.ready) {
+      printSuccess({ status: "ready", ready: true, createsInstruction: false }, context.globalOptions.format);
+      return EXIT_CODES.OK;
+    }
+  }
   if (start) {
     const { result: result2, storedConfig: storedConfig2 } = await startVisaLogin({
       storedConfig: context.storedConfig,
       baseUrl,
       timeoutMs: context.globalOptions.timeoutMs,
       dryRun: false,
+      reuseInstructionContext: true,
       ...instructionContext ? { instructionContext } : {}
     });
     const browserLaunch = await openBrowserWithResult(context.globalOptions.open, result2.authorizationUrl);
@@ -38448,7 +38469,7 @@ async function visaTaxonomy(context) {
 }
 function validateVisaFlagScope(command, subcommand, flags) {
   if (command === "visa") {
-    const fiveStep = ["login", "payment-method", "instruction", "checkout"].includes(subcommand ?? "");
+    const fiveStep = ["payment-method", "instruction", "checkout"].includes(subcommand ?? "");
     if (fiveStep) {
       if (flags.open !== void 0) {
         throw validationError("This step never opens a browser. Step 3 only shows links; for login/Instruction activation use visa browser-open separately.");
@@ -38457,19 +38478,16 @@ function validateVisaFlagScope(command, subcommand, flags) {
         throw validationError("Legacy --phase cannot resume this step. Use instruction get/wait for an existing ID; never recreate it.");
       }
       if (subcommand !== "instruction" && flags["authorization-deadline"] !== void 0) {
-        throw validationError("--authorization-deadline belongs only to visa instruction get/wait.");
+        throw validationError("--authorization-deadline belongs only to visa instruction bind-pi/get/wait.");
       }
-      if (subcommand === "login" && (hasQuickInstructionOptions(flags) || flags.context !== void 0 || [...FLAT_COMMERCE_SCOPE_FLAG_NAMES].some((name) => name !== "environment" && flags[name] !== void 0))) {
-        throw validationError("visa login is authentication-only; omit purchase/Instruction arguments and complete Steps 3 and 4 afterward.");
-      }
-      if (subcommand !== "login" && (flags.resume !== void 0 || flags.start !== void 0)) {
-        throw validationError("--resume is only for visa login; preserve the PI/Instruction IDs for other steps.");
+      if (flags.resume !== void 0 || flags.start !== void 0) {
+        throw validationError("--resume is only for visa init; preserve the PI/Instruction IDs for other steps.");
       }
       if (subcommand === "payment-method" && (flags.context !== void 0 || flags["confirm-purchase"] !== void 0 || [...FLAT_COMMERCE_SCOPE_FLAG_NAMES].some((name) => name !== "environment" && flags[name] !== void 0))) {
         throw validationError("Step 3 takes only environment and payment selection; it does not create an Instruction or purchase.");
       }
       if (flags["browser-opened"] !== void 0 || flags["manual-completed"] !== void 0) {
-        throw validationError("Use visa login --resume or visa instruction get/wait to check completion; Step 3 is rechecked with payment-method resolve.");
+        throw validationError("Use visa init --resume or visa instruction get/wait to check completion; Step 3 is rechecked with payment-method resolve.");
       }
       return;
     }
@@ -38653,7 +38671,6 @@ var init_edition = __esm({
     init_commerce_context();
     init_commerce_run();
     init_help2();
-    init_login();
     init_payment_method();
     init_instruction();
     init_checkout();

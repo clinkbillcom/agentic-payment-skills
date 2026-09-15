@@ -1,14 +1,28 @@
 # `visa instruction` Failure Reference
 
-Read this file only after `visa instruction candidates`, `create`, `get`, or
+Read this file only after `visa instruction candidates`, `create`, `bind-pi`, `get`, or
 `wait` returns incomplete, ambiguous, or failed results.
 
-All four commands require the same selected_product flat purchase arguments,
+All subcommands require the same selected_product flat purchase arguments,
 `--environment sandbox`, `--payment-instrument-id`, and `--selection-source
 default|explicit`. Never build a context file or substitute another PI.
 Each subcommand is independently invoked with its required inputs and current
 state, not proof that earlier commands ran. Exact-ID get/wait does not invoke
 candidates/create; a ready result does not itself invoke Checkout.
+
+## Quick Continuation
+
+An exact pendingInstructionId from commerce-login takes priority over candidate
+selection. With Step3's ready PI, `get` checks that ID: ACTIVE verifies the PI
+and eligible Mandates; CREATED continues activation; PENDING returns
+binding_required without a write.
+
+For PENDING, explicitly use `visa instruction bind-pi` with the same purchase
+arguments, PI/source, `--instruction-id <id> --authorization-deadline <ms>
+--confirm-purchase`. It binds the same ID and returns its ordinary activation
+URL. Preserve the original deadline. Unknown binding results need exact read-only
+reconciliation, not another binding or replacement creation. If VIC activated a
+different concurrent purchase, continue this purchase's original ID.
 
 ## Technical Eligibility
 
@@ -58,7 +72,7 @@ These outcomes assume technical eligibility unless stated otherwise:
 | Candidate read failed or coverage unknown | stop_read_only |
 | Complete eligible set empty | create_ordinary |
 
-`no_match` permits creation only after the complete eligible set has no semantic
+Without a Quick ID, `no_match` permits creation only after the complete eligible set has no semantic
 match. Ambiguous evidence never permits a guess or automatic creation.
 A match freezes both instructionId and mandateId for Step5.
 

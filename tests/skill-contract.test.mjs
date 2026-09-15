@@ -39,7 +39,7 @@ async function walk(directory) {
 
 test('package exposes the bundled Visa launcher and current version', () => {
   assert.equal(packageJson.name, 'visa-skill');
-  assert.equal(packageJson.version, '0.1.101');
+  assert.equal(packageJson.version, '0.1.103');
   assert.deepEqual(packageJson.bin, { 'visa-cli': './bin/visa-cli' });
   assert.deepEqual(packageJson.scripts, { test: 'node --test tests/*.test.mjs' });
   assert.ok(skill.includes(`Visa Skill ${packageJson.version}.`));
@@ -92,8 +92,8 @@ test('runtime package ships only current aggregate diagnostic references', async
       'references/visa-checkout.md',
       'references/visa-commerce-login.md',
       'references/visa-commerce-run.md',
+      'references/visa-init.md',
       'references/visa-instruction.md',
-      'references/visa-login.md',
       'references/visa-payment-method.md',
       'references/visa-pending-instructions.md',
       'references/visa-product-search.md',
@@ -117,9 +117,9 @@ test('aggregate references map failures to stages and safe atomic commands', asy
     'visa-recommend.md': ['visa recommend', 'retryFilters', 'never authorizes'],
     'visa-recommend-products.md': ['visa recommend-products', 'productMatching.failures', 'product-search'],
     'visa-product-search.md': ['visa product-search', 'PRODUCT_SELECTION_REQUIRED', 'PRODUCT_VERIFIED'],
-    'visa-commerce-login.md': ['visa commerce-login', 'quick_instruction_get', 'browser-open'],
+    'visa-commerce-login.md': ['visa commerce-login', 'pendingInstructionId', 'browser-open'],
     'visa-commerce-run.md': ['visa commerce-run', 'instruction_create', 'read-only'],
-    'visa-login.md': ['visa login', '--resume', 'manualOpenUrl'],
+    'visa-init.md': ['visa init', '--resume', 'manualOpenUrl'],
     'visa-payment-method.md': ['visa payment-method resolve', 'selectionSource', 'same_resolve'],
     'visa-instruction.md': ['visa instruction candidates', 'eligibleMandates', '--authorization-deadline'],
     'visa-checkout.md': ['visa checkout', '--mandate-id', 'read-only'],
@@ -202,10 +202,10 @@ test('purchase uses one frozen context and direct flat CLI input', () => {
   );
   assert.match(purchase, /purchaseContext` unchanged[\s\S]*in memory|purchaseContext unchanged[\s\S]*in memory/u);
   assert.match(purchase, /Do not create a[\s\S]*local JSON file/u);
-  assert.match(purchase, /Steps 4-5[\s\S]*same flat arguments[\s\S]*--mode selected_product/u);
+  assert.match(purchase, /Steps 2, 4-5[\s\S]*same flat arguments[\s\S]*--mode selected_product/u);
   assert.doesNotMatch(purchase, /--context-file|same file/u);
   assert.doesNotMatch(purchase, /--context '<purchase-context-json>'/u);
-  assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN[\s\S]*not a command-order requirement[\s\S]*do not call the legacy command/u);
+  assert.match(purchase, /PRODUCT_VERIFIED[\s\S]*CONTINUE_TO_COMMERCE_LOGIN[\s\S]*not a command-order requirement[\s\S]*Use commerce-login only for an[\s\S]*authorized purchase/u);
   assert.match(purchase, /never run or refresh `visa detail`/iu);
   assert.match(agent, /same frozen facts as flat --xxx arguments/u);
   assert.match(agent, /Never create a context file/u);
@@ -250,7 +250,7 @@ test('card setup and VIC stay URL-only across purchase and recovery guidance', a
   assert.match(runReference, /card-management and VIC URLs are[\s\S]*manual-only/u);
 });
 
-test('purchase identity freezes both PI and selection source without Quick fallback', () => {
+test('purchase identity freezes both PI and selection source across exact Quick continuation', () => {
   const section = skill.slice(
     skill.indexOf('### Purchase Identity'),
     skill.indexOf('### Compatibility Recovery'),
@@ -258,7 +258,9 @@ test('purchase identity freezes both PI and selection source without Quick fallb
   assert.match(section, /BOTH `paymentInstrumentId`[\s\S]*`selectionSource=default\|explicit`/u);
   assert.match(section, /explicitly chosen alternate PI remains selected despite a later default/iu);
   assert.match(section, /Never reuse PENDING or CREATED/u);
-  assert.match(section, /creates no Quick or PENDING Instruction and never calls `bind-pi`/u);
+  assert.match(section, /exact Quick pendingInstructionId/u);
+  assert.match(section, /SAME ID via `visa instruction bind-pi`/u);
+  assert.match(section, /Only when no Quick ID exists/u);
   assert.match(section, /changed default PI stops/u);
   assert.match(section, /Do not ask which card/u);
   assert.match(section, /original authorization deadline/u);

@@ -10,7 +10,7 @@ const agent = await read('agents/openai.yaml');
 const paymentMethod = await read('references/visa-payment-method.md');
 const instruction = await read('references/visa-instruction.md');
 const checkout = await read('references/visa-checkout.md');
-const login = await read('references/visa-login.md');
+const login = await read('references/visa-init.md');
 
 function section(document, heading) {
   const lines = document.split('\n');
@@ -41,7 +41,9 @@ const stringOptions = [
   'mandate-id', 'url',
 ];
 const options = Object.fromEntries(stringOptions.map((name) => [name, { type: 'string' }]));
-options['confirm-purchase'] = { type: 'boolean' };
+for (const name of ['confirm-purchase', 'sandbox', 'start', 'no-open']) {
+  options[name] = { type: 'boolean' };
+}
 
 // Parse documented argv without executing mutations or depending on a future vendor.
 function parseExample(example) {
@@ -56,7 +58,8 @@ function parseExample(example) {
   return { command: parsed.positionals.join(' '), flags: { ...parsed.values } };
 }
 
-const loginSection = section(skill, '### Step2: Login Only');
+const loginSection = section(skill, '### Standalone Login');
+const purchaseLoginSection = section(skill, '### Step2: Purchase Login');
 const resolveSection = section(skill, '### Step3: Resolve Payment Method');
 const instructionSection = section(skill, '### Step4: Select Or Authorize An Instruction');
 const checkoutSection = section(skill, '### Step5: Checkout Once');
@@ -89,10 +92,10 @@ test('Agent command plans allow login before discovery without an enforced pipel
   const commands = (row) => [...row['Agent command plan'].matchAll(/`([^`]+)`/gu)]
     .map((match) => match[1]);
   const byRequest = Object.fromEntries(plans.map((row) => [row['Request/state'], row]));
-  assert.deepEqual(commands(byRequest['Login only; no product']), ['visa login']);
+  assert.deepEqual(commands(byRequest['Login only; no product']), ['visa init']);
   assert.equal(byRequest['Login only; no product'].Boundary, 'Report login; stop');
   assert.deepEqual(commands(byRequest['Login, then ask for offers']), [
-    'visa login', 'visa recommend-products',
+    'visa init', 'visa recommend-products',
   ]);
   assert.equal(byRequest['Login, then ask for offers'].Boundary, 'No card/Instruction/Checkout');
   assert.deepEqual(commands(byRequest['Browse while logged out or logged in']), ['visa recommend-products']);
@@ -129,10 +132,10 @@ test('purchase-context validation is numeric/MCC-only while semantics and safety
 });
 
 test('five-step examples separate auth, card resolution, authorization, and checkout', () => {
-  assert.deepEqual(loginExamples.map(({ command }) => command), ['visa login', 'visa login']);
+  assert.deepEqual(loginExamples.map(({ command }) => command), ['visa init', 'visa init']);
   assert.deepEqual(loginExamples.map(({ flags }) => flags), [
-    { environment: 'sandbox', format: 'json' },
-    { environment: 'sandbox', resume: '<id>', format: 'json' },
+    { sandbox: true, start: true, 'no-open': true, format: 'json' },
+    { sandbox: true, resume: '<id>', 'no-open': true, format: 'json' },
   ]);
   assert.deepEqual(resolveExamples.map(({ command }) => command), [
     'visa payment-method resolve', 'visa payment-method resolve',
@@ -145,12 +148,23 @@ test('five-step examples separate auth, card resolution, authorization, and chec
     },
   ]);
   assert.deepEqual(instructionCommands.map(({ command }) => command), [
+    'visa instruction bind-pi',
     'visa instruction candidates', 'visa instruction create',
     'visa instruction get', 'visa instruction wait',
   ]);
   assert.equal(checkoutExample.command, 'visa checkout');
-  assert.match(loginSection, /authentication only[\s\S]*no `instructionContext`, Quick,[\s\S]*PENDING/u);
+  assert.match(loginSection, /pure login without purchase context/u);
   assert.match(loginSection, /Never call[\s\S]*`wallet init`/u);
+  const purchaseLogin = parseExample(codeBlocks(purchaseLoginSection)[0]);
+  assert.equal(purchaseLogin.command, 'visa commerce-login');
+  for (const [name, value] of Object.entries(purchaseFlags)) {
+    assert.equal(purchaseLogin.flags[name], value, name);
+  }
+  assert.equal(purchaseLogin.flags['confirm-purchase'], true);
+  assert.equal(purchaseLogin.flags['no-open'], true);
+  assert.match(purchaseLoginSection, /ONLY the persisted default PI/u);
+  assert.match(purchaseLoginSection, /Other cards never affect Quick/u);
+  assert.match(purchaseLoginSection, /Unauthenticated: send instructionContext through Benefit OAuth/u);
 });
 
 test('every Step4/5 example carries identical flat purchase facts and frozen PI/source', () => {
@@ -169,7 +183,7 @@ test('every Step4/5 example carries identical flat purchase facts and frozen PI/
     assert.equal(flags['payment-instrument-id'], '<pi>', command);
     assert.equal(flags['selection-source'], '<default|explicit>', command);
     assert.equal(flags.format, 'json', command);
-    assert.equal(flags['confirm-purchase'] ?? false, /(?:create|checkout)$/u.test(command), command);
+    assert.equal(flags['confirm-purchase'] ?? false, /(?:create|bind-pi|checkout)$/u.test(command), command);
     assert.equal(flags['context-file'], undefined);
     assert.equal(flags.context, undefined);
   }
@@ -177,6 +191,10 @@ test('every Step4/5 example carries identical flat purchase facts and frozen PI/
 
 test('get/wait require exact Instruction and original deadline, checkout requires both IDs', () => {
   const byCommand = Object.fromEntries(instructionCommands.map(({ command, flags }) => [command, flags]));
+  assert.equal(byCommand['visa instruction bind-pi']['instruction-id'], '<id>');
+  assert.equal(byCommand['visa instruction bind-pi']['authorization-deadline'], '<ms>');
+  assert.match(instructionSection, /SAME ID/u);
+  assert.match(instructionSection, /get\/wait` are read-only/u);
   assert.equal(byCommand['visa instruction get']['instruction-id'], '<id>');
   assert.equal(byCommand['visa instruction wait']['instruction-id'], '<id>');
   assert.equal(byCommand['visa instruction wait']['authorization-deadline'], '<ms>');

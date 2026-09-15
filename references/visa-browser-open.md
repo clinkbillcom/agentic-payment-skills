@@ -12,7 +12,8 @@ manageCardUrl, and vicUrl are all URL-only. Never pass `--open` as a workaround.
 
 | Signal | Next action |
 | --- | --- |
-| launched for login | `visa login --environment sandbox --resume <id>` checks the same login |
+| launched for standalone login | `visa init --sandbox --resume <id> --no-open` checks the same login |
+| launched for purchase login | Same `visa commerce-login` purchase arguments plus `--browser-opened`; manual completion uses `--manual-completed` |
 | launched for Instruction | `visa instruction get` checks exact ID immediately, or `wait` with original deadline |
 | manual_required | Show exact manualOpenUrl for user completion, then the same state check |
 | Closed page or manual completion | Check authoritative state first; do not reopen |

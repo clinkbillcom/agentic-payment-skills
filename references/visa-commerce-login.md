@@ -1,19 +1,31 @@
-# `visa commerce-login` Compatibility Reference
+# `visa commerce-login` Failure Reference
 
-Read this file only after an existing `visa commerce-login` caller returns an
-error or incomplete state. This command/export remains compatibility-only.
-New Skill purchases use `visa login`, never this legacy aggregate.
+Read this file only after `visa commerce-login` returns an error or incomplete state.
 
-Use returned stage, status, reason, error, exact login/Instruction IDs, and
-read-only recovery to diagnose the existing operation. `quick_instruction_get`
-identifies an existing Quick read failure, not permission to create one.
-Do not copy a legacy login-created Instruction into a new five-step purchase.
+Step2 uses authorized selected_product flat purchase arguments, environment
+sandbox, --confirm-purchase and --no-open. It inspects login status first.
+Standalone authentication without purchase context uses visa init, not this command.
 
-For an unresolved legacy login, preserve its returned continuation. Only an
-exact returned login URL may use browser-open after a system-browser notice.
-Do not open card/VIC URLs or infer that a browser launch proves readiness.
-After manual completion, check authoritative state without reopening.
+| State | Action |
+| --- | --- |
+| Authenticated, default PI proven usable and VIC-ready | No new Instruction; continue Step3 |
+| Authenticated, no default or known unusable/unsupported/incomplete default | Direct PENDING create; retain pendingInstructionId |
+| Failed card query, multiple defaults, unknown default support/completion | Structured read-only error; no PENDING create |
+| Unauthenticated | Send exact instructionContext through Benefit OAuth |
+| OAuth user action required | Show manualOpenUrl, system-browser notice, separate browser-open |
+| Manual completion | Repeat same purchase command with --manual-completed; check original OAuth, never reopen |
+| Original Quick ID returned | Preserve exact pendingInstructionId and authorizationDeadline; never replace |
 
-Never call wallet init, create a replacement Instruction, or start another
-purchase to repair an unknown result. If the existing continuation is missing,
-stop with read-only diagnosis rather than inventing it.
+Other cards never influence Quick. Do not repeat OAuth for an authenticated customer.
+IDs, purchase facts, PI/source and original deadline are conversation-owned, never
+context files. Same-command OAuth continuation retains the existing login session,
+including after browser failure.
+
+After Step3 freezes a VIC-ready PI/source, Step4 continues this exact Quick ID:
+ACTIVE verifies the same PI and eligible Mandate, with Agent semantic matching;
+PENDING uses explicit visa instruction bind-pi with the same ID, selected PI/source,
+original --authorization-deadline and --confirm-purchase, then ordinary activation;
+CREATED uses same-ID get/wait and activation. get/wait are read-only.
+No replacement ordinary Instruction, no candidate reuse of another purchase's draft.
+Unknown creation or payment requires read-only reconciliation, never resubmission.
+All Step3 bind/VIC/manage URLs remain URL-only.
