@@ -41,7 +41,7 @@ Classify live stderr and final init output with `classifyWalletInitObservation` 
 
 When a resolved, authorized purchase target has `walletGate=REQUIRE_STATUS`, first finish wallet login and run `classifyInstructionRestriction` over the complete frozen intent; only `CONTINUE_INSTRUCTION_CREATION` may proceed. Never start this for `CATALOG_SEARCH`, pre-selection `CATALOG_PURCHASE`, or an unattended run.
 
-Refresh payment methods without waiting. If the list is empty, or the selected Visa exists but `visaRegistrationSucceeded !== true`, run one foreground `clink instruction prepare ... --max-wait 900 --format json`. Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. Assemble title, mandates, amount, currency, merchant semantics, service window, and fulfillment address from the frozen purchase exactly as described in `references/clink-instruction.md`. An optional `pendingInstructionId` returned by an earlier Quick-capable `wallet init` is not a Skill continuation; `instruction prepare` authoritatively returns the exact ID it created or reused.
+Refresh payment methods without waiting. If the list is empty, run one foreground `clink instruction prepare ... --max-wait 900 --format json`. Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. Assemble title, mandates, amount, currency, merchant semantics, service window, and fulfillment address from the frozen purchase exactly as described in `references/clink-instruction.md`. An optional `pendingInstructionId` returned by an earlier Quick-capable `wallet init` is not a Skill continuation; `instruction prepare` authoritatively returns the exact ID it created or reused.
 
 Before waiting, the command emits a structured `PENDING` envelope with `instructionId`, trusted Agent Portal `bindingUrl`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`. Return that URL without opening or inspecting it, and keep the same process in the foreground while the user either opens the link or completes binding/VIC in an already-open Portal. Only a final envelope preserving the same ID with `command=instruction prepare`, `status=ready`, `instructionStatus=ACTIVE`, and non-empty `instruction.paymentInstrumentId` resumes payment. If the foreground wait times out, execute only its returned environment-locked same-ID `instruction get` continuation. If the external process dies before the final envelope, execute only an exact-ID read-only `instruction get`; do not prepare another Instruction or enter Checkout/payment.
 
@@ -129,6 +129,8 @@ clink card list --format json
 ```
 
 `card list` is cache-only. Do not use it alone when current card state matters; refresh first with `card binding-link --no-watch --no-open`.
+
+For authorization routing, treat `strongAuthReady` (Boolean) plus `authProtocol` (`VISA` or `MASTERCARD`) as the only authoritative payment-method contract. Do not infer readiness from card brand or legacy network-specific registration booleans. `strongAuthReady=false`, or readiness absent during backend rollout, bypasses instruction matching. Ignore unknown/conflicting protocol values while readiness is false or absent. Non-Boolean/conflicting readiness, or `strongAuthReady=true` without exactly one supported protocol, fails closed.
 
 ## Binding Or Managing Cards
 

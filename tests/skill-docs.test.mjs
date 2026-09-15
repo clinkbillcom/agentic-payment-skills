@@ -22,6 +22,17 @@ const browserHandoff = await readFile(new URL('../references/clink-browser-hando
 const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
 const networkPreflight = await readFile(new URL('../scripts/network-preflight.mjs', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
+const authorizationWorkflow = await readFile(
+  new URL('../lib/authorization-workflow-fsm.mjs', import.meta.url),
+  'utf8',
+);
+const eventWorkflow = await readFile(new URL('../lib/event-workflow-fsm.mjs', import.meta.url), 'utf8');
+const strongAuth = await readFile(new URL('../lib/strong-auth.mjs', import.meta.url), 'utf8');
+const pageHandoff = await readFile(new URL('../lib/page-handoff.mjs', import.meta.url), 'utf8');
+const vendoredCli = await readFile(
+  new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
+  'utf8',
+);
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 /** Every doc shipped to the agent, keyed by the path a failure message should name. */
@@ -41,6 +52,14 @@ const shippedDocs = {
   'references/clink-payment-intent-contract.md': paymentIntentContract,
   'references/clink-browser-handoff.md': browserHandoff,
   'references/clink-restricted-categories.md': restrictedCategories,
+};
+
+const shippedStrongAuthRuntime = {
+  'lib/authorization-workflow-fsm.mjs': authorizationWorkflow,
+  'lib/event-workflow-fsm.mjs': eventWorkflow,
+  'lib/strong-auth.mjs': strongAuth,
+  'lib/page-handoff.mjs': pageHandoff,
+  'vendor/clink-cli/clink-cli.bundle.mjs': vendoredCli,
 };
 
 function plainMarkdownCell(cell) {
@@ -138,8 +157,13 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(authorizationSourceRow[1], /DIRECT_PAY/u);
   assert.match(authorizationSourceRow[1], /CURRENT_USER_TURN/u);
   assert.match(authorizationSourceRow[1], /UPSTREAM_MERCHANT_WORKFLOW/u);
-  assert.match(skill, /Visa \+ VIC ready/u);
-  assert.match(skill, /Visa.*without VIC readiness enters the PENDING Instruction continuation/u);
+  assert.match(skill, /strongAuthReady=true/u);
+  assert.match(skill, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(skill, /`strongAuthReady=false` bypasses instruction matching/u);
+  assert.match(skill, /absent readiness field means capability unavailable and also bypasses/u);
+  assert.match(skill, /When readiness is false, ignore an unknown\/conflicting protocol/u);
+  assert.match(skill, /Non-Boolean\/conflicting readiness/u);
+  assert.match(skill, /Brand-based routing is incorrect/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
 
@@ -150,13 +174,37 @@ test('Instruction mandate descriptions stay within the CLI limit', () => {
   }
 });
 
-test('payment reference separates non-Visa bypass from Visa pending preparation', () => {
+test('payment reference documents the protocol-neutral strong-auth resolver', () => {
   assert.match(paymentRefund, /Direct\/Session Pay Authorization Resolver/u);
-  assert.match(paymentRefund, /non-Visa/u);
+  assert.match(paymentRefund, /AUTHORIZATION_BYPASSED/u);
+  assert.match(paymentRefund, /strongAuthReady=false/u);
   assert.match(paymentRefund, /bypass instruction matching/u);
-  assert.match(paymentRefund, /AUTHORIZATION_PREPARE_REQUIRED/u);
-  assert.match(paymentRefund, /clink instruction prepare/u);
-  assert.match(paymentRefund, /Visa \+ VIC ready/u);
+  assert.match(paymentRefund, /AUTHORIZATION_LIST_REQUIRED/u);
+  assert.match(paymentRefund, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(paymentRefund, /Card brand is display data/u);
+  assert.match(paymentRefund, /AUTHORIZATION_ERROR/u);
+  assert.match(paymentRefund, /readiness field is absent during backend rollout/u);
+  assert.match(paymentRefund, /absent readiness field is the compatibility bypass above, not an error/u);
+  assert.match(paymentRefund, /ignore unknown\/conflicting protocol values unless readiness is true/u);
+  assert.match(ucpCheckout, /If readiness is absent, it omits both capability fields/u);
+  assert.match(ucpCheckout, /unknown\/conflicting protocol is omitted rather than blocking ordinary checkout/u);
+  assert.match(walletConfig, /readiness absent during backend rollout, bypasses instruction matching/u);
+  assert.match(instruction, /absent readiness field during backend rollout/u);
+});
+
+test('shipped docs and strong-auth runtime reject legacy registration capability fields', () => {
+  const legacyFields = [
+    ['visa', 'RegistrationSucceeded'].join(''),
+    ['mastercard', 'RegistrationSucceeded'].join(''),
+    ['visa', 'registration', 'succeeded'].join('_'),
+    ['mastercard', 'registration', 'succeeded'].join('_'),
+  ];
+
+  for (const [name, body] of Object.entries({ ...shippedDocs, ...shippedStrongAuthRuntime })) {
+    for (const field of legacyFields) {
+      assert.equal(body.includes(field), false, `${name} must not use legacy capability field ${field}`);
+    }
+  }
 });
 
 test('Agent Pay account event monitoring is optional, correlated, and user-visible', () => {
@@ -639,8 +687,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.4');
-  assert.equal(packageJson.version, '1.14.4');
+  assert.equal(skillVersion, '1.14.5');
+  assert.equal(packageJson.version, '1.14.5');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -1269,7 +1317,7 @@ test('the per-page actor table stays in SKILL.md and the handoff reference', () 
   assert.match(browserHandoff, /OAUTH_DEVICE_VERIFICATION/u);
   assert.match(browserHandoff, /CARD_BINDING/u);
   assert.match(browserHandoff, /INSTRUCTION_PREPARE_CARD_BINDING/u);
-  assert.match(browserHandoff, /VIC_PASSKEY_REGISTRATION/u);
+  assert.match(browserHandoff, /STRONG_AUTH_PASSKEY_REGISTRATION/u);
   assert.match(browserHandoff, /INSTRUCTION_PASSKEY_SIGNING/u);
   assert.match(browserHandoff, /THREE_DS_CHALLENGE/u);
   assert.match(browserHandoff, /RISK_RULE_CONFIG/u);
@@ -1284,6 +1332,7 @@ test('--no-open covers every link command other than wallet init', () => {
       /card binding-link/u,
       /card setup-link/u,
       /card modify-link/u,
+      /card passkey-link/u,
       /risk link/u,
       /instruction prepare/u,
       /instruction create/u,
@@ -1319,6 +1368,7 @@ test('--no-open covers every link command other than wallet init', () => {
     'card binding-link',
     'card setup-link',
     'card modify-link',
+    'card passkey-link',
     'risk link',
     'instruction prepare',
     'instruction create',

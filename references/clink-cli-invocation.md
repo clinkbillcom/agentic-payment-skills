@@ -176,3 +176,5 @@ The CLI binds each long-running command to the authorization identity observed w
 Never read or print OAuth Access/Refresh Tokens. Token refresh and revocation belong to the CLI; use `wallet init`, authenticated commands, and `wallet logout`. Never pass a legacy customer API key as a literal shell argument. A never-OAuth legacy workflow may receive `CLINK_CUSTOMER_API_KEY` from its execution environment. `config set customer-api-key` is always rejected; only `config unset customer-api-key` may remove an existing saved legacy key.
 
 Do not echo secrets in user-visible output or logs. `wallet status` and `config get` expose readiness metadata without raw tokens or API keys.
+
+For explicit card-enrollment maintenance, `clink card passkey-link --payment-instrument-id <id> --no-open --format json` generates a protocol-specific URL. Send it for the user to open; normal no-card purchases use the foreground `instruction prepare` continuation instead.
