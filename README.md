@@ -103,15 +103,15 @@ no runtime workflow JavaScript. General wallet, card, risk, payment, Alipay QR, 
 Instruction, refund, event, Tip, and Skill installation capabilities remain
 short fail-closed contracts in `SKILL.md`.
 
-Skill `0.1.103` includes Visa CLI `0.2.78` from upstream commit
-`479c0902658dcf6b1173bd6800c0a654320d482d`. This product-match branch performs
+Skill `0.1.104` vendors Visa CLI `0.2.79` from upstream commit
+`c03ffc9dd1708046059b9591e519e47b28bde71b`. This product-match branch performs
 one-round Visa recommendation followed only by exact configured merchant
 matching and matched-merchant Catalog search. The separate
 `wujh/visa-offer-product-broad-search-0901` branch adds parallel broad Catalog
 on top of this flow. This Skill sends no `program.code` in new purchase
 contexts. The official Visa bundle includes the five independent commands.
-CLI tests pass 1486/1486 and bundled Skill tests pass 61/61. These are local
-regression results, not backend deployment or live payment acceptance.
+Run `npm test` in both source and Skill repositories for local regression.
+This does not establish backend deployment or live payment acceptance.
 If a distribution lacks a required command, report the limitation; do not
 fall back to legacy orchestration or invent missing purchase data.
 
@@ -128,6 +128,11 @@ gates. Readiness or nextAction alone never authorizes an unrequested next comman
    A ready default creates nothing; no default or a known unready default creates
    PENDING. Other cards do not affect Quick. Unknown reads stop; retain the exact
    Quick ID and deadline. Login URL is returned before separate browser-open.
+   For unauthenticated purchases, webpage authorization owns Quick creation,
+   independently of POST /oauth/benefit/token. Token polling does not create
+   PENDING; resume the same OAuth to obtain tokens for authenticated operations
+   and checkout. Browser-open is not completion. The backend callback fix
+   remains a deployment prerequisite; never switch to Device OAuth.
 3. Resolve the persisted default without asking which card. A proactive exact-ID
    choice uses `--payment-instrument-id <id> --selection-source explicit`.
    No card returns bindCardUrl at Portal root; default selection without a
@@ -139,6 +144,10 @@ gates. Readiness or nextAction alone never authorizes an unrequested next comman
    for Steps 4-5. Every selected card must be VIC-ready. Default changes require
    reconfirmation; explicit alternates persist despite default changes and
    do not require a persisted default.
+   UAT binding uses `https://uat-agent.clinkbill.com/`, never
+   `/payment-method-setup` or `/agent-authorization` (Instruction-list recovery
+   only). Default and explicit card VIC use `/passkey-auth/{pi}?type=visa`
+   without `instructionId`; retain the Quick ID separately for Step4.
 4. Continue any Quick ID first: ACTIVE is checked, PENDING binds the same ID to
    Step3 PI with explicit bind-pi, CREATED continues activation. No replacement.
    Without a Quick ID, read-only candidates filters ACTIVE, PI, currency, amount >= purchase,
@@ -181,7 +190,7 @@ npm test
 git diff --check
 ```
 
-Skill version: `0.1.103`
+Skill version: `0.1.104`
 
 Vendored CLI provenance is recorded in
 `vendor/visa-cli/package.json`. The generated bundle must be updated only by

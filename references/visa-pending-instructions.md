@@ -8,6 +8,10 @@ activatable PENDING/CREATED Instructions, not a creator, selection, binding, or
 activation operation. Preserve `--instruction-id <id>` when known; never infer
 the newest or only row belongs to this purchase.
 
+`/agent-authorization` is the legacy Instruction-list recovery route, not a
+bind-card entry. No-card binding guidance uses the UAT Agent Portal root
+`https://uat-agent.clinkbill.com/`, never `/payment-method-setup`.
+
 | Status | Safe action |
 | --- | --- |
 | activation_ready | Preserve exact ID; show the returned authorization URL for user action and exact-read afterward |

@@ -165,7 +165,13 @@ interface:
     missing/unusable/unsupported/incomplete default creates PENDING. Other ready
     cards do not affect this decision. Failed reads, ambiguous defaults or
     unknown capability/completion are read-only errors, not permission to create.
-    Logged out: send instructionContext through Benefit OAuth. Show manualOpenUrl,
+    Logged out: send instructionContext through Benefit OAuth. The backend must
+    make the Quick decision during webpage authorization, independently of
+    POST /oauth/benefit/token. Token polling does not create PENDING; still
+    resume the same OAuth to obtain tokens for authenticated operations and checkout.
+    A browser-open result does not prove Quick creation or login completion.
+    The backend callback fix is a prerequisite, not proven deployed by this Skill.
+    Never switch to Device OAuth. Show manualOpenUrl,
     give the system-browser notice, then separately invoke browser-open.
     Continue the identical commerce-login command with --browser-opened or
     --manual-completed; check the original login first, never reopen.
@@ -183,6 +189,11 @@ interface:
     does not require a default. A selected supported card not yet VIC-ready
     returns vicUrl. Support false/unknown or a card-info failure stops for
     manual card management, never VIC or Checkout.
+    The UAT bind-card entry is https://uat-agent.clinkbill.com/, never
+    /payment-method-setup or /agent-authorization. The latter is legacy
+    Instruction-list recovery only, not card binding. Both default and explicit
+    card VIC use /passkey-auth/{pi}?type=visa without instructionId, with the
+    same selected PI. Retain any Quick ID separately for Step4, never add it here.
     The ENTIRE Step3 is URL-only: never use browser-open, --open, an OS opener,
     preview, or an Agent browser for bindCardUrl, manageCardUrl, or vicUrl.
     Show only the exact URL and stop for user action. When the user returns,

@@ -22,6 +22,11 @@ Bind Card is URL-only in every flow. All card-management and VIC URLs are
 manual-only here too. An existing login/Instruction activation URL may use the
 system browser only when the exact continuation is known; manual completion
 first checks state without reopening.
+The UAT bind-card entry is `https://uat-agent.clinkbill.com/`, never
+`/payment-method-setup` or `/agent-authorization`. The latter is legacy
+Instruction-list recovery only. Card-only VIC uses the selected PI's
+`/passkey-auth/{pi}?type=visa` without `instructionId`; an exact Instruction
+activation URL is a separate authorization and must retain its original ID.
 
 Never replace the original Instruction, select a card by list order, reset a
 returned deadline, clear checkout_started, or retry an uncertain payment.

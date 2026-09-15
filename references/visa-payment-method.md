@@ -39,6 +39,14 @@ pass `--open`, use an OS opener, or inspect protected pages with an Agent
 browser. The user returns to repeat the same command and recheck state.
 Step3 does not wait for card/VIC or create an Instruction.
 
+The UAT bind-card entry is `https://uat-agent.clinkbill.com/`, never
+`/payment-method-setup` or `/agent-authorization`. The latter is legacy
+Instruction-list recovery only, not card binding.
+Both the default and an explicit alternate use the selected card's
+`/passkey-auth/{pi}?type=visa` URL without `instructionId`. Keep the Quick ID
+for Step4 exact continuation, never append it to card-only VIC.
+Even `defaultOpenLinks=true` must not open any Step3 link.
+
 `GET /agent/cwallet/card/info` is authoritative.
 `cardSchemeRegistrationEnabled` is VIC support; `visaRegistrationSucceeded` or
 card-level `strongAuthRegistered` is completion. Do not use device-local

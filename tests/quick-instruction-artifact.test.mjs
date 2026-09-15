@@ -66,6 +66,35 @@ test('runtime artifacts describe the selected PI and browser recovery contract',
   assert.match(combined, /--phase checkout_started/u);
 });
 
+test('active and legacy handoff guidance separates root binding, card VIC and Instruction recovery', async () => {
+  for (const path of [
+    'SKILL.md', 'agents/openai.yaml', 'README.md', 'README.zh.md',
+    'references/visa-payment-method.md', 'references/visa-commerce-run.md',
+  ]) {
+    const text = await readFile(new URL(path, root), 'utf8');
+    assert.ok(text.includes('https://uat-agent.clinkbill.com/'), path);
+    assert.ok(text.includes('/passkey-auth/{pi}?type=visa'), path);
+    assert.match(text, /without `?instructionId`?|不带\s*`instructionId`/u, path);
+    assert.match(text, /Instruction-list recovery|Instruction 列表恢复/u, path);
+    assert.match(text, /never[\s\S]*\/payment-method-setup|不使用[\s\S]*\/payment-method-setup/u, path);
+  }
+  const recovery = await readFile(new URL('references/visa-pending-instructions.md', root), 'utf8');
+  assert.match(recovery, /\/agent-authorization` is the legacy Instruction-list recovery route, not a\s*bind-card entry/u);
+});
+
+test('Quick creation is webpage-owned while same Benefit OAuth token continuation remains required', async () => {
+  for (const path of ['SKILL.md', 'agents/openai.yaml', 'README.md', 'references/visa-commerce-login.md']) {
+    const text = await readFile(new URL(path, root), 'utf8');
+    assert.match(text, /webpage authorization/u, path);
+    assert.match(text, /independently of\s*POST \/oauth\/benefit\/token/u, path);
+    assert.match(text, /[Tt]oken polling\s+does not create\s+PENDING/u, path);
+    assert.match(text, /resume the same OAuth to obtain tokens/u, path);
+    assert.match(text, /[Nn]ever switch to Device OAuth/u, path);
+    assert.match(text, /backend callback fix/u, path);
+  }
+  assert.match(artifacts['SKILL.md'], /browser-open result does not prove authorization,\s*Quick creation, or login completion/u);
+});
+
 test('runtime artifacts do not load historical or filter reference files', async () => {
   assert.doesNotMatch(combined, /visa-recommend-filters\.md/u);
   assert.doesNotMatch(combined, /quick-instruction-cases\.md/u);

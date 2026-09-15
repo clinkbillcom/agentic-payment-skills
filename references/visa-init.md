@@ -25,3 +25,6 @@ Use `stage`, `status`, `reason`, and `error` as returned. Do not invent a more
 specific cause. Login readiness proves neither card readiness nor purchase
 authorization. The system browser is user-operated, never the Agent's built-in
 browser. A launch is not proof of login success.
+Resume the same Benefit OAuth to obtain tokens for later authenticated
+operations; browser completion does not replace token polling. Never switch
+to Device OAuth.

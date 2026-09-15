@@ -21,6 +21,13 @@ IDs, purchase facts, PI/source and original deadline are conversation-owned, nev
 context files. Same-command OAuth continuation retains the existing login session,
 including after browser failure.
 
+For unauthenticated purchases, the backend must make the Quick decision during
+webpage authorization, independently of POST /oauth/benefit/token. Token polling
+does not create PENDING; resume the same OAuth to obtain tokens for subsequent
+authenticated operations and checkout. A browser-open result proves neither
+Quick creation nor login completion. The backend callback fix is a prerequisite;
+CLI/Skill delivery does not prove deployment. Never switch to Device OAuth.
+
 After Step3 freezes a VIC-ready PI/source, Step4 continues this exact Quick ID:
 ACTIVE verifies the same PI and eligible Mandate, with Agent semantic matching;
 PENDING uses explicit visa instruction bind-pi with the same ID, selected PI/source,

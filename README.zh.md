@@ -82,12 +82,12 @@ Skill 不包含运行时工作流 JavaScript。钱包、
 events、Skill 打赏和安装能力，仍以 `SKILL.md` 中简短且 fail-closed 的
 Capability Contract 提供。
 
-Skill `0.1.103` 内含来源提交
-`479c0902658dcf6b1173bd6800c0a654320d482d` 的 Visa CLI `0.2.78`。本
+Skill `0.1.104` 已 vendor 上游提交
+`c03ffc9dd1708046059b9591e519e47b28bde71b` 的 Visa CLI `0.2.79`。本
 product-match 分支只执行一轮 Visa 推荐、精确商户匹配和命中商户 Catalog 搜索；
 `wujh/visa-offer-product-broad-search-0901` 在此基础上额外并行广域 Catalog。
 新购买上下文仍不发送 `program.code`。官方 Visa bundle 已同步五个独立命令；
-CLI 回归 1486/1486、同步后 Skill 测试 61/61 通过。仅为本地回归结果，
+在 CLI 和 Skill 仓库分别执行 `npm test` 验证本地回归；
 不代表后端部署或真实支付验收。
 
 若发行版缺少新命令，应报告限制，不猜测字段、不回退旧聚合、不拆成原子支付。
@@ -103,6 +103,10 @@ ready 或 nextAction 不能把“仅登录/仅查卡”的请求扩展成购买�
 2. `visa commerce-login` 先查登录状态，购买上下文携带 instructionContext。
    默认卡 ready 不新建；无默认卡或默认卡明确未就绪创建 PENDING，其他卡不影响。
    状态未知先只读核对。保留原 Quick ID 和 deadline，先返回链接再独立 browser-open。
+   未登录购买由网页授权阶段决定并创建 Quick，与 POST /oauth/benefit/token
+   解耦；token 轮询不创建 PENDING，但 CLI 仍须恢复同一 OAuth 获取后续鉴权操作和
+   checkout 所需 token。打开浏览器不证明授权、Quick 创建或登录完成。
+   后端 callback 修复是部署前提，本 Skill 交付不证明已部署；不得切换 Device OAuth。
    纯登录用 `visa init --sandbox --start --no-open`，原 ID `--resume`，不调用 wallet init。
 3. `visa payment-method resolve --environment sandbox` 默认取已保存默认卡，
    不问用哪张。用户主动指定非默认卡 exact ID 时传
@@ -113,12 +117,18 @@ ready 或 nextAction 不能把“仅登录/仅查卡”的请求扩展成购买�
    用户回来后同一命令复查。ready 后同时冻结 paymentInstrumentId 和
    selectionSource default|explicit 并传给 Step4/5。默认卡改变必须重新确认；
    显式非默认选择不会被新默认卡替换，也不要求存在默认卡或设为默认。
-4. candidates 只读过滤 ACTIVE、PI、币种、额度 >= 购买金额、MCC、有效期、
+   UAT 绑卡入口为 `https://uat-agent.clinkbill.com/`，不使用
+   `/payment-method-setup` 或 `/agent-authorization`，后者仅用于 Instruction 列表恢复。
+   默认或显式选择卡的 VIC URL 均为 `/passkey-auth/{pi}?type=visa`，不带
+   `instructionId`；Quick ID 单独保留给 Step4。
+4. 有 Quick ID 时先精确 get：ACTIVE 核验同卡及 Mandate；PENDING 以原 ID、Step3
+   PI/source 和原 deadline 显式 bind-pi；CREATED 继续原 ID 激活，禁止替换。
+   仅无 Quick ID 时，candidates 只读过滤 ACTIVE、PI、币种、额度 >= 购买金额、MCC、有效期、
    使用/占用与 recurring，返回全部 eligible Instructions 及 eligibleMandates
    的 mandateId/title/description/金额/币种/MCC 和 PI。Agent 按同商户、SKU、
    面值、地区、数量语义匹配，接受等价翻译，不以标题字符串相等为条件；
    证据模糊就停止澄清，不能猜。命中冻结两个 ID 去 Step5；确定无匹配才用
-   `--confirm-purchase` 创建普通 PI-bound CREATED，绝不创建 PENDING 或 bind-pi。
+   `--confirm-purchase` 创建普通 PI-bound CREATED，不创建替代 PENDING。
    先告知使用系统浏览器、避开实际宿主内置浏览器，再 browser-open 精确
    manualOpenUrl。保留 instructionId 和 epoch 毫秒 authorizationDeadline；
    get 立即检查，wait 带 `--instruction-id`、`--authorization-deadline <ms>`，
@@ -152,7 +162,7 @@ npm test
 git diff --check
 ```
 
-Skill 版本：`0.1.103`
+Skill 版本：`0.1.104`
 
 CLI 来源记录在 `vendor/visa-cli/package.json`。生成的 bundle 只能由
 `clink-cli` 官方 vendor 同步流程更新。

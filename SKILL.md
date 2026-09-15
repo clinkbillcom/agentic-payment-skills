@@ -1,8 +1,8 @@
 ---
 name: visa-skill
-description: "Visa Skill 0.1.103. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
+description: "Visa Skill 0.1.104. Use for consumer payments and commerce even when Visa is not named: pay/支付/付款, buy or order/购买/下单/订购, place an order/点单/点餐, checkout, shopping/购物, coupons/优惠券, vouchers/代金券, discounts/优惠, benefits/权益, gift cards, merchant offers, product discovery, and Visa card benefits. Supports en, zh-CN, zh-TW, and zh-HK. Do not use for travel visas, immigration, passports, or consular applications."
 metadata:
-  version: "0.1.103"
+  version: "0.1.104"
   requires:
     node: ">=20"
     bundled: "vendor/visa-cli/visa-cli.bundle.mjs"
@@ -577,7 +577,14 @@ Failed card query, multiple explicit defaults, or unknown default support or
 completion returns a structured read-only error, never blind PENDING creation.
 Other cards never affect Quick. Do not repeat OAuth for an authenticated user.
 
-Unauthenticated: send instructionContext through Benefit OAuth. Show the exact
+Unauthenticated: send instructionContext through Benefit OAuth. The backend
+must make the Quick decision during webpage authorization, independently of
+POST /oauth/benefit/token. Token polling does not create PENDING; the CLI still
+must resume the same OAuth to obtain tokens for authenticated card, Instruction,
+and checkout operations. A browser-open result does not prove authorization,
+Quick creation, or login completion. This requires the backend callback fix;
+CLI/Skill delivery alone does not prove it is deployed. Never switch to Device OAuth.
+Show the exact
 manualOpenUrl and system-browser notice before separate visa browser-open.
 Repeat the same purchase command with --manual-completed after user completion,
 or --browser-opened after a successful separate opener. Resume the original
@@ -632,6 +639,13 @@ The purchase actions in the table apply only to an authorized purchase.
 | Selected card supports VIC but is not ready | `vicUrl` | Show URL; stop for user VIC |
 | VIC support false or unknown, or card-info read fails | Stop/manual card management | Never enter VIC or Checkout |
 | Selected card is owned, usable, and VIC-ready | `ready`, `paymentInstrumentId`, `selectionSource` | Freeze BOTH values; advance to Step4 |
+
+The UAT bind-card entry is `https://uat-agent.clinkbill.com/`, never
+`/payment-method-setup` or `/agent-authorization`. The latter is legacy
+Instruction-list recovery only, not card binding.
+For both the default and a user-selected alternate, `vicUrl` has the selected
+card path `/passkey-auth/{pi}?type=visa`, without `instructionId`. Do not attach
+the Quick ID to a card-only VIC URL; retain it for Step4 exact continuation.
 
 The ENTIRE Step3 NEVER browser-opens or uses `--open`, including `vicUrl` and
 `manageCardUrl`. Show only the exact returned URL. When the user returns,

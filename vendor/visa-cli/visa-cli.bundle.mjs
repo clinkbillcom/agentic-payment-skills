@@ -4998,7 +4998,7 @@ var CLI_VERSION, CLI_VERSION_HEADER;
 var init_version = __esm({
   "dist/version.js"() {
     "use strict";
-    CLI_VERSION = "0.2.78";
+    CLI_VERSION = "0.2.79";
     CLI_VERSION_HEADER = "X-Clink-CLI-Version";
   }
 });
@@ -24334,7 +24334,7 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
-    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), CARD_SETUP_PATH, refreshContext.runtimeConfig.email);
+    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), cardSetupPath(refreshContext), refreshContext.runtimeConfig.email);
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
@@ -24428,6 +24428,9 @@ async function walletStatus(context) {
   }, context.globalOptions.format);
   return EXIT_CODES.OK;
 }
+function cardSetupPath(context) {
+  return context.executableName === VISA_EXECUTABLE_NAME ? "/" : CARD_SETUP_PATH;
+}
 async function handleCardCommand(subcommand, context) {
   if (!subcommand) {
     printContextHelp(context, "card");
@@ -24437,7 +24440,7 @@ async function handleCardCommand(subcommand, context) {
     case "binding-link":
       return cardBindingLink(context);
     case "setup-link":
-      return cardRedirectLink(context, CARD_SETUP_PATH, "card setup");
+      return cardRedirectLink(context, cardSetupPath(context), "card setup");
     case "modify-link":
       return cardRedirectLink(context, CARD_MANAGEMENT_PATH, "card management");
     case "passkey-link":
@@ -24451,7 +24454,7 @@ async function handleCardCommand(subcommand, context) {
   }
 }
 async function cardBindingLink(context) {
-  const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+  const prepared = await resolveBindingLink(context, cardSetupPath(context));
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
@@ -26330,7 +26333,7 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
       if (options2.bindingResolution?.status === "failed") {
         throw options2.bindingResolution.error;
       }
-      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+      const prepared = await resolveBindingLink(context, cardSetupPath(context));
       if (prepared.dryRun) {
         throw apiError("card binding-link unexpectedly produced a dry-run response", 502);
       }
@@ -35472,7 +35475,7 @@ function createVisaCommerceCliDependencies(context, commerceContext, agentState)
         ...continuation.paymentInstrumentId ? { paymentInstrumentId: continuation.paymentInstrumentId } : {}
       };
     },
-    bindingPortalUrl: () => new URL("/payment-method-setup", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
+    bindingPortalUrl: () => new URL("/", resolveAgentBaseUrl(context.runtimeConfig.baseUrl)).href,
     saveContinuation: async (continuation) => {
       agentStateIsQuick = false;
       currentAgentState = {
@@ -36715,6 +36718,10 @@ Step 3:
     [--payment-instrument-id <user-chosen-pi> --selection-source explicit]
   Default is the persisted default PI. Never ask which card unless the user initiates
   a change. No card, no default, or incomplete VIC returns bindCardUrl/manageCardUrl/vicUrl.
+  bindCardUrl is the Agent Portal root (sandbox: https://uat-agent.clinkbill.com/).
+  vicUrl is /passkey-auth/{selectedPi}?type=visa without instructionId, for default or explicit PI.
+  Step3 never opens a browser, even with defaultOpenLinks=true. /agent-authorization is
+  legacy Instruction-list recovery only, never a bind-card entry.
   NEVER open any Step 3 URL, even when automatic opening is enabled in local config.
   Recheck this command after the user acts. ready=true returns paymentInstrumentId and
   selectionSource (default or explicit). Carry both unchanged into Steps 4 and 5.
