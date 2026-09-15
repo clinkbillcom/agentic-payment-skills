@@ -1,6 +1,6 @@
 # Async Events
 
-Read this before waiting for card binding/change, risk-rule update, refund lifecycle, VIC registration, purchase-instruction activation, Agent Alipay QR or post-3DS payment completion, optional Agent Pay account confirmation, or optional skill-tip merchant account evidence.
+Read this before waiting for card binding/change, risk-rule update, refund lifecycle, Visa/Mastercard strong-auth readiness, purchase-instruction activation, Agent Alipay QR or post-3DS payment completion, optional Agent Pay account confirmation, or optional skill-tip merchant account evidence.
 
 ## Model
 
@@ -87,7 +87,7 @@ With `--type`, `events` contains only listed types. In ordinary typed polling, t
 
 Always correlate returned events by the flow-specific identifiers below. Use `resourceId` only where that flow declares it valid; for UCP it is a payment order ID, not the checkout correlation key. Type selection controls queue progress, not business correctness.
 
-When a flow has more than one valid readiness event, use one any-of poll such as `--type type-a,type-b`; never start separate typed polls, because either poll can acknowledge the other type as unrelated. If existing FSMs use one wait spec per type, feed the same any-of result through each wait spec. Re-check authoritative status with a `get`/status command (`card binding-link --no-watch --no-open`, `card get`, or `refund get`) rather than trusting one event type. VIC registration readiness is the common case: it can arrive as `vic_device.binding_succeeded` or as a same-card canonical `payment_method.update` with `visaRegistrationSucceeded=true`; accept `payment_method.updated` only as a compatibility alias.
+When a flow has more than one valid readiness event, use one any-of poll such as `--type type-a,type-b`; never start separate typed polls, because either poll can acknowledge the other type as unrelated. If existing FSMs use one wait spec per type, feed the same any-of result through each wait spec. Re-check authoritative status with a `get`/status command (`card binding-link --no-watch --no-open`, `card get`, or `refund get`) rather than trusting one event type. Strong-auth readiness is the common case: a same-card canonical `payment_method.update` is actionable only with `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`; `vic_device.binding_succeeded` is retained as a Visa compatibility wake-up signal. Accept `payment_method.updated` only as a compatibility alias, and always refresh the exact card before continuing.
 
 Do not start an on-demand poll beside a built-in watch for the same flow. Ordinary typed `--no-ack` preserves only selected types and still consumes other types, so it is not a passive observer. Checkout-selector `--no-ack` is the narrow ACK-free exception, but it still must not race the built-in watch for the same workflow.
 
@@ -123,7 +123,7 @@ An event type alone is not proof that the current workflow completed. After any 
 | UCP checkout payment success | exact non-empty string `checkoutId` carried by the checkout and the event payload's nested `data.checkoutId` / `data.checkout_id`. Event top-level fields and `resourceId` are never checkout correlation keys. Event `orderId`/`resourceId` is the Clink Payment `paymentOrderId`, not the UCP order ID, and cannot substitute for checkout correlation or order lookup. |
 | Refund result | same `refundOrderId` or `refundId` returned by `refund create` |
 | Instruction activation | same `purchaseInstructionId` or `instructionId` returned by `instruction create` / `sign-url` |
-| VIC registration | same `paymentInstrumentId` and `visaRegistrationSucceeded=true` evidence |
+| Strong-auth readiness | same `paymentInstrumentId`; then an authoritative refresh proving `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD` |
 | Optional Agent Pay account event | one unique candidate among active watches in the same environment and wallet/customer scope within 60 seconds: matching `amount + currency`, no explicit `customerEmail` / `webSite` / `userId` conflict, and optional identities used only as a unique positive tie-breaker |
 | Optional skill-tip account event | same `orderId`; when unavailable, require a compound identity with at least two stable fields such as `customerId + merchantId` or `customerId + skillId` |
 
@@ -136,7 +136,7 @@ If the right event type appears for a different resource, keep the current workf
 | First card binding | `payment_method.added` for the target customer/payment method |
 | Card update/default change | `payment_method.update` (`payment_method.updated` compatibility alias) or `payment_method.default_change` |
 | Risk-rule update | `risk_rule.updated` |
-| VIC registration | `vic_device.binding_succeeded` or canonical `payment_method.update` with `visaRegistrationSucceeded=true` for the same payment method |
+| Strong-auth readiness | canonical same-card `payment_method.update` with `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`; `vic_device.binding_succeeded` is a Visa compatibility signal that still requires the same authoritative refresh |
 | Instruction activation | `purchase_instruction.activated` for the instruction |
 | 3DS payment result | `agent_order.succeeded` or `agent_order.failed` for the order |
 | Agent Alipay QR result | one any-of poll for `agent_order.succeeded,agent_order.failed`, correlated by `orderId`, `paymentExecutionDetailId`, or frozen session |

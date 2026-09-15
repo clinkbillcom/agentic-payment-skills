@@ -22,6 +22,17 @@ const browserHandoff = await readFile(new URL('../references/clink-browser-hando
 const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
 const networkPreflight = await readFile(new URL('../scripts/network-preflight.mjs', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
+const authorizationWorkflow = await readFile(
+  new URL('../lib/authorization-workflow-fsm.mjs', import.meta.url),
+  'utf8',
+);
+const eventWorkflow = await readFile(new URL('../lib/event-workflow-fsm.mjs', import.meta.url), 'utf8');
+const strongAuth = await readFile(new URL('../lib/strong-auth.mjs', import.meta.url), 'utf8');
+const pageHandoff = await readFile(new URL('../lib/page-handoff.mjs', import.meta.url), 'utf8');
+const vendoredCli = await readFile(
+  new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
+  'utf8',
+);
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 /** Every doc shipped to the agent, keyed by the path a failure message should name. */
@@ -41,6 +52,14 @@ const shippedDocs = {
   'references/clink-payment-intent-contract.md': paymentIntentContract,
   'references/clink-browser-handoff.md': browserHandoff,
   'references/clink-restricted-categories.md': restrictedCategories,
+};
+
+const shippedStrongAuthRuntime = {
+  'lib/authorization-workflow-fsm.mjs': authorizationWorkflow,
+  'lib/event-workflow-fsm.mjs': eventWorkflow,
+  'lib/strong-auth.mjs': strongAuth,
+  'lib/page-handoff.mjs': pageHandoff,
+  'vendor/clink-cli/clink-cli.bundle.mjs': vendoredCli,
 };
 
 function plainMarkdownCell(cell) {
@@ -138,8 +157,13 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(authorizationSourceRow[1], /DIRECT_PAY/u);
   assert.match(authorizationSourceRow[1], /CURRENT_USER_TURN/u);
   assert.match(authorizationSourceRow[1], /UPSTREAM_MERCHANT_WORKFLOW/u);
-  assert.match(skill, /Visa \+ VIC ready/u);
-  assert.match(skill, /Visa.*without VIC readiness enters the PENDING Instruction continuation/u);
+  assert.match(skill, /strongAuthReady=true/u);
+  assert.match(skill, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(skill, /`strongAuthReady=false` bypasses instruction matching/u);
+  assert.match(skill, /absent readiness field means capability unavailable and also bypasses/u);
+  assert.match(skill, /When readiness is false, ignore an unknown\/conflicting protocol/u);
+  assert.match(skill, /Non-Boolean\/conflicting readiness/u);
+  assert.match(skill, /Brand-based routing is incorrect/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
 
@@ -150,13 +174,37 @@ test('Instruction mandate descriptions stay within the CLI limit', () => {
   }
 });
 
-test('payment reference separates non-Visa bypass from Visa pending preparation', () => {
+test('payment reference documents the protocol-neutral strong-auth resolver', () => {
   assert.match(paymentRefund, /Direct\/Session Pay Authorization Resolver/u);
-  assert.match(paymentRefund, /non-Visa/u);
+  assert.match(paymentRefund, /AUTHORIZATION_BYPASSED/u);
+  assert.match(paymentRefund, /strongAuthReady=false/u);
   assert.match(paymentRefund, /bypass instruction matching/u);
-  assert.match(paymentRefund, /AUTHORIZATION_PREPARE_REQUIRED/u);
-  assert.match(paymentRefund, /clink instruction prepare/u);
-  assert.match(paymentRefund, /Visa \+ VIC ready/u);
+  assert.match(paymentRefund, /AUTHORIZATION_LIST_REQUIRED/u);
+  assert.match(paymentRefund, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(paymentRefund, /Card brand is display data/u);
+  assert.match(paymentRefund, /AUTHORIZATION_ERROR/u);
+  assert.match(paymentRefund, /readiness field is absent during backend rollout/u);
+  assert.match(paymentRefund, /absent readiness field is the compatibility bypass above, not an error/u);
+  assert.match(paymentRefund, /ignore unknown\/conflicting protocol values unless readiness is true/u);
+  assert.match(ucpCheckout, /If readiness is absent, it omits both capability fields/u);
+  assert.match(ucpCheckout, /unknown\/conflicting protocol is omitted rather than blocking ordinary checkout/u);
+  assert.match(walletConfig, /readiness absent during backend rollout, bypasses instruction matching/u);
+  assert.match(instruction, /absent readiness field during backend rollout/u);
+});
+
+test('shipped docs and strong-auth runtime reject legacy registration capability fields', () => {
+  const legacyFields = [
+    ['visa', 'RegistrationSucceeded'].join(''),
+    ['mastercard', 'RegistrationSucceeded'].join(''),
+    ['visa', 'registration', 'succeeded'].join('_'),
+    ['mastercard', 'registration', 'succeeded'].join('_'),
+  ];
+
+  for (const [name, body] of Object.entries({ ...shippedDocs, ...shippedStrongAuthRuntime })) {
+    for (const field of legacyFields) {
+      assert.equal(body.includes(field), false, `${name} must not use legacy capability field ${field}`);
+    }
+  }
 });
 
 test('Agent Pay account event monitoring is optional, correlated, and user-visible', () => {
@@ -639,8 +687,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.3');
-  assert.equal(packageJson.version, '1.14.3');
+  assert.equal(skillVersion, '1.14.4');
+  assert.equal(packageJson.version, '1.14.4');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -910,11 +958,9 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list --format json/u);
-  assert.match(skill, /UAT wrapper adds `--sandbox`/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--sandbox/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list --format json/u);
-  assert.match(catalogDiscovery, /wrapper appends `--sandbox` to every public Catalog command/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
@@ -931,7 +977,7 @@ test('catalog discovery loads the merchant list before matching intent on descri
   assert.match(catalogDiscovery, /non-empty merchant array contains no trustworthy merchant identity[\s\S]*fails closed/u);
   assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
   assert.match(catalogDiscovery, /preserves a non-root path such as `\/yiyuan\/`/u);
-  assert.match(catalogDiscovery, /never reads a static well-known document or a local bundled merchant list/u);
+  assert.match(catalogDiscovery, /never reads a production static well-known document or a test\/UAT local bundle/u);
   assert.match(catalogDiscovery, /command returns `\{ merchants: \[\.\.\.\] \}`[\s\S]*compatibility adapter[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
   assert.match(catalogDiscovery, /merchant_match_invalid_discriminator[\s\S]*never discarded[\s\S]*absent discriminator/u);
   assert.match(catalogDiscovery, /broad Catalog group contract[\s\S]*does not carry a merchant route hostname or URL/u);
@@ -939,7 +985,7 @@ test('catalog discovery loads the merchant list before matching intent on descri
 
   assert.match(skill, /active non-shadow internal merchant routes needed for endpoint resolution/u);
   assert.match(skill, /Catalog-disabled rows have `description:""`/u);
-  assert.match(skill, /Each current row may carry `ext`, an opaque complete JSON value/u);
+  assert.match(skill, /Each current row also carries `ext`, an opaque complete JSON value/u);
   assert.match(skill, /never inspect, retain, validate, or copy it into a candidate/u);
   assert.match(skill, /Skip isolated malformed rows[\s\S]*without rejecting other trustworthy rows/u);
   assert.match(skill, /hostname bucket assigned to different merchant IDs[\s\S]*preserving unrelated hostnames/u);
@@ -960,20 +1006,20 @@ test('catalog discovery loads the merchant list before matching intent on descri
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--format json/u);
-  assert.match(skill, /clink catalog search --query <text>[^\n]*--format json/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--sandbox/u);
+  assert.match(skill, /clink catalog search --query <text>[^\n]*--sandbox/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--format json/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--sandbox/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
 });
 
-test('public Catalog is config-free, UAT-pinned, language-aware, and checkout-safe', () => {
+test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
   assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
   assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
   assert.match(cliInvocation, /wrapper appends `--sandbox`/u);
@@ -982,11 +1028,10 @@ test('public Catalog is config-free, UAT-pinned, language-aware, and checkout-sa
   assert.match(cliInvocation, /send no `Authorization`/u);
   assert.match(cliInvocation, /four Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
   assert.match(cliInvocation, /anonymous `GET \/agent\/ucp\/merchants`/u);
-  assert.match(cliInvocation, /Preflight `https:\/\/uat-api\.clinkbill\.com` before the merchant-list command/u);
+  assert.match(cliInvocation, /Preflight the selected API origin before the merchant-list command/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
-  assert.match(catalogDiscovery, /fixes `catalogEnvironment=sandbox`/u);
-  assert.match(catalogDiscovery, /do not pass `--sandbox` or `--test` yourself/u);
+  assert.match(catalogDiscovery, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(catalogDiscovery, /valid BCP47 tag/u);
   assert.match(catalogDiscovery, /Agent owns result-language detection/u);
   assert.match(catalogDiscovery, /--language zh-Hans --context '\{"address_country":"HK"\}'/u);
@@ -1272,7 +1317,7 @@ test('the per-page actor table stays in SKILL.md and the handoff reference', () 
   assert.match(browserHandoff, /OAUTH_DEVICE_VERIFICATION/u);
   assert.match(browserHandoff, /CARD_BINDING/u);
   assert.match(browserHandoff, /INSTRUCTION_PREPARE_CARD_BINDING/u);
-  assert.match(browserHandoff, /VIC_PASSKEY_REGISTRATION/u);
+  assert.match(browserHandoff, /STRONG_AUTH_PASSKEY_REGISTRATION/u);
   assert.match(browserHandoff, /INSTRUCTION_PASSKEY_SIGNING/u);
   assert.match(browserHandoff, /THREE_DS_CHALLENGE/u);
   assert.match(browserHandoff, /RISK_RULE_CONFIG/u);
@@ -1287,6 +1332,7 @@ test('--no-open covers every link command other than wallet init', () => {
       /card binding-link/u,
       /card setup-link/u,
       /card modify-link/u,
+      /card passkey-link/u,
       /risk link/u,
       /instruction prepare/u,
       /instruction create/u,
@@ -1322,6 +1368,7 @@ test('--no-open covers every link command other than wallet init', () => {
     'card binding-link',
     'card setup-link',
     'card modify-link',
+    'card passkey-link',
     'risk link',
     'instruction prepare',
     'instruction create',

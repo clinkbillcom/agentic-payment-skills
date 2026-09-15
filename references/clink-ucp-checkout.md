@@ -50,8 +50,8 @@ DISCOVER_PRODUCT
   -> FREEZE_INTENT_QUANTITY_AND_AMOUNT_WITH normalizeUcpAmountToMinorUnitLong
   -> CLASSIFY_FULFILLMENT
   -> REFRESH_PAYMENT_INSTRUMENT
-  -> IF_VISA_VIC_READY_LIST_AUTHORIZATIONS
-  -> IF_VISA_VIC_READY_SELECT_INSTRUCTION_MANDATE
+  -> IF_STRONG_AUTH_READY_LIST_AUTHORIZATIONS
+  -> IF_STRONG_AUTH_READY_SELECT_INSTRUCTION_MANDATE
   -> IF_NO_MATCH_START_INSTRUCTION_WORKFLOW_AND_STOP
   -> IF_UNATTENDED_USE_PINNED_AUTHORIZATION_OR_SURFACE_GAP
   -> RESOLVE_CHECKOUT_ROUTE_WITH classifyUcpCheckoutRoute
@@ -214,13 +214,15 @@ clink card binding-link --no-watch --no-open --format json
 
 Resolve the payment method from the refreshed `paymentMethodsVoList`: use the caller-selected card when provided, otherwise use the current/default paymentInstrumentId. Freeze this exact `paymentInstrumentId` into the aggregate command only after it is ready. If no method exists, mark `paymentInstrumentRefreshAttempted=true` and enter the foreground PENDING Instruction continuation in Step 2. Do not start `card binding-link` with a watch, emit its URL, or run checkout with a guessed card.
 
+When UCP completion builds its `PAYMENT_GATEWAY` credential, the CLI forwards a present Boolean readiness as `strong_auth_ready` and preserves `auth_protocol` when it resolves to `VISA` or `MASTERCARD`. If readiness is absent, it omits both capability fields. When readiness is false, an unknown/conflicting protocol is omitted rather than blocking ordinary checkout. A ready card without exactly one supported protocol is invalid. The CLI no longer emits a network-specific registration boolean.
+
 ## Step 2: Authorization Gate And Candidate Instructions
 
-After `parse-item` and item selection freeze the product facts, run the authorization capability gate against the refreshed selected/default card.
+After `parse-item` and item selection freeze the product facts, run the authorization capability gate against the refreshed selected/default card. The new payment-method fields are the only authority; do not route from card brand or legacy network-specific registration booleans.
 
-- If the selected/default card is non-Visa, skip instruction and mandate matching.
-- If there is no card, or the selected Visa is not VIC-ready, screen the frozen purchase and run one foreground `clink instruction prepare ... --max-wait 900 --format json`. Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. Return its structured PENDING envelope's Bind Card URL only with `processRunning=true` and `terminal=false`, without auto-opening it, and keep the same process waiting for the final same-ID ready envelope.
-- If the selected/default card is Visa + VIC ready, list candidate instructions before creating or checking out:
+- On an attended run, if `strongAuthReady=false` or readiness is absent during rollout, skip instruction and mandate matching. An unattended run requires pinned authorization and proven strong-auth readiness.
+- If there is no card, screen the frozen purchase and run one foreground `clink instruction prepare ... --max-wait 900 --format json`. Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. Return its structured PENDING envelope's Bind Card URL only with `processRunning=true` and `terminal=false`, without auto-opening it, and keep the same process waiting for the final same-ID ready envelope.
+- If the selected/default card has `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`, list candidate instructions before creating or checking out:
 
 ```bash
 clink instruction list \
@@ -237,9 +239,9 @@ The `--valid-only` query is required so the CLI requests ACTIVE instructions and
 - filter out entries for a different `paymentInstrumentId`
 - filter out entries with missing `instructionId`, `mandateId`, `currencyCode`, or amount limit
 
-If there is no matching instruction+mandate after filtering, screen the purchase with `classifyInstructionRestriction` from `lib/restricted-categories.mjs` (see `references/clink-restricted-categories.md`) — a restricted category refuses here and ends the checkout attempt without a draft — then start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; it is the agentic equivalent of OpenClaw's `prepare_visa_purchase_instruction`, but do not call `prepare_visa_purchase_instruction` as a local tool in this skill. Do not build or run the aggregate checkout command on this Visa + VIC branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
+If there is no matching instruction+mandate after filtering, screen the purchase with `classifyInstructionRestriction` from `lib/restricted-categories.mjs` (see `references/clink-restricted-categories.md`) — a restricted category refuses here and ends the checkout attempt without a draft — then start the instruction creation workflow described in `references/clink-instruction.md` with the same product/order mandate scope, then stop the UCP checkout path. In this skill, that means using `clink instruction create` and, when needed, `clink instruction sign-url`; do not call a network-specific preparation tool or infer network internals. Do not build or run the aggregate checkout command on this strong-auth-ready branch until the created instruction is Passkey-authorized, ACTIVE, tied to the same `paymentInstrumentId`, and contains a matching ACTIVE/non-reserved mandate.
 
-Carry the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification into either Instruction command. A VIC-ready Visa with no reusable match uses ordinary `instruction create` plus Passkey. A missing/incomplete Visa uses `instruction prepare` and the PENDING continuation described in `references/clink-instruction.md`. For shipped physical goods, pass the real CWallet instruction address shape; for `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address. The first prepare envelope is progress, not permission to return. Restart this checkout flow from Step 1 only after the final same-ID envelope reports `instructionStatus=ACTIVE` and non-empty `instruction.paymentInstrumentId`, so payment instruments and `instruction list --valid-only` are refreshed before matching.
+Carry the frozen merchant URL/domain, merchant/category/title/description semantics, currency, exact amount or authorized cap, service window, and fulfillment/shipping classification into either Instruction command. A strong-auth-ready Visa/Mastercard with no reusable match uses ordinary `instruction create` plus Passkey. A missing card uses `instruction prepare` and the PENDING continuation described in `references/clink-instruction.md`. For shipped physical goods, pass the real CWallet instruction address shape; for `NO_SHIPPING_REQUIRED`, pass the fixed Apple Park default address. The first prepare envelope is progress, not permission to return. Restart this checkout flow from Step 1 only after the final same-ID envelope reports `instructionStatus=ACTIVE` and non-empty `instruction.paymentInstrumentId`, so payment instruments and `instruction list --valid-only` are refreshed before matching.
 
 An older Quick-capable `wallet init` may have returned a `pendingInstructionId`, but it does not drive a Skill-side continuation. `instruction prepare` authoritatively creates/reuses the frozen intent and returns the ID it waits on. A PENDING Instruction never appears in `--valid-only` and never authorizes checkout.
 
@@ -326,7 +328,7 @@ Call `classifyUcpCheckoutRunExecution` with the frozen product, route, payment i
 - `productSelectionFrozen=true`
 - `fulfillmentAndAddressReady=true`
 - `paymentInstrumentReady=true`
-- `authorizationGatePassed=true` after either the non-Visa/VIC bypass or an exact ACTIVE Instruction match
+- `authorizationGatePassed=true` after the `strongAuthReady=false`/absent-readiness compatibility bypass or an exact ACTIVE Instruction match for `authProtocol=VISA|MASTERCARD`
 - `restrictedCategoryGatePassed=true`
 - `checkoutRouteResolved=true`
 - `checkoutExecutionClaimed=false` on the pre-claim classification
