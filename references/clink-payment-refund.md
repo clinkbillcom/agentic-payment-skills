@@ -12,7 +12,7 @@ Enter payment execution only after `references/clink-payment-intent-contract.md`
 - Payment parameters come from the user or an upstream merchant workflow.
 - The payment is explicitly authorized for this request.
 - Fulfillment is classified before old pay: `PHYSICAL_GOODS_REQUIRES_SHIPPING`, `NO_SHIPPING_REQUIRED`, or `UNKNOWN`.
-- Before direct or session payment, run the authorization resolver. `instruction_id` and `mandate_id` are mandatory only when the selected/default card is Visa + VIC ready and a matching ACTIVE instruction+mandate is found.
+- Before direct or session payment, run the authorization resolver. `instruction_id` and `mandate_id` are mandatory only when refreshed selected/default card data has `strongAuthReady=true`, `authProtocol=VISA|MASTERCARD`, and a matching ACTIVE instruction+mandate.
 
 ## Payment Modes
 
@@ -39,9 +39,9 @@ Common options:
 - `--payment-instrument-id <id>` to select a specific method
 - `--payment-method-type <type>`, default `CARD`
 - `--terminal-qr` for an explicitly selected `ALIPAY` payment; it renders a UTF-8 QR on stderr while stdout remains one JSON envelope
-- `--instruction-id <id>` and `--mandate-id <id>` for VIC-routed charge context; `--purchase-instruction-id <id>` remains only a backward-compatible alias for `--instruction-id` and must not conflict with `--instruction-id`
+- `--instruction-id <id>` and `--mandate-id <id>` for strong-auth-routed charge context; `--purchase-instruction-id <id>` remains only a backward-compatible alias for `--instruction-id` and must not conflict with `--instruction-id`
 - `--shipping-address '<json>'` for old pay context; use the UCP Postal Address shape (`street_address`, `address_locality`, `address_region`, `address_country`, `postal_code`, optional `extended_address`, `first_name`, `last_name`, `phone_number`)
-- `--products '<json-array>'` for product-level VIC credential context; each item uses `productId`, `productName`, optional `productUrl`, `quantity`, `unitPrice` as a major-unit decimal, `currencyCode`, and optional `extra`
+- `--products '<json-array>'` for product-level strong-auth credential context; each item uses `productId`, `productName`, optional `productUrl`, `quantity`, `unitPrice` as a major-unit decimal, `currencyCode`, and optional `extra`
 - Old agent pay must send `aiAgentInstructionBo.merchantInfo.merchantCategoryCode` fixed to `5999`; do not ask the user or merchant skill for this value.
 - Environment targeting comes from the locked logical `clink` wrapper, not from changing flags between commands.
 
@@ -79,14 +79,20 @@ clink card binding-link --no-watch --no-open --format json
 
 Then classify the refreshed card state with `lib/authorization-workflow-fsm.mjs` `classifyPaymentAuthorizationResolver`.
 
+Card brand is display data; `strongAuthReady` and `authProtocol` determine the authorization route. An unattended run with false/missing readiness returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP` and never bypasses authorization.
+
 Resolver branches:
 
-- `AUTHORIZATION_BYPASSED`: the selected/default card is non-Visa, or it is Visa but VIC is not enabled. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`.
-- `AUTHORIZATION_LIST_REQUIRED`: the selected/default card is Visa + VIC ready. List ACTIVE instructions before pay.
+- `AUTHORIZATION_BYPASSED`: the selected/default card has `strongAuthReady=false`, or the readiness field is absent during backend rollout. In this branch, bypass instruction matching and run `clink pay` without `--instruction-id` or `--mandate-id`; ignore unknown/conflicting protocol values unless readiness is true.
+- `AUTHORIZATION_PREPARE_REQUIRED`: on an attended run, the refreshed list is empty. Run the restricted-category gate, then one foreground `clink instruction prepare ... --max-wait 900 --format json`; do not pass `--payment-instrument-id`, `--open`, or `--no-watch`. An unattended run returns `SURFACE_UNATTENDED_AUTHORIZATION_GAP` instead.
+- `AUTHORIZATION_LIST_REQUIRED`: the selected/default card has `strongAuthReady=true` and `authProtocol=VISA|MASTERCARD`. List ACTIVE instructions before pay. Card brand is display data and does not choose this branch.
 - `AUTHORIZATION_MATCHED`: pass the matched `instruction_id` and `mandate_id` to `clink pay`.
 - `AUTHORIZATION_DRAFT_REQUIRED`: no matching instruction+mandate exists after listing, or the selected authorization is incomplete. Run the restricted-category gate described below; only a clean result may start the instruction creation workflow. Stop the current pay attempt until activation.
+- `AUTHORIZATION_ERROR`: `strongAuthReady` is non-Boolean/conflicting, or a ready card has a missing/unsupported/conflicting `authProtocol`. Stop instead of guessing from scheme or a legacy registration field. A genuinely absent readiness field is the compatibility bypass above, not an error.
 
-For the Visa + VIC ready branch, run:
+For `AUTHORIZATION_PREPARE_REQUIRED`, pass the structured PENDING envelope to `classifyAuthorizationPrepareObservation`. Return `bindingUrl` only with non-empty `instructionId`, `status=PENDING`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`, then keep the same CLI process in the foreground. Resume only when the final envelope preserves that ID and reports `status=ready`, `instructionStatus=ACTIVE`, and non-empty `instruction.paymentInstrumentId`. Timeout/pending may execute only the returned same-ID read-only `resumeCommand`; external process death permits only exact-ID read-only verification. Never run prepare, Checkout, or payment again.
+
+For the strong-auth-ready Visa/Mastercard branch, run:
 
 ```bash
 clink instruction list --valid-only --payment-instrument-id <payment_instrument_id> --format json

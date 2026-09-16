@@ -1,13 +1,13 @@
 # clink-payment-skill
 
-适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、VIC 授权、退款和风控规则操作。
+适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、Visa/Mastercard 强认证授权、退款和风控规则操作。
 
-Skill 版本：`1.14.4`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
+Skill 版本：`1.14.6`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
 
 ## 环境要求
 
 - Node.js >= 20
-- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 钉在生产环境
+- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 和公开 Catalog 发现固定为 sandbox/UAT 环境
 - **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续认证命令都会读到 UAT 的 `baseUrl`
 - 新的钱包初始化使用 OAuth Device Authorization；邮箱/OTP 路径默认取邮箱 `@` 前部分作为姓名。仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
 
@@ -27,8 +27,8 @@ Install Clink Payment Skills: https://github.com/clinkbillcom/agentic-payment-sk
 
 1. 先执行 `clink wallet status --format json`。如果钱包已就绪（OAuth 或完整的旧 CSK），报告就绪并结束。
 2. 保留用户明确选择的邮箱/OTP 路径，使用已提供的邮箱，仅缺失时询问。交付门禁通过后，未提供邮箱或明确选择 Google 时进入 Portal，不要求在聊天中先提供邮箱，也不向这条路径注入缓存邮箱。
-3. 邮箱/OTP 继续执行 `clink wallet init --email <email> --open --format json`。交付门禁通过后，Portal/Google 使用 `clink wallet init --open --format json`，打开带 Google 按钮的 Portal。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 Clink device-token 轮询已启动，不是 Google 轮询或 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成所选登录；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
-4. 初始化成功且返回 `paymentMethodsCached=true`、`paymentMethodCount=0` 和非空 `bindingUrl` 时，只把 init URL 视为需要绑定首张卡的信号。先启动带内置监听的 `clink card binding-link --no-open --format json`；该命令会等限定事件类型的首次 poll 成功后才输出首个 JSON envelope，其中包含受信 Agent Portal 上精确的 `/payment-method-setup` `bindingUrl`（只允许受控的可选 `email` 参数）、`watchReady=true` 和 `watchEventType=payment_method.added`。此时**必须把这份已受监听保护的 `bindingUrl` 返回给用户**，并保持同一进程继续等待匹配事件；不能只报告 OAuth 已完成而漏掉链接。数量大于 0 表示已有卡；缓存刷新失败也不会推翻已经成功的 OAuth 登录。
+3. 邮箱/OTP 继续执行 `clink wallet init --email <email> --open --format json`。交付门禁通过后，Portal/Google 使用 `clink wallet init --open --format json`，打开带 Google 按钮的 Portal。持续读取同一进程，直到它输出 `Waiting for authorization...`；这表示 Clink device-token 轮询已启动，不是 Event Hub 监听。如果 CLI 请求打开系统浏览器，再提示用户在那里完成所选登录；只有浏览器拉起失败且 wait marker 已出现后才展示验证 URL。OAuth 阶段绝不能另起 `events poll`。
+4. 钱包初始化不得启动绑卡命令，也不得发送 init 缓存的 `bindingUrl`。后续已授权支付若没有卡，执行 `clink instruction prepare --title <title> --mandates '<mandates_json>' ... --max-wait 900 --format json`。CLI 在等待前输出结构化 `PENDING` envelope，包含 `instructionId`、`bindingUrl`、`watchReady=true`、`watchEventType=purchase_instruction.activated`、`processRunning=true` 和 `terminal=false`；Agent 可以提示该链接但不得自动打开，并必须保持同一进程前台运行以读取最终 envelope。只有最终 envelope 保持同一 ID、返回 `instructionStatus=ACTIVE` 且带有 `paymentInstrumentId`，才可继续。超时只能使用 CLI 返回的同 ID 只读 resume；如果外部进程先终止，也只能执行精确 ID 的只读 `instruction get`。禁止再次 prepare Instruction、Checkout 或 payment。
 
 用户明确要求重新登录、重新授权、替换过期链接，或错过之前的登录时，必须启动一次新的 `wallet init`。新尝试会覆盖旧尝试，Agent 不得复用聊天历史或旧终端输出里的登录 URL。
 
@@ -70,18 +70,19 @@ https://www.clinkbill.com/public/skills/agentic-payment-skill.manifest.json
 - 支付执行（直接模式和会话模式）
 - Agent 支付宝二维码支付：直接在终端展示 CLI 生成的字符二维码，必要时回退到私有 PNG，等待关联的成功/失败事件，并在每个终态递归清理临时目录
 - 基于语义的 v2 意图路由和派生钱包门禁：匿名公共 Catalog 搜索不读取钱包状态或 `~/.clink-cli/config.json`；带购买意图的商品发现也保持匿名，直到本轮语义明确授权并绑定一个候选商品。候选编号只负责定位商品，本身不能授权购买。Catalog 结果语言由 Agent 根据会话意图决定并冻结为 BCP47，通过 `--language` 传入；query 文本和后端不再猜测目标语言
+- 使用 `clink tool internal-ucp get-merchant-list` 匿名获取内部商户 route：所有环境都请求各自的 `GET /agent/ucp/merchants`，使用服务端已筛选的 active 非影子内部 route，安全保留返回的 `domain` URL 及可选子路径，并从中派生 hostname；同一 merchant ID 可有多条 route。Catalog-disabled、单条脏数据或不可匹配记录会被逐条跳过；同一 hostname 若指向不同 merchant ID，只剔除该冲突 hostname，不影响其他可信 route；任何环境都不再读取静态或内置商户列表
 - 使用 `clink skills list --all --tippable` 查询可打赏 Skill，仅按编号、发布者、技能名称三列展示，表头语言与用户语言一致
 - 使用 `clink skills tip` 按 publisher/name 且不传 version，或从同一上下文两小时内展示的列表解析 Number 后执行明确授权的 USD 打赏；同步 agent pay 成功即为支付成功，`account-created` / `account-reloaded` 只是可选的结果增强事件
 - 使用 `clink skills install publisher/name[@version]` 安装公开 Skill：省略 version 表示 latest，`@version` 表示精确版本；按序号安装时，从同一上下文两小时内最新的带 scope 列表冻结 publisher/name/version，并在确认后执行
-- VIC 代理授权准备（Visa 状态检查、instruction 复用/创建 draft、发送 Passkey URL 由页面自动签名）
-- UCP 商品下单 —— 解析并冻结一个商品，判断履约方式；实物邮寄必须提供完整的标准收货地址；完成 Visa/VIC 授权后，先运行 `clink tool internal-ucp get-endpoint`。仅 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `get-rest-endpoint`；每个 provider（包括 `clinkbill` 和非 clinkbill）都必须解析出 canonical HTTPS endpoint，且其 origin 与当前成功的 wallet-status 证据完全同源。runtime 原子 claim 唯一的 `checkoutAttemptId` 后，才在冻结的 `CLINK_BASE_URL` 下以前台方式执行一次 `clink ucp-checkout run ... --confirm-purchase --format json`；只读 resume 继续保留该环境锁。仅数字交付追加 `--wait-delivery --max-wait 900`；Agent 不再手工串联 create、complete、事件轮询或交付轮询
+- 强认证代理授权准备（Visa/Mastercard 能力检查、Instruction 复用/创建、CLI 负责的无卡 PENDING continuation，以及页面完成授权）
+- UCP 商品下单 —— 解析并冻结一个商品，判断履约方式；实物邮寄必须提供完整的标准收货地址；完成 Visa/Mastercard 强认证授权后，先运行 `clink tool internal-ucp get-endpoint`。仅 `NOT_IN_INTERNAL_UCP_LIST` 才 fallback 到 `get-rest-endpoint`；每个 provider（包括 `clinkbill` 和非 clinkbill）都必须解析出 canonical HTTPS endpoint，且其 origin 与当前成功的 wallet-status 证据完全同源。runtime 原子 claim 唯一的 `checkoutAttemptId` 后，才在冻结的 `CLINK_BASE_URL` 下以前台方式执行一次 `clink ucp-checkout run ... --confirm-purchase --format json`；只读 resume 继续保留该环境锁。仅数字交付追加 `--wait-delivery --max-wait 900`；Agent 不再手工串联 create、complete、事件轮询或交付轮询
 - 退款提交与状态轮询
 - 风控规则查看与配置
-- 事件驱动的异步完成 —— 通过 CLI 内置的链接监听或 `clink events poll` 等待 Clink 事件中心的 webhook（绑卡、退款结果、VIC 激活、3DS 后订单结果），而不是凭猜测或反复重试
+- 事件驱动的异步完成 —— 发出链接后保持原 CLI 进程等待精确 Instruction/卡激活、退款、VIC 或 3DS 后订单事件，而不是结束当前工作或反复重试
 
 ## 必须由用户自己打开的页面
 
-这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱/OTP 或 Portal/Google 登录页、绑卡/加卡/管理卡页、Visa Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
+这个 skill 会被不同的 agent 安装，其中一些自带浏览器能力。OAuth 邮箱/OTP 或 Portal/Google 登录页、绑卡/加卡/管理卡页、Visa/Mastercard Passkey 注册与签名页、instruction 更新/取消页、3DS 挑战页和风控规则页，都必须由用户在自己的浏览器里完成——不得由 agent 内置浏览器、无头浏览器、浏览器 MCP、computer-use 或内嵌 webview 去打开、跳转、预览、截图或填写。Passkey 页在 agent 浏览器里根本不可能成功：WebAuthn 需要用户自己设备上的平台认证器。商品详情页正好相反，仍然属于 agent 的工作。
 
 OAuth 完成由原进程的 Clink device-token 轮询证明；其他异步流程使用匹配的 webhook 事件，而不是浏览器回报。原进程仍在运行且链接有效时，用户可以在其他浏览器或设备上完成。逐页契约见 `references/clink-browser-handoff.md`，每个 URL 在发出前由 `lib/page-handoff.mjs` 分类。
 

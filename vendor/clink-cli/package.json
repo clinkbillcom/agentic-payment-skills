@@ -1,12 +1,23 @@
 {
   "name": "clink-cli-vendored",
   "version": "0.2.32",
-  "upstreamCommit": "6c3b7c6e3184938489d3c2fd55292dd4d726e0a8",
+  "upstreamCommit": "70f3c2aef3203f5f3a2be11bc5a49b3b2884c475",
   "edition": "main",
   "private": true,
   "type": "module",
   "bin": {
     "clink-cli": "clink-cli.bundle.mjs"
   },
-  "description": "Vendored main Edition bundle of @clink-ai/clink-cli built from upstreamCommit. Playwright remains external because it is an optional runtime fallback whose native dependencies cannot be bundled. Re-vendor with clink-cli's bundle:main and sync-vendored-cli.mjs workflow."
+  "description": "Vendored main Edition bundle based on upstreamCommit, with downstream Mastercard strong-auth patches recorded in downstreamPatches. See README.md before re-vendoring. Playwright remains an optional external runtime dependency.",
+  "bundleSha256": "2a8938ea9a220d5d9c74e44ae8b08ec8a1fd3dbf1edbe98b1a53965711741965",
+  "downstreamPatches": [
+    {
+      "repository": "https://github.com/clinkbillcom/agentic-payment-skills",
+      "commits": [
+        "fdcd82cef99cede3c262e244ed872d1ea124720d",
+        "ee79caec6b9c23003f261c6be16d70b973aee438"
+      ],
+      "purpose": "Mastercard strong-auth capability, protocol-specific Passkey URLs, and checkout credential forwarding"
+    }
+  ]
 }

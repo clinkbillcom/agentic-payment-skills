@@ -22,6 +22,17 @@ const browserHandoff = await readFile(new URL('../references/clink-browser-hando
 const restrictedCategories = await readFile(new URL('../references/clink-restricted-categories.md', import.meta.url), 'utf8');
 const networkPreflight = await readFile(new URL('../scripts/network-preflight.mjs', import.meta.url), 'utf8');
 const cliWrapper = await readFile(new URL('../bin/clink', import.meta.url), 'utf8');
+const authorizationWorkflow = await readFile(
+  new URL('../lib/authorization-workflow-fsm.mjs', import.meta.url),
+  'utf8',
+);
+const eventWorkflow = await readFile(new URL('../lib/event-workflow-fsm.mjs', import.meta.url), 'utf8');
+const strongAuth = await readFile(new URL('../lib/strong-auth.mjs', import.meta.url), 'utf8');
+const pageHandoff = await readFile(new URL('../lib/page-handoff.mjs', import.meta.url), 'utf8');
+const vendoredCli = await readFile(
+  new URL('../vendor/clink-cli/clink-cli.bundle.mjs', import.meta.url),
+  'utf8',
+);
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 
 /** Every doc shipped to the agent, keyed by the path a failure message should name. */
@@ -41,6 +52,14 @@ const shippedDocs = {
   'references/clink-payment-intent-contract.md': paymentIntentContract,
   'references/clink-browser-handoff.md': browserHandoff,
   'references/clink-restricted-categories.md': restrictedCategories,
+};
+
+const shippedStrongAuthRuntime = {
+  'lib/authorization-workflow-fsm.mjs': authorizationWorkflow,
+  'lib/event-workflow-fsm.mjs': eventWorkflow,
+  'lib/strong-auth.mjs': strongAuth,
+  'lib/page-handoff.mjs': pageHandoff,
+  'vendor/clink-cli/clink-cli.bundle.mjs': vendoredCli,
 };
 
 function plainMarkdownCell(cell) {
@@ -77,13 +96,13 @@ test('skill frontmatter stays compact and trigger-focused', () => {
   assert.match(description, /^Use when/u);
 });
 
-test('environment guidance matches the production wallet-init distribution wrapper', () => {
-  assert.doesNotMatch(cliWrapper, /--sandbox|--test/u);
-  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=production/u);
+test('environment guidance matches the sandbox wallet-init distribution wrapper', () => {
+  assert.match(cliWrapper, /set -- "\$@" --sandbox/u);
+  assert.match(cliWrapper, /CLINK_WALLET_INIT_ENVIRONMENT=sandbox/u);
   assert.match(cliInvocation, /Environment selection belongs to `wallet init`/u);
-  assert.match(cliInvocation, /pins `wallet init` to production/u);
+  assert.match(cliInvocation, /pins `wallet init` to sandbox/u);
   assert.match(cliInvocation, /there is no `--base-url` flag/u);
-  assert.doesNotMatch(skill, /hardcoded UAT\/sandbox/u);
+  assert.match(skill, /pins init to sandbox\/UAT/u);
 });
 
 test('UCP checkout docs leave idempotency-key generation to the CLI', () => {
@@ -138,8 +157,13 @@ test('main skill routes direct and session pay through authorization resolver be
   assert.match(authorizationSourceRow[1], /DIRECT_PAY/u);
   assert.match(authorizationSourceRow[1], /CURRENT_USER_TURN/u);
   assert.match(authorizationSourceRow[1], /UPSTREAM_MERCHANT_WORKFLOW/u);
-  assert.match(skill, /Visa \+ VIC ready/u);
-  assert.match(skill, /non-Visa or Visa without VIC readiness/u);
+  assert.match(skill, /strongAuthReady=true/u);
+  assert.match(skill, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(skill, /`strongAuthReady=false` bypasses instruction matching/u);
+  assert.match(skill, /absent readiness field means capability unavailable and also bypasses/u);
+  assert.match(skill, /When readiness is false, ignore an unknown\/conflicting protocol/u);
+  assert.match(skill, /Non-Boolean\/conflicting readiness/u);
+  assert.match(skill, /Brand-based routing is incorrect/u);
   assert.doesNotMatch(skill, /Direct\/session non-Visa payment is explicitly authorized \| Run `clink pay`/u);
 });
 
@@ -150,12 +174,37 @@ test('Instruction mandate descriptions stay within the CLI limit', () => {
   }
 });
 
-test('payment reference documents Visa VIC resolver bypass branch', () => {
+test('payment reference documents the protocol-neutral strong-auth resolver', () => {
   assert.match(paymentRefund, /Direct\/Session Pay Authorization Resolver/u);
-  assert.match(paymentRefund, /non-Visa/u);
-  assert.match(paymentRefund, /Visa but VIC is not enabled/u);
+  assert.match(paymentRefund, /AUTHORIZATION_BYPASSED/u);
+  assert.match(paymentRefund, /strongAuthReady=false/u);
   assert.match(paymentRefund, /bypass instruction matching/u);
-  assert.match(paymentRefund, /Visa \+ VIC ready/u);
+  assert.match(paymentRefund, /AUTHORIZATION_LIST_REQUIRED/u);
+  assert.match(paymentRefund, /authProtocol=VISA\|MASTERCARD/u);
+  assert.match(paymentRefund, /Card brand is display data/u);
+  assert.match(paymentRefund, /AUTHORIZATION_ERROR/u);
+  assert.match(paymentRefund, /readiness field is absent during backend rollout/u);
+  assert.match(paymentRefund, /absent readiness field is the compatibility bypass above, not an error/u);
+  assert.match(paymentRefund, /ignore unknown\/conflicting protocol values unless readiness is true/u);
+  assert.match(ucpCheckout, /If readiness is absent, it omits both capability fields/u);
+  assert.match(ucpCheckout, /unknown\/conflicting protocol is omitted rather than blocking ordinary checkout/u);
+  assert.match(walletConfig, /readiness absent during backend rollout, bypasses instruction matching/u);
+  assert.match(instruction, /absent readiness field during backend rollout/u);
+});
+
+test('shipped docs and strong-auth runtime reject legacy registration capability fields', () => {
+  const legacyFields = [
+    ['visa', 'RegistrationSucceeded'].join(''),
+    ['mastercard', 'RegistrationSucceeded'].join(''),
+    ['visa', 'registration', 'succeeded'].join('_'),
+    ['mastercard', 'registration', 'succeeded'].join('_'),
+  ];
+
+  for (const [name, body] of Object.entries({ ...shippedDocs, ...shippedStrongAuthRuntime })) {
+    for (const field of legacyFields) {
+      assert.equal(body.includes(field), false, `${name} must not use legacy capability field ${field}`);
+    }
+  }
 });
 
 test('Agent Pay account event monitoring is optional, correlated, and user-visible', () => {
@@ -269,7 +318,7 @@ test('legacy CSK readiness remains compatible without weakening OAuth fail-close
   assert.match(walletConfig, /Invalid OAuth state[\s\S]*never fall back to CSK/u);
   assert.match(walletConfig, /OAuth reauthorization required[\s\S]*never inspect stored\/env\/flag CSK/u);
   assert.match(skill, /Preserve legacy CSK compatibility/u);
-  assert.match(skill, /Do not force[\s\S]*to migrate/u);
+  assert.match(skill, /do not force[\s\S]*to migrate/iu);
   assert.match(skill, /New `wallet init` always creates OAuth/u);
   assert.match(skill, /Once OAuth succeeds, `oauthRequired=true` is permanent/u);
   assert.doesNotMatch(skill, /printenv CLINK_CUSTOMER_API_KEY \| clink config set customer-api-key/u);
@@ -325,9 +374,8 @@ test('instruction activation runs on the command own built-in watch', () => {
     if (!/clink instruction (create|sign-url)/u.test(block)) continue;
     assert.doesNotMatch(block, /--no-watch/u);
   }
-  assert.match(asyncEvents, /are no exception: they use their built-in watch too/u);
   assert.match(asyncEvents, /Without `eventType` or `expectedResource`[\s\S]*first non-stale event batch/iu);
-  assert.match(asyncEvents, /instruction create\/sign-url watches are exceptions[\s\S]*preserve unmatched records[\s\S]*only a matched event/iu);
+  assert.match(asyncEvents, /instruction create` and `instruction sign-url` use their built-in Passkey watch/u);
 });
 
 // A 15-minute timeout or a runtime-killed foreground command leaves the activation unobserved
@@ -335,7 +383,7 @@ test('instruction activation runs on the command own built-in watch', () => {
 // live authorization, so both the action contract and the reference must send it to instruction get.
 test('a watch that ends without the activation verifies rather than fails', () => {
   assert.match(skill, /VERIFY_AUTHORIZATION_AFTER_WATCH_GAP/u);
-  assert.match(skill, /never report failure here/u);
+  assert.match(skill, /Never report failure here/u);
   assert.match(skill, /VERIFY_AUTHORIZATION_ACTIVATION/u);
   assert.match(instruction, /VERIFY_AUTHORIZATION_AFTER_WATCH_GAP/u);
   assert.match(instruction, /\*\*not\*\* a failure/u);
@@ -355,44 +403,34 @@ test('the --no-watch handoff is documented as the next command to run', () => {
   assert.match(skill, /Do not pass `--no-watch`, do not start an `events poll` alongside it/u);
 });
 
-test('wallet init starts the watch and then requires returning the binding URL', () => {
-  assert.match(
-    walletConfig,
-    /trusted Agent Portal origin[\s\S]*exact `\/payment-method-setup` path[\s\S]*optional configured `email`/u,
-  );
-  assert.match(walletConfig, /Never emit that unprotected init copy/u);
-  assert.match(walletConfig, /paymentMethodsCached=true[\s\S]*paymentMethodCount=0/u);
-  assert.match(
-    walletConfig,
-    /clink card binding-link --no-open --format json[\s\S]*without `--no-watch`/u,
-  );
-  assert.match(walletConfig, /first JSON envelope[\s\S]*`data\.watchReady=true`[\s\S]*process remains alive/u);
-  assert.match(walletConfig, /scopes a watch to `payment_method\.added`/u);
-  assert.match(walletConfig, /first Event Hub poll succeeds/u);
-  assert.match(walletConfig, /`data\.watchEventType=payment_method\.added`/u);
-  assert.match(walletConfig, /positive count[\s\S]*return ready/u);
-  assert.match(walletConfig, /do not start a competing `events poll`/u);
-  assert.match(skill, /`START_WATCHED_CARD_BINDING`/u);
-  assert.match(skill, /Do not return the unprotected init copy/u);
-  assert.match(skill, /`bindingUrlRequired=true`/u);
-  assert.match(
-    skill,
-    /must return that command's trusted Agent Portal `\/payment-method-setup` `data\.bindingUrl` to the user/u,
-  );
-  assert.match(skill, /only one optional non-empty `email` parameter/u);
-  assert.match(skill, /`paymentMethodsCached=true`, `paymentMethodCount=0`/u);
-  assert.match(skill, /`data\.watchReady=true`/u);
-  assert.match(
-    skill,
-    /clink card binding-link --no-open --format json[\s\S]*without `--no-watch`/u,
-  );
-  assert.doesNotMatch(skill, /proactively send (?:its|the returned) origin-only card-binding URL/iu);
-  assert.match(readme, /Start `clink card binding-link --no-open --format json`/u);
-  assert.match(readme, /must return that watched `bindingUrl` to the user/u);
-  assert.match(readmeZh, /先启动带内置监听的 `clink card binding-link --no-open --format json`/u);
-  assert.match(readmeZh, /必须把这份已受监听保护的 `bindingUrl` 返回给用户/u);
+test('wallet init defers card setup to the foreground pending-instruction continuation', () => {
+  assert.match(walletConfig, /wallet initialization never owns card setup/u);
+  assert.match(walletConfig, /never start a watched `card binding-link`/u);
+  assert.match(walletConfig, /`cardReadiness=missing`/u);
+  assert.doesNotMatch(walletConfig, /START_WATCHED_CARD_BINDING/u);
+  assert.doesNotMatch(skill, /START_WATCHED_CARD_BINDING/u);
+  assert.doesNotMatch(skill, /bindingUrlRequired=true/u);
+  assert.match(skill, /`HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI`/u);
+  assert.match(skill, /non-empty `instructionId`/u);
+  assert.match(skill, /`watchEventType=purchase_instruction\.activated`/u);
+  assert.match(skill, /`processRunning=true`/u);
+  assert.match(skill, /`terminal=false`/u);
+  assert.match(skill, /`INSTRUCTION_PREPARE_CARD_BINDING`/u);
+  assert.match(skill, /never auto-open or inspect it/u);
+  assert.match(skill, /Keep the same CLI process in the foreground/u);
+  assert.match(skill, /`instructionStatus=ACTIVE`/u);
+  assert.match(skill, /`instruction\.paymentInstrumentId`/u);
+  assert.match(readme, /clink instruction prepare/u);
+  assert.match(readme, /keep the same process in the foreground/u);
+  assert.match(readmeZh, /clink instruction prepare/u);
+  assert.match(readmeZh, /保持同一进程前台运行/u);
   assert.match(asyncEvents, /polls the OAuth device-token endpoint; it does not poll the Event Hub/u);
-  assert.match(browserHandoff, /must hand that watched URL to the user/u);
+  assert.match(browserHandoff, /`instruction prepare \.\.\. --format json` owns the handoff/u);
+  assert.match(cliInvocation, /Do not treat it as command completion/u);
+  assert.match(instruction, /No-Card PENDING Continuation/u);
+  assert.match(instruction, /A still-`PENDING` result remains pending and does not authorize payment/u);
+  assert.match(instruction, /external process dies before the final envelope/u);
+  assert.match(ucpCheckout, /first prepare envelope is progress, not permission to return/u);
   for (const body of [
     skill,
     readme,
@@ -653,8 +691,8 @@ test('CLI invocation reference uses shipped contracts instead of runtime help an
 
 test('skill and package versions stay bumped and in sync', () => {
   const skillVersion = skill.match(/version:\s*"([^"]+)"/u)?.[1];
-  assert.equal(skillVersion, '1.14.4');
-  assert.equal(packageJson.version, '1.14.4');
+  assert.equal(skillVersion, '1.14.6');
+  assert.equal(packageJson.version, '1.14.6');
   assert.equal(skillVersion, packageJson.version);
   assert.equal(packageJson.engines?.node, '>=20');
 });
@@ -902,6 +940,7 @@ test('README summaries include CLI-first internal routing and the profile provid
 });
 
 test('instruction activation waits are FSM-driven and correlated before resume', () => {
+  assert.match(skill, /classifyAuthorizationPrepareObservation/u);
   assert.match(skill, /classifyAuthorizationDraftObservation/u);
   assert.match(skill, /classifyAuthorizationActiveVerification/u);
   assert.match(skill, /classifyEventWaitRequest/u);
@@ -916,32 +955,69 @@ test('instruction activation waits are FSM-driven and correlated before resume',
   assert.match(instruction, /instruction get` exits nonzero or returns an explicit error envelope/u);
   assert.match(instruction, /`CREATED`, `PENDING`, or `INPROGRESS`/u);
   assert.match(instruction, /`COMPLETED`, `CANCELLED`, `EXPIRED`, `DECLINED`/u);
-  assert.match(ucpCheckout, /built-in watch/u);
+  assert.match(ucpCheckout, /final same-ID envelope/u);
 });
 
 test('catalog discovery loads the merchant list before matching intent on descriptions', () => {
   assert.match(skill, /references\/clink-catalog-discovery\.md/u);
   assert.match(skill, /lib\/catalog-discovery-fsm\.mjs/u);
   assert.match(skill, /classifyCatalogDiscovery/u);
-  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--test/u);
+  assert.match(skill, /clink tool internal-ucp get-merchant-list[^\n]*--sandbox/u);
 
-  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--test\|--sandbox\] --format json/u);
+  assert.match(catalogDiscovery, /clink tool internal-ucp get-merchant-list \[--sandbox\] --format json/u);
   assert.match(catalogDiscovery, /classifyCatalogDiscovery/u);
   assert.match(catalogDiscovery, /`description`/u);
   assert.match(catalogDiscovery, /merchant_match_not_in_candidates/u);
   assert.match(catalogDiscovery, /merchantMatch: \{ merchantId, merchantDomain, merchantUrl, reason \}/u);
   assert.match(catalogDiscovery, /merchant_match_ambiguous/u);
+  assert.match(catalogDiscovery, /active, non-shadow internal merchant routes/u);
+  assert.match(catalogDiscovery, /support internal endpoint resolution/u);
+  assert.match(catalogDiscovery, /null or missing upstream description/u);
+  assert.match(catalogDiscovery, /`ext` is an opaque complete JSON value/u);
+  assert.match(catalogDiscovery, /object, array, scalar, or null/u);
+  assert.match(catalogDiscovery, /does not inspect, validate, retain, or copy `ext`/u);
+  assert.match(catalogDiscovery, /can never influence merchant identity or intent matching/u);
+  assert.match(catalogDiscovery, /skips isolated malformed rows[\s\S]*do not invalidate other trustworthy rows/u);
+  assert.match(catalogDiscovery, /non-empty merchant array contains no trustworthy merchant identity[\s\S]*fails closed/u);
+  assert.match(catalogDiscovery, /hostname is assigned to different merchant IDs[\s\S]*preserving every unrelated route/u);
+  assert.match(catalogDiscovery, /preserves a non-root path such as `\/yiyuan\/`/u);
+  assert.match(catalogDiscovery, /never reads a production static well-known document or a test\/UAT local bundle/u);
+  assert.match(catalogDiscovery, /command returns `\{ merchants: \[\.\.\.\] \}`[\s\S]*compatibility adapter[\s\S]*missing or conflicting domain leaves `merchantUrl` unset/u);
+  assert.match(catalogDiscovery, /merchant_match_invalid_discriminator[\s\S]*never discarded[\s\S]*absent discriminator/u);
+  assert.match(catalogDiscovery, /broad Catalog group contract[\s\S]*does not carry a merchant route hostname or URL/u);
+  assert.match(catalogDiscovery, /multiple validated merchant-list routes[\s\S]*leaves the broad group and its products unenriched/u);
+
+  assert.match(skill, /active non-shadow internal merchant routes needed for endpoint resolution/u);
+  assert.match(skill, /Catalog-disabled rows have `description:""`/u);
+  assert.match(skill, /Each current row also carries `ext`, an opaque complete JSON value/u);
+  assert.match(skill, /never inspect, retain, validate, or copy it into a candidate/u);
+  assert.match(skill, /Skip isolated malformed rows[\s\S]*without rejecting other trustworthy rows/u);
+  assert.match(skill, /hostname bucket assigned to different merchant IDs[\s\S]*preserving unrelated hostnames/u);
+  assert.match(skill, /any present invalid `merchantUrl` discriminator[\s\S]*rejected rather than treated as absent/u);
+  assert.match(skill, /broad internal Catalog group currently carries `merchant_id` but no merchant route discriminator/u);
+  assert.match(skill, /List active internal UCP merchant routes/u);
+
+  assert.match(readme, /active non-shadow internal routes/u);
+  assert.match(readme, /One merchant ID may have multiple routes/u);
+  assert.match(readme, /isolated malformed\/unmatchable rows are skipped individually/u);
+  assert.match(readme, /hostname assigned to different merchant IDs is removed without hiding unrelated routes/u);
+  assert.match(readme, /no environment reads a static or bundled merchant list/u);
+  assert.match(readmeZh, /active 非影子内部 route/u);
+  assert.match(readmeZh, /同一 merchant ID 可有多条 route/u);
+  assert.match(readmeZh, /单条脏数据或不可匹配记录会被逐条跳过/u);
+  assert.match(readmeZh, /同一 hostname 若指向不同 merchant ID，只剔除该冲突 hostname/u);
+  assert.match(readmeZh, /任何环境都不再读取静态或内置商户列表/u);
 });
 
 test('catalog discovery keeps merchant-scoped and broad search paths distinct', () => {
-  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--test/u);
-  assert.match(skill, /clink catalog search --query <text>[^\n]*--test/u);
+  assert.match(skill, /clink ucp-catalog search --merchant-id <id> --query <text>[^\n]*--sandbox/u);
+  assert.match(skill, /clink catalog search --query <text>[^\n]*--sandbox/u);
   assert.match(skill, /never takes `--merchant-id`/u);
 
-  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--test/u);
+  assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--sandbox/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--test\|--sandbox\] --format json/u,
+    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
@@ -950,16 +1026,16 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
 test('public Catalog is config-free, environment-explicit, language-aware, and checkout-safe', () => {
   assert.match(cliInvocation, /Public Catalog discovery is the deliberate exception/u);
   assert.match(cliInvocation, /do not read `~\/\.clink-cli\/config\.json`/u);
-  assert.match(cliInvocation, /no environment flag means production/u);
-  assert.match(cliInvocation, /`--sandbox` means sandbox\/UAT/u);
-  assert.match(cliInvocation, /`--test` means test/u);
+  assert.match(cliInvocation, /wrapper appends `--sandbox`/u);
+  assert.match(cliInvocation, /explicit `--test` conflicts and exits 2/u);
+  assert.match(cliInvocation, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(cliInvocation, /send no `Authorization`/u);
-  assert.match(cliInvocation, /three Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
-  assert.match(cliInvocation, /Production `tool internal-ucp get-merchant-list`[\s\S]*network-error exit 6/u);
-  assert.match(cliInvocation, /preflight `https:\/\/www\.clinkbill\.com`[\s\S]*preflight the selected Catalog API origin/u);
+  assert.match(cliInvocation, /four Gateway Catalog API actions[\s\S]*HTTP `401` or `403`[\s\S]*exit 5/u);
+  assert.match(cliInvocation, /anonymous `GET \/agent\/ucp\/merchants`/u);
+  assert.match(cliInvocation, /Preflight the selected API origin before the merchant-list command/u);
   assert.match(cliInvocation, /wallet status, OAuth refresh, or re-login cannot repair it/u);
 
-  assert.match(catalogDiscovery, /Freeze one `catalogEnvironment`/u);
+  assert.match(catalogDiscovery, /Freeze `catalogEnvironment=sandbox`/u);
   assert.match(catalogDiscovery, /valid BCP47 tag/u);
   assert.match(catalogDiscovery, /Agent owns result-language detection/u);
   assert.match(catalogDiscovery, /--language zh-Hans --context '\{"address_country":"HK"\}'/u);
@@ -978,7 +1054,7 @@ test('public Catalog is config-free, environment-explicit, language-aware, and c
   assert.match(catalogDiscovery, /pending selection is authoritative/u);
   assert.match(catalogDiscovery, /current `wallet status`/u);
   assert.match(catalogDiscovery, /test or sandbox candidate must never flow silently into production checkout/u);
-  assert.match(catalogDiscovery, /production merchant-list non-2xx[\s\S]*network error exit 6/u);
+  assert.match(catalogDiscovery, /merchant-list or Catalog search `401`\/`403`[\s\S]*exit 5/u);
   assert.match(ucpCheckout, /anonymous `POST \/agent\/ucp/u);
   assert.match(ucpCheckout, /require a successful current `wallet status`[\s\S]*verify that its API origin matches[\s\S]*Stop if/u);
   assert.match(ucpCheckout, /selected product without that frozen environment is invalid/u);
@@ -1244,7 +1320,8 @@ test('the per-page actor table stays in SKILL.md and the handoff reference', () 
 
   assert.match(browserHandoff, /OAUTH_DEVICE_VERIFICATION/u);
   assert.match(browserHandoff, /CARD_BINDING/u);
-  assert.match(browserHandoff, /VIC_PASSKEY_REGISTRATION/u);
+  assert.match(browserHandoff, /INSTRUCTION_PREPARE_CARD_BINDING/u);
+  assert.match(browserHandoff, /STRONG_AUTH_PASSKEY_REGISTRATION/u);
   assert.match(browserHandoff, /INSTRUCTION_PASSKEY_SIGNING/u);
   assert.match(browserHandoff, /THREE_DS_CHALLENGE/u);
   assert.match(browserHandoff, /RISK_RULE_CONFIG/u);
@@ -1259,7 +1336,9 @@ test('--no-open covers every link command other than wallet init', () => {
       /card binding-link/u,
       /card setup-link/u,
       /card modify-link/u,
+      /card passkey-link/u,
       /risk link/u,
+      /instruction prepare/u,
       /instruction create/u,
       /instruction sign-url/u,
     ]) {
@@ -1267,7 +1346,7 @@ test('--no-open covers every link command other than wallet init', () => {
     }
   }
 
-  assert.match(skill, /card binding-link --no-open --format json/u);
+  assert.match(skill, /card binding-link --no-watch --no-open --format json/u);
   assert.match(skill, /card setup-link --no-open --format json/u);
   assert.match(skill, /card modify-link --no-open --format json/u);
   assert.match(skill, /risk link --no-open --format json/u);
@@ -1293,7 +1372,9 @@ test('--no-open covers every link command other than wallet init', () => {
     'card binding-link',
     'card setup-link',
     'card modify-link',
+    'card passkey-link',
     'risk link',
+    'instruction prepare',
     'instruction create',
     'instruction sign-url',
     'instruction update',
@@ -1323,6 +1404,9 @@ test('--no-open covers every link command other than wallet init', () => {
           assert.match(command, /(?:^|\s)--open(?:\s|$)/u,
             `${name} wallet init example must request the system browser: ${command}`);
           assert.doesNotMatch(command, /--no-open/u);
+        } else if (commandName === 'instruction prepare') {
+          assert.doesNotMatch(command, /--open|--no-open|--no-watch/u,
+            `${name} instruction prepare must rely on its non-opening foreground contract: ${command}`);
         } else {
           assert.match(command, /(?:^|\s)--no-open(?:\s|$)/u,
             `${name} link command must suppress host-side browser launch: ${command}`);
@@ -1335,7 +1419,7 @@ test('--no-open covers every link command other than wallet init', () => {
       `shipped Bash examples must cover clink ${commandName}`);
   }
 
-  assert.match(cliInvocation, /belongs on every other link-producing command, not `wallet init`/u);
+  assert.match(cliInvocation, /`instruction prepare` is the exception/u);
   // --no-open must not be confused with --no-watch: killing the watch loses the completion event.
   assert.match(cliInvocation, /suppresses launch only/u);
   assert.match(browserHandoff, /does not touch the built-in event watch/u);
@@ -1393,45 +1477,44 @@ test('the prohibition never spills onto merchant product pages', () => {
   assert.match(browserHandoff, /`AGENT_ALLOWED` is not weakened by any of this/u);
 });
 
-// Quick instruction setup (2026-08) rides the instruction context on wallet init. CWallet does not
-// activate at payment_method.added, though: that event precedes VIC readiness. The docs must pin
-// the restricted-category preflight, exact-card refresh, bounded VIC stage, null-id regular-gate
-// fallback, and final exact instruction+card verification.
-test('quick instruction setup is documented end to end', () => {
-  assert.match(skill, /classifyQuickInstructionActivationGate/u);
-  assert.match(skill, /wallet init \[--email <email>\] --title <title> --mandates/u);
-  assert.match(skill, /Omit email only for Portal\/Google after the delivery gate/u);
-  assert.match(skill, /null is ambiguous between deliberate skip and swallowed creation failure/u);
-  assert.match(skill, /never means “list unconditionally(?:\.”|”\.)/u);
-  assert.match(skill, /WAIT_VIC_READINESS/u);
-  assert.match(skill, /payment_method\.update,vic_device\.binding_succeeded/u);
-  assert.match(skill, /singleAttempt=true/u);
-  assert.match(skill, /vicReadinessWaitAttempted=true/u);
-  assert.match(skill, /activationWaitAttempted=true/u);
-  assert.match(skill, /never supplies a resume poll/u);
-  assert.match(skill, /exact new `paymentInstrumentId`/u);
-  assert.match(skill, /informational only/u);
-  assert.match(skill, /newest intent wins/u);
-  assert.match(walletConfig, /## Quick Instruction Setup/u);
-  assert.match(walletConfig, /`--title` and `--mandates` become required together/u);
-  assert.match(walletConfig, /rejects `--payment-instrument-id` and `--extra`/u);
-  assert.match(walletConfig, /must carry `description`, `amountLimit`, and `currencyCode`/u);
-  assert.match(walletConfig, /at most 10 entries/u);
-  assert.match(walletConfig, /16384 UTF-8 bytes/u);
-  assert.match(walletConfig, /no usable Quick ID was returned/u);
-  assert.match(walletConfig, /classifyInstructionRestriction/u);
-  assert.match(instruction, /## Quick Instruction/u);
-  assert.match(instruction, /never satisfies `clink instruction list --valid-only`/u);
-  assert.match(instruction, /supersedes the older pending instruction server-side/u);
-  assert.match(instruction, /only card-addition evidence/u);
-  assert.match(instruction, /Never fall back to the default or first card/u);
-  assert.match(instruction, /null cannot distinguish a deliberate backend skip from swallowed creation failure/u);
-  assert.match(instruction, /Bind verification to both that exact instruction ID and the newly added card ID/u);
-  assert.match(ucpCheckout, /picks it up naturally/u);
-  assert.match(asyncEvents, /three distinct stages/u);
-  assert.match(asyncEvents, /proves only that the card exists, not that VIC is ready/u);
-  assert.match(asyncEvents, /regular authorization resolver rather than listing instructions unconditionally/u);
-  assert.match(asyncEvents, /classifyQuickInstructionActivationGate/u);
-  assert.match(asyncEvents, /final PENDING returns to the regular authorization list with no second Quick poll/u);
+// Main consumes one deterministic CLI continuation instead of orchestrating card-added, VIC, and
+// Instruction activation as separate Skill-side stages.
+test('pending instruction card continuation is documented end to end', () => {
+  assert.match(skill, /HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI/u);
+  assert.match(skill, /START_AUTHORIZATION_PREPARE_AND_WAIT/u);
+  assert.match(skill, /clink instruction prepare/u);
+  assert.match(skill, /no `--payment-instrument-id`/u);
+  assert.match(skill, /does not support `--open` or `--no-watch`/u);
+  assert.match(skill, /non-empty `instructionId`/u);
+  assert.match(skill, /watchReady=true/u);
+  assert.match(skill, /watchEventType=purchase_instruction\.activated/u);
+  assert.match(skill, /processRunning=true/u);
+  assert.match(skill, /terminal=false/u);
+  assert.match(skill, /INSTRUCTION_PREPARE_CARD_BINDING/u);
+  assert.match(skill, /same CLI process in the foreground/u);
+  assert.match(skill, /instructionStatus=ACTIVE/u);
+  assert.match(skill, /instruction\.paymentInstrumentId/u);
+  assert.match(skill, /environment-locked same-ID `resumeCommand`/u);
+  assert.doesNotMatch(skill, /After first-card `payment_method\.added`/u);
+  assert.match(walletConfig, /## Pending Instruction Continuation/u);
+  assert.match(walletConfig, /run one foreground `clink instruction prepare/u);
+  assert.match(walletConfig, /Do not pass `--payment-instrument-id`, `--open`, or `--no-watch`/u);
+  assert.match(walletConfig, /structured `PENDING` envelope/u);
+  assert.match(walletConfig, /`processRunning=true`/u);
+  assert.match(walletConfig, /`terminal=false`/u);
+  assert.match(instruction, /## No-Card PENDING Continuation/u);
+  assert.match(instruction, /clink instruction prepare/u);
+  assert.match(instruction, /structured `PENDING` envelope with non-empty `instructionId`/u);
+  assert.match(instruction, /The user may open the link or finish card\/VIC setup/u);
+  assert.match(instruction, /`instructionStatus=ACTIVE`/u);
+  assert.match(instruction, /`instruction\.paymentInstrumentId`/u);
+  assert.match(instruction, /`resumeReadOnly=true`/u);
+  assert.match(instruction, /external process dies before the final envelope/u);
+  assert.match(instruction, /do not send or open a standalone VIC registration page/u);
+  assert.match(instruction, /not the normal purchase continuation/u);
+  assert.match(ucpCheckout, /first prepare envelope is progress/u);
+  assert.match(asyncEvents, /run one foreground `instruction prepare`/u);
+  assert.match(asyncEvents, /`payment_method\.added` or a VIC event by itself is not completion/u);
+  assert.match(restrictedCategories, /START_AUTHORIZATION_PREPARE_AND_WAIT/u);
   assert.match(restrictedCategories, /Quick setup that carries `instructionContext`/u);
 });

@@ -15,9 +15,23 @@ import {
   formatPageHandoffMarker,
   resolvePageHandoffKind,
 } from '../lib/page-handoff.mjs';
+import { classifyAuthorizationPrepareObservation } from '../lib/authorization-workflow-fsm.mjs';
 
 const HUMAN_KINDS = Object.values(PageHandoffKind)
   .filter((kind) => PAGE_HANDOFF_CONTRACTS[kind].actor !== PageHandoffActor.AGENT_ALLOWED);
+
+function prepareBindingRequest(overrides = {}) {
+  return {
+    kind: PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING,
+    url: 'https://agent.clinkbill.com/payment-method-setup?email=user%40example.com',
+    instructionId: 'ins_prepare',
+    watchReady: true,
+    watchEventType: 'purchase_instruction.activated',
+    processRunning: true,
+    terminal: false,
+    ...overrides,
+  };
+}
 
 test('every declared kind has a contract and every contract is declared', () => {
   const declared = new Set(Object.values(PageHandoffKind));
@@ -26,11 +40,11 @@ test('every declared kind has a contract and every contract is declared', () => 
   assert.deepEqual([...contracted].filter((k) => !declared.has(k)), []);
 });
 
-test('non-OAuth Clink and Visa pages that need a person route to the user own device', () => {
+test('non-OAuth Clink strong-auth pages that need a person route to the user own device', () => {
   for (const kind of [
     PageHandoffKind.CARD_SETUP,
     PageHandoffKind.CARD_MODIFY,
-    PageHandoffKind.VIC_PASSKEY_REGISTRATION,
+    PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
     PageHandoffKind.INSTRUCTION_PASSKEY_SIGNING,
     PageHandoffKind.INSTRUCTION_AGENT_PAGE,
     PageHandoffKind.THREE_DS_CHALLENGE,
@@ -80,6 +94,87 @@ test('card binding hands off only with the built-in payment-method watch', () =>
   assert.equal(result.emitUrl, true);
   assert.equal(result.bindingUrlRequired, true);
   assert.equal(result.url, 'https://agent.clinkbill.com/payment-method-setup');
+});
+
+test('instruction prepare card binding uses a distinct exact-instruction handoff', () => {
+  const result = classifyPageHandoff(prepareBindingRequest());
+
+  assert.equal(result.kind, PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING);
+  assert.equal(result.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
+  assert.equal(result.instructionId, 'ins_prepare');
+  assert.deepEqual(result.cliFlags, []);
+  assert.deepEqual(result.completionEvents, ['purchase_instruction.activated']);
+  assert.equal(result.watch, 'instruction-prepare-foreground');
+  assert.equal(result.watchReady, true);
+  assert.equal(result.watchEventType, 'purchase_instruction.activated');
+  assert.equal(result.processRunning, true);
+  assert.equal(result.bindingUrlRequired, true);
+  assert.equal(result.emitUrl, true);
+});
+
+test('instruction prepare handoff composes from the validated first envelope', () => {
+  const prepare = classifyAuthorizationPrepareObservation({
+    stdout: {
+      ok: true,
+      data: {
+        instructionId: 'ins_composed',
+        status: 'PENDING',
+        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        watchReady: true,
+        watchEventType: 'purchase_instruction.activated',
+        processRunning: true,
+        terminal: false,
+      },
+    },
+  });
+  const handoff = classifyPageHandoff({
+    kind: PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING,
+    url: prepare.bindingUrl,
+    instructionId: prepare.instructionId,
+    watchReady: prepare.watchReady,
+    watchEventType: prepare.watchEventType,
+    processRunning: prepare.processRunning,
+    terminal: prepare.terminal,
+  });
+
+  assert.equal(prepare.action, 'HANDOFF_BIND_CARD_URL_AND_AWAIT_CLI');
+  assert.equal(handoff.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
+  assert.equal(handoff.instructionId, 'ins_composed');
+  assert.equal(handoff.emitUrl, true);
+});
+
+test('instruction prepare handoff rejects incomplete or wrong watch contracts', () => {
+  const valid = prepareBindingRequest();
+  const { processRunning: _processRunning, ...missingProcessRunning } = valid;
+  const { terminal: _terminal, ...missingTerminal } = valid;
+  for (const request of [
+    { ...valid, instructionId: '' },
+    { ...valid, watchReady: false },
+    { ...valid, watchEventType: 'payment_method.added' },
+    { ...valid, processRunning: false },
+    { ...valid, terminal: true },
+    missingProcessRunning,
+    missingTerminal,
+  ]) {
+    const result = classifyPageHandoff(request);
+    assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
+    assert.equal(result.reason, 'instruction_prepare_watch_not_ready');
+    assert.equal(result.emitUrl, false);
+  }
+});
+
+test('instruction prepare handoff applies the existing trusted setup URL policy', () => {
+  for (const url of [
+    'https://evil.example/payment-method-setup',
+    'https://agent.clinkbill.com/payment-method-setup?token=secret',
+    'http://agent.clinkbill.com/payment-method-setup',
+  ]) {
+    const result = classifyPageHandoff(prepareBindingRequest({ url }));
+    assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
+    assert.equal(result.reason, 'instruction_prepare_binding_url_not_trusted_setup');
+    assert.equal(result.emitUrl, false);
+    assert.equal(result.detail, null);
+  }
 });
 
 test('card binding accepts only a trusted card-setup URL with optional email', () => {
@@ -223,6 +318,8 @@ test('an unattended run never emits a page only a human can finish', () => {
         processRunning: true,
         unattended: true,
       }
+      : kind === PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING
+        ? prepareBindingRequest({ unattended: true })
       : { kind, unattended: true };
     const result = classifyPageHandoff(request);
     assert.equal(result.state, PageHandoffState.BROWSER_HANDOFF_UNREACHABLE, kind);
@@ -253,7 +350,7 @@ test('an unattended run still browses merchant pages', () => {
 });
 
 // An unlabeled URL is the dangerous default. If it fell through to "agent may open it", every
-// hand-built Clink or Visa URL would be one missing argument away from being automated.
+// hand-built Clink or card-network URL would be one missing argument away from being automated.
 test('an unlabeled URL is an error, never agent-openable', () => {
   for (const request of [
     {},
@@ -270,10 +367,12 @@ test('an unlabeled URL is an error, never agent-openable', () => {
 });
 
 test('the two URL shapes this skill hand-builds are recognized from the string alone', () => {
-  assert.equal(
-    resolvePageHandoffKind('https://agent.clinkbill.com/passkey-auth/pi_123?type=visa'),
-    PageHandoffKind.VIC_PASSKEY_REGISTRATION,
-  );
+  for (const protocol of ['visa', 'mastercard']) {
+    assert.equal(
+      resolvePageHandoffKind(`https://agent.clinkbill.com/passkey-auth/pi_123?type=${protocol}`),
+      PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
+    );
+  }
   assert.equal(
     resolvePageHandoffKind('https://auth.example.test/device?user_code=ABCD-EFGH#f=1'),
     PageHandoffKind.OAUTH_DEVICE_VERIFICATION,
@@ -285,9 +384,9 @@ test('the two URL shapes this skill hand-builds are recognized from the string a
 
 test('a bare Passkey URL classifies without being told its kind', () => {
   const result = classifyPageHandoff({
-    url: 'https://agent.clinkbill.com/passkey-auth/pi_123?type=visa',
+    url: 'https://agent.clinkbill.com/passkey-auth/pi_123?type=mastercard',
   });
-  assert.equal(result.kind, PageHandoffKind.VIC_PASSKEY_REGISTRATION);
+  assert.equal(result.kind, PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION);
   assert.equal(result.action, PageHandoffAction.HANDOFF_TO_USER_DEVICE);
   assert.match(result.doNotAutomateReason, /virtual authenticator/u);
   assert.equal(result.watch, 'events-poll', 'the hand-built registration URL has no built-in watch');
@@ -297,6 +396,7 @@ test('single-load pages are marked so they are never re-sent as a nudge', () => 
   for (const kind of [
     PageHandoffKind.OAUTH_DEVICE_VERIFICATION,
     PageHandoffKind.CARD_BINDING,
+    PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING,
     PageHandoffKind.CARD_SETUP,
     PageHandoffKind.CARD_MODIFY,
     PageHandoffKind.THREE_DS_CHALLENGE,
@@ -309,6 +409,8 @@ test('single-load pages are marked so they are never re-sent as a nudge', () => 
         watchEventType: 'payment_method.added',
         processRunning: true,
       }
+      : kind === PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING
+        ? prepareBindingRequest()
       : { kind };
     assert.equal(classifyPageHandoff(request).singleLoad, true, kind);
   }
@@ -324,7 +426,9 @@ test('completion events match the flows that prove them', () => {
     ['purchase_instruction.activated'],
   );
   assert.deepEqual(
-    classifyPageHandoff({ kind: PageHandoffKind.VIC_PASSKEY_REGISTRATION }).completionEvents,
+    classifyPageHandoff({
+      kind: PageHandoffKind.STRONG_AUTH_PASSKEY_REGISTRATION,
+    }).completionEvents,
     ['vic_device.binding_succeeded', 'payment_method.update'],
   );
   assert.deepEqual(
@@ -336,6 +440,10 @@ test('completion events match the flows that prove them', () => {
       processRunning: true,
     }).completionEvents,
     ['payment_method.added'],
+  );
+  assert.deepEqual(
+    classifyPageHandoff(prepareBindingRequest()).completionEvents,
+    ['purchase_instruction.activated'],
   );
 });
 
@@ -363,11 +471,13 @@ test('the prohibition enumerates channels and verbs, not just opening', () => {
 test('wallet init requires --open and every other link command requires --no-open', () => {
   assert.deepEqual(LINK_COMMANDS_REQUIRING_OPEN, ['wallet init']);
   assert.equal(LINK_COMMANDS_REQUIRING_NO_OPEN.includes('wallet init'), false);
+  assert.equal(LINK_COMMANDS_REQUIRING_NO_OPEN.includes('instruction prepare'), false);
 
   for (const command of [
     'card binding-link',
     'card setup-link',
     'card modify-link',
+    'card passkey-link',
     'risk link',
     'instruction create',
     'instruction sign-url',
@@ -376,6 +486,7 @@ test('wallet init requires --open and every other link command requires --no-ope
   ]) {
     assert.ok(LINK_COMMANDS_REQUIRING_NO_OPEN.includes(command), command);
   }
+  assert.deepEqual(classifyPageHandoff(prepareBindingRequest()).cliFlags, []);
 });
 
 test('the marker stays an internal diagnostic shape', () => {

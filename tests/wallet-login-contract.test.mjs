@@ -556,7 +556,7 @@ test('Clink OAuth completion retains the customer identity and existing first-ca
       },
     },
   });
-  assert.equal(firstCard.action, 'START_WATCHED_CARD_BINDING');
-  assert.equal(firstCard.terminal, false);
-  assert.equal(firstCard.bindingUrlRequired, true);
+  assert.equal(firstCard.action, 'RETURN_WALLET_READY');
+  assert.equal(firstCard.terminal, true);
+  assert.equal(firstCard.cardReadiness, 'missing');
 });
