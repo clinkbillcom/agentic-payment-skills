@@ -1,7 +1,7 @@
 {
   "name": "clink-cli-vendored",
   "version": "0.2.32",
-  "upstreamCommit": "96dc91241a89e051210f26cd7440e63882be899a",
+  "upstreamCommit": "70f3c2aef3203f5f3a2be11bc5a49b3b2884c475",
   "edition": "main",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "clink-cli": "clink-cli.bundle.mjs"
   },
   "description": "Vendored main Edition bundle based on upstreamCommit, with downstream Mastercard strong-auth patches recorded in downstreamPatches. See README.md before re-vendoring. Playwright remains an optional external runtime dependency.",
-  "bundleSha256": "b6f75cc4560636556153a36101c80b69e32192ac8c56a35857229cf9e44900d8",
+  "bundleSha256": "2a8938ea9a220d5d9c74e44ae8b08ec8a1fd3dbf1edbe98b1a53965711741965",
   "downstreamPatches": [
     {
       "repository": "https://github.com/clinkbillcom/agentic-payment-skills",

@@ -2,12 +2,16 @@
 
 A Claude Code skill for Clink payment operations — wallet, card, payment, public-skill listing/tipping/installation, Visa/Mastercard strong-auth agentic authorization, refund, and risk rules via `clink`.
 
+Skill version: `1.14.6`. The Google-login contract covers `agentic-payment-skills` `main`/`uat` and matching Main Edition from `clinkbillcom/clink-cli` only; `visa-skill` is excluded and Portal implementation belongs to its owning team.
+
 ## Requirements
 
 - Node.js >= 20
 - The skill ships a vendored CLI bundle at `vendor/clink-cli/clink-cli.bundle.mjs` and exposes it as `clink` through `bin/clink`, which pins `wallet init` and public Catalog discovery to sandbox/UAT
 - Always invoke `bin/clink` **by path**. A globally installed `clink` or `clink-cli` on `PATH` can be a different, unpinned build, and every build shares the same global `~/.clink-cli/config.json` — so an unpinned build that initialized against UAT leaves this distribution reading a UAT `baseUrl` for every later authenticated command
-- New wallet initialization uses OAuth Device Authorization and derives the name from the email text before `@`; an existing complete legacy CSK wallet remains supported only if that local wallet has never completed OAuth authorization
+- New wallet initialization uses OAuth Device Authorization; the email/OTP path derives the name from the email text before `@`. An existing complete legacy CSK wallet remains supported only if that local wallet has never completed OAuth authorization
+
+**Google delivery gate:** local Main Skill classifiers support email/OTP and no-email Portal login. A new verified Main vendor bundle and Portal/backend integration verification are still required; local tests do not prove a deployed Google login. See `references/clink-wallet-config.md` for the internal `loginMethod` contract and integration checks. Keep email/OTP available and report Google as pending rather than silently switching the user's login choice.
 
 ## Install Clink Payment Skills
 
@@ -22,11 +26,13 @@ After installation, route the user's complete semantic intent before touching th
 Use this status-first setup path only when the validated route returns `walletGate=REQUIRE_STATUS`: immediately for an explicit wallet operation, or after anonymous discovery and user selection when a resolved purchase enters checkout/payment. A purchase description alone is not a reason to initialize the wallet.
 
 1. Run `clink wallet status --format json`. If the wallet is already ready (OAuth or complete legacy CSK), report readiness and stop.
-2. Otherwise ask the user for their email address (the only required input; the display name is derived from the email text before `@`).
-3. Run `clink wallet init --email <email> --open --format json`. Keep reading the same process until it prints `Waiting for authorization...`; this activates OAuth device-token polling, not Event Hub listening. If the CLI requested a system-browser launch, tell the user to complete authorization there; show the URL only after both browser-launch failure and the wait marker. Never start `events poll` for OAuth.
+2. Preserve an explicit email/OTP choice: use the supplied email, or ask only when it is missing. After the delivery gate passes, no supplied email or an explicit Google choice uses Portal without collecting an email in chat. Do not inject a cached email into that path.
+3. Email/OTP keeps `clink wallet init --email <email> --open --format json`. Portal/Google after the delivery gate uses `clink wallet init --open --format json` to open Portal with a Google button. Keep reading the same process until it prints `Waiting for authorization...`; this activates OAuth device-token polling, not Event Hub polling. If the CLI requested a system-browser launch, tell the user to complete the selected login there; show the URL only after both browser-launch failure and the wait marker. Never start `events poll` for OAuth.
 4. Wallet initialization never starts a card-binding command or emits its cached `bindingUrl`. If a later authorized payment has no card, run `clink instruction prepare --title <title> --mandates '<mandates_json>' ... --max-wait 900 --format json`. Before waiting, the CLI emits a structured `PENDING` envelope with `instructionId`, `bindingUrl`, `watchReady=true`, `watchEventType=purchase_instruction.activated`, `processRunning=true`, and `terminal=false`; return that URL to the user without opening it and keep the same process in the foreground for the final envelope. Continue only when the final envelope preserves the same ID and reports `instructionStatus=ACTIVE` with an attached `paymentInstrumentId`. A timeout permits only its returned same-ID read-only resume; if the external process dies first, use only an exact-ID read-only `instruction get`. Never prepare another Instruction or start Checkout/payment.
 
 An explicit request to log in again, reauthorize, replace an expired link, or recover after missing the earlier login always starts a fresh `wallet init`. The new attempt supersedes the old one, and the agent must never reuse a login URL from chat history or earlier terminal output.
+
+Google identifies the customer by the server-verified email; an existing email reuses its `customerId`. This contract adds no Google `sub` binding table, `login_ui`, `expectedEmail`, or extra Google OTP. The CLI still polls Clink and consumes its authorization result, not a Google success page or browser-supplied identity.
 
 ## Build The Fallback Release Artifact
 
@@ -78,7 +84,7 @@ Once installed, Claude can handle Clink payment operations on your behalf:
 
 Different agents install this skill, and some drive a browser of their own. OAuth device verification, card binding/setup/modify, Visa/Mastercard Passkey registration and signing, instruction update/cancel, the 3DS challenge, and the risk-rule page must be completed by the user in their own browser — not opened, navigated, previewed, screenshotted, or filled by an agent browser, headless browser, browser MCP, computer-use, or embedded webview. Passkey pages cannot succeed in an agent browser at all: WebAuthn needs the user's own platform authenticator. Merchant product pages are the opposite case and remain agent work.
 
-Because completion is proven by a webhook event rather than by anything the browser reports, the user may finish on any browser or device — including a phone — and the flow still converges. `references/clink-browser-handoff.md` holds the per-page contract, and `lib/page-handoff.mjs` classifies each URL before it is sent.
+OAuth completion is proven by the original Clink device-token poll; other async flows use matching webhook events, not browser reports. The user may act on another browser or device while the original process and link remain valid. `references/clink-browser-handoff.md` holds the per-page contract, and `lib/page-handoff.mjs` classifies each URL before it is sent.
 
 An Agent Alipay QR is not one of these pages. The Skill invokes `clink pay` with `--terminal-qr`, preserves the CLI's UTF-8 character QR, and keeps the local `image/png` file action as fallback. It never opens that file in Agent Browser, prints Base64, or exposes raw QR content. The Skill starts the order-event wait immediately and recursively removes the caller-owned cleanup directory after success, failure, expiry, timeout, or polling error.
 

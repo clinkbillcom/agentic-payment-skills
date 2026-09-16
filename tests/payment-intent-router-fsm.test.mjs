@@ -16,7 +16,7 @@ import {
 test('routes explicit wallet relogin before payment-target classification', () => {
   const result = classifyPaymentIntent({
     text: '重新登录',
-    currentEmail: 'user@example.com',
+    email: 'user@example.com',
   });
 
   assert.equal(result.state, PaymentIntentState.WALLET_RELOGIN_SELECTED);
@@ -25,8 +25,11 @@ test('routes explicit wallet relogin before payment-target classification', () =
   assert.equal(result.email, 'user@example.com');
 });
 
-test('wallet relogin asks for email instead of a merchant or product', () => {
-  const result = classifyPaymentIntent({ text: '登录链接过期了，给我一个新的' });
+test('explicit email wallet relogin asks for email instead of a merchant or product', () => {
+  const result = classifyPaymentIntent({
+    text: '登录链接过期了，给我一个新的',
+    loginMethod: 'email',
+  });
 
   assert.equal(result.state, PaymentIntentState.WALLET_RELOGIN_INPUT_MISSING);
   assert.equal(result.route, PaymentIntentRoute.INPUT_REQUIRED);
@@ -1871,7 +1874,7 @@ for (const text of [
   test(`an explicit wallet re-login after search wording retains priority: ${text}`, () => {
     const result = classifyPaymentIntent({
       text,
-      currentEmail: 'user@example.com',
+      email: 'user@example.com',
       merchantId: 'merchant_catalog_hint',
     });
 

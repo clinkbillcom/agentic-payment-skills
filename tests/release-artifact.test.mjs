@@ -125,7 +125,7 @@ test('fallback ZIP and manifest are deterministic and contain only runtime paylo
   assert.deepEqual(manifest, {
     schemaVersion: 1,
     name: PACKAGE_ROOT,
-    skillVersion: JSON.parse(await readFile(join(repositoryRoot, 'package.json'))).version,
+    skillVersion: JSON.parse(gitFixture(repositoryRoot, ['show', `${fixedCommit}:package.json`])).version,
     sourceRepository: SOURCE_REPOSITORY,
     sourceCommit: fixedCommit,
     archiveFile: ARCHIVE_FILE,
@@ -157,14 +157,17 @@ test('fallback ZIP and manifest are deterministic and contain only runtime paylo
   );
   assert.deepEqual(
     zipEntries.get(`${rootPrefix}.gitignore`).data,
-    gitFixture(repositoryRoot, ['show', 'HEAD:.gitignore'], 'buffer'),
+    gitFixture(repositoryRoot, ['show', `${fixedCommit}:.gitignore`], 'buffer'),
   );
   for (const reservedName of RESERVED_ROOT_FILES) {
     assert.ok(!zipEntries.has(`${rootPrefix}${reservedName}`));
   }
 
   const archivedSkill = zipEntries.get(`${rootPrefix}SKILL.md`);
-  assert.deepEqual(archivedSkill.data, await readFile(join(repositoryRoot, 'SKILL.md')));
+  assert.deepEqual(
+    archivedSkill.data,
+    gitFixture(repositoryRoot, ['show', `${fixedCommit}:SKILL.md`], 'buffer'),
+  );
   assert.equal(zipEntries.get(`${rootPrefix}bin/clink`).mode & 0o111, 0o111);
   assert.equal(archivedSkill.mode & 0o111, 0);
 
@@ -182,7 +185,7 @@ test('fallback ZIP and manifest are deterministic and contain only runtime paylo
     '-r',
     '--name-only',
     '-z',
-    'HEAD',
+    fixedCommit,
   ], 'buffer')
     .subarray(0, -1)
     .toString('utf8')
