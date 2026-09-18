@@ -302,6 +302,21 @@ async function stopLiveProcess(live) {
   }
 }
 
+async function readFileWhenReady(path, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      return await readFile(path, 'utf8');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw lastError ?? new Error(`Timed out waiting for ${path}`);
+}
+
 test('Main Google candidate bundle preserves login identity and Skill FSM handoff', {
   skip: process.platform === 'win32' ? 'Browser opener stubs require a POSIX shell' : false,
 }, async (context) => {
@@ -386,7 +401,7 @@ test('Main Google candidate bundle preserves login identity and Skill FSM handof
           response.end(JSON.stringify({
             code: 200,
             data: {
-              bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+              bindingUrl: 'https://agent.clinkbill.com/',
               paymentMethodsVoList: fixture.openExit === 0 ? [{ paymentInstrumentId: 'pi_google_fixture' }] : [],
             },
           }));
@@ -461,7 +476,7 @@ test('Main Google candidate bundle preserves login identity and Skill FSM handof
         }
         const expectedVerificationUrl = otp ? expectedUrl.href : verificationUrl;
         assert.ok(pending.stderr.split(/\r?\n/u).includes(expectedVerificationUrl));
-        assert.ok((await readFile(openedUrlPath, 'utf8')).split('\n').includes(expectedVerificationUrl));
+        assert.ok((await readFileWhenReady(openedUrlPath)).split('\n').includes(expectedVerificationUrl));
         const handoff = classifyWalletInitObservation({
           loginMethod: intent.loginMethod,
           running: true,
@@ -638,7 +653,7 @@ test('vendored wallet init keeps polling OAuth without starting an Event Hub wat
     assert.equal(output.data.customerId, 'cus_wallet_pending_contract');
     assert.equal(
       output.data.bindingUrl,
-      'https://agent.clinkbill.com/payment-method-setup?email=wallet-pending%40example.com',
+      'https://agent.clinkbill.com/?email=wallet-pending%40example.com',
     );
     assert.equal(output.data.paymentMethodCount, 0);
     assert.equal(requestPaths.includes('/agent/event-hub/webhook-events/poll'), false);
@@ -959,7 +974,7 @@ test('vendored wallet OAuth init uses Bearer, returns binding URL, redacts statu
     assert.equal('oauthRequired' in output.data, false);
     assert.equal(
       output.data.bindingUrl,
-      'https://agent.clinkbill.com/payment-method-setup?email=wallet-init%40example.com',
+      'https://agent.clinkbill.com/?email=wallet-init%40example.com',
     );
     assert.equal(output.data.paymentMethodsCached, true);
     assert.equal(output.data.paymentMethodCount, 1);
@@ -1184,7 +1199,7 @@ test('vendored card binding-link exposes its URL only after the default watch is
       ok: true,
       data: {
         bindingUrl:
-          'https://agent.clinkbill.com/payment-method-setup'
+          'https://agent.clinkbill.com/'
           + '?email=wallet%2Bbinding%40example.com',
         paymentMethodsVoList: [],
         watchReady: true,
@@ -1553,7 +1568,7 @@ test('vendored card binding-link --no-watch exits without polling Event Hub', as
     assert.deepEqual(jsonLines(result.stdout), [{
       ok: true,
       data: {
-        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        bindingUrl: 'https://agent.clinkbill.com/',
         paymentMethodsVoList: [],
         watchReady: false,
         watchEventType: null,
@@ -2666,11 +2681,11 @@ test('vendored events poll rejects checkout id without one supported event type'
 });
 
 test('vendored CLI metadata tracks the main edition and production contracts', () => {
-  assert.equal(vendorPackage.version, '0.2.32');
+  assert.equal(vendorPackage.version, '0.2.34');
   assert.equal(vendorPackage.edition, 'main');
   assert.equal(
     vendorPackage.upstreamCommit,
-    '70f3c2aef3203f5f3a2be11bc5a49b3b2884c475',
+    '731756a641db40edbf8f5e6484305043993718ce',
   );
   assert.equal('backportCommits' in vendorPackage, false);
   assert.equal(vendorPackage.bundleSha256, createHash('sha256').update(bundleSource).digest('hex'));

@@ -23,7 +23,7 @@ const HUMAN_KINDS = Object.values(PageHandoffKind)
 function prepareBindingRequest(overrides = {}) {
   return {
     kind: PageHandoffKind.INSTRUCTION_PREPARE_CARD_BINDING,
-    url: 'https://agent.clinkbill.com/payment-method-setup?email=user%40example.com',
+    url: 'https://agent.clinkbill.com/?email=user%40example.com',
     instructionId: 'ins_prepare',
     watchReady: true,
     watchEventType: 'purchase_instruction.activated',
@@ -81,7 +81,7 @@ test('OAuth delegates URL exposure to the wallet workflow', () => {
 test('card binding hands off only with the built-in payment-method watch', () => {
   const result = classifyPageHandoff({
     kind: PageHandoffKind.CARD_BINDING,
-    url: 'https://agent.clinkbill.com/payment-method-setup',
+    url: 'https://agent.clinkbill.com/',
     watchReady: true,
     watchEventType: 'payment_method.added',
     processRunning: true,
@@ -93,7 +93,7 @@ test('card binding hands off only with the built-in payment-method watch', () =>
   assert.equal(result.watch, 'built-in');
   assert.equal(result.emitUrl, true);
   assert.equal(result.bindingUrlRequired, true);
-  assert.equal(result.url, 'https://agent.clinkbill.com/payment-method-setup');
+  assert.equal(result.url, 'https://agent.clinkbill.com/');
 });
 
 test('instruction prepare card binding uses a distinct exact-instruction handoff', () => {
@@ -119,7 +119,7 @@ test('instruction prepare handoff composes from the validated first envelope', (
       data: {
         instructionId: 'ins_composed',
         status: 'PENDING',
-        bindingUrl: 'https://agent.clinkbill.com/payment-method-setup',
+        bindingUrl: 'https://agent.clinkbill.com/',
         watchReady: true,
         watchEventType: 'purchase_instruction.activated',
         processRunning: true,
@@ -163,10 +163,11 @@ test('instruction prepare handoff rejects incomplete or wrong watch contracts', 
   }
 });
 
-test('instruction prepare handoff applies the existing trusted setup URL policy', () => {
+test('instruction prepare handoff rejects untrusted and legacy card portal paths', () => {
   for (const url of [
     'https://evil.example/payment-method-setup',
     'https://agent.clinkbill.com/payment-method-setup?token=secret',
+    'https://agent.clinkbill.com/payment-method-modify',
     'http://agent.clinkbill.com/payment-method-setup',
   ]) {
     const result = classifyPageHandoff(prepareBindingRequest({ url }));
@@ -177,11 +178,12 @@ test('instruction prepare handoff applies the existing trusted setup URL policy'
   }
 });
 
-test('card binding accepts only a trusted card-setup URL with optional email', () => {
+test('card binding accepts only the trusted portal root with optional email', () => {
   for (const url of [
-    'https://agent.clinkbill.com/payment-method-setup',
-    'https://uat-agent.clinkbill.com/payment-method-setup?email=alice%2Bcards%40example.com',
-    'https://agent.clinkbill.dev/payment-method-setup?email=test%40example.com',
+    'https://agent.clinkbill.com',
+    'https://agent.clinkbill.com/',
+    'https://uat-agent.clinkbill.com/?email=alice%2Bcards%40example.com',
+    'https://agent.clinkbill.dev/?email=test%40example.com',
   ]) {
     const result = classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
@@ -197,17 +199,18 @@ test('card binding accepts only a trusted card-setup URL with optional email', (
   }
 
   for (const url of [
-    'http://agent.clinkbill.com/payment-method-setup',
-    'https://user:pass@agent.clinkbill.com/payment-method-setup',
-    'https://evil.example/payment-method-setup',
-    'https://agent.clinkbill.com',
+    'http://agent.clinkbill.com/',
+    'https://user:pass@agent.clinkbill.com/',
+    'https://evil.example/',
+    'https://agent.clinkbill.com/payment-method-setup',
+    'https://agent.clinkbill.com/payment-method-modify',
     'https://agent.clinkbill.com/payment-method-setup/',
     'https://agent.clinkbill.com/card-binding',
-    'https://agent.clinkbill.com/payment-method-setup?token=secret',
-    'https://agent.clinkbill.com/payment-method-setup?email=alice%40example.com&token=secret',
-    'https://agent.clinkbill.com/payment-method-setup?email=',
-    'https://agent.clinkbill.com/payment-method-setup?email=a%40example.com&email=b%40example.com',
-    'https://agent.clinkbill.com/payment-method-setup#fragment',
+    'https://agent.clinkbill.com/?token=secret',
+    'https://agent.clinkbill.com/?email=alice%40example.com&token=secret',
+    'https://agent.clinkbill.com/?email=',
+    'https://agent.clinkbill.com/?email=a%40example.com&email=b%40example.com',
+    'https://agent.clinkbill.com/#fragment',
     'javascript:alert(1)',
     'not-a-url',
   ]) {
@@ -232,7 +235,7 @@ test('unattended card binding rejects unsafe URLs before constructing diagnostic
   ]) {
     const result = classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.clinkbill.com/payment-method-setup?token=secret',
+      url: 'https://agent.clinkbill.com/?token=secret',
       watchReady: true,
       watchEventType: 'payment_method.added',
       processRunning: true,
@@ -271,7 +274,7 @@ test('card binding never emits before its scoped watch is ready and still runnin
   ]) {
     const result = classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.clinkbill.com/payment-method-setup',
+      url: 'https://agent.clinkbill.com/',
       ...request,
     });
     assert.equal(result.state, PageHandoffState.PAGE_HANDOFF_INVALID);
@@ -312,7 +315,7 @@ test('an unattended run never emits a page only a human can finish', () => {
     const request = kind === PageHandoffKind.CARD_BINDING
       ? {
         kind,
-        url: 'https://agent.clinkbill.com/payment-method-setup',
+        url: 'https://agent.clinkbill.com/',
         watchReady: true,
         watchEventType: 'payment_method.added',
         processRunning: true,
@@ -404,7 +407,7 @@ test('single-load pages are marked so they are never re-sent as a nudge', () => 
     const request = kind === PageHandoffKind.CARD_BINDING
       ? {
         kind,
-        url: 'https://agent.clinkbill.com/payment-method-setup',
+        url: 'https://agent.clinkbill.com/',
         watchReady: true,
         watchEventType: 'payment_method.added',
         processRunning: true,
@@ -434,7 +437,7 @@ test('completion events match the flows that prove them', () => {
   assert.deepEqual(
     classifyPageHandoff({
       kind: PageHandoffKind.CARD_BINDING,
-      url: 'https://agent.clinkbill.com/payment-method-setup',
+      url: 'https://agent.clinkbill.com/',
       watchReady: true,
       watchEventType: 'payment_method.added',
       processRunning: true,
@@ -459,7 +462,7 @@ test('the prohibition enumerates channels and verbs, not just opening', () => {
 
   const result = classifyPageHandoff({
     kind: PageHandoffKind.CARD_BINDING,
-    url: 'https://agent.clinkbill.com/payment-method-setup',
+    url: 'https://agent.clinkbill.com/',
     watchReady: true,
     watchEventType: 'payment_method.added',
     processRunning: true,

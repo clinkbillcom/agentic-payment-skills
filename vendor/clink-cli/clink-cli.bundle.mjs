@@ -10617,7 +10617,7 @@ import { readFile as readFile2 } from "node:fs/promises";
 import os2 from "node:os";
 
 // dist/version.js
-var CLI_VERSION = "0.2.32";
+var CLI_VERSION = "0.2.34";
 var CLI_VERSION_HEADER = "X-Clink-CLI-Version";
 
 // dist/device-identity.js
@@ -14297,12 +14297,12 @@ Examples:
   clink events poll --type agent_order.succeeded --checkout-id checkout_123 --ucp-order-id ucp_order_123 --max-wait 900 --format json
   clink events poll --no-ack --format json
 `;
-function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
-  const output = getHelpText(command, subcommand, nestedCommand, executableName);
+function printHelp(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME, walletInitEmailOptional = executableName === MAIN_EXECUTABLE_NAME) {
+  const output = getHelpText(command, subcommand, nestedCommand, executableName, walletInitEmailOptional);
   process.stdout.write(output);
 }
-function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME) {
-  const help = getRawHelpText(command, subcommand, nestedCommand, executableName === MAIN_EXECUTABLE_NAME);
+function getHelpText(command, subcommand, nestedCommand, executableName = MAIN_EXECUTABLE_NAME, walletInitEmailOptional = executableName === MAIN_EXECUTABLE_NAME) {
+  const help = getRawHelpText(command, subcommand, nestedCommand, walletInitEmailOptional);
   return renderCliCommandText(help, executableName);
 }
 function getRawHelpText(command, subcommand, nestedCommand, walletInitEmailOptional = false) {
@@ -22634,8 +22634,7 @@ function isRecord17(value) {
 // dist/cli.js
 var INSTRUCTION_PATH2 = "/agent/cwallet/instructions";
 var PENDING_INSTRUCTION_PATH = `${INSTRUCTION_PATH2}/pending`;
-var CARD_SETUP_PATH = "/payment-method-setup";
-var CARD_MANAGEMENT_PATH = "/payment-method-modify";
+var CARD_PORTAL_PATH = "/";
 var INSTRUCTION_STATUSES = /* @__PURE__ */ new Set([
   "CREATED",
   "ACTIVE",
@@ -22678,10 +22677,11 @@ var BASE_COMMAND_NAMES = /* @__PURE__ */ new Set([
   "tool",
   "config"
 ]);
+var MAIN_EDITION = { walletInitEmailOptional: true };
 function printContextHelp(context, command, subcommand, nestedCommand) {
-  printHelp(command, subcommand, nestedCommand, context.executableName);
+  printHelp(command, subcommand, nestedCommand, context.executableName, context.walletInitEmailOptional);
 }
-async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = { walletInitEmailOptional: true }) {
+async function runCli(argv, startedAt = performance.timeOrigin + performance.now(), edition = MAIN_EDITION) {
   const args = parseArgs(argv, edition.parseArgsOptions);
   const [command, subcommand, nestedCommand] = args.positionals;
   edition.validateArgs?.(command, subcommand, args.flags);
@@ -22694,11 +22694,11 @@ async function runCli(argv, startedAt = performance.timeOrigin + performance.now
     if (command && !BASE_COMMAND_NAMES.has(command) && !editionCommandNames.has(command)) {
       throw validationError(`unsupported command: ${command}`);
     }
-    process.stdout.write((edition.getHelpText ?? getHelpText)(command, subcommand, nestedCommand));
+    process.stdout.write(edition.getHelpText ? edition.getHelpText(command, subcommand, nestedCommand) : getHelpText(command, subcommand, nestedCommand, edition.executableName, edition.walletInitEmailOptional ?? false));
     return EXIT_CODES.OK;
   }
   if (!command) {
-    process.stdout.write((edition.getHelpText ?? getHelpText)());
+    process.stdout.write(edition.getHelpText ? edition.getHelpText() : getHelpText(void 0, void 0, void 0, edition.executableName, edition.walletInitEmailOptional ?? false));
     return EXIT_CODES.OK;
   }
   if (isMaintenanceCommand(command, subcommand)) {
@@ -23944,7 +23944,7 @@ async function refreshPaymentMethodsAfterWalletInit(context, config) {
       return { bindingUrl: null, cached: false, count: 0 };
     }
     const data = unwrapApiData(result.body);
-    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), CARD_SETUP_PATH, refreshContext.runtimeConfig.email);
+    const bindingUrl = buildAgentPortalUrl(asRequiredString(data.bindingUrl, "missing bindingUrl in response"), resolveAgentBaseUrl(refreshContext.runtimeConfig.baseUrl), CARD_PORTAL_PATH, refreshContext.runtimeConfig.email);
     const count = await cachePaymentMethods(refreshContext, data.paymentMethodsVoList);
     return { bindingUrl, cached: true, count };
   } catch (error) {
@@ -24047,9 +24047,9 @@ async function handleCardCommand(subcommand, context) {
     case "binding-link":
       return cardBindingLink(context);
     case "setup-link":
-      return cardRedirectLink(context, CARD_SETUP_PATH, "card setup");
+      return cardRedirectLink(context, CARD_PORTAL_PATH, "card setup");
     case "modify-link":
-      return cardRedirectLink(context, CARD_MANAGEMENT_PATH, "card management");
+      return cardRedirectLink(context, CARD_PORTAL_PATH, "card management");
     case "passkey-link":
       return cardPasskeyLink(context);
     case "list":
@@ -24061,7 +24061,7 @@ async function handleCardCommand(subcommand, context) {
   }
 }
 async function cardBindingLink(context) {
-  const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+  const prepared = await resolveBindingLink(context, CARD_PORTAL_PATH);
   if (prepared.dryRun) {
     printSuccess(prepared.result, context.globalOptions.format);
     return EXIT_CODES.OK;
@@ -25755,7 +25755,7 @@ async function prepareCommandPendingInstruction(context, instructionContext, max
       if (options2.bindingResolution?.status === "failed") {
         throw options2.bindingResolution.error;
       }
-      const prepared = await resolveBindingLink(context, CARD_SETUP_PATH);
+      const prepared = await resolveBindingLink(context, CARD_PORTAL_PATH);
       if (prepared.dryRun) {
         throw apiError("card binding-link unexpectedly produced a dry-run response", 502);
       }
