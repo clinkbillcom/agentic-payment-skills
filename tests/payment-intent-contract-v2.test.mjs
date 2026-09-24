@@ -66,20 +66,20 @@ test('v2 product search preserves only nested explicit Catalog scope', () => {
   assert.equal(result.walletGate, PaymentWalletGate.SKIP);
 });
 
-test('v2 product search carries channel and store scope without a wallet', () => {
+test('v2 product search carries order-channel and store scope without a wallet', () => {
   const result = classifyPaymentIntent({
     ...boundRequest,
     operation: PaymentRoutingOperation.CATALOG_SEARCH,
     target: {
       catalogQuery: 'coffee',
       catalogLanguage: 'en',
-      channelType: 'eat365',
+      orderChannelId: 'ucp_oc_eats365_hk',
       storeId: 'arabica_cheklapkok',
       addressCountry: 'hk',
     },
   });
 
-  assert.equal(result.channelType, 'eats365');
+  assert.equal(result.orderChannelId, 'ucp_oc_eats365_hk');
   assert.equal(result.storeId, 'arabica_cheklapkok');
   assert.equal(result.addressCountry, 'HK');
   assert.equal(result.walletGate, PaymentWalletGate.SKIP);

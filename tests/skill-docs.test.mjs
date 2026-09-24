@@ -1017,7 +1017,7 @@ test('catalog discovery keeps merchant-scoped and broad search paths distinct', 
   assert.match(catalogDiscovery, /clink ucp-catalog search --merchant-id <merchant_id> --query <text>[^\n]*--sandbox/u);
   assert.match(
     catalogDiscovery,
-    /clink catalog search --query <text> \[--channel-type <channel>\] --language <BCP47> \[--context <json>\] \[--sandbox\] --format json/u,
+    /clink catalog search --query <text> \[--order-channel-id <order_channel_id>\] --language <BCP47> \[--context <json>\] \[--sandbox\] --format json/u,
   );
   assert.match(catalogDiscovery, /not merchant-scoped and takes no `--merchant-id`/u);
   assert.match(catalogDiscovery, /empty array falls through to the broad search/u);
@@ -1113,27 +1113,27 @@ test('discovery-only results require semantic purchase authorization before chec
   );
 });
 
-test('catalog search uses the channel selector and location hint plus exact local store filtering', () => {
-  assert.match(skill, /--channel-type eats365/u);
+test('catalog search uses the order-channel selector and location hint plus exact local store filtering', () => {
+  assert.match(skill, /--order-channel-id ucp_oc_eats365_hk/u);
   assert.match(skill, /eats365/u);
-  assert.match(skill, /normalize the `eat365` spelling/u);
+  assert.match(skill, /channel_type` is not the authoritative external/u);
   assert.match(skill, /context\.address_country` only for established HK\/SG/u);
   assert.match(skill, /US, JP, and other countries mean unknown catalog location/u);
   assert.match(skill, /locally keep only exact matching `store_id` groups and recompute `productCount`/u);
 
-  assert.match(catalogDiscovery, /--channel-type eats365 --context '\{"address_country":"HK"\}'/u);
+  assert.match(catalogDiscovery, /--order-channel-id ucp_oc_eats365_hk --context '\{"address_country":"HK"\}'/u);
   assert.match(catalogDiscovery, /does not apply it as a search predicate/u);
   assert.match(catalogDiscovery, /store_id` exactly matches the target[\s\S]*recompute the count/u);
   assert.match(catalogDiscovery, /US, JP[\s\S]*unknown catalog location/u);
   assert.match(catalogDiscovery, /legacy pending input `region=hk` or `region=sg`/u);
-  assert.match(catalogDiscovery, /Skip this inference step when `channelType` or `storeId` is already established/u);
+  assert.match(catalogDiscovery, /Skip this inference step when `orderChannelId` or `storeId` is already established/u);
   assert.match(catalogDiscovery, /merchant-scoped endpoint accepts neither the channel selector nor store identity/u);
   // Real eats365 store ids are lowercase slugs, not numeric store codes; a fabricated-looking
   // example invites the agent to invent one instead of taking it from context.
   assert.doesNotMatch(catalogDiscovery, /store_id":"[A-Z]{2}\d+/u);
-  assert.match(catalogDiscovery, /catalog_channel_type_missing/u);
+  assert.match(catalogDiscovery, /catalog_order_channel_id_missing/u);
   assert.match(catalogDiscovery, /Never invent one/u);
-  assert.doesNotMatch(catalogDiscovery, /--ext '\{"channel_type"/u);
+  assert.doesNotMatch(catalogDiscovery, /--ext '\{"order_channel_id"/u);
 });
 
 // A platform-store item has no product detail page. When the docs did not say so, the agent read

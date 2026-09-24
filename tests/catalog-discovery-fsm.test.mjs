@@ -5,7 +5,8 @@ import {
   CatalogEnvironment,
   CatalogDiscoveryState,
   CatalogDiscoveryAction,
-  CATALOG_CHANNEL_EATS365,
+  CATALOG_ORDER_CHANNEL_EATS365_HK,
+  CATALOG_ORDER_CHANNEL_EATS365_SG,
   CATALOG_SUPPORTED_COUNTRIES,
   classifyCatalogDiscovery as classifyCatalogDiscoveryRaw,
   resolveCatalogEnvironment,
@@ -1123,43 +1124,44 @@ test('skips intent matching when no merchant exposes a matchable description', (
   assert.equal(result.reason, 'no_matchable_merchant_candidate');
 });
 
-test('uses the top-level channel selector and keeps a store id for response filtering', () => {
+test('uses the top-level order-channel selector and keeps a store id for response filtering', () => {
   const result = classifyCatalogDiscovery({
     query: 'iced matcha latte',
     merchantListOutput,
     merchantMatch: false,
-    channelType: 'eats365',
+    orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_HK,
     addressCountry: 'HK',
     storeId: 'arabica_cheklapkok',
   });
 
   assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
   assert.equal(result.ext, null);
-  assert.equal(result.channelType, 'eats365');
+  assert.equal(result.orderChannelId, CATALOG_ORDER_CHANNEL_EATS365_HK);
   assert.equal(result.storeId, 'arabica_cheklapkok');
   assert.equal(result.country, 'HK');
   assert.equal(
     result.command,
     'clink catalog search --query \'iced matcha latte\''
-      + ' --channel-type eats365'
+      + ' --order-channel-id ucp_oc_eats365_hk'
       + ' --language en'
       + ' --context \'{"address_country":"HK"}\' --format json',
   );
   assert.doesNotMatch(result.command, /--ext|store_id/u);
 });
 
-test('normalizes the eat365 spelling to the backend channel type', () => {
+test('keeps each eats365 order-channel id as the external target identity', () => {
   const result = classifyCatalogDiscovery({
     query: 'croissant',
     merchantListOutput,
     merchantMatch: false,
-    channelType: 'eat365',
-    addressCountry: 'hk',
+    orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_SG,
+    addressCountry: 'sg',
   });
 
-  assert.equal(result.channelType, CATALOG_CHANNEL_EATS365);
-  assert.equal(result.country, 'HK');
+  assert.equal(result.orderChannelId, CATALOG_ORDER_CHANNEL_EATS365_SG);
+  assert.equal(result.country, 'SG');
   assert.equal(result.ext, null);
+  assert.match(result.command, /--order-channel-id ucp_oc_eats365_sg/u);
 });
 
 test('treats countries without catalog location mappings as unknown location', () => {
@@ -1193,47 +1195,47 @@ test('accepts legacy HK and SG region aliases as country context', () => {
   }
 });
 
-test('requires a channel type before accepting a store id', () => {
+test('requires an order-channel id before accepting a store id', () => {
   const result = classifyCatalogDiscovery({
     query: 'croissant',
     storeId: 'arabica_cheklapkok',
   });
 
   assert.equal(result.state, CatalogDiscoveryState.CATALOG_INPUT_MISSING);
-  assert.equal(result.reason, 'catalog_channel_type_missing');
-  assert.deepEqual(result.missing, ['channelType']);
+  assert.equal(result.reason, 'catalog_order_channel_id_missing');
+  assert.deepEqual(result.missing, ['orderChannelId']);
 });
 
-test('a known store bypasses merchant-scoped matching and searches its platform channel', () => {
+test('a known store bypasses merchant-scoped matching and searches its order channel', () => {
   const result = classifyCatalogDiscovery({
     query: 'iced matcha latte',
     merchantListOutput,
     merchantMatch: { merchantId: 'mcht_frnz6yfrz1sd' },
     merchantSearchOutput: { products: [{ id: 'wrong-internal-product' }] },
-    channelType: 'eats365',
+    orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_HK,
     storeId: 'arabica_cheklapkok',
   });
 
   assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
   assert.equal(result.reason, 'store_target_established');
   assert.equal(result.storeId, 'arabica_cheklapkok');
-  assert.match(result.command, /--channel-type eats365/u);
+  assert.match(result.command, /--order-channel-id ucp_oc_eats365_hk/u);
   assert.doesNotMatch(result.command, /ucp-catalog|--merchant-id/u);
 });
 
-test('an explicit channel bypasses merchant-scoped matching even without a store target', () => {
+test('an explicit order channel bypasses merchant-scoped matching even without a store target', () => {
   const result = classifyCatalogDiscovery({
     query: 'running shoes',
     merchantListOutput,
     merchantMatch: { merchantId: 'mcht_frnz6yfrz1sd' },
     merchantSearchOutput: { products: [{ id: 'wrong-internal-product' }] },
-    channelType: 'eats365',
+    orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_HK,
   });
 
   assert.equal(result.state, CatalogDiscoveryState.BROAD_SEARCH_REQUIRED);
   assert.equal(result.reason, 'channel_target_established');
-  assert.equal(result.channelType, 'eats365');
-  assert.match(result.command, /--channel-type eats365/u);
+  assert.equal(result.orderChannelId, CATALOG_ORDER_CHANNEL_EATS365_HK);
+  assert.match(result.command, /--order-channel-id ucp_oc_eats365_hk/u);
   assert.doesNotMatch(result.command, /ucp-catalog|--merchant-id/u);
 });
 
@@ -1245,9 +1247,8 @@ test('preserves grouped broad-search target identity', () => {
     broadSearchOutput: {
       groups: [
         {
-          channel_type: 'eats365',
+          order_channel_id: 'ucp_oc_eats365_hk',
           store_id: 'arabica_cheklapkok',
-          region: 'hk',
           name: '%Arabica (Alexandra House)',
           products: [{ id: 'p1' }, { id: 'p2' }],
         },
@@ -1260,30 +1261,28 @@ test('preserves grouped broad-search target identity', () => {
   assert.equal(result.reason, 'broad_catalog_search_matched');
   assert.equal(result.scope, 'BROAD');
   assert.equal(result.productCount, 2);
+  assert.equal(result.groups[0].order_channel_id, 'ucp_oc_eats365_hk');
   assert.equal(result.groups[0].store_id, 'arabica_cheklapkok');
-  assert.equal(result.groups[0].region, 'hk');
 });
 
 test('filters broad-search groups to the requested store and recalculates product count', () => {
   const targetGroup = {
-    channel_type: 'eats365',
+    order_channel_id: 'ucp_oc_eats365_hk',
     store_id: 'arabica_cheklapkok',
-    region: 'hk',
     products: [{ id: 'target-product' }],
   };
   const result = classifyCatalogDiscovery({
     query: 'iced matcha latte',
     merchantListOutput,
     merchantMatch: false,
-    channelType: 'eats365',
+    orderChannelId: 'ucp_oc_eats365_hk',
     storeId: 'arabica_cheklapkok',
     broadSearchOutput: {
       groups: [
         targetGroup,
         {
-          channel_type: 'eats365',
+          order_channel_id: 'ucp_oc_eats365_hk',
           store_id: 'another_store',
-          region: 'hk',
           products: [{ id: 'other-1' }, { id: 'other-2' }],
         },
       ],
@@ -1294,7 +1293,7 @@ test('filters broad-search groups to the requested store and recalculates produc
   assert.equal(result.state, CatalogDiscoveryState.CATALOG_RESULTS_READY);
   assert.equal(result.productCount, 1);
   assert.deepEqual(result.groups, [targetGroup]);
-  assert.equal(result.groups[0].region, 'hk');
+  assert.equal(result.groups[0].order_channel_id, 'ucp_oc_eats365_hk');
   assert.equal(result.storeId, 'arabica_cheklapkok');
 });
 
@@ -1303,16 +1302,21 @@ test('does not return products from another store when the requested store has n
     query: 'birthday cake',
     merchantListOutput,
     merchantMatch: false,
-    channelType: 'eats365',
+    orderChannelId: 'ucp_oc_eats365_hk',
     storeId: 'arabica_cheklapkok',
     broadSearchOutput: {
-      groups: [{ store_id: 'another_store', products: [{ id: 'wrong-store-product' }] }],
+      groups: [{
+        order_channel_id: 'ucp_oc_eats365_hk',
+        store_id: 'another_store',
+        products: [{ id: 'wrong-store-product' }],
+      }],
       total_products: 1,
     },
   });
 
   assert.equal(result.state, CatalogDiscoveryState.EXTERNAL_DISCOVERY_REQUIRED);
   assert.equal(result.reason, 'catalog_search_exhausted');
+  assert.equal(result.orderChannelId, 'ucp_oc_eats365_hk');
   assert.equal(result.storeId, 'arabica_cheklapkok');
 });
 
@@ -1357,7 +1361,7 @@ test('delegates to external discovery when a scoped store search returns nothing
     query: 'birthday cake',
     merchantListOutput,
     merchantMatch: false,
-    channelType: 'eats365',
+    orderChannelId: 'ucp_oc_eats365_hk',
     addressCountry: 'HK',
     storeId: 'arabica_cheklapkok',
     broadSearchOutput: { groups: [], total_products: 0 },
@@ -1365,7 +1369,7 @@ test('delegates to external discovery when a scoped store search returns nothing
 
   assert.equal(result.state, CatalogDiscoveryState.EXTERNAL_DISCOVERY_REQUIRED);
   assert.equal(result.ext, null);
-  assert.equal(result.channelType, 'eats365');
+  assert.equal(result.orderChannelId, 'ucp_oc_eats365_hk');
   assert.equal(result.storeId, 'arabica_cheklapkok');
   assert.equal(result.country, 'HK');
 });
@@ -1450,13 +1454,16 @@ test('resolveCatalogExt returns no ext for a plain unscoped search', () => {
   assert.deepEqual(resolveCatalogExt({}), { valid: true, ext: null });
 });
 
-test('resolveCatalogExt keeps channel and store selectors out of ext', () => {
+test('resolveCatalogExt keeps order-channel and store selectors out of ext', () => {
   assert.deepEqual(
-    resolveCatalogExt({ channelType: 'eat365', storeId: 'arabica_cheklapkok' }),
+    resolveCatalogExt({
+      orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_HK,
+      storeId: 'arabica_cheklapkok',
+    }),
     {
       valid: true,
       ext: null,
-      channelType: CATALOG_CHANNEL_EATS365,
+      orderChannelId: CATALOG_ORDER_CHANNEL_EATS365_HK,
       storeId: 'arabica_cheklapkok',
     },
   );

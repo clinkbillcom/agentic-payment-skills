@@ -2351,8 +2351,7 @@ const pendingCatalogSelection = {
       product_id: 'product_2',
       title: 'Iced Matcha Latte',
       url: 'https://order.example.hk/store/HK081034?product_id=product_2',
-      channel_type: 'eats365',
-      region: 'hk',
+      order_channel_id: 'ucp_oc_eats365_hk',
       store_id: 'HK081034',
       price: 4200,
       currency: 'HKD',
@@ -2542,7 +2541,7 @@ for (const [name, candidate] of [
       productUrl: 'https://shop.example/products/p1',
       merchantId: 'merchant_1',
       storeId: 'store_1',
-      channelType: 'eats365',
+      orderChannelId: 'ucp_oc_eats365_hk',
     },
   ],
   [
@@ -2603,7 +2602,7 @@ for (const [name, candidate] of [
       productName: 'Product',
       productUrl: 'https://order.example/store',
       storeId: 'store_1',
-      channelType: 'eats365',
+      orderChannelId: 'ucp_oc_eats365_hk',
     },
   ],
 ]) {
@@ -3173,7 +3172,7 @@ test('resolves a bare ordinal reply into the matching catalog product', () => {
   assert.equal(result.reason, 'catalog_product_selected');
   assert.equal(result.selectedProduct.productId, 'product_2');
   assert.equal(result.selectedProduct.storeId, 'HK081034');
-  assert.equal(result.selectedProduct.channelType, 'eats365');
+  assert.equal(result.selectedProduct.orderChannelId, 'ucp_oc_eats365_hk');
   assert.equal(result.selectedProduct.productUrl, 'https://order.example.hk/store/HK081034?product_id=product_2');
   assert.equal(result.selectedProduct.price, 4200);
   assert.equal(result.selectedProduct.currency, 'HKD');
