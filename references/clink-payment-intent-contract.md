@@ -49,7 +49,7 @@ The FSM derives wallet behavior from the validated operation. Callers must obey 
 
 Invalid, denied, unsupported, or unbound contracts fail closed with `requiresWallet:false` and `walletGate:SKIP`. Missing inputs also do not initialize a wallet; collect or repair the scoped input first.
 
-Catalog scope is nested under `target`. `merchantId` is mutually exclusive with channel/store scope. `storeId` requires `channelType`; `addressCountry` is an optional discovery hint. The Catalog FSM still validates a scoped merchant against the anonymous merchant list. Top-level copies are ambient and ignored.
+Catalog scope is nested under `target`. `merchantId` is mutually exclusive with the external order-channel/store scope. An external platform-store target is identified by `orderChannelId` plus `storeId`; `storeId` requires `orderChannelId` and `channelType` is not an identity field. `addressCountry` is an optional discovery hint. The Catalog FSM still validates a scoped merchant against the anonymous merchant list. Top-level copies are ambient and ignored.
 
 `INTERNAL_UCP_CATALOG` is not a general item-ID bypass. It is valid only for a
 candidate produced by the Catalog FSM from a validated merchant-list entry. Its
