@@ -2,12 +2,12 @@
 
 适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、Visa/Mastercard 强认证授权、退款和风控规则操作。
 
-Skill 版本：`1.14.6`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
+Skill 版本：`1.14.7`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
 
 ## 环境要求
 
 - Node.js >= 20
-- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 和公开 Catalog 发现固定为 sandbox/UAT 环境
+- Skill 内置 vendored CLI bundle：`vendor/clink-cli/clink-cli.bundle.mjs`，通过 `bin/clink` 暴露为 `clink` 命令，并将 `wallet init` 钉在生产环境
 - **必须按路径调用 `bin/clink`**。`PATH` 上全局安装的 `clink` 或 `clink-cli` 可能是另一个未钉环境的构建，而所有构建共用同一个全局 `~/.clink-cli/config.json` —— 一旦某个未钉版本对 UAT 做过初始化，本分发的后续认证命令都会读到 UAT 的 `baseUrl`
 - 新的钱包初始化使用 OAuth Device Authorization；邮箱/OTP 路径默认取邮箱 `@` 前部分作为姓名。仅当本地钱包从未完成过 OAuth 授权时，才继续兼容已有且完整的旧 CSK 钱包
 
