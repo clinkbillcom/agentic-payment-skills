@@ -2,7 +2,7 @@
 
 适用于 Claude Code 的 Clink 支付技能，通过 `clink` 实现钱包、卡片、支付、Skill 查询/打赏/安装、Visa/Mastercard 强认证授权、退款和风控规则操作。
 
-Skill 版本：`1.14.6`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
+Skill 版本：`1.14.7`。Google 登录契约仅覆盖 `agentic-payment-skills` 的 `main`/`uat` 和 `clinkbillcom/clink-cli` 提供的匹配 Main Edition；不包含 `visa-skill`，Portal 实现由其负责团队交付。
 
 ## 环境要求
 

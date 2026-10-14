@@ -2,7 +2,7 @@
 
 A Claude Code skill for Clink payment operations — wallet, card, payment, public-skill listing/tipping/installation, Visa/Mastercard strong-auth agentic authorization, refund, and risk rules via `clink`.
 
-Skill version: `1.14.6`. The Google-login contract covers `agentic-payment-skills` `main`/`uat` and matching Main Edition from `clinkbillcom/clink-cli` only; `visa-skill` is excluded and Portal implementation belongs to its owning team.
+Skill version: `1.14.7`. The Google-login contract covers `agentic-payment-skills` `main`/`uat` and matching Main Edition from `clinkbillcom/clink-cli` only; `visa-skill` is excluded and Portal implementation belongs to its owning team.
 
 ## Requirements
 
