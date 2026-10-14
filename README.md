@@ -7,7 +7,7 @@ Skill version: `1.14.6`. The Google-login contract covers `agentic-payment-skill
 ## Requirements
 
 - Node.js >= 20
-- The skill ships a vendored CLI bundle at `vendor/clink-cli/clink-cli.bundle.mjs` and exposes it as `clink` through `bin/clink`, which pins `wallet init` and public Catalog discovery to sandbox/UAT
+- The skill ships a vendored CLI bundle at `vendor/clink-cli/clink-cli.bundle.mjs` and exposes it as `clink` through `bin/clink`, which pins `wallet init` to production
 - Always invoke `bin/clink` **by path**. A globally installed `clink` or `clink-cli` on `PATH` can be a different, unpinned build, and every build shares the same global `~/.clink-cli/config.json` — so an unpinned build that initialized against UAT leaves this distribution reading a UAT `baseUrl` for every later authenticated command
 - New wallet initialization uses OAuth Device Authorization; the email/OTP path derives the name from the email text before `@`. An existing complete legacy CSK wallet remains supported only if that local wallet has never completed OAuth authorization
 
